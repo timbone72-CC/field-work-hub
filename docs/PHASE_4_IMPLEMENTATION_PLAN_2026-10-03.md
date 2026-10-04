@@ -1,6 +1,6 @@
 # Field Work Hub — Phase 4 Implementation Plan — 2026-10-03
 
-Status: **APPROVED SCOPE — V14 LAYOUT AND FLASH/TORCH CHECKS PASS; COMBINED PHASE 4 PHONE GATE PENDING**
+Status: **APPROVED SCOPE — V14 CAMERA, OFFLINE/RESTART/FINISH AND ACCOUNT-ISOLATION PHONE CHECKS PASS; RECONNECT/SYNC AND CONFLICT CHECKS PENDING**
 
 Current runtime evidence and staging authority: [PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md](PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md). Original planning classification/history below remains historical.
 
@@ -187,7 +187,7 @@ PASS: configured and simple/all-off behavior works, repeated capture remains qui
 
 Phase 4 completes only when the whole approved behavior, focused/final exact-head automation, deployed migration/grant/advisor parity, verified recovery, combined physical gate, explicit Level 3 merge approval and runtime integration agree. Keep photos **WAITING / delivery pending** for Phase 5; no claim of remote delivery/cleanup. Phase 5 consumes the same UUID/item/revision/frozen-set facts and adds company-authorized bytes/destination/retry, preserving this counting rule. Future Phase 6 derives Total/item counts from server-known facts, never phone-only guesses.
 
-Current status: **backend, exact-head Android/Admin/database automation and v14/v15 APK identity checks PASS; local Admin login/template/custom/all-off creation and copy isolation PASS; v14 full-width top picker and removal of camera instruction accepted by the operator as working for now, with remaining layout dissatisfaction noted; remaining combined phone gate, explicit Level 3 merge approval, runtime integration and main publication PENDING**. Corrected candidate v14 and read-only recovery v15 retain the stable package/signer and Room v3. Exact identities and hashes are recorded in the implementation record. Next checkpoint: continue the approved grouped Phase 4 phone gate; offline/restart/Finish/account-isolation/conflict checks remain. Do not install v15 unless a blocker requires it. Preserve app data; no new letter-level plan approval; stop only for material new decisions, failed evidence, the genuine device boundary or separate explicit Level 3 pre-merge approval.
+Current status: **backend and exact-head Android/Admin/database/governance automation PASS; v14/v15 artifact identity PASS; Admin/template/custom/all-off creation and copy isolation PASS; v14 camera layout and Flash/Torch PASS; operator-reported offline capture, restart recovery, Finish enforcement (blocked at During 0/2), and account isolation PASS. Reconnect/synchronization with replay/idempotency and delivery-pending verification, plus the controlled conflict/Needs review phone check, remain unverified. Explicit Level 3 merge approval, runtime integration and main publication remain PENDING.** Candidate v14 and read-only recovery v15 retain the stable package/signer and Room v3; exact APK hashes and prior CI runs are recorded in the implementation record. Preserve app data; do not install recovery or repeat passed phone checks. Continue only the remaining evidence gates, then stop for the separate explicit Level 3 pre-merge approval.
 
 ## Operator clarification — optional walking order — 2026-10-03 15:15 America/Chicago
 
