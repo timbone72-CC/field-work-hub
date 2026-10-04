@@ -1,6 +1,6 @@
 # Field Work Hub — Phase 4 Implementation Plan — 2026-10-03
 
-Status: **APPROVED SCOPE — ORIGINAL RUNTIME AND ADMIN GATES PASSED; CAMERA PARITY CORRECTION IN PROGRESS; REPLACEMENT CI/ARTIFACT AND DEVICE GATES PENDING**
+Status: **APPROVED SCOPE — CAMERA UI CORRECTION IN CI; DEVICE AND COMBINED PHASE 4 GATES PENDING**
 
 Current runtime evidence and staging authority: [PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md](PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md). Original planning classification/history below remains historical.
 
@@ -187,7 +187,7 @@ PASS: configured and simple/all-off behavior works, repeated capture remains qui
 
 Phase 4 completes only when the whole approved behavior, focused/final exact-head automation, deployed migration/grant/advisor parity, verified recovery, combined physical gate, explicit Level 3 merge approval and runtime integration agree. Keep photos **WAITING / delivery pending** for Phase 5; no claim of remote delivery/cleanup. Phase 5 consumes the same UUID/item/revision/frozen-set facts and adds company-authorized bytes/destination/retry, preserving this counting rule. Future Phase 6 derives Total/item counts from server-known facts, never phone-only guesses.
 
-Current status: **backend and exact-head Android/Admin/database automation PASS; local Admin login/template/custom/all-off creation and copy isolation PASS; corrected v10 camera screen/control phone retest, remaining combined phone gate, explicit Level 3 merge approval, runtime integration and main publication PENDING**. Corrected candidate v10 and read-only recovery v11 use the stable package/signer and Room v3. Exact identities and hashes are in the implementation record. Next exact checkpoint: install the v10 candidate as an update over installed v8, preserve app data, and verify the dropdown, non-overlapping portrait header, Flash Auto/On/Off and Torch behavior; then continue the same grouped gate. Do not install recovery unless a blocker requires it. No new letter-level plan approval; stop only for material new decisions, failed evidence, the genuine device boundary or separate explicit Level 3 pre-merge approval.
+Current status: **backend and exact-head Android/Admin/database automation PASS; local Admin login/template/custom/all-off creation and copy isolation PASS; v10 device screenshots exposed a narrow portrait picker and redundant instruction text; v12/v13 replacement build and artifact checks, phone retest, remaining combined phone gate, explicit Level 3 merge approval, runtime integration and main publication PENDING**. Candidate v12 and read-only recovery v13 will retain the stable package/signer and Room v3. Exact identities and hashes will be recorded after CI. Next exact checkpoint: update the installed app without clearing data, verify the full-width top picker in portrait and landscape with no item instruction on the camera view, then verify Flash/Torch behavior and continue the grouped gate. Do not install recovery unless a blocker requires it. No new letter-level plan approval; stop only for material new decisions, failed evidence, the genuine device boundary or separate explicit Level 3 pre-merge approval.
 
 ## Operator clarification — optional walking order — 2026-10-03 15:15 America/Chicago
 

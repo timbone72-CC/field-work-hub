@@ -44,7 +44,7 @@ Team carries forward:
 - app-private protected original before camera bytes are accepted;
 - one shutter press = one independent protected-photo transaction;
 - immutable work-order binding;
-- CameraX multi-shot `Take → Take → Take → Done`;
+- CameraX multi-shot `Take → Take → Take → Done` with the FPP preview-first layout; the required-item selector spans the top, camera instructions remain in the saved work-order but are not repeated over the preview, and Flash/Torch controls sit on a separate row;
 - capture without internet;
 - preservation of non-empty image bytes even after abnormal callback/lifecycle paths;
 - separate protected original and prepared upload derivative;

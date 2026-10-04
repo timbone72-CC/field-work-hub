@@ -155,3 +155,12 @@ Exact PR head **659af707960e655bed44e1aef0c98ae3393df6e8** contains the correcte
 Both retain package `com.inandout.fieldphotoprep.team.internal`, signer SHA-256 **1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe**, and Room v3. Candidate sync is enabled; recovery sync is disabled. Runtime rollback remains the verified read-only recovery path; do not downgrade or clear app data.
 
 The v10 phone control/layout retest is still pending. It must verify the required-item dropdown and current counts, no portrait overlap, Flash cycling, Torch on/off and the announced 1× fallback when wide physical-camera flash is unavailable. The remaining Phase 4 offline, restart, Finish, account-isolation and conflict observations remain pending. Level 3 approval is still pending; no merge or deployment occurred.
+
+
+## Portrait selector correction — 2026-10-04
+
+The operator's v10 screenshots show the item dropdown compressed into a narrow left column in portrait because it shared one horizontal row with Flash and Torch. The Admin-authored instruction `Include the whole test area` also appeared over the live preview. The operator clarified that this instruction is not needed during capture and that the item dropdown should run across the top.
+
+The camera UI now puts the selected item/count dropdown in its own full-width top row in both orientations, with Flash and Torch on a separate row below it. The camera no longer renders the selected item's instruction text. The saved requirement snapshot and its instruction remain intact for Admin/work-order records; capture selection, counts, item binding, and stored data are unchanged. This is a Level 3 camera-screen correction within the existing Phase 4 scope.
+
+The candidate and read-only recovery identities advance to v12 and v13 because v10 is the previously distributed candidate and v11 is the retained recovery. Exact-head Android/Admin/database CI, APK identity/hash checks and the replacement phone layout/control retest remain pending. The combined offline/restart/Finish/account-isolation/conflict phone gate and explicit Level 3 merge approval remain pending. Do not downgrade, uninstall or clear app data.
