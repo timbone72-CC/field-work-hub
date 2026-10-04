@@ -187,3 +187,8 @@ The actual correction is in PhotoActivity at source commit **834a7d40b2172d8e7fe
 ## Accepted v14 camera layout check — 2026-10-03 America/Chicago
 
 After installing the corrected v14 candidate, the operator reported: “Im not completely satisfied, but this layout works for now.” Record the full-width top selector and removal of the camera instruction as **layout PASS for now**, with the operator's remaining dissatisfaction preserved as a future usability note. Do not describe the entire camera gate as passed. Flash/Torch physical behavior and the remaining offline, restart, Finish, account-isolation and conflict checks remain pending. Candidate v14 remains the test build; recovery v15 remains uninstalled. No further layout change is made in this checkpoint.
+
+
+## Accepted v14 Flash/Torch check — 2026-10-03 America/Chicago
+
+The operator confirmed: “The flash and tourch work.” Record Flash and Torch as **PASS on v14** based on the operator's phone check. The previously accepted full-width selector/no-instruction layout remains accepted for now, with the operator's noted dissatisfaction retained. This does not complete the combined Phase 4 phone gate; offline/restart/Finish/account-isolation/conflict checks and explicit Level 3 merge approval remain pending.
