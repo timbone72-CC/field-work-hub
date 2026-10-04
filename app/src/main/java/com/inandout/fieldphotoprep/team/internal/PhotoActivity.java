@@ -60,7 +60,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     private ImageCapture capture;
     private PreviewView previewView;
     private FrameLayout cameraRoot;
-    private TextView cameraStatus, cameraInstruction, zoomText;
+    private TextView cameraStatus, zoomText;
     private Button shutter, done, flashButton, torchButton, wideButton, oneXButton, threeXButton, itemPicker;
     private LinearLayout zoomSliderPanel;
     private SeekBar zoomSlider;
@@ -292,31 +292,28 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         top.setOrientation(LinearLayout.VERTICAL);
         top.setPadding(dp(10), dp(6), dp(10), dp(6));
         top.setBackgroundColor(Color.argb(165, 0, 0, 0));
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
         itemPicker = compactButton("Select photo item");
         itemPicker.setTextSize(14);
         itemPicker.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        itemPicker.setMaxLines(2);
+        itemPicker.setEllipsize(android.text.TextUtils.TruncateAt.END);
         itemPicker.setContentDescription("Choose a required photo item or Extra photos");
         itemPicker.setOnClickListener(v -> showCameraItemPicker());
-        header.addView(itemPicker, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(itemPicker, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
         flashButton = compactButton("Flash Auto");
         flashButton.setText(flashLabel());
         flashButton.setOnClickListener(v -> cycleFlash());
-        LinearLayout.LayoutParams flashParams = new LinearLayout.LayoutParams(-2, -2);
-        flashParams.leftMargin = dp(4);
-        header.addView(flashButton, flashParams);
+        controls.addView(flashButton, new LinearLayout.LayoutParams(0, -2, 1));
         torchButton = compactButton(torch ? "Torch On" : "Torch Off");
         torchButton.setOnClickListener(v -> toggleTorch());
-        LinearLayout.LayoutParams torchParams = new LinearLayout.LayoutParams(-2, -2);
+        LinearLayout.LayoutParams torchParams = new LinearLayout.LayoutParams(0, -2, 1);
         torchParams.leftMargin = dp(4);
-        header.addView(torchButton, torchParams);
-        top.addView(header, new LinearLayout.LayoutParams(-1, -2));
-        cameraInstruction = cameraText("", 12, false);
-        cameraInstruction.setPadding(dp(3), dp(2), dp(3), 0);
-        cameraInstruction.setVisibility(View.GONE);
-        top.addView(cameraInstruction, new LinearLayout.LayoutParams(-1, -2));
+        controls.addView(torchButton, torchParams);
+        top.addView(controls, new LinearLayout.LayoutParams(-1, -2));
         cameraStatus = cameraText("Starting camera…", 12, false);
         cameraStatus.setSingleLine(true);
         cameraStatus.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -796,12 +793,8 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         PhotoRequirements.Item selected = requirements.enabledItem(item);
         if (selected == null) {
             itemPicker.setText("Extra photos · " + count + " saved ▼");
-            cameraInstruction.setText("");
-            cameraInstruction.setVisibility(View.GONE);
         } else {
             itemPicker.setText(selected.label + " · " + count + "/" + selected.minimum + " ▼");
-            cameraInstruction.setText(selected.instruction);
-            cameraInstruction.setVisibility(selected.instruction.isEmpty() ? View.GONE : View.VISIBLE);
         }
     }
     private void showCameraStatus(String status) {
