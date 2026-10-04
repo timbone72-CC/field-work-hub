@@ -62,7 +62,9 @@ Downloaded actual CI artifacts **11284969453** (candidate) and **11284894657** (
 
 Post-advisor-repair live Phase 4 rolled-back SQL fixture rerun PASS; no fixture accounts or image bytes. Business totals still **8 WOs / 5 accepted actions / 0 photos / 0 templates / 0 Finish sets**. Live migration ordering is exactly the mirrored 23-version chain. Prior immediate before/after DDL hashes and source/grant/advisor proof above remain the accepted preservation evidence.
 
-## Concrete combined device gate — not yet executed
+## Historical device-gate procedure — superseded; do not follow
+
+The v4–v7 device/version instructions below are historical and were superseded by later candidate builds, including v14. Do not use them to stage or repeat testing. Current phone results and remaining checks are recorded in the latest checkpoint at the end of this file; the approved gate remains in the Phase 4 plan.
 
 Test subject: safe synthetic surroundings only. Retain existing accounts. Keep the current package data; candidate must install as an update over the previously tested v4 (or retained v5 recovery). If device version is already 7 or above, pause and build a verified higher candidate/recovery pair rather than downgrade. The tested v6/v7 pair remains available.
 
@@ -192,3 +194,16 @@ After installing the corrected v14 candidate, the operator reported: “Im not c
 ## Accepted v14 Flash/Torch check — 2026-10-03 America/Chicago
 
 The operator confirmed: “The flash and tourch work.” Record Flash and Torch as **PASS on v14** based on the operator's phone check. The previously accepted full-width selector/no-instruction layout remains accepted for now, with the operator's noted dissatisfaction retained. This does not complete the combined Phase 4 phone gate; offline/restart/Finish/account-isolation/conflict checks and explicit Level 3 merge approval remain pending.
+
+
+## Accepted v14 offline, Finish, restart and account-isolation checks — 2026-10-03 America/Chicago
+
+The operator reports these phone checks complete on the current v14 candidate:
+
+- Offline photo capture and restart recovery worked.
+- Finish correctly blocked when the required During item was still **0/2**.
+- Account isolation passed: the second existing contractor account did not show the original account's work orders/photos; switching back to the original account restored its work.
+
+These are recorded as **PASS by operator report**. The repository does not contain a separate server-side readout for the phone observations.
+
+Current device-gate status: v14 camera layout and Flash/Torch, offline capture, restart recovery, Finish enforcement and account isolation are **PASS**. Reconnect/synchronization of frozen metadata and Finish, replay/idempotency and truthful delivery-pending status remain **unverified**. The controlled Admin-requirement-edit versus offline-run conflict/Needs review check also remains **unverified**. Do not repeat the passed checks. Explicit Level 3 merge approval, runtime integration and publication remain pending.
