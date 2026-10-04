@@ -43,19 +43,20 @@ jobs:
           grep -q 'Approve Reassignment' app/src/main/java/com/inandout/fieldphotoprep/team/internal/MainActivity.java
           grep -q 'Decline Reassignment' app/src/main/java/com/inandout/fieldphotoprep/team/internal/MainActivity.java
           grep -q 'Assignment receipt: Confirmed' app/src/main/java/com/inandout/fieldphotoprep/team/internal/MainActivity.java
-      - name: Run focused Phase 3 regression tests
-        run: gradle :app:testDebugUnitTest --tests '*SessionCoordinatorTest' --tests '*SessionOperationGuardTest' --tests '*RoomMigrationTest' --tests '*OfflineActionTest'
-      - name: Run complete Phase 3 JVM tests
+      - name: Run focused Phase 4 regression tests
+        run: gradle :app:testDebugUnitTest --tests '*SessionCoordinatorTest' --tests '*SessionOperationGuardTest' --tests '*RoomMigrationTest' --tests '*OfflineActionTest' --tests '*PhotoRequirementsTest' --tests '*ProtectedPhotoTest' --tests '*CameraLensMathTest'
+      - name: Run complete Phase 4 JVM tests
         run: gradle :app:testDebugUnitTest
       - name: Build internal Team APK
         run: gradle :app:assembleDebug
-      - name: Verify additive Room v1 and v2 schema exports
+      - name: Verify additive Room v1, v2 and v3 schema exports
         shell: bash
         run: |
           set -euo pipefail
           SCHEMA="$(find app/schemas -type f -name '1.json' -print -quit)"
           test -n "${SCHEMA}"
           test -n "$(find app/schemas -type f -name 2.json -print -quit)"
+          test -n "$(find app/schemas -type f -name 3.json -print -quit)"
           echo "Room schema: ${SCHEMA}"
       - name: Verify Team client identity and network permission
         shell: bash
@@ -102,22 +103,22 @@ jobs:
               sys.exit(1)
           PY
       - name: Freeze candidate identity and APK
-        run: python3 ci/write_phase3_artifact_identity.py candidate
-      - name: Upload combined FWH Phase 3 contractor APK
+        run: python3 ci/write_phase4_artifact_identity.py candidate
+      - name: Upload combined FWH Phase 4 contractor APK
         uses: actions/upload-artifact@v4
         with:
-          name: field-work-hub-phase3-apk
-          path: phase3-artifacts/candidate/
+          name: field-work-hub-phase4-apk
+          path: phase4-artifacts/candidate/
           if-no-files-found: error
       - name: Build evidence-preserving recovery APK
         run: gradle :app:assembleDebug -PfwhRecovery
       - name: Verify and freeze recovery identity
-        run: python3 ci/write_phase3_artifact_identity.py recovery
+        run: python3 ci/write_phase4_artifact_identity.py recovery
       - name: Upload evidence-preserving recovery APK
         uses: actions/upload-artifact@v4
         with:
-          name: field-work-hub-phase3-recovery-apk
-          path: phase3-artifacts/recovery/
+          name: field-work-hub-phase4-recovery-apk
+          path: phase4-artifacts/recovery/
           if-no-files-found: error
       - name: Upload versioned Room schemas
         uses: actions/upload-artifact@v4

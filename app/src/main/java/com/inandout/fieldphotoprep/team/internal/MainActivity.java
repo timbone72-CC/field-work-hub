@@ -47,7 +47,7 @@ public final class MainActivity extends Activity {
     private LinearLayout workOrdersContainer;
     private SupabaseApi.AuthSession currentSession;
     private final androidx.room.InvalidationTracker.Observer evidenceObserver =
-            new androidx.room.InvalidationTracker.Observer("cached_work_orders", "field_actions") {
+            new androidx.room.InvalidationTracker.Observer("cached_work_orders", "field_actions", "protected_photos") {
                 @Override
                 public void onInvalidated(java.util.Set<String> tables) {
                     if (executor.isShutdown()) return;
@@ -503,6 +503,13 @@ public final class MainActivity extends Activity {
                                         ? "Started — waiting to sync"
                                         : displayStatus(workOrder.fieldStatus);
         card.addView(text("Status: " + status, 14, false));
+        try { card.addView(text(PhotoRequirements.parse(workOrder.requirementSnapshotJson).summary(), 14, false)); }
+        catch (Exception e) { card.addView(text(e.getMessage(),14,true)); }
+        Button photos = new Button(this); photos.setText("Photos");
+        photos.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoActivity.class)
+                .putExtra("wo",workOrder.id).putExtra("run",workOrder.currentRunId)));
+        card.addView(photos);
+
         if (!workOrder.conflictReason.isEmpty()) {
             String explanation =
                     "CLOCK_REVIEW".equals(workOrder.conflictReason)
@@ -557,7 +564,8 @@ public final class MainActivity extends Activity {
         if (currentSession != null
                 && currentSession.userId.equals(workOrder.assignedUserId)
                 && "IN_PROGRESS".equals(workOrder.fieldStatus)
-                && !workOrder.pendingAssigneeUserId.isEmpty()) {
+                && !workOrder.pendingAssigneeUserId.isEmpty()
+                && BuildConfig.FIELD_SYNC_ENABLED) {
             TextView request =
                     text(
                             "Admin requested that this in-progress WO be reassigned. Approve the"

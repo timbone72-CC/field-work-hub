@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <application
         android:name=".TeamApplication"
         android:allowBackup="false"
@@ -9,6 +12,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FieldPhotoPrepTeam"
         android:usesCleartextTraffic="false">
+        <activity android:name=".PhotoActivity" android:configChanges="orientation|screenSize" android:exported="false" android:screenOrientation="fullSensor" />
         <activity
             android:name=".MainActivity"
             android:exported="true">

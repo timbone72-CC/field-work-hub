@@ -78,7 +78,7 @@ abstract class CachedWorkOrderDao {
 
     boolean hasEvidence(CachedWorkOrder row, List<FieldAction> actions) {
         if (!row.startedAt.isEmpty()) return true;
-        return hasLocalActions(row, actions);
+        return hasLocalActions(row, actions) || !photos(row.cacheOwnerUserId, row.organizationId, row.workOrderId, row.runId).isEmpty();
     }
 
     private boolean hasLocalActions(CachedWorkOrder row, List<FieldAction> actions) {
@@ -111,6 +111,9 @@ abstract class CachedWorkOrderDao {
                             owner, org, old.workOrderId, old.runId, "ASSIGNMENT_UNAVAILABLE");
                     protectedWos.add(old.workOrderId);
                 } else delete(owner, org, old.workOrderId, old.runId);
+            } else if (evidence && !sameRequirements(old.requirementSnapshotJson, next.requirementSnapshotJson)) {
+                markRunConflict(owner, org, old.workOrderId, old.runId, "REQUIREMENTS_CHANGED");
+                protectedWos.add(old.workOrderId);
             } else if (!old.conflictReason.isEmpty()) {
                 protectedWos.add(old.workOrderId);
             } else if (evidence && isOlder(next.serverUpdatedAt, old.serverUpdatedAt)) {
@@ -123,6 +126,26 @@ abstract class CachedWorkOrderDao {
         for (CachedWorkOrder row : downloaded)
             if (!protectedWos.contains(row.workOrderId))
                 insertAll(java.util.Collections.singletonList(row));
+    }
+
+    static boolean sameRequirements(String a, String b) {
+        try { return new org.json.JSONObject(a).toString().equals(new org.json.JSONObject(b).toString())
+                || (PhotoRequirements.parse(a).revision.equals(PhotoRequirements.parse(b).revision)
+                && canonicalJson(new org.json.JSONObject(a)).equals(canonicalJson(new org.json.JSONObject(b)))); }
+        catch(Exception e) { return false; }
+    }
+
+    private static String canonicalJson(Object value) throws org.json.JSONException {
+        if (value instanceof org.json.JSONObject) {
+            org.json.JSONObject j=(org.json.JSONObject)value; java.util.List<String> keys=new java.util.ArrayList<>();
+            java.util.Iterator<String> iterator=j.keys(); while(iterator.hasNext()) keys.add(iterator.next());
+            java.util.Collections.sort(keys); StringBuilder b=new StringBuilder("{");
+            for(String key:keys) b.append(org.json.JSONObject.quote(key)).append(":").append(canonicalJson(j.get(key))).append(",");
+            return b.append("}").toString();
+        }
+        if(value instanceof org.json.JSONArray) { org.json.JSONArray a=(org.json.JSONArray)value; StringBuilder b=new StringBuilder("[");
+            for(int i=0;i<a.length();i++) b.append(canonicalJson(a.get(i))).append(","); return b.append("]").toString(); }
+        return value instanceof String ? org.json.JSONObject.quote((String)value) : String.valueOf(value);
     }
 
     static boolean isOlder(String incoming, String current) {
@@ -161,6 +184,7 @@ abstract class CachedWorkOrderDao {
             throw new IllegalStateException(
                     "Refresh Assignments online before starting this work, or contact Admin if it"
                         + " needs review.");
+        PhotoRequirements requirements = PhotoRequirements.parse(row.requirementSnapshotJson);
         java.time.Instant event = java.time.Instant.parse(eventTime);
         FieldAction start = null;
         for (FieldAction a : actions(session.userId, session.organizationId))
@@ -195,8 +219,95 @@ abstract class CachedWorkOrderDao {
                         eventTime,
                         System.currentTimeMillis(),
                         nextSequence());
+        a.requirementRevision = requirements.revision;
+        if ("COMPLETE".equals(kind)) freezePhotos(row, requirements, a);
         insertAction(a);
         return a;
+    }
+
+    @Query("SELECT * FROM protected_photos WHERE ownerId=:owner AND organizationId=:org AND workOrderId=:wo AND runId=:run ORDER BY id")
+    abstract List<ProtectedPhoto> photos(String owner, String org, String wo, String run);
+    @Query("SELECT * FROM protected_photos ORDER BY id") abstract List<ProtectedPhoto> allPhotos();
+    @Query("SELECT * FROM protected_photos WHERE id=:id") abstract ProtectedPhoto photo(String id);
+    @Insert(onConflict=OnConflictStrategy.ABORT) abstract void insertPhoto(ProtectedPhoto p);
+    @Query("UPDATE protected_photos SET state=:state,originalBytes=:bytes,problem=:problem WHERE id=:id AND state='CAPTURING'")
+    abstract void publishCapture(String id,String state,long bytes,String problem);
+    @Query("UPDATE protected_photos SET prepared=:prepared,problem=:problem WHERE id=:id AND state='WAITING'")
+    abstract void photoPrepared(String id,boolean prepared,String problem);
+    @Query("UPDATE protected_photos SET state='PROBLEM',problem=:problem WHERE id=:id AND state IN ('WAITING','CAPTURING')")
+    abstract void photoProblem(String id,String problem);
+    @Query("UPDATE protected_photos SET state='DISCARDING' WHERE id=:id AND finishSetId=''")
+    abstract void discardPhoto(String id);
+    @Query("UPDATE protected_photos SET state='DISCARDED',prepared=0,problem='' WHERE id=:id AND state='DISCARDING'")
+    abstract void completeDiscard(String id);
+    @Query("UPDATE protected_photos SET finishSetId=:setId WHERE id=:id AND finishSetId=''")
+    abstract void freezePhoto(String id,String setId);
+
+    private CachedWorkOrder captureRun(SupabaseApi.AuthSession session, String wo, String run) {
+        CachedWorkOrder r=find(session.userId,session.organizationId,wo,run);
+        if (r==null || !"CONTRACTOR".equals(session.role) || !r.assignedUserId.equals(session.userId)
+                || r.assignmentInstanceId.isEmpty() || !r.conflictReason.isEmpty()
+                || "FIELD_COMPLETE".equals(r.fieldStatus) || "CANCELLED".equals(r.fieldStatus))
+            throw new IllegalStateException("This work is unavailable for capture. Contact Admin if it needs review.");
+        boolean started=!r.startedAt.isEmpty();
+        for (FieldAction a:actions(session.userId,session.organizationId)) if(a.workOrderId.equals(wo)&&a.runId.equals(run)) {
+            if("COMPLETE".equals(a.kind)) throw new IllegalStateException("Finish has frozen these photos.");
+            if("CONFLICT".equals(a.state)||a.reason.startsWith("PROTOCOL")) throw new IllegalStateException("Saved progress needs review.");
+            if("START".equals(a.kind)&&a.assignmentInstanceId.equals(r.assignmentInstanceId)) started=true;
+        }
+        if(!started) throw new IllegalStateException("Start Work first.");
+        PhotoRequirements.parse(r.requirementSnapshotJson);
+        return r;
+    }
+
+    @Transaction
+    ProtectedPhoto reservePhoto(SupabaseApi.AuthSession session, String wo, String run, String item,
+            String time, String id, String original, String prepared) {
+        CachedWorkOrder r=captureRun(session,wo,run); PhotoRequirements req=PhotoRequirements.parse(r.requirementSnapshotJson);
+        if(!item.isEmpty() && req.enabledItem(item)==null) throw new IllegalStateException("Choose an enabled photo item or Extra.");
+        for(ProtectedPhoto p:photos(session.userId,session.organizationId,wo,run))
+            if("CAPTURING".equals(p.state)) throw new IllegalStateException("Wait for the current photo to save.");
+        if (photos(session.userId,session.organizationId,wo,run).stream().filter(p -> !"DISCARDED".equals(p.state)).count()>=5000)
+            throw new IllegalStateException("This run has reached the 5000 photo limit.");
+        ProtectedPhoto p=new ProtectedPhoto(id,session.userId,session.organizationId,wo,run,r.assignmentInstanceId,
+                req.revision,item,time,original,prepared);
+        insertPhoto(p); return p;
+    }
+
+    @Transaction
+    void finalizePhoto(String id, boolean valid, long bytes, String problem) {
+        ProtectedPhoto p=photo(id); if(p==null || !"CAPTURING".equals(p.state)) return;
+        publishCapture(id,valid?"WAITING":(bytes==0?"DISCARDED":"PROBLEM"),bytes,problem);
+    }
+
+    @Transaction
+    ProtectedPhoto beginDiscard(SupabaseApi.AuthSession session, String id) {
+        ProtectedPhoto p=photo(id);
+        if(p==null || !p.ownerId.equals(session.userId)||!p.organizationId.equals(session.organizationId)) throw new IllegalStateException("Photo unavailable.");
+        captureRun(session,p.workOrderId,p.runId);
+        if(!p.finishSetId.isEmpty()||"CAPTURING".equals(p.state)||"DISCARDED".equals(p.state)) throw new IllegalStateException("Photo cannot be discarded.");
+        discardPhoto(p.id); p.state="DISCARDING"; return p;
+    }
+
+    private void freezePhotos(CachedWorkOrder r, PhotoRequirements req, FieldAction a) {
+        java.util.List<ProtectedPhoto> valid=new java.util.ArrayList<>();
+        for(ProtectedPhoto p:photos(r.cacheOwnerUserId,r.organizationId,r.workOrderId,r.runId)) {
+            if("DISCARDED".equals(p.state)) continue;
+            if(!p.assignmentInstanceId.equals(r.assignmentInstanceId)||!p.requirementRevision.equals(req.revision)
+                    ||!p.finishSetId.isEmpty()||!p.readable()) throw new IllegalStateException("A photo is still saving or needs recovery. Finish is paused.");
+            if(java.time.Instant.parse(p.capturedAt).isAfter(java.time.Instant.parse(a.eventTime)))
+                throw new IllegalStateException("Phone time is earlier than a saved photo. Correct it before Finish.");
+            valid.add(p);
+        }
+        String missing=req.missing(valid); if(!missing.isEmpty()) throw new IllegalStateException("More photos needed:\n"+missing);
+        if(!req.configured && valid.isEmpty()) return; // Legacy Phase 3 intent stays unchanged.
+        a.finishSetId=java.util.UUID.randomUUID().toString(); org.json.JSONArray set=new org.json.JSONArray();
+        try { for(ProtectedPhoto p:valid) {
+            set.put(new org.json.JSONObject().put("id",p.id).put("item_id",p.itemId.isEmpty()?org.json.JSONObject.NULL:p.itemId).put("captured_at",p.capturedAt));
+            freezePhoto(p.id,a.finishSetId);
+        } } catch(org.json.JSONException e) { throw new IllegalStateException(e); }
+        a.finishPhotosJson=set.toString();
+        a.finishDigest=PhotoOwner.digest(a.finishPhotosJson);
     }
 
     @Transaction

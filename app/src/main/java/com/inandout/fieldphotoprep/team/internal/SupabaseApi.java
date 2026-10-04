@@ -71,6 +71,7 @@ final class SupabaseApi
         String assignmentInstanceId = "";
         String conflictReason = "";
         String pendingKind = "";
+        String requirementSnapshotJson = "{}";
 
         WorkOrder(
                 String id,
@@ -205,6 +206,7 @@ final class SupabaseApi
                             nullableString(row, "field_completed_at"),
                             nullableString(row, "updated_at"));
             workOrder.assignmentInstanceId = nullableString(row, "assignment_instance_id");
+            workOrder.requirementSnapshotJson = row.has("requirement_snapshot") ? row.getJSONObject("requirement_snapshot").toString() : "{}";
             workOrders.add(workOrder);
         }
         return workOrders;
@@ -235,6 +237,26 @@ final class SupabaseApi
         request.put("p_assignment_instance_id", action.assignmentInstanceId);
         request.put("p_action_kind", action.kind);
         request.put("p_event_time", action.eventTime);
+        if (!action.finishSetId.isEmpty()) {
+            JSONObject metadata = new JSONObject();
+            metadata.put("p_set_id", action.finishSetId); metadata.put("p_work_order_id", action.workOrderId);
+            metadata.put("p_run_id", action.runId); metadata.put("p_assignment_instance_id", action.assignmentInstanceId);
+            metadata.put("p_requirement_revision", action.requirementRevision.isEmpty()?JSONObject.NULL:action.requirementRevision);
+            metadata.put("p_photos", new JSONArray(action.finishPhotosJson));
+            metadata.put("p_digest",action.finishDigest); metadata.put("p_payload",action.finishPhotosJson);
+            JSONObject result = new JSONObject(postRpc(accessToken,"register_photo_finish_set",metadata));
+            if ("CONFLICT".equals(result.optString("outcome"))) {
+                result.put("action_id",action.actionId); return new FieldActionResult(action,result.toString());
+            }
+            if (!java.util.Arrays.asList("APPLIED","ALREADY_APPLIED").contains(result.optString("outcome"))
+                    || !action.finishSetId.equals(result.optString("set_id"))) throw new IllegalStateException("Invalid photo metadata response");
+        }
+        if (!action.requirementRevision.isEmpty() || !action.finishSetId.isEmpty()) {
+            request.put("p_requirement_revision",action.requirementRevision.isEmpty()?JSONObject.NULL:action.requirementRevision);
+            request.put("p_finish_set_id",action.finishSetId.isEmpty()?JSONObject.NULL:action.finishSetId);
+            request.put("p_finish_digest",action.finishDigest);
+            return new FieldActionResult(action, postRpc(accessToken,"accept_field_action_v4",request));
+        }
         return new FieldActionResult(action, postRpc(accessToken, "accept_field_action", request));
     }
 

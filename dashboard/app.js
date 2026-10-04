@@ -45,6 +45,20 @@ const saveEditButton = document.getElementById('save-edit');
 const cancelEditButton = document.getElementById('cancel-edit');
 const editStatus = document.getElementById('edit-status');
 
+const createPhotos = new PhotoRequirementEditor(document.getElementById('create-photo-requirements'), () => workTypeInput.value);
+const editPhotos = new PhotoRequirementEditor(document.getElementById('edit-photo-requirements'), () => editWorkTypeInput.value);
+function fillWorkTypes() {
+  for (const [prefix, input, editor] of [['', workTypeInput, createPhotos], ['edit-', editWorkTypeInput, editPhotos]]) {
+    const select = document.getElementById(`${prefix}work-type-choice`);
+    select.replaceChildren(new Option('Custom / Other', ''));
+    const types = [...new Set([...workOrderRows.map(r => r.work_type), ...editor.templates.map(t => t.work_type)])].filter(Boolean).sort();
+    for (const type of types) select.add(new Option(type, type));
+    select.value = types.includes(input.value) ? input.value : '';
+    input.hidden = !!select.value;
+    select.onchange = () => { input.value = select.value; input.hidden = !!select.value; if (select.value) editor.useDefault(); };
+  }
+}
+
 for (const input of woNumberModeInputs) {
   input.addEventListener('change', () => {
     applyWoNumberMode(currentWoNumberMode());
@@ -107,7 +121,8 @@ createForm.addEventListener('submit', async (event) => {
       workType: workTypeInput.value.trim(),
       instructions: instructionsInput.value.trim(),
       dueDate: dueDateInput.value,
-      assignedUserId: assigneeSelect.value
+      assignedUserId: assigneeSelect.value,
+      requirements: createPhotos.snapshot()
     });
 
     const created = Array.isArray(createdRows) ? createdRows[0] : null;
@@ -117,6 +132,8 @@ createForm.addEventListener('submit', async (event) => {
 
     setCreateStatus(`Created and assigned ${created.wo_number}. Waiting for contractor receipt.`, false);
     createForm.reset();
+    createPhotos.load(null);
+    fillWorkTypes();
     rememberWoNumberMode.checked = rememberMode;
     applyWoNumberMode(mode);
     persistWoNumberModePreference();
@@ -142,7 +159,9 @@ editForm.addEventListener('submit', async (event) => {
       workType: editWorkTypeInput.value.trim(),
       instructions: editInstructionsInput.value.trim(),
       dueDate: editDueDateInput.value,
-      assignedUserId: editAssigneeSelect.value
+      assignedUserId: editAssigneeSelect.value,
+      requirements: editPhotos.snapshot(),
+      expectedRevision: editPhotos.expectedRevision
     });
 
     const updated = Array.isArray(updatedRows) ? updatedRows[0] : null;
@@ -171,6 +190,9 @@ signOutButton.addEventListener('click', () => {
   currentUser = null;
   assignableUsers = [];
   workOrderRows = [];
+  createPhotos.templates = []; editPhotos.templates = [];
+  createPhotos.load(null); editPhotos.load(null);
+  fillWorkTypes();
   workOrders.replaceChildren();
   rlsResult.textContent = '';
   accountHeading.textContent = 'Signed in';
@@ -229,7 +251,9 @@ async function fetchWorkOrders() {
     'instructions',
     'due_date',
     'field_status',
-    'created_at'
+    'created_at',
+    'current_run_id',
+    'run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)'
   ].join(',');
 
   // Intentionally broad request: no organization_id or assigned_user_id filter.
@@ -261,9 +285,9 @@ async function fetchAssignableUsers() {
   return response.json();
 }
 
-async function createWorkOrder({ generateWoNumber, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId }) {
+async function createWorkOrder({ generateWoNumber, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId, requirements }) {
   requireAccessToken();
-  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_create_work_order`, {
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_create_work_order_v4`, {
     method: 'POST',
     headers: authHeaders(true),
     body: JSON.stringify({
@@ -273,7 +297,8 @@ async function createWorkOrder({ generateWoNumber, woNumber, propertyAddress, wo
       p_work_type: workType,
       p_instructions: instructions || null,
       p_due_date: dueDate,
-      p_assigned_user_id: assignedUserId
+      p_assigned_user_id: assignedUserId,
+      p_requirements: requirements
     })
   });
 
@@ -284,9 +309,9 @@ async function createWorkOrder({ generateWoNumber, woNumber, propertyAddress, wo
   return response.json();
 }
 
-async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId }) {
+async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId, requirements, expectedRevision }) {
   requireAccessToken();
-  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_update_work_order`, {
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_update_work_order_v4`, {
     method: 'POST',
     headers: authHeaders(true),
     body: JSON.stringify({
@@ -296,7 +321,9 @@ async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workTyp
       p_work_type: workType,
       p_instructions: instructions || null,
       p_due_date: dueDate,
-      p_assigned_user_id: assignedUserId
+      p_assigned_user_id: assignedUserId,
+      p_requirements: requirements,
+      p_expected_revision: expectedRevision
     })
   });
 
@@ -345,6 +372,7 @@ function renderSignedIn(rows, users, organizationId) {
   renderRlsSummary(rows);
   renderAssignableUsers(users);
   renderWorkOrders(rows, organizationId);
+  Promise.all([createPhotos.reloadTemplates(), editPhotos.reloadTemplates()]).then(fillWorkTypes).catch(e => setCreateStatus(e.message, true));
 }
 
 function renderRlsSummary(rows) {
@@ -451,6 +479,8 @@ function openEditor(workOrderId) {
   editWoNumberInput.value = row.wo_number;
   editPropertyAddressInput.value = row.property_address;
   editWorkTypeInput.value = row.work_type;
+  editPhotos.load(row.run?.requirement_snapshot || {}, row.field_status !== "ASSIGNED");
+  fillWorkTypes();
   editInstructionsInput.value = row.instructions || '';
   editDueDateInput.value = row.due_date;
 

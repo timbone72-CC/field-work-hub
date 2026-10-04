@@ -68,6 +68,7 @@
 
           <div class="form-grid">
             <label>Work type
+              <select id="work-type-choice" aria-label="Work type options"><option value="">Custom / Other</option></select>
               <input id="work-type" name="work-type" type="text" required maxlength="200" placeholder="Occupancy Inspection">
             </label>
 
@@ -85,6 +86,8 @@
               <option value="">Sign in to load Team users</option>
             </select>
           </label>
+
+          <div id="create-photo-requirements"></div>
 
           <button id="create-wo" type="submit">Create &amp; Assign</button>
           <p id="create-status" class="status" role="status" aria-live="polite"></p>
@@ -108,6 +111,7 @@
 
           <div class="form-grid">
             <label>Work type
+              <select id="edit-work-type-choice" aria-label="Work type options"><option value="">Custom / Other</option></select>
               <input id="edit-work-type" type="text" required maxlength="200">
             </label>
 
@@ -128,6 +132,8 @@
 
           <p id="edit-reassign-note" class="muted"></p>
 
+          <div id="edit-photo-requirements"></div>
+
           <div class="row gap edit-actions">
             <button id="save-edit" type="submit">Save Changes</button>
             <button id="cancel-edit" class="secondary" type="button">Close Editor</button>
@@ -141,6 +147,7 @@
       <div id="work-orders" class="work-orders"></div>
     </section>
   </main>
+  <script src="photo-requirements.js?v=phase4-1" defer></script>
   <script src="app.js?v=admin-auto-refresh-20260930-1" defer></script>
   <script src="session.js?v=admin-auto-refresh-20260930-1" defer></script>
   <script src="contractors.js?v=admin-auto-refresh-20260930-1" defer></script>

@@ -52,6 +52,7 @@ jobs:
           fi
       - name: Check dashboard JavaScript syntax
         run: |
+          node --check dashboard/photo-requirements.js
           node --check dashboard/app.js
           node --check dashboard/auto-refresh.js
           node --check dashboard/session.js
