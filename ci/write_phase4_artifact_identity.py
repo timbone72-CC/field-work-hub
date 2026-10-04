@@ -19,7 +19,7 @@ signer=re.search(r'certificate SHA-256 digest:\s*([0-9a-fA-F]+)',cert).group(1).
 expected='1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe'
 assert signer==expected
 assert "name='com.inandout.fieldphotoprep.team.internal'" in badging
-assert ("versionCode='11'" if recovery else "versionCode='10'") in badging
+assert ("versionCode='13'" if recovery else "versionCode='12'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
 assert (Path('app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase/3.json')).is_file()
@@ -29,7 +29,7 @@ out=Path('phase4-artifacts')/variant;out.mkdir(parents=True,exist_ok=True)
 filename=f'Field-Work-Hub-0.4-Phase4-{variant}-{head[:7]}.apk'
 shutil.copyfile(apk,out/filename)
 identity={'runtime_head':head,'variant':variant,'file':filename,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
-          'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':11 if recovery else 10,
+          'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':13 if recovery else 12,
           'room_version':3,'field_sync_enabled':not recovery}
 (out/'identity.json').write_text(json.dumps(identity,indent=2)+'\n')
 print(json.dumps(identity,indent=2))
