@@ -265,3 +265,17 @@ Current evidence: v14 camera, offline/restart, account isolation, reconnect/froz
 
 
 Initial Finish correction CI at `7ac357af1bf0b9fdd2b1b61cc60e187cf560db0e`: Admin/database PASS; Android focused run 37351236371 compiled runtime/tests and passed 36 of 37 focused cases. The new dialog test verified its visible title/message, then failed when inspecting navigation before AlertDialog's queued button callback ran. Correct the test by draining the main looper after each button click; keep the actual exact-run navigation assertion and add dismissal verification. Runtime source is unchanged by this test-only repair. The initial head is not a verified candidate; complete tests/artifacts were skipped. Rerun focused tests before the full suite on the successor head; device staging remains stopped until both pass.
+
+
+## Finish explanation candidate v16 and recovery v17 verified — 2026-10-05
+
+Frozen tested source head **79ed0a908f2728162ba1692e512f02fdd8b0da4b**. Android run **37351501870** PASS: corrected focused tests, complete JVM suite, candidate/recovery builds, additive schema and APK identity checks. Admin **37351501783**, database **37351501767**, governance **37351497994** PASS for this head. The source tree published through the connector was independently matched to the local reviewed tree (`8c281fca7d7d224924b8418854ed659edfb0f75f`). No runtime source changed after the passing head; this successor is documentation only.
+
+Actual downloaded CI ZIP hashes match GitHub artifact digests; extracted APK hashes independently match their CI identity reports:
+
+- Candidate **v16**, artifact **11362737474**, `Field-Work-Hub-0.4-Phase4-candidate-79ed0a9.apk`, **7,957,679 bytes**, SHA-256 **c3cf29ddcc08c1685db52f9b2bb8f9d8e4640217bb0862a90d39cfd926c89c81**; field sync enabled.
+- Read-only recovery **v17**, artifact **11362174307**, `Field-Work-Hub-0.4-Phase4-recovery-79ed0a9.apk`, **7,957,687 bytes**, SHA-256 **a016b5ad815eaf277535d83f791ca36ba93d23162a4ef29225a2f9fc38e8213b**; field sync disabled.
+
+Both verify package `com.inandout.fieldphotoprep.team.internal`, stable signer SHA-256 **1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe**, and Room **v3**. Both verified files were retained and made available before offering installation. No new install or physical UI pass is claimed. Recover through v17 only if needed; never downgrade/uninstall/Clear data.
+
+The candidate is ready for the one affected device check; all earlier physical evidence remains accepted. Exact next operator step: install v16 as an update and confirm the existing work list/photos are present. Then create a fresh synthetic Front-1 / Total-2 job on the existing laptop dashboard, take one Front photo, tap Finish from its card, and verify the immediate one-more-photo explanation and Open Photos navigation. The newly observed viewport defect is the reason for this targeted additional gate. No repeated camera/offline/sync/conflict gate is required. The dialog device check, explicit Level 3 pre-merge approval, final proposed merge-head verification, integration and publication remain PENDING.
