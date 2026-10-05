@@ -20,9 +20,18 @@ Plan ID: `dashboard-workflow-enhancement-plan`.
 
 The laptop/PC Admin dashboard should support many jobs without an endlessly expanded page. It should carry context and saved decisions from assignment through review and client delivery.
 
-`Find address → choose/create WO → choose/adapt template → assign → contractor performs work → photos become available for review → Admin reviews → internal correction if needed → Admin approves client package → send → confirm delivery`.
+`Select company/address → choose/create WO → choose/adapt template → assign → contractor taps Accept to acknowledge → contractor starts/performs work → photos become available for review → Admin reviews → internal correction if needed → Admin approves client package → send to configured destination → confirm delivery`.
 
-Contractor Finish, receipt of photo bytes, photo approval, job/package approval and confirmed client delivery are distinct facts. No transition silently performs a later business action.
+Assignment download receipt, contractor acknowledgment, Start, contractor Finish, receipt of photo bytes, photo approval, job/package approval and confirmed client delivery are distinct facts. No transition silently performs a later business action.
+
+## Operator decisions — 2026-10-05
+
+The operator clarified at 15:51:45 America/Chicago:
+
+- FWH is a universal multi-company workflow, not an HNP-only product. Companies, work types, templates and authorized delivery destinations are configurable; HNP is one possible client configuration.
+- A contractor tapping **Accept** is the acknowledgment. Accept is separate from durable download receipt and **Start Work**; it does not automatically start work, finish work, approve evidence or send anything to a client. No extra acceptance confirmation screen or new Start prerequisite is requested.
+
+These decisions settle product direction within this proposal. They do not constitute completed Phase 5/6 implementation-plan approval or a runtime/merge gate.
 
 ## Recommended phase placement
 
@@ -30,14 +39,14 @@ Keep existing phase numbers. Phase 4 remains complete. Use two existing numbered
 
 | Phase / proposed section | Responsibility | Dependency |
 | --- | --- | --- |
-| Phase 5 — secure evidence transfer and reviewed-delivery foundation | Protected transfer, exact identity, persistent recovery, organization-private Admin-readable review storage and server-authorized final release primitives. | Preserve completed Phase 3/4 behavior. Decide review-storage/destination boundary before implementation. |
+| Phase 5 — secure evidence transfer and reviewed-delivery foundation | Protected transfer, exact identity, persistent recovery, organization-private Admin-readable review storage, configurable client-company destinations and server-authorized final release primitives. | Preserve completed Phase 3/4 behavior. Decide review-storage/destination boundary before implementation. |
 | Phase 6A — compact dashboard and job workspace | Search/filters, paged table, address/WO selection, tabs, queues, retained position, truthful status, next actions and existing conflict/cancel controls. | Server facts and Phase 5 readiness; deterministic layout work can be developed independently. |
-| Phase 6B — work-type templates and follow-ups | Relevant selectable templates, editable job copies, repeat/new jobs, linked corrective runs, fresh assignment and receipt, original client WO number preserved. | Existing template snapshots/run owners; amendment for pre-client-delivery follow-up. |
+| Phase 6B — work-type templates and follow-ups | Configurable companies/work types/templates, editable job copies, repeat/new jobs, linked corrective runs, fresh assignment receipt and explicit Accept acknowledgment, original client WO number preserved. | Existing template snapshots/run owners; amendment for pre-client-delivery follow-up. |
 | Phase 6C — photo review and correction loop | Category gallery, bulk/individual decisions, reasons, one correction request, returned-photo review. | Secure review bytes from Phase 5 and corrective-run authority from 6B. |
 | Phase 6D — final client package and sending | Preview approved selection, selected destination, explicit job/package approval and Send, confirmation/failure/reconciliation. | Review from 6C; Phase 5 owns transfer/delivery identity and retry mechanics. |
 | Phase 6E — optional alerts and notifications | Dashboard alerts, per-type phone/computer preferences, timings, quiet hours, deduplication, snooze and links to affected work. | Stable business events from earlier sections. Each device/channel needs its own truthful support boundary. |
 | Phase 7 — internal real-world pilot | Exercise the entire updated workflow with safe jobs before live expansion. | Updated Phase 5/6 completion evidence. |
-| Phase 8 — production readiness / small HNP pilot | Production notification/storage configuration, access/revocation, retention and controlled deployment. | Retain existing production gates; do not use them to postpone required Phase 5/6 protection. |
+| Phase 8 — production readiness / small configured-company pilot | Production company/destination/notification configuration, access/revocation, retention and controlled deployment. HNP may be a pilot configuration, not product-wide identity. | Retain existing production gates; do not use them to postpone required Phase 5/6 protection. |
 
 Sections organize coherent implementation batches and evidence, not repeated plan approvals. Notification mechanics are separable from layout and review and come last within the fully planned Phase 6 parent. Phase 5 must include a controlled Admin release test surface/API so its delivery protection can be proven before the richer Phase 6 UI exists.
 
@@ -49,11 +58,13 @@ Sections organize coherent implementation batches and evidence, not repeated pla
 - Tabs: Details, Assignment, Requirements, Review, Delivery and History. Keep address/client WO identity visible.
 - Show one primary next action appropriate to server-confirmed state; keep other legitimate actions reachable.
 - Preserve filters, sort/page/scroll and safely saved draft/review decisions when closing or moving to the next job. Surface save failures and stale-edit conflicts; do not claim saved from browser memory alone.
-- Queues/counts: Needs assignment, Awaiting acceptance where enabled, In progress, Overdue, Finished—photos pending, Awaiting review, Follow-up pending, Ready to send, Delivery problem, Completed and other Problems.
+- Queues/counts: Needs assignment, Awaiting acknowledgment, In progress, Overdue, Finished—photos pending, Awaiting review, Follow-up pending, Ready to send, Delivery problem, Completed and other Problems. Reminder/notification preferences remain optional; assignment acknowledgment is a separate fact.
 - Unsynchronized phone-only evidence is unknown to the dashboard, never assumed absent or successfully received. Display last refresh/stale connectivity truth when relevant.
 - Keep historical Complete searchability and current conflict/reassignment/cancel protection. Alerts never replace the underlying job problem state.
 
 ## Work orders, templates and follow-ups
+
+Client company is a configurable business context within the Admin's authorized organization, not a substitute for the organization/tenant security boundary. Work types, template choices/defaults and authorized delivery settings must support different client companies without hard-coded HNP names, requirements, folder roots or credentials. Template applicability may include organization-wide options as well as company-specific defaults; keep a flat list and per-job editability.
 
 Address is a navigation grouping, not photo/WO identity. Group only within the authorized organization/company. Do not merge different properties or companies because address text happens to match; uncertain address matches require a deliberate choice. A permanent Property entity is not automatically required.
 
@@ -61,13 +72,23 @@ The Admin selects an existing WO or creates new work, then chooses its previousl
 
 A template contains work description/instructions and the existing flat photo-item requirements. Every item/count/instruction remains configurable for a new dispatch. Applying a template copies values into a run snapshot; editing the job does not silently edit the reusable template. Explicit actions save a new template or update future defaults. Old snapshots/history remain intact.
 
-Follow-up keeps the same permanent Team WO and external client WO number, but creates a new run UUID and clear contractor label/reason. Admin chooses an eligible contractor and due date, with fresh assignment receipt and zero new-run capture counters. Previous photos do not satisfy the new run's capture requirements.
+Follow-up keeps the same permanent Team WO and external client WO number, but creates a new run UUID and clear contractor label/reason. Admin chooses an eligible contractor and due date, with fresh assignment receipt, fresh contractor acknowledgment and zero new-run capture counters. Previous photos do not satisfy the new run's capture requirements.
 
 Distinguish internal corrections before client delivery from client-requested corrections after a sent package. Either retains prior run history. Ordinary repeat work carrying a new client order is a new WO, not automatically a corrective run. A completed address can offer follow-up, repeat using prior template, or new work/template without forcing one choice.
 
 A corrective run should contain only the new work/photos actually requested. It need not reapply the original full template. The final client package may include approved original and corrective-run photos; their original immutable identities and category provenance are preserved.
 
 Templates remain editable, but dispatched offline/started run requirements cannot be silently rewritten. Existing Start freeze, revision races and protected evidence remain authoritative pending any explicit amendment. Further requested work uses a deliberate new run/revision path; no generic requirement bypass is introduced.
+
+## Contractor Accept acknowledgment
+
+The contractor sees **Accept** on a new assignment; one tap durably records acknowledgment for that exact authenticated contractor and assignment/run instance. **Start Work** remains a separate existing action. Do not add a new durable field state merely to display Accepted; retain the acknowledged timestamp alongside download receipt and the existing run state.
+
+Show Admin facts distinctly: Assigned, Downloaded/received, Acknowledged (contractor-facing Accepted), and Started. Durable download alone never produces an Accepted label. Reassignment, redispatch or a follow-up requires a fresh acknowledgment; a previous contractor/run acknowledgment is history only.
+
+Offline acknowledgment persists in the existing owner-scoped local/action system before the app says it is saved, survives restart and synchronizes idempotently. The phone distinguishes pending sync from server-confirmed acknowledgment. Admin cannot know an unsynchronized tap; show only server-confirmed facts and relevant freshness. Stale or no-longer-authorized acknowledgments preserve evidence and surface the existing conflict boundary rather than accepting the wrong assignment.
+
+Acceptance reminders may use the acknowledgment fact and configurable elapsed time. They remain optional, stop when resolved/reassigned/cancelled, and never claim that the human has not acknowledged solely because the phone is offline. This proposal does not introduce a mandatory Accept-before-Start block.
 
 ## Photo review and correction loop
 
@@ -87,13 +108,17 @@ The approved roadmap currently delivers every frozen photo directly to the HNP a
 
 Phase 5 must distinguish protected inbound evidence/review availability from client release. Unreviewed or rejected photos and internal correction comments must not become visible to clients through destination-folder sharing, reports or live links.
 
-Design and validate an organization-private staging/review destination and Admin-authorized retrieval before selecting its implementation. It can reuse a verified private company-controlled boundary if permissions prove that clients cannot see it. Do not assume that an HNP folder is private or that review is possible from metadata without uploaded bytes. Backend remains the owner of storage authorization; clients never receive reusable company secrets.
+Design and validate an organization-private staging/review destination and Admin-authorized retrieval before selecting its implementation. It can reuse a verified private company-controlled boundary if permissions prove that clients cannot see it. Do not assume that a selected company folder is private or that review is possible from metadata without uploaded bytes. Backend remains the owner of storage authorization; clients never receive reusable company secrets.
 
 A frozen, revisioned client-package manifest records selected approved photo UUIDs across eligible runs, client-facing notes, exact authorized destination, approval and delivery outcome. Package approval and Send are separate actions. Sending uses the same identity on retry; success requires confirmed provider results and durable bookkeeping. Ambiguous outcome becomes unresolved, not a blind resend or success.
 
 Preview exactly what the client receives. Internal visit labels/rejection comments stay internal unless intentionally included as client-facing information. A correction before first delivery produces one initial client submission under the original number; a client return creates a deliberate corrected package/revision with earlier delivery history preserved.
 
-Destination selection should initially be limited to configured, verified destinations. Existing HNP Drive is the baseline. Additional storage providers, email/report output or automatic client-portal submission require a defined interface, authentication, permission and provider gate; they are not implied by a dropdown.
+Destination selection is company-configurable and limited to supported, verified destinations. Google Drive is a candidate first supported provider because it already appears in the roadmap, but its authorized account/root/folder settings must belong to the selected organization/client-company configuration rather than a global HNP constant. HNP can be one configured company; the same core workflow must accommodate other companies and destinations without an HNP-specific build.
+
+Keep work-order/run/review/package logic independent of provider details through the single existing delivery owner and a narrow provider-facing boundary. Bind each package/attempt to its exact authorized configured destination; changing a company default must not redirect an in-flight retry. Template labels, external WO numbers and address matches never authorize cross-company delivery or shared access.
+
+Universal design does not imply that every storage provider or client portal is already integrated. Each additional provider, email/report output or client-system submission needs a concrete supported delivery method, authorization and provider gate. Do not invent a generic integration framework or promise unsupported delivery choices. Source/live configuration and the roadmap's HNP-specific and deferred-multiple-provider clauses must be amended explicitly before dependent runtime work.
 
 Rejected photos still require a safe resolved retention path so they do not block the original all-photos-delivered Complete rule forever. Separate durable private evidence receipt from client delivery eligibility. Define cleanup/retention before implementation; preserve originals until the governing confirmation and durable-bookkeeping conditions are met. Do not let review status alone trigger deletion or strand required evidence only on a contractor phone.
 
@@ -104,7 +129,7 @@ Each type has independent Dashboard, Phone and Computer on/off choices. Admin ma
 Types: finished/awaiting review; assignment awaiting acceptance; acceptance reminder after selected time; overdue job; follow-up awaiting review; upload failed/stalled; sync/assignment/cancellation conflict or app problem needing intervention; final delivery failure.
 
 - Finished—uploads pending and Ready for review are different events.
-- Receipt means durable app download, not a person's acceptance. If explicit Accept is added, give it its own server fact/action and fresh assignment-instance identity. Never label a download as Accepted.
+- Receipt means durable app download. Tapping Accept is the human acknowledgment, recorded separately for the exact current assignment. Never label a download as Accepted or send an acceptance reminder after server-confirmed acknowledgment.
 - Acceptance timing, due-date changes, reminder timing and quiet hours use clear timezone rules. Cancel/reassign/complete invalidates obsolete reminders.
 - Group/deduplicate by issue, assignment/run and event. Repeated refresh/retry does not flood devices. One alert acknowledgment is not resolution.
 - Snooze affects interruption, not the underlying status. Resolution clears active alerts based on verified facts; retain needed history.
@@ -124,22 +149,22 @@ Navigation cannot auto-approve, dispatch, release, delete or resolve conflicts. 
 
 Before coding, replace/augment the complete numbered Phase 5 and Phase 6 plans, not just their next letter. Define exact storage/authorization, persistence, APIs, migrations, rollback, notification support and retained evidence policy for all included sections. Do not label this proposal as that completed implementation design.
 
-Automated boundaries: organization/role isolation; template-copy/history invariants; follow-up/run identity and idempotency; fresh receipt versus acceptance; freeze/revision/offline races; review/bulk decisions; captured versus approved coverage; package revision/approval invalidation; private staging and release guards; retry-safe versus uncertain provider results; no false Complete; notification event deduplication/quiet hours/revocation and stale reminders; unrelated-job independence.
+Automated boundaries: organization/role isolation; template-copy/history invariants; follow-up/run identity and idempotency; fresh receipt versus Accept acknowledgment, offline acknowledgment recovery/idempotency and stale-assignment rejection; configured-company/destination separation; freeze/revision/offline races; review/bulk decisions; captured versus approved coverage; package revision/approval invalidation; private staging and release guards; retry-safe versus uncertain provider results; no false Complete; notification event deduplication/quiet hours/revocation and stale reminders; unrelated-job independence.
 
 Combined genuine gates, selected in the complete plans:
 
 1. Phase 5 phone/provider: disposable offline captures survive restart/interruption, exact private review bytes become Admin-readable, clients cannot access them, authorized release confirms exact selected destination without duplicates, cleanup respects retained evidence.
-2. Phase 6 laptop/phone: address/WO/template → assign → completed evidence review → selective correction → fresh contractor follow-up → review returned photos → one approved client package → confirmed delivery; history and rejected/internal evidence stay correct. Prove paged navigation and retained context with representative synthetic job/photo volumes.
+2. Phase 6 laptop/phone: configured company/address/WO/template → assign → contractor Accept acknowledgment distinct from Start → completed evidence review → selective correction → fresh contractor follow-up → review returned photos → one approved client package → confirmed delivery; history and rejected/internal evidence stay correct. Prove paged navigation and retained context with representative synthetic job/photo volumes.
 3. Phase 6 notification devices: selected alert reaches configured phone/computer, denied/offline/disabled cases are truthful, quiet hours/deduplication work, click opens the right authorized job, and closed-browser/locked-phone support is tested only if promised.
 
 Build independent automated-testable work first; combine compatible real checks; do not repeat Phase 4 camera/freeze evidence merely because the layout changes. Focused checks during implementation, one final complete suite on the exact runtime head, and required Level 3 pre-merge approval remain in force.
 
 Completion: Phase 5 establishes secure recoverable review transfer and guarded provider delivery; Phase 6 lets Admin move through the whole workflow without losing context, conflating receipt/completion/approval/delivery, exposing rejected/private material or hiding unresolved problems. Selected notifications must satisfy the explicitly supported channel gates. Update Phase 7 pilot scenarios and Phase 8 production configuration/retention checks accordingly.
 
-## Decisions to settle in the complete Phase 5/6 amendment
+## Remaining implementation decisions for the complete Phase 5/6 amendment
 
-1. First client-delivery destination(s): configured HNP Drive only, other selected storage, report/email output or client-system submission. Do not guess access/integration support.
-2. Whether personal contractor acceptance is required before Start or is an acknowledgment/reminder feature; current durable download receipt stays separate either way.
-3. Private review storage/access and retention of rejected evidence, package selection/coverage across runs, supported notification mechanism and device enrollment. These require source/provider reconciliation and concrete implementation design, not speculative product promises.
+Product direction is settled: universal company-configurable design, and one-tap Accept acknowledgment separate from receipt/Start. Do not ask the operator to choose those again.
 
-Next checkpoint: review this consolidated placement and settle the first destination and acceptance policy, then finish one consolidated whole-phase amendment before runtime changes. Preserve all accepted Phase 4 results and existing production data.
+Finish source/provider reconciliation for the first supported configurable delivery method, organization-private review storage/access and rejected-evidence retention, package coverage across runs, exact assignment acknowledgment persistence/authorization, supported phone/computer notification mechanisms and enrollment. Request only a material unresolved business choice that cannot be derived from existing authorization; routine architecture work is the implementer's responsibility.
+
+Next checkpoint: finish one consolidated whole-phase amendment that incorporates these decisions and replaces the affected HNP-specific, direct-delivery, completion, receipt/acknowledgment and deferred-notification assumptions before runtime changes. Preserve all accepted Phase 4 results and existing production data.
