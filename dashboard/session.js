@@ -229,7 +229,7 @@ async function adminFetch(url, options = {}) {
   const epoch = adminSessionEpoch;
   await ensureFreshAdminSession();
   if (epoch !== adminSessionEpoch || !accessToken) throw new Error('The Admin session changed.');
-  const mutation = /\/rpc\/admin_(create|update)_work_order|\/functions\/v1\/admin-invite-contractor/.test(url);
+  const mutation = /\/rpc\/admin_(create|update)_work_order|\/rpc\/admin_save_photo_template|\/functions\/v1\/admin-invite-contractor/.test(url);
   if (mutation) {
     adminWritesPending++;
     adminWriteRevision++;

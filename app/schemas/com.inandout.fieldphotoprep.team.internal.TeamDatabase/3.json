@@ -1,0 +1,512 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "563c8a127eab0d0b69100b59cc7bb6f7",
+    "entities": [
+      {
+        "tableName": "cached_work_orders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`cache_owner_user_id` TEXT NOT NULL, `organization_id` TEXT NOT NULL, `work_order_id` TEXT NOT NULL, `run_id` TEXT NOT NULL, `run_sequence` INTEGER NOT NULL, `assigned_user_id` TEXT NOT NULL, `wo_number` TEXT NOT NULL, `property_address` TEXT NOT NULL, `work_type` TEXT NOT NULL, `instructions` TEXT NOT NULL, `admin_updates_json` TEXT NOT NULL, `due_date` TEXT NOT NULL, `requirement_snapshot_json` TEXT NOT NULL, `field_status` TEXT NOT NULL, `assignment_received_at` TEXT NOT NULL, `started_at` TEXT NOT NULL, `field_completed_at` TEXT NOT NULL, `pending_assignee_user_id` TEXT NOT NULL, `reassignment_requested_at` TEXT NOT NULL, `server_updated_at` TEXT NOT NULL, `last_successful_sync_epoch_ms` INTEGER NOT NULL, `assignment_instance_id` TEXT NOT NULL DEFAULT '', `conflict_reason` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`cache_owner_user_id`, `work_order_id`, `run_id`))",
+        "fields": [
+          {
+            "fieldPath": "cacheOwnerUserId",
+            "columnName": "cache_owner_user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "organizationId",
+            "columnName": "organization_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workOrderId",
+            "columnName": "work_order_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runSequence",
+            "columnName": "run_sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignedUserId",
+            "columnName": "assigned_user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "woNumber",
+            "columnName": "wo_number",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "propertyAddress",
+            "columnName": "property_address",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workType",
+            "columnName": "work_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instructions",
+            "columnName": "instructions",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adminUpdatesJson",
+            "columnName": "admin_updates_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueDate",
+            "columnName": "due_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requirementSnapshotJson",
+            "columnName": "requirement_snapshot_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fieldStatus",
+            "columnName": "field_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignmentReceivedAt",
+            "columnName": "assignment_received_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fieldCompletedAt",
+            "columnName": "field_completed_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pendingAssigneeUserId",
+            "columnName": "pending_assignee_user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reassignmentRequestedAt",
+            "columnName": "reassignment_requested_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverUpdatedAt",
+            "columnName": "server_updated_at",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSuccessfulSyncEpochMs",
+            "columnName": "last_successful_sync_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignmentInstanceId",
+            "columnName": "assignment_instance_id",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "conflictReason",
+            "columnName": "conflict_reason",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "cache_owner_user_id",
+            "work_order_id",
+            "run_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cached_work_orders_cache_owner_user_id_organization_id",
+            "unique": false,
+            "columnNames": [
+              "cache_owner_user_id",
+              "organization_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_work_orders_cache_owner_user_id_organization_id` ON `${TABLE_NAME}` (`cache_owner_user_id`, `organization_id`)"
+          },
+          {
+            "name": "index_cached_work_orders_assigned_user_id",
+            "unique": false,
+            "columnNames": [
+              "assigned_user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_work_orders_assigned_user_id` ON `${TABLE_NAME}` (`assigned_user_id`)"
+          },
+          {
+            "name": "index_cached_work_orders_due_date",
+            "unique": false,
+            "columnNames": [
+              "due_date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_work_orders_due_date` ON `${TABLE_NAME}` (`due_date`)"
+          }
+        ]
+      },
+      {
+        "tableName": "field_actions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`actionId` TEXT NOT NULL, `ownerId` TEXT NOT NULL, `organizationId` TEXT NOT NULL, `workOrderId` TEXT NOT NULL, `runId` TEXT NOT NULL, `assignmentInstanceId` TEXT NOT NULL, `kind` TEXT NOT NULL, `eventTime` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `sequence` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `retryNotBefore` INTEGER NOT NULL, `reason` TEXT NOT NULL, `claimId` TEXT NOT NULL, `claimGeneration` INTEGER NOT NULL, `canonicalStatus` TEXT NOT NULL, `canonicalStartedAt` TEXT NOT NULL, `canonicalCompletedAt` TEXT NOT NULL, `serverUpdatedAt` TEXT NOT NULL, `acceptedAt` TEXT NOT NULL, `requirementRevision` TEXT NOT NULL DEFAULT '', `finishSetId` TEXT NOT NULL DEFAULT '', `finishPhotosJson` TEXT NOT NULL DEFAULT '', `finishDigest` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`actionId`))",
+        "fields": [
+          {
+            "fieldPath": "actionId",
+            "columnName": "actionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "organizationId",
+            "columnName": "organizationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workOrderId",
+            "columnName": "workOrderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignmentInstanceId",
+            "columnName": "assignmentInstanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventTime",
+            "columnName": "eventTime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retryNotBefore",
+            "columnName": "retryNotBefore",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "claimId",
+            "columnName": "claimId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "claimGeneration",
+            "columnName": "claimGeneration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalStatus",
+            "columnName": "canonicalStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalStartedAt",
+            "columnName": "canonicalStartedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalCompletedAt",
+            "columnName": "canonicalCompletedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverUpdatedAt",
+            "columnName": "serverUpdatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedAt",
+            "columnName": "acceptedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requirementRevision",
+            "columnName": "requirementRevision",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "finishSetId",
+            "columnName": "finishSetId",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "finishPhotosJson",
+            "columnName": "finishPhotosJson",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "finishDigest",
+            "columnName": "finishDigest",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "actionId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_field_actions_ownerId_organizationId_workOrderId_runId_assignmentInstanceId_kind",
+            "unique": true,
+            "columnNames": [
+              "ownerId",
+              "organizationId",
+              "workOrderId",
+              "runId",
+              "assignmentInstanceId",
+              "kind"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_field_actions_ownerId_organizationId_workOrderId_runId_assignmentInstanceId_kind` ON `${TABLE_NAME}` (`ownerId`, `organizationId`, `workOrderId`, `runId`, `assignmentInstanceId`, `kind`)"
+          },
+          {
+            "name": "index_field_actions_ownerId_organizationId_sequence",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "organizationId",
+              "sequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_field_actions_ownerId_organizationId_sequence` ON `${TABLE_NAME}` (`ownerId`, `organizationId`, `sequence`)"
+          }
+        ]
+      },
+      {
+        "tableName": "protected_photos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `ownerId` TEXT NOT NULL, `organizationId` TEXT NOT NULL, `workOrderId` TEXT NOT NULL, `runId` TEXT NOT NULL, `assignmentInstanceId` TEXT NOT NULL, `requirementRevision` TEXT NOT NULL, `itemId` TEXT NOT NULL, `capturedAt` TEXT NOT NULL, `originalPath` TEXT NOT NULL, `preparedPath` TEXT NOT NULL, `state` TEXT NOT NULL, `problem` TEXT NOT NULL, `finishSetId` TEXT NOT NULL, `originalBytes` INTEGER NOT NULL, `prepared` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "organizationId",
+            "columnName": "organizationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workOrderId",
+            "columnName": "workOrderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignmentInstanceId",
+            "columnName": "assignmentInstanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requirementRevision",
+            "columnName": "requirementRevision",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemId",
+            "columnName": "itemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capturedAt",
+            "columnName": "capturedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalPath",
+            "columnName": "originalPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "preparedPath",
+            "columnName": "preparedPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "problem",
+            "columnName": "problem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishSetId",
+            "columnName": "finishSetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalBytes",
+            "columnName": "originalBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "prepared",
+            "columnName": "prepared",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_protected_photos_ownerId_organizationId_workOrderId_runId",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "organizationId",
+              "workOrderId",
+              "runId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_protected_photos_ownerId_organizationId_workOrderId_runId` ON `${TABLE_NAME}` (`ownerId`, `organizationId`, `workOrderId`, `runId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '563c8a127eab0d0b69100b59cc7bb6f7')"
+    ]
+  }
+}

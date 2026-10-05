@@ -31,7 +31,7 @@ final class RoomAssignmentStore implements AssignmentStore {
                             workOrder.instructions,
                             "[]",
                             workOrder.dueDate,
-                            "{}",
+                            workOrder.requirementSnapshotJson,
                             workOrder.fieldStatus,
                             workOrder.assignmentReceivedAt,
                             workOrder.startedAt,
@@ -70,6 +70,7 @@ final class RoomAssignmentStore implements AssignmentStore {
                             row.startedAt,
                             row.fieldCompletedAt,
                             row.serverUpdatedAt);
+            workOrder.requirementSnapshotJson = row.requirementSnapshotJson;
             workOrder.assignmentInstanceId = row.assignmentInstanceId;
             workOrder.conflictReason = row.conflictReason;
             for (FieldAction a : dao.actions(session.userId, session.organizationId)) {

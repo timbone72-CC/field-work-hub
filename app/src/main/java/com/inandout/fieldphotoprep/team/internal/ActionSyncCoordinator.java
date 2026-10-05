@@ -129,6 +129,9 @@ final class ActionSyncCoordinator {
     boolean hasUnresolved(String owner, String org, String wo) {
         for (FieldAction a : dao.actions(owner, org))
             if (a.workOrderId.equals(wo) && !"ACCEPTED".equals(a.state)) return true;
+        for (CachedWorkOrder r : dao.listForOwner(owner, org)) if (r.workOrderId.equals(wo))
+            for (ProtectedPhoto p : dao.photos(owner, org, wo, r.runId))
+                if (!"DISCARDED".equals(p.state)) return true;
         return false;
     }
 }

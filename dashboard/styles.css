@@ -211,3 +211,8 @@ button.secondary {
   .work-order-actions button { width: 100%; }
   .edit-actions button { width: 100%; }
 }
+
+.photo-item { display: grid; grid-template-columns: auto 1fr 120px; gap: 10px; padding: 12px; border: 1px solid #d8dbe0; border-radius: 8px; }
+.photo-item details { grid-column: 1 / -1; }
+.photo-total { display: flex; gap: 20px; align-items: center; }
+@media (max-width: 620px) { .photo-item { grid-template-columns: 1fr; } .photo-total { display: block; } }

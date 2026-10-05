@@ -78,6 +78,13 @@ final class SessionCoordinator {
         }
     }
 
+    <T> T local(long generation, SupabaseApi.AuthSession expected, java.util.concurrent.Callable<T> work) throws Exception {
+        synchronized(stateLock) {
+            if (!matches(generation, expected.userId, expected.organizationId)) throw new SessionChanged();
+            return work.call();
+        }
+    }
+
     boolean runIfCurrent(long generation, Runnable action) {
         synchronized (stateLock) {
             if (store.generation() != generation) return false;

@@ -1,4 +1,4 @@
-name: Phase 3 Database Gate CI
+name: FWH Database Gate CI
 on:
   pull_request:
   push:
@@ -35,7 +35,9 @@ jobs:
         run: |
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_3a_database_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_3_actions_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_4_photos_gate.sql
       - name: Verify real two-connection mutation races
         run: |
           python3 -m pip install 'psycopg[binary]==3.2.10'
           python3 tests/supabase/phase_3_lock_races.py
+          python3 tests/supabase/phase_4_lock_races.py

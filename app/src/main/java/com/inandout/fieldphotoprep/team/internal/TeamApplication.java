@@ -12,6 +12,7 @@ public final class TeamApplication extends Application {
         startup.execute(
                 () -> {
                     TeamRuntime runtime = TeamRuntime.get(this);
+                    if (BuildConfig.FIELD_SYNC_ENABLED) runtime.photos.io.execute(runtime.photos::recover);
                     SupabaseApi.AuthSession s = runtime.sessions.load();
                     if (s != null) runtime.scheduler.ensure(s);
                 });

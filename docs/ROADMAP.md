@@ -44,7 +44,7 @@ Team carries forward:
 - app-private protected original before camera bytes are accepted;
 - one shutter press = one independent protected-photo transaction;
 - immutable work-order binding;
-- CameraX multi-shot `Take → Take → Take → Done`;
+- CameraX multi-shot `Take → Take → Take → Done` with the FPP preview-first layout; the required-item selector spans the top, camera instructions remain in the saved work-order but are not repeated over the preview, and Flash/Torch controls sit on a separate row;
 - capture without internet;
 - preservation of non-empty image bytes even after abnormal callback/lifecycle paths;
 - separate protected original and prepared upload derivative;
@@ -829,13 +829,13 @@ Completion gate: **retained 3A proof plus multiple assignments, offline Start/Fi
 
 ---
 
-# Phase 4 — Photo requirements, CameraX capture, protection, and preparation — SCOPE APPROVED / RUNTIME NOT STARTED
+# Phase 4 — Photo requirements, CameraX capture, protection, and preparation — IMPLEMENTATION AND PHYSICAL CHECKS PASS / FINAL CHECKS AND MERGE APPROVAL PENDING
 
 ## Goal
 
 Add Admin-controlled Total and custom photo-item rules plus the proven FPP multi-shot field camera without weakening run identity or offline safety.
 
-Whole numbered-phase scope, authority, failure/recovery, dependencies, exact evidence gates and approval record: [PHASE_4_IMPLEMENTATION_PLAN_2026-10-03.md](PHASE_4_IMPLEMENTATION_PLAN_2026-10-03.md). Its 4A–4E sections are one implementation/approval unit. The operator approved the discussed amendment and continuation at 2026-10-03 15:00:44 America/Chicago. Backend/runtime/device evidence remains pending; no letter-only plan approvals or phone gates are added.
+Whole numbered-phase scope, authority, failure/recovery, dependencies, exact evidence gates and approval record: [PHASE_4_IMPLEMENTATION_PLAN_2026-10-03.md](PHASE_4_IMPLEMENTATION_PLAN_2026-10-03.md). Its 4A–4E sections are one implementation/approval unit. The operator approved the discussed amendment and continuation at 2026-10-03 15:00:44 America/Chicago. Backend and exact-head automated checks pass. Candidate v14 camera layout and Flash/Torch checks pass; the operator also reports offline capture, restart recovery, Finish enforcement (blocked at During 0/2), and account isolation passed. Reconnect/frozen metadata/Finish with delivery-pending verification and the controlled photo-bearing revision conflict/Needs review check now PASS (2026-10-05). The blocked-Finish visibility defect is corrected and accepted: show the owning error immediately in a dialog with missing counts and Open Photos for that exact run. New v16/v17 exact-head automation/artifact verification PASS at `79ed0a908f2728162ba1692e512f02fdd8b0da4b`; the targeted explanation device check PASS on 2026-10-05 (visible Total 1/2 explanation and operator-confirmed Open Photos navigation). No further device check is pending. Final proposed merge-head checks and explicit Level 3 merge approval remain pending. Retain all accepted physical evidence. Explicit Level 3 merge approval remains pending; public Pages publication follows approved integration on main. [Implementation and staging record](PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md) owns exact artifacts, hosted evidence, rollback and the grouped gate. No letter-only plan approvals or phone gates are added.
 
 ## 4A — Admin work-type templates + run requirement snapshots
 

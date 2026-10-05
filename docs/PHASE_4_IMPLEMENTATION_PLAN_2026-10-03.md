@@ -1,6 +1,8 @@
 # Field Work Hub — Phase 4 Implementation Plan — 2026-10-03
 
-Status: **APPROVED SCOPE — WHOLE-PHASE PLAN RECORDED; RUNTIME NOT STARTED**
+Status: **APPROVED SCOPE — IMPLEMENTATION AND REQUIRED PHYSICAL CHECKS PASS; FINAL MERGE-HEAD CHECKS / LEVEL 3 APPROVAL PENDING**
+
+Current runtime evidence and staging authority: [PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md](PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md). Original planning classification/history below remains historical.
 
 Plan ID: `phase-4-implementation-plan`.
 
@@ -166,7 +168,7 @@ Use controlled rolled-back SQL fixtures and disposable multi-connection races wh
 
 ## One combined Admin laptop / Android physical gate
 
-Stage only after focused and complete exact-head automation, hosted authorization/parity/advisors and both artifact identities/recovery pass. Record candidate SHA/hash/signer/version, roadmap/implementation record, rollback and exact PASS/BLOCKED/FAIL criteria. The gate proves real Admin-to-cached snapshot flow and actual CameraX/offline/restart behavior; no Drive gate belongs to this phase.
+Stage only after focused and complete exact-head automation, hosted authorization/parity/advisors and both artifact identities/recovery pass. Record candidate SHA/hash/signer/version, roadmap/implementation record, rollback and exact PASS/BLOCKED/FAIL criteria. The gate proves real Admin-to-cached snapshot flow and actual CameraX/offline/restart behavior; no Drive gate belongs to this phase. Use the exact tested dashboard served on laptop loopback as recorded in the implementation record. GitHub Pages publishes from protected main after approved integration; the pre-merge gate does not require changing that protection or adding preview infrastructure. Actual local Admin login remains required evidence.
 
 1. On the laptop, create a disposable named-item WO from a reusable template; customize counts/on-off/instructions/order. Verify the preview math and a second all-off or Total-only run without changing the template's other snapshots.
 2. On Android, refresh/download both; confirm requirements match before Start. Turn Airplane mode on **and Wi-Fi off**, then Start the named run offline.
@@ -185,7 +187,7 @@ PASS: configured and simple/all-off behavior works, repeated capture remains qui
 
 Phase 4 completes only when the whole approved behavior, focused/final exact-head automation, deployed migration/grant/advisor parity, verified recovery, combined physical gate, explicit Level 3 merge approval and runtime integration agree. Keep photos **WAITING / delivery pending** for Phase 5; no claim of remote delivery/cleanup. Phase 5 consumes the same UUID/item/revision/frozen-set facts and adds company-authorized bytes/destination/retry, preserving this counting rule. Future Phase 6 derives Total/item counts from server-known facts, never phone-only guesses.
 
-Current status: **planning scope approved and recorded; runtime/backend/APK/device gates PENDING**. No Phase 4 implementation/deployment is claimed. Next exact checkpoint: integrate this documentation plan after its required checks, then create the single Phase 4 runtime branch/implementation record and implement 4A–4E within this plan. No new letter-level plan approval; stop only for material new decisions, failed evidence, the genuine device boundary or separate explicit Level 3 pre-merge approval.
+Current status: **backend and prior exact-head automation/artifact verification PASS; Admin/template/custom/all-off creation and copy isolation PASS; v14 camera layout and Flash/Torch, offline capture/restart, count enforcement, account isolation, reconnect/frozen metadata/Finish with delivery pending, and controlled photo-bearing conflict/Needs review PASS.** The 2026-10-05 screenshot exposed a visible Finish explanation defect: its existing error appeared above the scrolled viewport. The accepted correction now shows a dialog with remaining item/Total counts and exact-run Open Photos navigation. Candidate v16/read-only recovery v17 exact-head automation and artifact verification PASS at `79ed0a908f2728162ba1692e512f02fdd8b0da4b`; the targeted explanation device check also PASS on 2026-10-05 with the visible Total 1/2 popup and operator-confirmed exact-job Open Photos navigation. No further device check is pending. Explicit Level 3 merge approval, runtime integration and main publication remain PENDING. The implementation record owns exact identities, evidence and rollback. Preserve app data and accepted photos/jobs; do not repeat passed physical gates.
 
 ## Operator clarification — optional walking order — 2026-10-03 15:15 America/Chicago
 
