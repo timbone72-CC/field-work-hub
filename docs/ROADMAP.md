@@ -1,8 +1,43 @@
-# Field Photo Prep Team — Master Implementation Roadmap
+# Field Work Hub — Master Implementation Roadmap
 
-Planning status: **APPROVED / CURRENT — runtime work remains phase-gated**
+Planning status: **APPROVED BASELINE / COMPLETE PHASE 5–6 AMENDMENT PENDING APPROVAL — runtime work remains phase-gated**
 
 Operator approval recorded: **2026-09-14**.
+
+## Pending consolidated Phase 5/6 amendment — 2026-10-05
+
+**Planning package complete; new parent-phase approval PENDING. No runtime, production configuration or existing phase-completion status changes.** The 2026-09-14 approved baseline below is retained, including accepted Phase 3/4 evidence. Its direct HNP delivery and cleanup assumptions conflict with the requested private-review workflow; dependent Phase 5/6 runtime is blocked until this complete amendment is approved and integrated. The retained old Phase 5/6 outline is historical baseline, not permission to implement the conflicting direct-release path.
+
+Authoritative planning line: `docs/dashboard-workflow-enhancements`, scope key `dashboard-workflow-enhancement-plan`; main baseline `7644fe3e48048d2f2068638494c8ece3348e23fe`.
+
+- [Complete combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md).
+- [Complete Phase 5 amendment — sections 5A–5E](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md).
+- [Complete Phase 6 amendment — sections 6A–6E](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md).
+
+One parent-phase plan approval covers each phase's included lettered sections; letters do not create repeated design gates. Existing Level 3 pre-merge approval, exact-head tests and genuine device/provider boundaries remain governing. The operator's instructions to combine and finish planning authorize this documentation, not a fabricated runtime/physical PASS or a retroactive approval record.
+
+### Exact pending replacements
+
+| Baseline section / assumption | Replacement once approved |
+| --- | --- |
+| First finish line; FPP Team transfer adaptation; global authority's Drive/HNP wording | Universal company-configurable workflow; private Supabase evidence → Admin review/preparation → manually approved client package → explicit Send → confirmed first-provider Drive delivery. Supabase still owns business authority. |
+| Work types/templates | Existing flat templates gain optional company applicability, description/instructions, several selectable options per type, historical snapshot reuse and explicit Save as new/Update; dispatched/started snapshot protection stays. |
+| Assignment receipt | Preserve durable downloaded receipt; add separate one-tap Accept fact per exact instance, offline persistence/idempotency, fresh acknowledgment after reassign/follow-up; no new field state or mandatory Accept-before-Start gate. |
+| Reopen Work Order / completed-only correction | Explicit correction after accepted FIELD_COMPLETE may precede initial client delivery. Same WO/client number, new run/assignment, fresh receipt/Accept, zero new counts; classify internal versus client return from confirmed delivery history. Preserve one open run and earlier history. |
+| Fully Complete and Phase 6 all frozen photos delivered | Current accepted field/capture facts, latest required package coverage/approvals and confirmed delivery, all covered-run evidence privately received/retained and no open correction/protected conflict. Rejected/excluded evidence is not falsely client-delivered. |
+| HNP archive hierarchy and reassignment folder movement | Configured same-company root → address context → stable WO UUID folder → immutable package UUID folder. Exact IDs/destination snapshots; delivered packages do not move when contractor changes. HNP is a configuration. |
+| Phase 4 prospective HNP byte-delivery eligibility | Accepted Phase 4 metadata/Finish makes new Phase 5 private transfer eligible; it never makes unreviewed bytes automatically client-visible. Phase 4 implementation/result paragraphs remain accepted historical evidence. |
+| Phase 5 direct delivery, upload state and cleanup | Replace entire future phase with linked 5A configuration/authorization, 5B recoverable holding transfer, 5C usable minimum review/toggle, 5D package preview/approval/Send/Drive receipt, 5E retention/cleanup/recovery and one combined device/provider gate. Private receipt is separate from final delivery and cannot clean originals. |
+| Phase 6 display/reopen/cancel outline | Replace entire future phase with linked 6A compact workspace/status, 6B flexible templates/follow-up/Accept, 6C efficient review/correction, 6D multi-run final package/history, 6E optional alerts. Preserve existing cancellation/offline/conflict protection. |
+| Deferred business push notifications | Permit only the linked optional Admin dashboard/Web Push phone/computer path: enrolled supported devices, per-type/channel preferences, timing/quiet hours, generic payload, deduplication, role checks and real device gate. Broader messaging stays deferred. |
+| Deferred multiple-storage abstraction | One configurable Drive implementation and a narrow provider boundary are in scope; additional providers/portals require explicit integration plans. No general provider framework. |
+| Phase 7 scenarios | Add repeated review On/Off, internal/client-return corrections, offline Accept, company/destination isolation, cross-run release coverage, workspace recovery and optional alert failures; retain existing safe field/recovery scenarios. |
+| Phase 8 HNP-only hierarchy/pilot/retention | Configured-company production pilot, with HNP one possible company; verify roots/credentials, private holding budget/backup/export/retention/deletion, held evidence, supported alerts, updates and second device. No automatic private holding purge before the production policy gate. |
+| Integration/Testing contract remote-success cleanup wording | Require final applicable client-package delivery plus durable local/server bookkeeping and verified private retention of excluded evidence; distinguish staging, review, package approval, send and client receipt. See Phase 5 section 9 for exact clauses. |
+
+Approval application: record the operator's exact decision/date and plan revision; integrate these linked complete plans and replace affected baseline future sections/contract clauses in one coherent documentation update before runtime. Do not mark old assumptions current alongside their approved replacements. Keep Phase 4 COMPLETE and existing phase numbers; do not alter package/signer or FPP. Phase 5 and Phase 6 remain PLANNED until their actual implementation/evidence/merge gates pass.
+
+---
 
 This is the authoritative product and implementation roadmap for Field Photo Prep Team. It defines the intended user workflow, authority boundaries, offline behavior, photo rules, work-order lifecycle, HNP delivery rules, phase boundaries, failure handling, verification, and real-device gates.
 

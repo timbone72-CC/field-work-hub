@@ -1,6 +1,6 @@
 # Field Work Hub — Dashboard Workflow Enhancement Plan — 2026-10-05
 
-Status: **COMBINED OCTOBER 3 / OCTOBER 5 PRODUCT PROPOSAL — DOCUMENTATION ONLY — NOT RUNTIME AUTHORIZATION**
+Status: **COMPLETE COMBINED PRODUCT PROPOSAL + COMPLETE PHASE 5/6 DESIGN DRAFTS — PARENT-PHASE APPROVAL PENDING — DOCUMENTATION ONLY**
 
 Plan ID: `dashboard-workflow-enhancement-plan`.
 
@@ -12,9 +12,9 @@ Plan ID: `dashboard-workflow-enhancement-plan`.
 - Baseline / documentation rollback: main `7644fe3e48048d2f2068638494c8ece3348e23fe` (Phase 4 published-smoke closeout, PR #37).
 - Preflight: main, open PRs, repository branches, governing contracts, roadmap and Phase 4 closeout inspected. No open PR or Phase 5/6 implementation branch found. Historical branches are not superseded by this proposal.
 - Rule packs: AGENTS, GOVERNANCE, PROJECT_PROFILE, RULE_INDEX, CHANGE_CONTROL, TESTING, INTEGRATION, PHASE_STAGING_DOCTRINE and relevant roadmap/Phase 4 records.
-- Changed surface: this proposal only. No runtime, deployed configuration, data, permissions, photo retention or original FPP changes.
+- Changed surfaces: this proposal, complete Phase 5/6 implementation amendments and the roadmap pending-amendment register. No runtime, deployed configuration, data, permissions, photo retention or original FPP changes.
 - Verification: document/contract reconciliation, source readback, no customer/contractor data or credentials. No runtime tests or new physical pass claims.
-- Approval state: operator statements establish requested behavior and accepted recommendations. At 2026-10-05 16:03:46 America/Chicago the operator explicitly instructed combining the earlier and current proposals. That authorizes this documentation reconciliation; it does not establish approval of an unfinished replacement Phase 5/6 implementation plan or runtime/merge approval. Existing approved roadmap remains authoritative until a consolidated amendment is approved and integrated.
+- Approval state: operator statements establish requested behavior and accepted recommendations. At 2026-10-05 16:03:46 America/Chicago the operator explicitly instructed combining the earlier and current proposals. That authorizes this documentation reconciliation; it does not establish approval of these completed replacement Phase 5/6 design drafts or runtime/merge approval. Existing approved roadmap remains authoritative until a consolidated amendment is approved and integrated.
 
 ## Reconciliation of the earlier proposal
 
@@ -22,7 +22,7 @@ The October 3 conversation at approximately 18:17 America/Chicago proposed: phon
 
 The October 5 proposal extends that same workflow with a compact address/WO workspace, flexible work-type templates, same-client-WO corrective runs, individual/bulk photo decisions, client package preview, explicit Accept acknowledgment and selectable dashboard/phone/computer alerts. This document is the single combined product proposal on the existing authoritative planning branch; no competing plan is created.
 
-Resolved here: carry forward the review toggle, make private receipt insufficient for phone-original cleanup, and give Phase 5 a usable minimum review-and-send workflow. Phase 6 extends that workflow rather than retrofitting its security boundary. Defaults and detailed behavior introduced to make the combination concrete remain reviewable proposed rules; do not mislabel them as separately approved runtime decisions.
+Resolved here: carry forward the review toggle, make private receipt insufficient for phone-original cleanup, and give Phase 5 a usable minimum review-and-send workflow. Phase 6 extends that workflow rather than retrofitting its security boundary. Defaults and detailed behavior introduced to make the combination concrete remain reviewable proposed rules; do not mislabel them as separately approved runtime decisions. The whole numbered Phase 5 and Phase 6 implementation designs are now complete and linked below; provider/device evidence remains a future implementation gate.
 
 ## Product goal and workflow
 
@@ -41,7 +41,9 @@ The operator clarified at 15:51:45 America/Chicago:
 
 These decisions settle product direction within this proposal. They do not constitute completed Phase 5/6 implementation-plan approval or a runtime/merge gate.
 
-## Recommended phase placement
+## Phase placement and complete implementation amendments
+
+Detailed plans: [Phase 5 — private review and controlled delivery](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) and [Phase 6 — Admin workflow and optional alerts](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md). Each covers all of its lettered sections, authority, APIs, additive migrations, failure/recovery, rollback, automated evidence and genuine device/provider completion boundaries.
 
 Keep existing phase numbers. Phase 4 remains complete. Use two existing numbered parent phases with all sections planned upfront, rather than reopening Phase 4 or adding an unrelated phase after the pilot.
 
@@ -124,7 +126,7 @@ This defines the off path narrowly without adding a second automatic-delivery mo
 - Collect problems during review, then send one checked correction request with affected items, reasons, required new photos, assignee and due date. Flagging a photo does not itself dispatch a new assignment.
 - Rejecting surplus/duplicate/irrelevant evidence need not force a return visit. Admin explicitly decides whether a follow-up is necessary.
 - On return, show new/replacement evidence first. Existing approvals persist only for unchanged evidence; changed selected content invalidates affected package approval.
-- Keep captured counts and approved package coverage separate. Rejection never rewrites a previously accepted contractor Finish. Define coverage checks against job requirements and corrective-run requirements without double-counting a photo or using old photos to satisfy a new run's capture minimum.
+- Keep captured counts and approved package coverage separate. Rejection never rewrites a previously accepted contractor Finish. The Phase 6 plan defines explicit release-item mappings and coverage against final job goals plus selected new-run correction minima, without double-counting a photo or using old photos to satisfy a new run's capture minimum.
 - Keep final package photo selection separate from original frozen Finish manifests; review does not mutate capture identity or frozen evidence membership.
 
 ## Review storage and final client delivery
@@ -133,13 +135,13 @@ The approved roadmap currently delivers every frozen photo directly to the HNP a
 
 Phase 5 must distinguish protected inbound evidence/review availability from client release. Photos in private staging never become client-visible automatically. Pending-review photos cannot be released when Review required is On. With Review required Off, Admin may explicitly approve and send a package containing eligible selected photos not individually reviewed. Rejected photos and internal correction comments remain excluded unless deliberately changed or intentionally included as authorized client-facing notes.
 
-Design and validate an organization-private staging/review destination and Admin-authorized retrieval before selecting its implementation. It can reuse a verified private company-controlled boundary if permissions prove that clients cannot see it. Do not assume that a selected company folder is private or that review is possible from metadata without uploaded bytes. Backend remains the owner of storage authorization; clients never receive reusable company secrets.
+Use a private Supabase holding bucket in the existing FWH environment, with immutable org/WO/run/photo paths, narrowly authorized resumable contractor upload and short-lived Admin read access. Backend verification of actual prepared JPEG bytes creates the review receipt; metadata alone cannot. Holding is separate from final company storage and has no public/client access or automatic client release. The whole-phase plan defines exact authorization, private retained evidence and recovery. Provisioning and real access tests are future runtime gates, not already-completed work. Clients never receive reusable company secrets.
 
 A frozen, revisioned client-package manifest records selected eligible photo UUIDs across eligible runs, applicable review-required setting and review decisions, client-facing notes, exact authorized destination, package approval and delivery outcome. Required individual approvals must match the exact selected photos/revisions; Review required Off is recorded explicitly rather than falsifying those approvals. Package approval and Send are separate actions. Sending uses the same identity on retry; success requires confirmed provider results and durable bookkeeping. Ambiguous outcome becomes unresolved, not a blind resend or success.
 
 Preview exactly what the client receives. Internal visit labels/rejection comments stay internal unless intentionally included as client-facing information. A correction before first delivery produces one initial client submission under the original number; a client return creates a deliberate corrected package/revision with earlier delivery history preserved.
 
-Destination selection is company-configurable and limited to supported, verified destinations. Each company has a configured default; Admin may choose another authorized supported destination for the WO/package before approval and Send. Google Drive is a candidate first supported provider because it already appears in the roadmap, but its authorized account/root/folder settings must belong to the selected organization/client-company configuration rather than a global HNP constant. HNP can be one configured company; the same core workflow must accommodate other companies and destinations without an HNP-specific build.
+Destination selection is company-configurable and limited to supported, verified destinations. Each company has a configured default; Admin may choose another authorized supported destination for the WO/package before approval and Send. Google Drive is the first supported final provider because it already appears in the roadmap; its authorized account/root/folder settings belong to the selected organization/client-company configuration rather than a global HNP constant. Delivered package folders stay stable across later contractor changes. Other providers remain separately scoped integrations. HNP can be one configured company; the same core workflow must accommodate other companies and destinations without an HNP-specific build.
 
 Keep work-order/run/review/package logic independent of provider details through the single existing delivery owner and a narrow provider-facing boundary. Bind each package/attempt to its exact authorized configured destination; changing a company default must not redirect an in-flight retry. Template labels, external WO numbers and address matches never authorize cross-company delivery or shared access.
 
@@ -149,9 +151,9 @@ Universal design does not imply that every storage provider or client portal is 
 
 Carry forward the October 3 rule explicitly: **phone originals remain protected until the applicable final client package is confirmed delivered and local/server bookkeeping is durably recorded**. Private staging receipt, field completion, review approval, package approval, pressing Send, a notification or an ambiguous provider result is insufficient for automatic cleanup. Originals remain recoverable through interruption/restart and internal follow-up review; storage pressure never authorizes early deletion.
 
-A package may exclude rejected or unselected photos. Such photos are not falsely marked delivered to the client. Before their phone bytes can become cleanup-eligible after final package confirmation, verify durable private retention of their evidence/identity under the approved rejected-evidence policy. Preserve rejection/selection/history and remote identity. If those conditions are unresolved, retain bytes and surface the problem; no indefinite blind retry or destructive workaround. Rejected-only, cancelled, never-sent and retention-expiry cases require an explicit protected resolution policy in the whole-phase amendment, not automatic deletion from a review setting.
+A package may exclude rejected or unselected photos. Such photos are not falsely marked delivered to the client. Before their phone bytes can become cleanup-eligible after final package confirmation, verify durable private retention of their evidence/identity under the approved rejected-evidence policy. Preserve rejection/selection/history and remote identity. If those conditions are unresolved, retain bytes and surface the problem; no indefinite blind retry or destructive workaround. The whole-phase policy retains all verified prepared JPEG evidence and identity/history privately with automatic holding purge disabled through the internal pilot. Phone originals on rejected-only, cancelled, never-sent or conflicted work without delivered closure remain protected and visible as held evidence; no hidden force-delete or fake-delivery path is introduced. Production retention/export/deletion requires the existing Phase 8 gate.
 
-Define per-photo retention and per-package client-delivery eligibility separately so excluded photos do not permanently block the old all-photos-client-delivered Complete rule. Completion must reflect the current authorized work, package coverage/approval, confirmed final delivery and absence of unresolved protected conflicts. These are explicit amendments to the original roadmap/cleanup rules, not already-implemented behavior.
+The detailed plan defines per-photo private retention and per-package client-delivery eligibility separately so excluded surplus photos do not permanently block the old all-photos-client-delivered Complete rule. Completion must reflect the current authorized work, package coverage/approval, confirmed final delivery and absence of unresolved protected conflicts. These are explicit amendments to the original roadmap/cleanup rules, not already-implemented behavior.
 
 ## Selectable alerts and device notifications
 
@@ -178,7 +180,7 @@ Navigation cannot auto-approve, dispatch, release, delete or resolve conflicts. 
 
 ## Verification and completion boundaries for the eventual amendments
 
-Before coding, replace/augment the complete numbered Phase 5 and Phase 6 plans, not just their next letter. Define exact storage/authorization, persistence, APIs, migrations, rollback, notification support and retained evidence policy for all included sections. Do not label this proposal as that completed implementation design.
+The linked Phase 5 and Phase 6 amendments supply the complete numbered-phase designs, including exact storage/authorization, persistence, APIs, migrations, rollback, notification support and retained evidence policy. Before runtime, record parent-phase approval and integrate their explicit roadmap/contract replacements. This product proposal explains the workflow; the linked plans govern its detailed implementation after approval.
 
 Automated boundaries: organization/role isolation; template-copy/history invariants; follow-up/run identity and idempotency; fresh receipt versus Accept acknowledgment, offline acknowledgment recovery/idempotency and stale-assignment rejection; configured-company/destination separation; freeze/revision/offline races; review/bulk decisions; captured versus approved coverage; package revision/approval invalidation; private staging and release guards; Review required On/Off eligibility, rejection persistence, no automatic send and setting-change approval invalidation; staging receipt cannot authorize original cleanup; excluded-photo private retention; retry-safe versus uncertain provider results; no false Complete; notification event deduplication/quiet hours/revocation and stale reminders; unrelated-job independence.
 
@@ -192,10 +194,19 @@ Build independent automated-testable work first; combine compatible real checks;
 
 Completion: Phase 5 establishes secure recoverable private holding, a usable minimum Admin review/setting/package approval/Send workflow, confirmed configured-destination delivery and final-delivery-gated original protection; Phase 6 lets Admin move through the whole workflow without losing context, conflating receipt/completion/approval/delivery, exposing rejected/private material or hiding unresolved problems. Selected notifications must satisfy the explicitly supported channel gates. Update Phase 7 pilot scenarios and Phase 8 production configuration/retention checks accordingly.
 
-## Remaining implementation decisions for the complete Phase 5/6 amendment
+## Resolved implementation choices and next checkpoint
 
-Product direction is settled: universal company-configurable design, one-tap Accept acknowledgment separate from receipt/Start, and combination of the October 3 holding/review/destination/original-protection workflow with today's enhancements. Do not ask the operator to choose those again. This revision supplies proposed Review required On/Off semantics and an On default for concrete review.
+| Topic | Concrete combined decision | Governing detail |
+| --- | --- | --- |
+| Private review | Private Supabase holding, actual byte verification, exact owner/Finish authority, short-lived Admin access; no client exposure. | Phase 5 sections 2–5 |
+| Final destination | Configurable same-company Google Drive account/root, default/override, frozen package destination, stable WO/package folders and duplicate-safe IDs. | Phase 5 sections 2, 3 and 7 |
+| Review toggle | New WO default On; Off permits selected non-rejected pending photos without false individual approval. Both require package approval and explicit Send. | Phase 5 sections 6–7 |
+| Retention and cleanup | Prepared evidence remains private with no automatic pilot purge. Originals stay until final delivery, durable bookkeeping and applicable retention/closure; never-sent/cancelled evidence is held. | Phase 5 section 8 |
+| Follow-ups and coverage | Same client WO/WO UUID, new run/assignment, zero new capture counts; internal correction before first delivery, client return after it; explicit release-item mappings. | Phase 6 sections 3–5 |
+| Accept | One durable tap, separate from download/Start; existing action owner handles offline idempotent exact-instance acknowledgment. No mandatory Start gate. | Phase 6 section 3 |
+| Phone/computer alerts | Optional Web Push to enrolled supported Android Chrome and desktop Chrome/Edge, generic private payload, per-type/channel settings, timing/quiet hours and truthful delivery limits. | Phase 6 section 6 |
+| Phase attachment | Keep 4 complete; one complete plan for each of 5 and 6, updated 7 pilot and 8 production configuration/retention gates. | Both phase plans and roadmap register |
 
-Finish source/provider reconciliation for the first supported configurable delivery method, organization-private review storage/access and rejected-evidence retention, package coverage across runs, exact assignment acknowledgment persistence/authorization, supported phone/computer notification mechanisms and enrollment. Request only a material unresolved business choice that cannot be derived from existing authorization; routine architecture work is the implementer's responsibility.
+The user-requested product direction is preserved. Concrete defaults, retention behavior, first supported provider and notification mechanism are recorded for review rather than left as unfinished implementation choices. Current storage/provider/device inspection and future physical evidence are distinguished explicitly.
 
-Next checkpoint: finish the consolidated whole-phase Phase 5/6 implementation amendments from this combined product proposal, including exact storage/API/migration/rollback and retained-evidence/notification decisions. Replace affected HNP-specific, direct-delivery, completion, original-cleanup, receipt/acknowledgment and deferred-notification assumptions explicitly before runtime changes. Preserve all accepted Phase 4 results and existing production data.
+Next checkpoint: review the completed proposal and both complete parent-phase amendments as one planning package. Record any material change once, then the operator's parent-phase approval when supplied; integrate the narrow roadmap/contract replacements before dependent runtime. Keep all accepted Phase 4 evidence. No letter-by-letter plan approvals, repeated Phase 4 gates, runtime changes or production release are implied by completing this documentation.
