@@ -8,6 +8,8 @@ This contract does not authorize unfinished roadmap phases. It defines safety ru
 
 The complete Phase 5/6 amendments were approved on **2026-10-05 at 16:32:14 America/Chicago** and integrated through [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38). Their approved private holding, controlled release, fresh Accept/follow-up and optional Admin notification boundaries replace the earlier HNP-only/direct-delivery assumptions. These are governing implementation rules, not claims that new infrastructure/runtime is deployed.
 
+The shared-access/recovery amendment was approved **2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC)** (“review approved”, reviewing `af056da36c5ecbcfac16cb8e1c0b8ce3832754fd`) in [PR #39](https://github.com/timbone72-CC/field-work-hub/pull/39). The [shared-access amendment](docs/SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) governs the added Phase 5 foundations, whole Phase 6 including 6F and Phase 7/8 attachments. These are approved future implementation boundaries; no new role, grant, recovery service or email/domain configuration is claimed deployed.
+
 ## Mandatory reread before integration work
 
 Before changing Supabase/Auth/RLS, local persistence, offline synchronization, reassignment, camera/photo state, background work, remote storage, upload, retry, reconciliation, or cleanup:
@@ -27,7 +29,7 @@ If the roadmap does not define the intended cross-system behavior, **STOP. Integ
 ### Supabase is authoritative for
 
 - authenticated user identity;
-- organization membership and role;
+- organization membership, role, responsible-team membership/scope, Supervisor tier, work entitlement and exact historical photo-recovery grants;
 - server-visible work-order identity/details;
 - current server assignment;
 - server-approved reassignment request/consent state;
@@ -61,8 +63,22 @@ A local queue update alone cannot prove remote success.
 - Android/browser clients use only publishable/public client credentials appropriate for untrusted clients.
 - Service-role/secret credentials never ship in Android/browser code.
 - RLS/narrow RPCs enforce authorization even if a client UI is modified or bypassed.
-- JWT claims can become stale; workflows that depend on changed role/org/revocation must account for token refresh/reauthentication.
+- JWT claims can become stale; sensitive work/read/Storage operations revalidate current server role/org/team/tier/access/session rather than relying solely on old claims. Refresh/login does not turn a disabled work entitlement back on.
 - Contractor devices never receive the company Google Drive account password or long-lived company storage credentials.
+
+## Shared office authority and photo recovery
+
+The approved [shared-access amendment](docs/SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) sections 3–8 define the cumulative permission matrix and server owners. Admin work/roster is limited to explicit teams. Tier 1/2 Supervisor access is explicit supervised teams; Tier 3 is one granted organization. Product Owner alone controls Supervisor grants/allowances and owner-imposed suspensions through a private verified-UUID capability; that capability alone does not authorize customer photos or Send. Tier 2/3 Admin invitations respect owner-set capacity and the existing trusted invitation boundary. Only Tier 3 adds Contractor recruitment/cross-team roster movement; existing own-team Admin recruitment remains within Contractor caps.
+
+WO responsible-team identity is independent of current roster. Roster move, office ownership handoff and Contractor reassignment are distinct audited operations; historical photo/run/provider identities stay fixed. In-progress Contractor consent remains required. An Admin's disablement preserves jobs and allows only an active explicitly authorized replacement/manager to continue. Concurrent edits and access changes use expected revisions/idempotent actions.
+
+Ordinary work disablement preserves Auth identity and exact removed-scope photo grants while denying every new operational permission. Photo grants pin org/user/photo/Finish/content/cutoff IDs, including previously registered accepted frozen evidence received later; no ongoing grant to later photos under an old WO. Recovery has bounded view/download/export with minimal provenance, no roster/internal-review access and no work edits/Accept/Start/Finish/assign/review/approve/Send. Cloud recovery returns retained derivatives; local originals require the original device/identity boundary. Security lock requires verified identity recovery and never purges evidence.
+
+Previously accepted pre-cutoff registered Finish-bound transfers and owner protection receipts may continue narrowly with unchanged bytes/identity. Unaccepted offline actions/photos remain protected local evidence/export, not fake accepted work or a new quarantine intake. Explicit authorized same-UUID business reactivation remains possible under existing conflict/seat/suspension checks. Sign-out stops authenticated network work; another user gets no prior-owner access. Access revocation cannot recall an already downloaded image or issued five-minute bearer URL.
+
+Optional recovery email targets the existing verified Auth account, disables account creation, uses fixed allowed callbacks, one-time expiring verification and current exact grant checks. It never restores work entitlement or carries unrestricted photo authority in a URL. Generic responses/rate limits/token scrub and session expiry follow the approved plan; password reset remains separate. No company secret or photo attachment is emailed. Work disablement and export never authorize cleanup; final-delivery/receipt/journal predicates and pilot no-purge retention remain. Phase 8 retention must preserve the agreed recovery/export boundary before deletion.
+
+All relevant list/count/workspace/history/template/draft/photo/review/correction/package/Send/alert endpoints and direct table/Storage policies use the same current scoped capability predicate. Recovery uses separate narrowly authorized interfaces, never a blanket active-or-recovery policy over operational records. Existing public security-invoker wrappers/private implementations and session/file/action/transfer/provider/cleanup owners remain. Supervisor runtime cannot activate until its complete Phase 6 controls and verification are ready.
 
 ## Work-order identity
 
@@ -176,11 +192,11 @@ Private Supabase holding is organization-controlled review storage. First final 
 - Freeze approved queued/in-flight/sent manifests and exact destination/remote IDs. Reconcile any unresolved delivery before conflicting follow-up/release. Delivered package folders do not move on contractor reassignment.
 - Private pilot retention has no automatic purge through Phases 5–7. Production retention/export/deletion is an explicit Phase 8 gate; storage pressure cannot bypass protected originals.
 
-## Optional Admin alert integration
+## Optional Admin/Supervisor alert integration
 
 - Approved Phase 6 alerts have independent per-type Dashboard/Phone/Computer settings and authenticated enrollment on supported devices.
 - Browser Web Push/service worker is an interruption channel, not a second authorization, field-action, release or cleanup owner. Generic lock-screen payloads contain no customer details/photos/tokens.
-- Server checks current Admin/org access before dispatch; click fetches the job through ordinary authorization. Permission failure, endpoint expiry, quiet hours and OS/browser limitations remain truthful.
+- Server checks current active Admin/Supervisor org/team/tier/work access before event listing/dispatch; click fetches the job through the same authorization. Removal/downgrade disables new scoped work pushes; recovery-only identity cannot enroll for work alerts. Permission failure, endpoint expiry, quiet hours and OS/browser limitations remain truthful.
 - Deduplicate event production; acknowledge/snooze never resolves a protected job problem. Push service acceptance is not proof of OS display or human reading; notification failure cannot lose evidence or alter work state.
 
 ## Cross-system conflict rules

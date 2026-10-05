@@ -4,19 +4,21 @@ Status: **APPROVED WHOLE-PHASE PLAN / PLANNED — NOT IMPLEMENTED / NO RUNTIME C
 
 Operator approval: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**. The operator explicitly stated: “i approve phase 5 and 6 amendments to be merged”. Approval covers revision 1 of both complete numbered parent-phase plans reviewed at `d4dc223f6c3d6df416ae0441a9c2565d8eaee87c`, including 5A–5E and 6A–6E, and merge of their documentation amendments through [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38). This successor records approval and applies the already-defined governing replacements; it does not change the technical design or claim implementation/provider/device PASS. Level 3 runtime pre-merge approval remains separate.
 
-Plan ID: `phase-6-admin-workflow`; revision 1. Sections 6A–6E are one whole numbered parent phase. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 5 plan](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
+Plan ID: `phase-6-admin-workflow`; revision 1. Sections 6A–6F are one whole numbered parent phase under the baseline plus the approved shared-access amendment. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 5 plan](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
 
-## Later proposed shared-access amendment
+## Approved shared-access amendment — 2026-10-05
 
-[SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, documents the subsequent user-requested Supervisor packages, Product Owner controls and preserved photo recovery. It is a complete material amendment proposed for consolidated approval, not part of the earlier approved revision-1 scope.
+[SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, was approved **2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC)** by “review approved”, reviewing `af056da36c5ecbcfac16cb8e1c0b8ce3832754fd` in [PR #39](https://github.com/timbone72-CC/field-work-hub/pull/39). This adds the later material Supervisor/team/recovery scope; the earlier revision-1 approval above remains its separate baseline. Current whole-phase authority is baseline revision 1 plus this approved amendment revision 1. Its section 13 governing replacements are applied in this documentation integration. Runtime remains PLANNED.
 
-Phase 6 gains shared scope/capability checks throughout 6A–6E and integrated **6F — Shared access and recovery controls**: the three tiers, Product Owner grant/allowance UI, scoped Admin invitations/Contractor roster management, work disable/restore and optional secure recovery email. The linked plan completes behavior, dependencies, failure/recovery, migration and combined evidence for the whole amended parent phase. 6F is an implementation section, never a separate plan-approval unit. Apply the linked section 13 governing changes after consolidated approval before dependent runtime; this existing revision-1 approval remains unchanged.
+Phase 6 includes **6F — Shared access and recovery controls**, integrated with capability/team checks throughout 6A–6E. Active scoped Supervisors use the same assignment/template/correction/review/package/Send owners. Notifications, enrollment, preferences, event lists, worker dispatch and click revalidate active Admin/Supervisor role and current team scope; recovery-only accounts receive no new work alerts. Existing per-user/channel settings and generic payload protection remain.
+
+Read Admin references below as the authorized office workflow where the tier matrix permits delegation; stored actor UUIDs identify the real Admin or Supervisor. The approved tier matrix, exact photo recovery boundaries, owner-only grants, migration/rollback, section 11 verification and Phase 7/8 attachments are part of this whole parent phase. No broad non-Contractor-as-Admin shortcut or shared login is allowed.
 
 ## 1. Scope, protected boundaries and dependencies
 
 Deliver a compact Admin workflow from selecting an address through assigning, reviewing, correcting, sending and monitoring jobs, with flexible templates, one-tap contractor acknowledgment and optional device alerts. Use Phase 5's private holding, review decisions, package manifest, provider worker, receipt and cleanup owner; do not create another release engine.
 
-Planning branch: `docs/dashboard-workflow-enhancements`; scope key: `dashboard-workflow-enhancement-plan`. Baseline: main `7644fe3e48048d2f2068638494c8ece3348e23fe`. This revision is Level 1 documentation. Runtime includes Level 2 UI and Level 3 schema/assignment/offline acknowledgment/push authority. One recorded parent-phase approval covers all included sections; explicit Level 3 pre-merge approval is still required. No FPP, package/signer, seat-limit, camera or general field-state redesign.
+Planning branch: `docs/dashboard-workflow-enhancements`; scope key: `dashboard-workflow-enhancement-plan`. Baseline: main `7644fe3e48048d2f2068638494c8ece3348e23fe`. This revision is Level 1 documentation. Runtime includes Level 2 UI and Level 3 schema/assignment/offline acknowledgment/push authority. One recorded parent-phase approval covers all included sections; explicit Level 3 pre-merge approval is still required. No FPP, package/signer, camera or general field-state redesign. Contractor seat limits remain; the approved shared-access amendment adds owner-controlled Admin/Supervisor allowances and scoped lifecycle authority.
 
 | Section | Build dependency | Boundary before dependent completion |
 | --- | --- | --- |
@@ -24,9 +26,10 @@ Planning branch: `docs/dashboard-workflow-enhancements`; scope key: `dashboard-w
 | 6B templates, follow-ups, Accept | Existing Phase 4 snapshots; Phase 5 company/private protection | Completed Phase 5 release/protection semantics; real fresh-assignment/offline acknowledgment gate. |
 | 6C efficient review/corrections | Phase 5 receipt/review API, 6B corrective-run authority | Exact new-photo decisions and revision-safe correction dispatch. |
 | 6D multi-run client package | Phase 5 delivery engine and 6B/6C | Cross-run release coverage and one immutable delivery; no new provider path. |
-| 6E optional alerts | Stable verified business facts/events from 5 and 6A–6D | Actual supported phone/computer enrollment, permission and delivery evidence. |
+| 6E optional alerts | Stable verified business facts/events from 5 and 6A–6D; current team/tier/access predicates | Actual supported phone/computer enrollment, permission, scoped revocation and delivery evidence. |
+| 6F shared access/recovery | Phase 5 team/access/grant foundations; integrate with 6A–6E and existing Auth/invitation owners | Verified owner binding, all tier/account/handoff boundaries, same-device export and actual TEST recovery-email gate. |
 
-Plan all five sections before coding. Independent layout/settings/event-rule work can proceed without repeatedly stopping for letter-level approval. Storage/provider protection cannot be replaced by a notification or postponed to the pilot.
+All six sections are planned through this baseline and the approved linked amendment before coding. Independent layout/settings/event-rule work can proceed without repeatedly stopping for letter-level approval. Storage/provider protection cannot be replaced by a notification or postponed to the pilot.
 
 ## 2. 6A — Compact dashboard and one job workspace
 
@@ -78,7 +81,7 @@ After Start, retain the approved requirement/work-type freeze, additive instruct
 
 `admin_create_followup` takes idempotent action UUID, expected current run/WO revision, kind (`INTERNAL_CORRECTION` or `CLIENT_RETURN`), reason, selected prior evidence references, active contractor, due date, new snapshot and release-item mapping. Under the same WO lock:
 
-- validate active same-org Admin and contractor, accepted current-run FIELD_COMPLETE, no open successor run, no unresolved protection conflict and no unresolved queued/in-flight/partial/failed/uncertain delivery attempt;
+- validate active same-org Admin or tier-authorized Supervisor with current team/capability scope, plus an eligible contractor, accepted current-run FIELD_COMPLETE, no open successor run, no unresolved protection conflict and no unresolved queued/in-flight/partial/failed/uncertain delivery attempt;
 - classify from delivery history: before any initial package is DELIVERED, use INTERNAL_CORRECTION; after confirmed client delivery, use CLIENT_RETURN; do not trust a UI label alone;
 - invalidate unsent prior package approval, preserve draft/history, and create one new run UUID/sequence and assignment instance;
 - preserve WO UUID/external client number/company, earlier runs/Finish sets/decisions/package receipts and immutable photo ownership;
@@ -135,7 +138,7 @@ History shows company/WO identity, runs/reasons, dispatch/receipt/Accept/Start/F
 
 ## 6. 6E — Optional dashboard, phone and computer alerts
 
-Use one server issue/event owner deriving from existing verified facts and Phase 5 history. No generic messaging platform, SMS/email service or native Admin app. Optional **Web Push** supports enrolled Android Chrome admin phones and supported Chrome/Edge desktop browsers over the dashboard's HTTPS origin. OS/browser settings govern actual background delivery. Other browsers/OSes show unsupported until specifically verified; do not promise iOS support from a general web API.
+Use one server issue/event owner deriving from existing verified facts and Phase 5 history. No generic messaging platform, SMS/job-email alert service or native Admin app. The separately approved 6F photo-recovery email uses the existing Auth boundary. Optional **Web Push** supports enrolled Android Chrome admin phones and supported Chrome/Edge desktop browsers over the dashboard's HTTPS origin. OS/browser settings govern actual background delivery. Other browsers/OSes show unsupported until specifically verified; do not promise iOS support from a general web API.
 
 Add a service worker scoped to the existing hosted dashboard path and a small notification settings module. Confirm actual GitHub Pages base path before registering worker or deep links; no assumed root `/`. The worker handles push/click only. It must not cache authenticated pages/API/photo URLs, become an offline photo store or own field/delivery actions. Clear application-visible state on sign-out; generic pushes never reveal saved job contents.
 
@@ -163,7 +166,7 @@ Quiet hours are optional per Admin, with an IANA timezone and start/end times. D
 
 ### Persistence, deduplication and dispatch
 
-Planned records: `admin_notification_preferences` (type/channels/delay/quiet hours/revision), private `admin_push_subscriptions` (Admin/org/device/class/endpoint/keys/status), `admin_alert_issues` (type/WO/run/assignment/problem version, first/last time, resolved facts), `admin_alert_receipts` (Admin/read/snooze) and private `admin_notification_outbox` (issue version/Admin/device/channel, state/attempt/next time/lease). Unique keys prevent duplicate notification production from refresh/retry. All records are org-scoped; only active Admin can enroll/settings/read their own subscription summary. A Contractor cannot subscribe to Admin events or use an arbitrary org/device supplied in a request.
+Planned records: `admin_notification_preferences` (type/channels/delay/quiet hours/revision), private `admin_push_subscriptions` (Admin/org/device/class/endpoint/keys/status), `admin_alert_issues` (type/WO/run/assignment/problem version, first/last time, resolved facts), `admin_alert_receipts` (Admin/read/snooze) and private `admin_notification_outbox` (issue version/Admin/device/channel, state/attempt/next time/lease). Unique keys prevent duplicate notification production from refresh/retry. All records are org-scoped; only active scoped Admin or Supervisor can enroll/settings/read their own subscription summary, with current work entitlement revalidated. A Contractor cannot subscribe to Admin events or use an arbitrary org/device supplied in a request.
 
 Operations: `admin_set_notification_preferences`, `admin_enroll_push`, `admin_disable_push`, `admin_acknowledge_alert`, `admin_snooze_alert`, and paged `admin_alert_list`. Expected revisions/idempotent actions apply to mutations. The notification worker reuses Phase 5's scheduler/lease pattern with a five-minute timed-issue evaluation; transactional facts enqueue immediate eligible events and scheduler drains them. No additional scheduler framework. Secure subscription writes validate HTTPS endpoint shape/size, reject local/private destinations and constrain outbound dispatch against SSRF; no general URL-fetch proxy.
 
@@ -172,6 +175,14 @@ Push payload is generic: `Field Work Hub — an assigned job needs attention`, o
 Worker status distinguishes QUEUED, PUSH_ACCEPTED_BY_SERVICE, FAILED and EXPIRED; push service acceptance is not proof of OS display or human reading. Retry can cause at-least-once delivery after a crash; stable notification tags collapse duplicates where supported. TTL bounds stale pushes, and click revalidates live state. 404/410 endpoint removal disables enrollment; transient 429/5xx backs off; denied/revoked permissions, unavailable subscription or VAPID rotation display an actionable settings condition. Turning channel Off suppresses queued sends for that channel. Notification failures never lose the job, mark it Complete or block safe field work.
 
 On supported devices test delivery with tab closed/phone locked, permissions denied, OS notifications disabled and offline/expired endpoints. A fully exited/force-stopped browser or blocked OS may delay/suppress delivery; list the observed support boundary honestly. Notification support is not guaranteed emergency paging.
+
+## 6F — Shared access and recovery controls
+
+Implement the approved [shared-access amendment](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) sections 3–8 as one integrated office access surface: team selection; cumulative tiers; owner-only Supervisor enrollment/grant/change/removal and allowances; scoped Tier 2/3 Admin invitations; Tier 3 Contractor recruitment/transfers; guarded work disable/restore; historical photo recovery and optional verified-email link. Account-management controls render only the caller's allowed capabilities. Owner suspension cannot be lifted by a lower manager. Roster moves and active-WO handoffs remain distinct, reasoned, revision-checked actions; in-progress Contractor consent remains required.
+
+Reuse the existing session/invitation/workspace and Phase 5 authority/recovery owners. Use the linked exact photo cutoffs and accepted-Finish continuation rules, never broad operational-table recovery access or invented acceptance of unsynchronized work. Recovery offers inspection/download/export only; email authenticates the existing verified identity and cannot restore work permission. A missing TEST sender is a recorded email gate, not permission to claim completion from a mocked send.
+
+The amendment sections 8–11 govern planned records/RPCs, additive migrations/compatibility, failures, rollback and test matrix. Combine its tier/owner/handoff/disable/email/scoped-push evidence with the existing whole Phase 6 workflow gate. Completion requires all six sections plus the existing field/review/package protections; 6F is not an independent plan approval.
 
 ## 7. Persistence, migration and recovery
 
@@ -222,7 +233,7 @@ Combine the real workflow and device notification checks on one staged exact run
 
 A notification-only failure stops that channel's completion claim; independent proven layout/review work can continue. If correcting the failure requires materially changing the promised channel/security design, record one consolidated amendment. Do not repeatedly seek letter-level plan approval.
 
-Phase 6 complete only when the Admin can **select → assign → acknowledge → review → correct → prepare/send → track confirmed delivery without losing context**, all facts remain distinct and private/protected history is correct, selected supported notifications satisfy their real device boundary, exact-head automation/live parity pass, Level 3 pre-merge approval and integration agree. No runtime/device PASS is claimed by this approved planning update.
+Phase 6 complete only when the Admin can **select → assign → acknowledge → review → correct → prepare/send → track confirmed delivery without losing context**, all facts remain distinct and private/protected history is correct, shared tier/owner/handoff/recovery controls and optional recovery email satisfy the approved amendment gates, selected supported notifications satisfy their real device boundary, exact-head automation/live parity pass, Level 3 pre-merge approval and integration agree. No runtime/device PASS is claimed by this approved planning update.
 
 ## 9. Phase 7 and Phase 8 attachments
 

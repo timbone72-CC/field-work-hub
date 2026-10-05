@@ -19,10 +19,12 @@
 
 **Approved Phase 5/6 storage/release architecture:** organization-private Supabase review holding records verified prepared evidence; configurable client-company Google Drive is the first final provider. HNP is one configuration. Exact remote objects/folder IDs and immutable package destination snapshots establish provider delivery truth. Contractor access is **server-mediated**: no reusable company credentials or FPP SAF picker. Supabase owns business/assignment/review/package authority. These amendments were approved 2026-10-05 at 16:32:14 America/Chicago in PR #38; infrastructure and runtime capabilities still require the linked phase implementation/evidence gates.
 
+**Approved shared dashboard/access/recovery architecture:** the [shared-access amendment](docs/SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), revision 1, approved **2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC)** in [PR #39](https://github.com/timbone72-CC/field-work-hub/pull/39), extends both complete Phase 5/6 plans. Server-controlled SUPERVISOR tiers and explicit Admin teams scope office data/work; a separate private verified-UUID Product Owner capability controls grants/allowances without automatic customer-photo access. Ordinary work disablement preserves exact historical photo recovery and accepted Finish-bound transfers, with unaccepted device evidence protected locally. Existing session/Room/PhotoOwner/action/transfer/review/package/provider/cleanup owners remain; optional verified-email recovery and production business domain/sender configuration require their real gates. These are approved plans, not deployed capabilities.
+
 ## Protected invariants
 
 - Team/FPP repository, package, backend and field-data separation is absolute for routine FWH work.
-- Contractor/admin and cross-organization isolation are enforced on the server, not the UI.
+- Contractor/Admin/Supervisor, team scope, work entitlement, exact historical recovery and cross-organization isolation are enforced on the server, not the UI. Stale JWTs and platform entitlement authority cannot bypass current work/photo checks.
 - Stable UUIDs identify organization, user, Team work order, field run and photo; display names/addresses and existing FPP-prefixed WO number strings are not identities.
 - Reassignment or cancellation never silently destroys offline-started work or unconfirmed photos; server authorization and approved consent remain authoritative.
 - Permanent photo UUID and protected original precede capture; prepared derivative is separate.

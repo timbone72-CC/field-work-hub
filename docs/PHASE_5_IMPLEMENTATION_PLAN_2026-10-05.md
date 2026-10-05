@@ -6,11 +6,15 @@ Operator approval: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**. Th
 
 Plan ID: `phase-5-private-review-delivery`; revision 1. Sections 5A–5E are one numbered parent-phase plan, not separate approval units. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 6 amendment](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
 
-## Later proposed shared-access amendment
+## Approved shared-access amendment — 2026-10-05
 
-[SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, documents the subsequent user-requested Supervisor packages, Product Owner controls and preserved photo recovery. It is a complete material amendment proposed for consolidated approval, not part of the earlier approved revision-1 scope.
+[SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, was approved **2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC)** by “review approved”, reviewing `af056da36c5ecbcfac16cb8e1c0b8ce3832754fd` in [PR #39](https://github.com/timbone72-CC/field-work-hub/pull/39). This adds the later material Supervisor/team/recovery scope; the earlier revision-1 approval above remains its separate baseline. Current whole-phase authority is baseline revision 1 plus this approved amendment revision 1. Its section 13 governing replacements are applied in this documentation integration. Runtime remains PLANNED.
 
-Phase 5 owns the common team/access/grant foundation before private evidence exposure, accepted Finish-bound transfer after ordinary work disablement, scoped review/Send checks and minimum signed-in/same-device photo recovery. The linked plan covers all 5A–5E dependencies, races, rollback and evidence. Its section 13 lists the higher-contract changes to apply together after approval; until then, do not implement the new dependent authority/recovery paths. Unchanged approved work and accepted Phase 4 evidence retain their status.
+Phase 5 owns the common team/access/grant foundation before private evidence exposure, accepted pre-cutoff Finish-bound transfer after ordinary work disablement, scoped review/Send authority and minimum signed-in/same-device photo recovery. Sections 5A–5E include the linked dependencies, authorization/legacy mapping, additive migration and rollback rules, section 11 verification and combined disable/reconnect/recovery reality gate. Supervisor work grants remain unusable until the full Phase 6 controls/tests are ready.
+
+For future Phase 5 work, normal office reads/mutations require current server-validated role, active work entitlement and exact team/capability scope. Configuration retains its explicit authority and same-org/company checks. Recovery reads use separate exact grants; accepted registered transfers/receipts use original-owner/Finish/content/cutoff checks without restoring work permission. These approved checks extend every relevant RPC/table/Storage path below; a bare same-org Admin check is insufficient. Five-minute bearer-read expiry and existing package/provider/cleanup owners remain.
+
+Whole-phase completion additionally requires scoped private evidence, recovery-only work denial, authorized exact transfer continuation and same-device owner export without evidence loss. All existing review/release/retention/cleanup and evidence gates remain required; no repeated Phase 4 camera gate is added.
 
 ## 1. Scope, authority and baseline
 
@@ -18,7 +22,7 @@ Replace the planned direct-to-HNP photo path with **protected phone capture → 
 
 Planning branch: `docs/dashboard-workflow-enhancements`; combined scope key: `dashboard-workflow-enhancement-plan`. Documentation classification is Level 1. Eventual runtime classification is Level 3 for schema, authorization, storage, durable queues, remote identity and cleanup. Baseline/rollback reference is main `7644fe3e48048d2f2068638494c8ece3348e23fe`. Runtime starts on one recorded authoritative line after this complete parent plan is approved and the governing contract amendments are integrated. Record approval evidence, exact runtime head and deployed-state parity in a Phase 5 implementation record. Level 3 pre-merge approval remains separate.
 
-Preserve Phase 3/4 identity, offline actions, camera, requirement snapshots and accepted physical evidence. Do not change FPP, Android package/signer, existing organization/seat authority or add client login. A client company is business context inside an organization, never a replacement tenant boundary.
+Preserve Phase 3/4 identity, offline actions, camera, requirement snapshots and accepted physical evidence. Do not change FPP, Android package/signer or add client login. Existing Contractor seat enforcement remains; the approved shared-access amendment adds team/access/recovery foundations and owner-controlled Admin/Supervisor allowances. A client company is business context inside an organization, never a replacement tenant boundary.
 
 ### Verified starting point
 

@@ -44,7 +44,7 @@ As Team grows, automated coverage should be organized around state/identity boun
 
 Cover:
 - organization isolation;
-- Admin vs Contractor permissions;
+- Admin vs Contractor and tier-authorized Supervisor permissions, scoped team/organization isolation and Product Owner-only entitlement authority;
 - server-authoritative assignment;
 - assign/reassign validation;
 - durable contractor download receipt versus one-tap human Accept, with fresh exact-instance facts and no automatic acknowledgment from Start/Finish;
@@ -114,6 +114,16 @@ Cover that dashboard/server-derived counts distinguish:
 The complete plans approved 2026-10-05 govern additional coverage: company/template/destination isolation and defaults, private object authorization/content receipts, Review required On/Off, bulk revision races, approval invalidation, immutable Send/remote IDs, cross-run release coverage and active correction-obligation supersession. Follow-ups preserve same WO/client number and old history while requiring new run/assignment/receipt/Accept and zero capture counts. Verify bounded workspace navigation, server-saved drafts, stale refresh conflicts and account isolation.
 
 Optional alerts require per-type/channel/device authorization, timing/timezone/DST/quiet-hour rules, snooze versus resolution, deduplication, role/endpoint revocation, generic private payloads and authorized click. Real supported phone/computer delivery and OS/browser limitations are a Phase 6 device gate; mocked push success cannot prove them. Notification failure does not change job or photo authority. See the complete Phase 5/6 plans linked from the approved roadmap for exact combined gates; preserve accepted Phase 4 observations.
+
+### Approved shared-access and recovery amendment
+
+The [shared-access amendment](docs/SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), revision 1, approved **2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC)** in [PR #39](https://github.com/timbone72-CC/field-work-hub/pull/39), adds its section 11 matrix to the whole Phase 5/6 evidence gates. Verify every allowed/denied tier action, owner-only tier/allowance changes, Admin delegation within capacity, owner suspension precedence, stale JWT/session denial, scope-filtered joins/counts/drafts/templates/photo paths/history and all direct-table/Storage/RPC boundaries. The owner's platform capability alone cannot inspect customer photos or Send.
+
+Prove roster transfer does not move active WO authority/history, explicit handoff preserves photo/run/provider identity, started reassignment retains consent, and disabled Admin jobs remain manageable only by an authorized replacement. Exact recovery cutoffs include pre-cutoff registered accepted evidence received later but exclude later photos under an old WO, removed team's future work, cross-user/tenant evidence and reused email/new UUID. A valid recovery Auth session still cannot use work/account mutations or enroll for new work alerts.
+
+Prove accepted original-owner transfers/receipts continue narrowly after ordinary work disablement, unaccepted offline evidence stays protected/exportable without false acceptance, and same-device read-only export/cancellation/storage failure cannot delete sources. Test additive migrations/account isolation and unchanged cleanup/retention guards. Recovery email tests cover existing verified recipient, no implicit signup, generic requests, rate limits, fixed callback, expiry/replay/token scrub and exact authorization on every request.
+
+Add the amendment's disable/reconnect/transfer/old-photo recovery sequence to the existing combined Phase 5 gate, and its tier/owner/team/shared-edit/recovery-email/scoped-push sequence to the combined Phase 6 gate. Actual permitted TEST mailbox delivery/link exchange and protected device export are genuine evidence boundaries. Missing sender/verified identity is BLOCKED; no mocks claim physical PASS. Phase 7 repeats these scenarios; Phase 8 proves production sender/domain/callback/retention and second-device cloud recovery. Preserve accepted Phase 4 camera observations. No letter-level plan approval is introduced.
 
 ## Realistic integration tests
 

@@ -2,7 +2,11 @@
 
 Date: 2026-10-05. Plan ID: `supervisor-access-recovery`; revision 1.
 
-Status: **COMPLETE PROPOSED AMENDMENT — DOCUMENTATION ONLY — NOT IMPLEMENTED.** The user requested that this discussion be documented and placed in the appropriate phases. The approved Phase 5/6 revision-1 plans merged through PR #38 remain the baseline. Their approval does not cover this later material expansion of account authority, team visibility and recovery. Read this complete amendment with both whole-phase plans; no section below is an independent approval unit.
+Status: **APPROVED COMPLETE AMENDMENT / PLANNED — DOCUMENTATION ONLY — NOT IMPLEMENTED.**
+
+Operator approval: **2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC)**. The operator stated “review approved” after review of the complete amendment at `af056da36c5ecbcfac16cb8e1c0b8ce3832754fd` in [PR #39](https://github.com/timbone72-CC/field-work-hub/pull/39). Approval covers amendment `supervisor-access-recovery`, revision 1, all its Phase 5/6 additions and Phase 7/8 attachments. The prior whole-phase revision-1 approvals through PR #38 remain the baseline; this approval adds the later material tier/team/recovery scope. This successor records approval and applies section 13 to the governing documents without changing the reviewed technical design. It does not claim runtime/device/provider PASS or future Level 3 runtime pre-merge approval.
+
+Read this approved amendment with both complete parent-phase plans. Current plan authority is Phase 5 revision 1 plus this amendment revision 1, and Phase 6 revision 1 plus this amendment revision 1 (6A–6F). No section is an independent approval unit.
 
 ## 1. Product outcome and recorded direction
 
@@ -12,7 +16,7 @@ The Product Owner controls who receives Supervisor access and which tier applies
 
 The product remains universal: HNP is one possible client-company configuration. The planned business Google Workspace address and website/domain belong to production setup. Current development can continue with correctly configured TEST services.
 
-The user expressly requested tiered sharing, Product Owner oversight, preserved photo access after disablement, optional recovery email and phase placement. The exact cumulative tier boundaries below are the concrete recommended design developed from that discussion. Package prices, seat counts and a billing integration are not decided by permission tiers.
+The user expressly requested tiered sharing, Product Owner oversight, preserved photo access after disablement, optional recovery email and phase placement. The exact cumulative tier boundaries below are the approved design developed from that discussion. Package prices, seat counts and a billing integration are not decided by permission tiers.
 
 ## 2. Classification and authoritative line
 
@@ -21,15 +25,15 @@ The user expressly requested tiered sharing, Product Owner oversight, preserved 
 | Goal / scope key | Plan shared dashboard authority and evidence recovery; `supervisor-access-recovery-plan`. |
 | Documentation branch | `docs/supervisor-access-recovery-plan`; one authoritative planning line. |
 | Baseline / documentation rollback | Main `e4f5c2e868a6caae33aad3f19d3335b7cafee0bb`, with approved PR #38 integrated. |
-| Preflight | Main confirmed at baseline; no open PRs on inspection; existing dashboard planning branch is merged, not an active competing line. Phase 4 is COMPLETE; Phase 5/6 runtime has not started. |
+| Preflight | Initial planning found main at the baseline with no overlapping open PR. Approval integration revalidated main at that same SHA and PR #39 as the only open authoritative line, head `af056da36c5ecbcfac16cb8e1c0b8ce3832754fd`. Phase 4 is COMPLETE; Phase 5/6 runtime has not started. |
 | Current level | Level 1 documentation. Future authorization, schemas, recovery and credential/domain cutover are Level 3; ordinary UI is classified by its actual impact. |
-| Affected surfaces | This plan, roadmap phase attachments and pending-amendment notices in the approved Phase 5/6 plans. |
+| Affected surfaces | This plan, roadmap/global authority and phase attachments, both Phase 5/6 plans, Integration/Testing contracts, Project Profile and Rule Index. |
 | Required rules | AGENTS, Governance, Project Profile, Rule Index, Change Control, Integration, Testing, Phase Staging and complete affected phase plans. Supabase skill used for Auth/recovery planning. |
 | External changes | None: no DDL, Auth account mutation, emails, DNS, domain purchase, deployment, storage or FPP changes. |
 | Protected behavior | Immutable org/user/WO/run/photo/provider identity, offline evidence, accepted Phase 4 observations, existing review/package/Send/cleanup owners and explicit in-progress handoff consent. |
 | Verification | Document/contract consistency, bounded diff, links, exact remote readback and historical roadmap preservation. Runtime/device/provider evidence remains pending. |
 
-## 3. Recommended cumulative tiers
+## 3. Approved cumulative tiers
 
 | Capability | Admin | Tier 1 — Work Supervisor | Tier 2 — Team Manager | Tier 3 — Organization Manager | Product Owner control |
 | --- | --- | --- | --- | --- | --- |
@@ -74,7 +78,7 @@ Use a private server-controlled platform capability bound to the verified immuta
 
 Product Owner controls organization allowances, Supervisor enrollment, tier, scope, upgrade/downgrade/removal and owner-imposed work suspension. The UI shows organization, granted tier, teams, active state, seat usage and audit history. Changes take an action UUID, expected grant/access revision and reason; the server atomically enforces authority and prevents self-escalation. Removing a tier disables Supervisor work access, preserves historical attribution and creates the appropriate photo-recovery cutoff.
 
-The platform capability does not itself authorize customer photo inspection, job review or Send. If the Product Owner needs to run an organization's work, grant an explicit organization work role/scope and audit those actions normally. A separate `OWNER` organization role solely for licensing is unnecessary; this amendment proposes a real `SUPERVISOR` work role with tier/scope grants, alongside the existing ADMIN and CONTRACTOR roles. Clients must not treat all non-Contractors as Admins.
+The platform capability does not itself authorize customer photo inspection, job review or Send. If the Product Owner needs to run an organization's work, grant an explicit organization work role/scope and audit those actions normally. A separate `OWNER` organization role solely for licensing is unnecessary; this amendment approves a real `SUPERVISOR` work role with tier/scope grants, alongside the existing ADMIN and CONTRACTOR roles. Clients must not treat all non-Contractors as Admins.
 
 Require recent verified authentication for entitlement/access changes and use available verified MFA for Product Owner controls before outside use. Initial/replacement Product Owner binding is an operator security procedure, not a button available to any Supervisor. Prevent disabling the last usable Product Owner capability without a verified replacement. Account recovery for that authority does not use the ordinary photo recovery grant.
 
@@ -204,11 +208,11 @@ Cut over as one documented environment change: stage domain/dashboard/support/se
 
 Outside-pilot gates: verified sender and support mailbox, allowed callbacks and TLS, tested owner recovery, documented retention/export availability, subscription reenrollment and environment rollback. Pending provider choice/domain identity are genuine future setup inputs, not reasons to stop current planning or ask repeated phase-section questions.
 
-## 13. Required governing amendments before dependent runtime
+## 13. Applied governing amendments
 
-The following is the exact application list for approval integration. It records contradictions explicitly; the proposed design cannot override higher governing contracts before these replacements are applied together.
+The operator approved this application list with the complete amendment. The replacements below are applied together in PR #39 to the roadmap, both whole-phase plans, Integration/Testing contracts, Project Profile and Rule Index. They replace the listed assumptions for future Phase 5/6 work; historical Phase 0–4 evidence remains unchanged.
 
-| Existing clause | Consolidated replacement to apply |
+| Superseded clause | Applied approved replacement |
 | --- | --- |
 | Roadmap initial roles only ADMIN/CONTRACTOR; no extra roles without need | Add justified SUPERVISOR with cumulative server grants; no organizational OWNER solely for licensing. |
 | Roadmap additional Admin creation Product Owner only | Product Owner retains allowance/tier control and delegates scoped Admin invitations to Tier 2/3 within caps. |
@@ -222,7 +226,7 @@ The following is the exact application list for approval integration. It records
 | Roadmap Phase 7 and 8A/B/C/E | Attach shared-account pilot and business domain/sender/production recovery gates described above. |
 | Deferred customer billing tiers | Permission packages are planned here; pricing/payments remain deferred. No Stripe or other billing integration is authorized. |
 
-Apply all affected authority clauses in one coherent approval-integration change, preserving unchanged whole-phase scope and historical evidence. Do not mark the baseline plans as already approved revisions containing this new material. After approval, record the amendment ID/revision and operator evidence on both whole parent phases and in their runtime impact records. No letter-by-letter approval is needed.
+Approval application is complete in this documentation integration. Both parent-phase plans record the amendment ID/revision and this approval separately from the PR #38 baseline. Future runtime impact records must carry both approvals and their exact source/live-state evidence. Unchanged whole-phase behavior and historical evidence are retained. No letter-by-letter approval is needed.
 
 ## 14. Remaining inputs and handoff
 
@@ -235,7 +239,7 @@ Apply all affected authority clauses in one coherent approval-integration change
 | Production recovery/retention/export duration and operation budget | Product Owner; Phase 8 policy gate before any private deletion or outside pilot. |
 | Package price and commercial limits | Business decision when needed; separate from role design and current implementation approval. |
 
-Next checkpoint: review this one complete amendment and its phase attachments. Material tier/team/recovery authority requires consolidated plan approval under CHANGE_CONTROL_CONTRACT and Phase Staging before the affected runtime paths begin. Already approved unrelated Phase 5/6 work retains its approval; do not restart Phase 4 or ask again for unchanged design. Once approved, apply section 13 together, establish one runtime line with exact source/live-state and rollback records, and implement as far as honest automated evidence permits before the combined device/provider gates.
+Next checkpoint after the authorized documentation integration: Phase 5 implementation preparation using its complete baseline plus this approved amendment. Establish one runtime line with current source/live-state and rollback records, verified owner identity and reviewed legacy mapping before dependent authorization changes. Build as far as honest automated evidence permits before the combined device/provider gates. Phase 6 uses the same approved authority foundations and includes 6F. Do not restart Phase 4 or ask again for unchanged phase design. The genuine setup inputs above and separate Level 3 runtime pre-merge approval remain outstanding; no runtime starts as part of this documentation integration.
 
 ### Official references checked for planning
 
