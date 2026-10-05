@@ -5,6 +5,7 @@ import static org.junit.Assert.*;
 import android.app.AlertDialog;
 import android.app.Application;
 import android.content.Intent;
+import android.os.Looper;
 import android.widget.TextView;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,6 +30,7 @@ public class FinishFeedbackTest {
         TextView visibleMessage = dialog.findViewById(android.R.id.message);
         assertEquals(work.woNumber + "\n\n" + message, visibleMessage.getText().toString());
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         Intent intent = Shadows.shadowOf(activity).getNextStartedActivity();
         assertEquals(PhotoActivity.class.getName(), intent.getComponent().getClassName());
         assertEquals(work.id, intent.getStringExtra("wo"));
@@ -41,6 +43,8 @@ public class FinishFeedbackTest {
                 "A photo is still saving or needs recovery. Finish is paused.");
         AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertFalse(dialog.isShowing());
         assertNull(Shadows.shadowOf(activity).getNextStartedActivity());
     }
 }
