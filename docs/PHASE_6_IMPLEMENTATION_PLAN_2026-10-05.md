@@ -6,6 +6,12 @@ Operator approval: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**. Th
 
 Plan ID: `phase-6-admin-workflow`; revision 1. Sections 6A–6E are one whole numbered parent phase. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 5 plan](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
 
+## Later proposed shared-access amendment
+
+[SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, documents the subsequent user-requested Supervisor packages, Product Owner controls and preserved photo recovery. It is a complete material amendment proposed for consolidated approval, not part of the earlier approved revision-1 scope.
+
+Phase 6 gains shared scope/capability checks throughout 6A–6E and integrated **6F — Shared access and recovery controls**: the three tiers, Product Owner grant/allowance UI, scoped Admin invitations/Contractor roster management, work disable/restore and optional secure recovery email. The linked plan completes behavior, dependencies, failure/recovery, migration and combined evidence for the whole amended parent phase. 6F is an implementation section, never a separate plan-approval unit. Apply the linked section 13 governing changes after consolidated approval before dependent runtime; this existing revision-1 approval remains unchanged.
+
 ## 1. Scope, protected boundaries and dependencies
 
 Deliver a compact Admin workflow from selecting an address through assigning, reviewing, correcting, sending and monitoring jobs, with flexible templates, one-tap contractor acknowledgment and optional device alerts. Use Phase 5's private holding, review decisions, package manifest, provider worker, receipt and cleanup owner; do not create another release engine.

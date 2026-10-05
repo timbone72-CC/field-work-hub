@@ -6,6 +6,12 @@ Operator approval: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**. Th
 
 Plan ID: `phase-5-private-review-delivery`; revision 1. Sections 5A–5E are one numbered parent-phase plan, not separate approval units. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 6 amendment](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
 
+## Later proposed shared-access amendment
+
+[SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, documents the subsequent user-requested Supervisor packages, Product Owner controls and preserved photo recovery. It is a complete material amendment proposed for consolidated approval, not part of the earlier approved revision-1 scope.
+
+Phase 5 owns the common team/access/grant foundation before private evidence exposure, accepted Finish-bound transfer after ordinary work disablement, scoped review/Send checks and minimum signed-in/same-device photo recovery. The linked plan covers all 5A–5E dependencies, races, rollback and evidence. Its section 13 lists the higher-contract changes to apply together after approval; until then, do not implement the new dependent authority/recovery paths. Unchanged approved work and accepted Phase 4 evidence retain their status.
+
 ## 1. Scope, authority and baseline
 
 Replace the planned direct-to-HNP photo path with **protected phone capture → private holding → usable Admin review → approved client package → explicit Send → confirmed configured-company delivery → guarded phone cleanup**. Phase 5 includes the minimum usable dashboard controls; review security and manual sending cannot wait for Phase 6. Phase 6 improves navigation, templates, corrections and notifications using these same owners.

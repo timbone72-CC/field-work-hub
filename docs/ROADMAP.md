@@ -1,6 +1,6 @@
 # Field Work Hub — Master Implementation Roadmap
 
-Planning status: **APPROVED / CURRENT — PHASE 5–6 AMENDMENT INTEGRATED — runtime work remains phase-gated**
+Planning status: **APPROVED BASELINE / CURRENT — PHASE 5–6 REVISION 1 INTEGRATED — SHARED-ACCESS AMENDMENT PROPOSED — runtime work remains phase-gated**
 
 Original roadmap approval: **2026-09-14**. Phase 5/6 whole-phase amendment and documentation merge approved: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**.
 
@@ -36,6 +36,25 @@ One parent-phase plan approval covers each phase's included lettered sections; l
 | Integration/Testing contract remote-success cleanup wording | Require final applicable client-package delivery plus durable local/server bookkeeping and verified private retention of excluded evidence; distinguish staging, review, package approval, send and client receipt. See Phase 5 section 9 for exact clauses. |
 
 Approval application complete in this documentation integration: the linked plans, affected global/future roadmap sections and integration/testing/profile clauses now express the same approved behavior. Phase 4 remains COMPLETE; Phase 5 and Phase 6 remain PLANNED until their actual implementation, evidence and merge gates pass. Next checkpoint is Phase 5 runtime preparation, not another planning approval.
+
+## Proposed shared dashboard, Supervisor access and photo recovery amendment — 2026-10-05
+
+**DOCUMENTED / COMPLETE PROPOSED PLAN — NOT IMPLEMENTED.** Read [the complete amendment](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), plan ID `supervisor-access-recovery`, revision 1, with the existing whole Phase 5/6 plans. The user authorized documenting and placing this later discussion. The earlier PR #38 approval remains valid for its revision-1 scope; it does not retroactively approve the later material team/role/recovery changes.
+
+Planning scope key: `supervisor-access-recovery-plan`; authoritative branch: `docs/supervisor-access-recovery-plan`; main baseline/rollback: `e4f5c2e868a6caae33aad3f19d3335b7cafee0bb`. Documentation only; no live systems changed. No overlapping open PR was found in preflight.
+
+| Phase | Proposed attachment |
+| --- | --- |
+| 5A–5E | Common team/work-access authority and exact historical photo grants before private evidence exposure; accepted Finish-bound transfer continuation, scoped review/release and minimum signed-in/same-device recovery. |
+| 6A–6E plus integrated 6F | Shared workspace; cumulative Work Supervisor / Team Manager / Organization Manager tiers; Product Owner grant/allowance controls; Admin/Contractor management and explicit team handoff; recovery screen/email; per-user scoped optional alerts. |
+| 7 | Repeated multi-person work, permission denials, handoffs, disable/downgrade and existing-photo recovery without manual repair. |
+| 8A/8B/8C/8E | Business Workspace/support identity, domain/HTTPS, verified transactional sender and Auth callbacks, production owner/seat/retention/recovery rules and second-device evidence. |
+
+Product Owner exclusively grants/changes/removes Supervisor tiers; Tier 2/3 may invite Admins only within owner-set allowances. No supervisor self-escalation and no automatic Product Owner access to customer photos. Ordinary work disablement preserves exact previously authorized evidence recovery, not ongoing access to later photos or authority to edit/approve/Send. Unaccepted device-only evidence stays protected and locally exportable; email cannot recover bytes that never reached the server.
+
+This is a material amendment to the current roles, additional-Admin authority and deactivation recovery clauses. Section 13 of the linked plan lists the precise governing replacements to apply together after consolidated approval. Until then, these entries are proposals rather than replacements for the approved authority rules. New dependent runtime paths require that approval/application; unchanged approved work remains authorized. 6F is part of the whole Phase 6 amendment, not a separate phase or letter-level approval gate. Preserve Phase 0–4 history and accepted evidence.
+
+Next planning checkpoint: review the complete amendment as one coherent set. Actual owner UUID verification, legacy-team mapping, email-provider delivery and production domain/retention inputs are recorded future implementation/setup gates, not missing letter-level plans.
 
 ---
 
@@ -987,6 +1006,8 @@ Completion gate: **Admin custom/all-off rules, one-item counting, quick offline 
 
 Whole numbered parent phase: [PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs behavior, owners, exact API/data boundaries, additive Room/server migrations, failure/recovery, rollback and evidence across all sections. Runtime has not started.
 
+Proposed later amendment: [SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) defines the scoped access foundation and minimum recovery additions across 5A–5E. Apply its governing changes after consolidated approval before dependent authorization/recovery runtime; this approved revision-1 plan is otherwise retained.
+
 | Section | Responsibility |
 | --- | --- |
 | 5A | Configurable company/default/override destination and private-holding authorization. |
@@ -1006,6 +1027,8 @@ Completion gate: **usable secure private review and explicit controlled delivery
 # Phase 6 — Compact Admin workspace, templates, follow-ups, review and optional alerts — APPROVED PLAN / PLANNED
 
 Whole numbered parent phase: [PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs all sections/dependencies and exact evidence boundaries. Phase 5 owns holding/review/package/provider/cleanup machinery; Phase 6 extends it, never duplicates it. Runtime has not started.
+
+Proposed later amendment: [SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) defines shared team visibility/tiered management across 6A–6E and the integrated 6F access/recovery controls. This addition awaits consolidated approval; 6F is part of the whole parent phase, not a separate design gate. The approved revision-1 table below remains its original scope.
 
 | Section | Responsibility |
 | --- | --- |
@@ -1040,6 +1063,10 @@ Use FWH repeatedly under realistic field conditions before an outside configured
 - no live customer evidence when safe equivalent exists;
 - fixes respond to observed failure/friction, not hypothetical features;
 - manual DB/Drive repair is not accepted as normal operation.
+
+## Proposed shared-access pilot attachment
+
+The [shared-access amendment](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) adds repeated individual Admin/Supervisor logins, all three tier boundaries, owner-only tier changes, team transfer versus active-WO handoff, shared-edit conflicts, work disable/downgrade with old-photo recovery, optional email and stale/offline permission races. These proposed additions do not replace the accepted field/review/provider scenarios. Email or push failure cannot erase evidence or grant unauthorized access.
 
 ## Required scenarios
 
@@ -1120,6 +1147,10 @@ Completion gate: **repeated internal field sessions succeed without lost/misattr
 ## Goal
 
 Harden only what is required for a small outside pilot.
+
+## Proposed business identity and recovery attachment
+
+The [complete amendment](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) places permanent website/dashboard domain, business Workspace/support mailbox, verified Auth sender and exact callbacks in **8A**; owner-controlled Supervisor/Admin allowances, scoped lifecycle and secure owner binding in **8B**; recovery/export availability aligned with retention in **8C**; and production email/callback plus second-device cloud recovery in **8E**. A new dashboard origin also requires verified Web Push reenrollment. No domain purchase, DNS/SMTP configuration or live sending is authorized by this documentation update. A mailbox alone does not configure transactional recovery delivery; verify the actual chosen sending path before outside use.
 
 ## 8A — Production identity/environment
 
@@ -1269,7 +1300,7 @@ Re-read current official documentation when implementing; do not rely on roadmap
 
 Original roadmap approved 2026-09-14. Complete Phase 5 and Phase 6 revision-1 amendments, including all 5A–5E/6A–6E sections and their documentation merge, approved **2026-10-05 at 16:32:14 America/Chicago** through the operator statement recorded above and [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38).
 
-Phase 4 is complete and its accepted evidence is retained. Next checkpoint is **Phase 5 implementation preparation**: reread governing documents/complete plan, inspect current source/live state, establish one authoritative runtime branch/impact/recovery record, and build the largest safe coherent automated-testable scope before the genuine device/provider boundary.
+Phase 4 is complete and its accepted evidence is retained. The later **shared-access/recovery amendment is documented and awaiting consolidated review/approval**; its affected authority clauses must be applied before dependent runtime. For unchanged approved scope, the next runtime checkpoint remains **Phase 5 implementation preparation**: reread governing documents/complete plan, inspect current source/live state, establish one authoritative runtime branch/impact/recovery record, and build the largest safe coherent automated-testable scope before the genuine device/provider boundary.
 
 One recorded parent-phase approval authorizes included implementation within unchanged scope; lettered sections/session boundaries do not create repeated plan approvals. Plan approval does not claim runtime completion or satisfy the separate explicit Level 3 pre-merge approval, exact-head automated/live parity and affected device/provider gates. Phase 6 depends on Phase 5 protection/release semantics; independent work may proceed only within the approved dependency plan.
 
