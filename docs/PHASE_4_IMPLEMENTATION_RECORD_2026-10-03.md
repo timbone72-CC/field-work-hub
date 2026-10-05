@@ -207,3 +207,24 @@ The operator reports these phone checks complete on the current v14 candidate:
 These are recorded as **PASS by operator report**. The repository does not contain a separate server-side readout for the phone observations.
 
 Current device-gate status: v14 camera layout and Flash/Torch, offline capture, restart recovery, Finish enforcement and account isolation are **PASS**. Reconnect/synchronization of frozen metadata and Finish, replay/idempotency and truthful delivery-pending status remain **unverified**. The controlled Admin-requirement-edit versus offline-run conflict/Needs review check also remains **unverified**. Do not repeat the passed checks. Explicit Level 3 merge approval, runtime integration and publication remain pending.
+
+
+## Reconnect/Finish evidence and visible-message defect — 2026-10-05 America/Chicago
+
+This is a Level 1 evidence-only update inside the existing Level 3 `phase-4-photos` scope on `feat/phase-4-photos` / PR #35. Documentation baseline/rollback is `5459cd495e82128186462240005020f4a53a24e2`; candidate v14, recovery v15, runtime, schema, package/signer and external configuration are unchanged. Verification: fresh read-only FWH server observations, operator screenshots, and affected-record review. No merge, deployment, fixture mutation or photo-byte access occurred.
+
+At 11:41 the operator's Photos screen for `TEST-P4-PHOTOS-1003` showed six saved photos, Delivery pending, Front 2/2, Back 2/2 and During 2/2, against Total 8. The operator had tapped Finish but remained IN_PROGRESS and reported that the app should have informed them. A preceding server observation confirmed no COMPLETE action, finish set or registered photos. This is correct count enforcement but a **visible Finish explanation defect**: the operator did not see an actionable reason at the button. Do not infer that no error text exists elsewhere; inspect the owning UI before repair. Required correction within the approved Finish explanation scope: visibly explain that two further photos are needed to reach Total 8 when all named items are met. No count bypass or change to requirements is authorized by this observation.
+
+The operator added two Extra photos and supplied a screenshot at 11:43 showing **Field complete — waiting to sync**, with ordinary Finish no longer offered. After being instructed to reconnect and refresh twice, they supplied the 11:45 screenshot showing this WO under Completed Work with **FIELD_COMPLETE**. The screenshot demonstrates convergence; it does not independently identify the number of refresh invocations.
+
+Fresh read-only FWH server verification at this checkpoint:
+- exact WO `0a185159-3124-4d8c-bd46-944ca8aadffa`, run `04ba1aef-363d-485b-96bb-27caf5fb8819`, requirement revision `18ffe43d-a7bd-4d11-b58b-23d3ad244755` remain bound together;
+- WO and run both FIELD_COMPLETE; original Finish event **2026-10-05T16:43:08.290798Z**, acceptance **2026-10-05T16:43:32.518672Z**;
+- exactly one accepted COMPLETE action `d22a9096-268b-4015-8a1c-2461c091f14f` and one frozen set `f1834e11-110f-4a29-ab9d-723a63a63050`;
+- set digest `3daa3e938b97c8307522623fbf46b5c272b486d458355aa3382acdb2e285f26e`; eight metadata entries and eight distinct registered photo UUIDs;
+- Front 2, Back 2, During 2, Extra 2, all using that same run/revision/set;
+- all eight server photos WAITING, with no remote file ID or upload timestamp. Metadata acceptance is proven; image-byte delivery is not claimed. Originals remain protected for Phase 5.
+
+**PASS:** local Finish freezes/queues when Total is met; photo metadata and Finish converge with exact identity, one accepted action/set and no duplicate records observed; server delivery remains pending. Earlier accepted camera/offline/restart/account-isolation evidence is retained. Do not repeat those checks or use the Phase 3 SYNC/CONFLICT test as substitute photo evidence.
+
+**Remaining:** controlled photo-bearing Admin requirement-revision conflict/Needs review phone gate; fix and verify the newly observed visible Finish explanation defect before Phase 4 closeout. Explicit Level 3 merge approval, runtime integration and publication remain pending. PR #35 stays the single authoritative line. Next physical checkpoint is the approved fresh Front-1 versus Admin Front-2 revision race, using existing accounts and synthetic work. Preserve these eight frozen photos and accepted records; do not reset or delete them.
