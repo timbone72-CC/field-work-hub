@@ -1,6 +1,7 @@
 package com.inandout.fieldphotoprep.team.internal;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -655,15 +656,29 @@ public final class MainActivity extends Activity {
                         List<SupabaseApi.WorkOrder> cached =
                                 assignmentRepository.loadCached(session);
                         postIfCurrent(operation, sessionGeneration,
-                                () ->
-                                        showSignedIn(
-                                                session,
-                                                cached,
-                                                false,
-                                                safeMessage(
-                                                        error, "Unable to save field action.")));
+                                () -> {
+                                    String message = safeMessage(error, "Unable to save field action.");
+                                    showSignedIn(session, cached, false, message);
+                                    if ("COMPLETE".equals(kind))
+                                        showFinishBlockedDialog(workOrder, message);
+                                });
                     }
                 });
+    }
+
+    // The work list can be scrolled far below statusText when Finish is tapped.
+    // Show the authoritative transaction failure without requiring a scroll to the top.
+    void showFinishBlockedDialog(SupabaseApi.WorkOrder workOrder, String message) {
+        if (isFinishing() || isDestroyed()) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Can't finish field work")
+                .setMessage(workOrder.woNumber + "\n\n" + message)
+                .setPositiveButton("Open Photos", (dialog, which) ->
+                        startActivity(new android.content.Intent(this, PhotoActivity.class)
+                                .putExtra("wo", workOrder.id)
+                                .putExtra("run", workOrder.currentRunId)))
+                .setNegativeButton("OK", null)
+                .show();
     }
 
     private void respondToReassignment(String workOrderId, boolean accept) {

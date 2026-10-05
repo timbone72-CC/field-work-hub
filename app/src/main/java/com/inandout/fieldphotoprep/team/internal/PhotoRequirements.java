@@ -63,10 +63,21 @@ final class PhotoRequirements {
             total++; counts.merge(p.itemId, 1, Integer::sum);
         }
         List<String> missing = new ArrayList<>();
-        for (Item i : items) if (i.enabled && counts.getOrDefault(i.id,0) < i.minimum)
-            missing.add(i.label + ": " + counts.getOrDefault(i.id,0) + "/" + i.minimum);
-        if (totalEnabled && total < totalMinimum) missing.add("Total photos: " + total + "/" + totalMinimum);
+        for (Item i : items) if (i.enabled && counts.getOrDefault(i.id,0) < i.minimum) {
+            int captured = counts.getOrDefault(i.id,0);
+            missing.add(i.label + ": " + captured + "/" + i.minimum
+                    + " — " + remainingPhotos(i.minimum - captured));
+        }
+        if (totalEnabled && total < totalMinimum) {
+            boolean itemsMet = missing.isEmpty();
+            missing.add("Total photos: " + total + "/" + totalMinimum
+                    + " — " + remainingPhotos(totalMinimum - total));
+            if (itemsMet) missing.add("Use Extra photos or take more photos for any required item.");
+        }
         return String.join("\n", missing);
+    }
+    private static String remainingPhotos(int count) {
+        return count + (count == 1 ? " more photo needed." : " more photos needed.");
     }
     String summary() {
         if (minimumUnique == 0) return "Photos optional. You can still take Extra photos.";

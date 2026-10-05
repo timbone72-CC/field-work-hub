@@ -44,7 +44,7 @@ jobs:
           grep -q 'Decline Reassignment' app/src/main/java/com/inandout/fieldphotoprep/team/internal/MainActivity.java
           grep -q 'Assignment receipt: Confirmed' app/src/main/java/com/inandout/fieldphotoprep/team/internal/MainActivity.java
       - name: Run focused Phase 4 regression tests
-        run: gradle :app:testDebugUnitTest --tests '*SessionCoordinatorTest' --tests '*SessionOperationGuardTest' --tests '*RoomMigrationTest' --tests '*OfflineActionTest' --tests '*PhotoRequirementsTest' --tests '*ProtectedPhotoTest' --tests '*CameraLensMathTest'
+        run: gradle :app:testDebugUnitTest --tests '*SessionCoordinatorTest' --tests '*SessionOperationGuardTest' --tests '*RoomMigrationTest' --tests '*OfflineActionTest' --tests '*PhotoRequirementsTest' --tests '*FinishFeedbackTest' --tests '*ProtectedPhotoTest' --tests '*CameraLensMathTest'
       - name: Run complete Phase 4 JVM tests
         run: gradle :app:testDebugUnitTest
       - name: Build internal Team APK

@@ -1,6 +1,6 @@
 # Field Work Hub — Phase 4 Implementation Plan — 2026-10-03
 
-Status: **APPROVED SCOPE — V14 CAMERA, OFFLINE/RESTART/FINISH AND ACCOUNT-ISOLATION PHONE CHECKS PASS; RECONNECT/SYNC AND CONFLICT CHECKS PENDING**
+Status: **APPROVED SCOPE — V14 PHYSICAL GATES PASS; VISIBLE FINISH EXPLANATION CORRECTION / V16 TARGETED CHECK PENDING**
 
 Current runtime evidence and staging authority: [PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md](PHASE_4_IMPLEMENTATION_RECORD_2026-10-03.md). Original planning classification/history below remains historical.
 
@@ -187,7 +187,7 @@ PASS: configured and simple/all-off behavior works, repeated capture remains qui
 
 Phase 4 completes only when the whole approved behavior, focused/final exact-head automation, deployed migration/grant/advisor parity, verified recovery, combined physical gate, explicit Level 3 merge approval and runtime integration agree. Keep photos **WAITING / delivery pending** for Phase 5; no claim of remote delivery/cleanup. Phase 5 consumes the same UUID/item/revision/frozen-set facts and adds company-authorized bytes/destination/retry, preserving this counting rule. Future Phase 6 derives Total/item counts from server-known facts, never phone-only guesses.
 
-Current status: **backend and exact-head Android/Admin/database/governance automation PASS; v14/v15 artifact identity PASS; Admin/template/custom/all-off creation and copy isolation PASS; v14 camera layout and Flash/Torch PASS; operator-reported offline capture, restart recovery, Finish enforcement (blocked at During 0/2), and account isolation PASS. Reconnect/synchronization with replay/idempotency and delivery-pending verification, plus the controlled conflict/Needs review phone check, remain unverified. Explicit Level 3 merge approval, runtime integration and main publication remain PENDING.** Candidate v14 and read-only recovery v15 retain the stable package/signer and Room v3; exact APK hashes and prior CI runs are recorded in the implementation record. Preserve app data; do not install recovery or repeat passed phone checks. Continue only the remaining evidence gates, then stop for the separate explicit Level 3 pre-merge approval.
+Current status: **backend and prior exact-head automation/artifact verification PASS; Admin/template/custom/all-off creation and copy isolation PASS; v14 camera layout and Flash/Torch, offline capture/restart, count enforcement, account isolation, reconnect/frozen metadata/Finish with delivery pending, and controlled photo-bearing conflict/Needs review PASS.** The 2026-10-05 screenshot exposed a visible Finish explanation defect: its existing error appeared above the scrolled viewport. The correction now shows a dialog with remaining item/Total counts and exact-run Open Photos navigation. Candidate v16/read-only recovery v17 verification and the targeted explanation device check are PENDING. Explicit Level 3 merge approval, runtime integration and main publication remain PENDING. The implementation record owns exact identities, evidence and rollback. Preserve app data and accepted photos/jobs; do not repeat passed physical gates.
 
 ## Operator clarification — optional walking order — 2026-10-03 15:15 America/Chicago
 

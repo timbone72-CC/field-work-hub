@@ -33,4 +33,21 @@ public class PhotoRequirementsTest {
             assertThrows(IllegalStateException.class,()->PhotoRequirements.parse(j.toString()));
         }
     }
+    static ProtectedPhoto captured(String item) {
+        return new ProtectedPhoto(UUID.randomUUID().toString(), "actor", "org", "wo", "run",
+                "assignment", id(1), item, "2026-10-05T12:00:00Z", "original", "prepared");
+    }
+    @Test public void completedItemsStillExplainAdditionalPhotosNeededForTotal() throws Exception {
+        PhotoRequirements r=PhotoRequirements.parse(configuration(8,2,2,2).toString());
+        List<ProtectedPhoto> photos=new ArrayList<>();
+        for(int n=2;n<=4;n++){photos.add(captured(id(n)));photos.add(captured(id(n)));}
+        assertEquals("Total photos: 6/8 — 2 more photos needed.\nUse Extra photos or take more photos for any required item.",r.missing(photos));
+        photos.add(captured(""));assertTrue(r.missing(photos).contains("1 more photo needed."));
+        photos.add(captured(""));assertEquals("",r.missing(photos));
+    }
+    @Test public void missingItemIsNamedEvenWhenExtrasMeetTheTotal() throws Exception {
+        PhotoRequirements r=PhotoRequirements.parse(configuration(2,2).toString());
+        assertEquals("Item 0: 1/2 — 1 more photo needed.",r.missing(List.of(captured(id(2)),captured(""))));
+    }
+
 }
