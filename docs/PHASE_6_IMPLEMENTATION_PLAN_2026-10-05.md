@@ -1,8 +1,10 @@
 # Field Work Hub — Phase 6 implementation amendment — 2026-10-05
 
-Status: **COMPLETE DESIGN DRAFT / PARENT-PHASE APPROVAL PENDING / NO RUNTIME CHANGES**.
+Status: **APPROVED WHOLE-PHASE PLAN / PLANNED — NOT IMPLEMENTED / NO RUNTIME CHANGES**.
 
-Plan ID: `phase-6-admin-workflow`; revision 1. Sections 6A–6E are one whole numbered parent phase. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 5 plan](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#pending-consolidated-phase-56-amendment--2026-10-05).
+Operator approval: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**. The operator explicitly stated: “i approve phase 5 and 6 amendments to be merged”. Approval covers revision 1 of both complete numbered parent-phase plans reviewed at `d4dc223f6c3d6df416ae0441a9c2565d8eaee87c`, including 5A–5E and 6A–6E, and merge of their documentation amendments through [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38). This successor records approval and applies the already-defined governing replacements; it does not change the technical design or claim implementation/provider/device PASS. Level 3 runtime pre-merge approval remains separate.
+
+Plan ID: `phase-6-admin-workflow`; revision 1. Sections 6A–6E are one whole numbered parent phase. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 5 plan](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
 
 ## 1. Scope, protected boundaries and dependencies
 
@@ -135,7 +137,7 @@ Web Push uses VAPID: public key may reach the browser, private signing key stays
 
 ### Types, channels and default behavior
 
-Each type has independent Dashboard/Phone/Computer switches. Phone/Computer apply only to enrolled devices of that class, with per-device enabled status. Dashboard alerts default On for the listed operational types; phone/computer default Off. These defaults are proposed concrete behavior, not a prior implementation claim. A job's underlying problem badge/count remains visible even when an alert preference is Off.
+Each type has independent Dashboard/Phone/Computer switches. Phone/Computer apply only to enrolled devices of that class, with per-device enabled status. Dashboard alerts default On for the listed operational types; phone/computer default Off. These defaults are approved concrete behavior, not an implementation-completion claim. A job's underlying problem badge/count remains visible even when an alert preference is Off.
 
 | Stable type | Trigger / resolution |
 | --- | --- |
@@ -214,7 +216,7 @@ Combine the real workflow and device notification checks on one staged exact run
 
 A notification-only failure stops that channel's completion claim; independent proven layout/review work can continue. If correcting the failure requires materially changing the promised channel/security design, record one consolidated amendment. Do not repeatedly seek letter-level plan approval.
 
-Phase 6 complete only when the Admin can **select → assign → acknowledge → review → correct → prepare/send → track confirmed delivery without losing context**, all facts remain distinct and private/protected history is correct, selected supported notifications satisfy their real device boundary, exact-head automation/live parity pass, Level 3 pre-merge approval and integration agree. No runtime/device PASS is claimed by this draft.
+Phase 6 complete only when the Admin can **select → assign → acknowledge → review → correct → prepare/send → track confirmed delivery without losing context**, all facts remain distinct and private/protected history is correct, selected supported notifications satisfy their real device boundary, exact-head automation/live parity pass, Level 3 pre-merge approval and integration agree. No runtime/device PASS is claimed by this approved planning update.
 
 ## 9. Phase 7 and Phase 8 attachments
 

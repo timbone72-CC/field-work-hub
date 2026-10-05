@@ -17,7 +17,7 @@
 
 **Android local persistence:** the verified Phase 3A Room implementation is authoritative for which exact authenticated user's assignments and pending local evidence have durably reached this device. Use PR #17’s actual merge state to distinguish the tested internal candidate from integration on main. Local pending work/photos are not proof of server acceptance.
 
-**Company-controlled HNP Google Drive:** authoritative for exact confirmed remote objects/folder IDs. First-version contractor access is **server-mediated**: contractor phones do not acquire the company's reusable Drive credentials or use FPP's per-device SAF folder-picker model. Supabase remains authoritative for Team business and assignment state.
+**Approved Phase 5/6 storage/release architecture:** organization-private Supabase review holding records verified prepared evidence; configurable client-company Google Drive is the first final provider. HNP is one configuration. Exact remote objects/folder IDs and immutable package destination snapshots establish provider delivery truth. Contractor access is **server-mediated**: no reusable company credentials or FPP SAF picker. Supabase owns business/assignment/review/package authority. These amendments were approved 2026-10-05 at 16:32:14 America/Chicago in PR #38; infrastructure and runtime capabilities still require the linked phase implementation/evidence gates.
 
 ## Protected invariants
 
@@ -27,7 +27,7 @@
 - Reassignment or cancellation never silently destroys offline-started work or unconfirmed photos; server authorization and approved consent remain authoritative.
 - Permanent photo UUID and protected original precede capture; prepared derivative is separate.
 - Stored photo/run/work-order binding and approved remote destination never follow current screen selection or visible folder name.
-- An ambiguous remote outcome stops blind retry; confirm exact remote identity before durable success and cleanup.
+- An ambiguous remote outcome stops blind retry; confirm exact remote identity before durable success. Phone cleanup additionally requires applicable final client-package delivery, durable local/server bookkeeping and private retention/closure of excluded evidence; private receipt alone is insufficient.
 - Company storage permissions and secrets do not move to contractor Android clients.
 - Preserve established work screens, understandable operator labels and phase-gated behavior; do not add unapproved UI or future hooks.
 

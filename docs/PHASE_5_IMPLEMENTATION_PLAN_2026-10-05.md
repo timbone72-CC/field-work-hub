@@ -1,14 +1,16 @@
 # Field Work Hub — Phase 5 implementation amendment — 2026-10-05
 
-Status: **COMPLETE DESIGN DRAFT / PARENT-PHASE APPROVAL PENDING / NO RUNTIME CHANGES**.
+Status: **APPROVED WHOLE-PHASE PLAN / PLANNED — NOT IMPLEMENTED / NO RUNTIME CHANGES**.
 
-Plan ID: `phase-5-private-review-delivery`; revision 1. Sections 5A–5E are one numbered parent-phase plan, not separate approval units. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 6 amendment](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#pending-consolidated-phase-56-amendment--2026-10-05).
+Operator approval: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**. The operator explicitly stated: “i approve phase 5 and 6 amendments to be merged”. Approval covers revision 1 of both complete numbered parent-phase plans reviewed at `d4dc223f6c3d6df416ae0441a9c2565d8eaee87c`, including 5A–5E and 6A–6E, and merge of their documentation amendments through [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38). This successor records approval and applies the already-defined governing replacements; it does not change the technical design or claim implementation/provider/device PASS. Level 3 runtime pre-merge approval remains separate.
+
+Plan ID: `phase-5-private-review-delivery`; revision 1. Sections 5A–5E are one numbered parent-phase plan, not separate approval units. Read with the [combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md), [Phase 6 amendment](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md) and [roadmap amendment register](ROADMAP.md#approved-consolidated-phase-56-amendment--2026-10-05).
 
 ## 1. Scope, authority and baseline
 
 Replace the planned direct-to-HNP photo path with **protected phone capture → private holding → usable Admin review → approved client package → explicit Send → confirmed configured-company delivery → guarded phone cleanup**. Phase 5 includes the minimum usable dashboard controls; review security and manual sending cannot wait for Phase 6. Phase 6 improves navigation, templates, corrections and notifications using these same owners.
 
-Planning branch: `docs/dashboard-workflow-enhancements`; combined scope key: `dashboard-workflow-enhancement-plan`. Documentation classification is Level 1. Eventual runtime classification is Level 3 for schema, authorization, storage, durable queues, remote identity and cleanup. Baseline/rollback reference is main `7644fe3e48048d2f2068638494c8ece3348e23fe`. Runtime starts on one recorded authoritative line after this complete parent plan is approved and the pending contract amendments are integrated. Record approval evidence, exact runtime head and deployed-state parity in a Phase 5 implementation record. Level 3 pre-merge approval remains separate.
+Planning branch: `docs/dashboard-workflow-enhancements`; combined scope key: `dashboard-workflow-enhancement-plan`. Documentation classification is Level 1. Eventual runtime classification is Level 3 for schema, authorization, storage, durable queues, remote identity and cleanup. Baseline/rollback reference is main `7644fe3e48048d2f2068638494c8ece3348e23fe`. Runtime starts on one recorded authoritative line after this complete parent plan is approved and the governing contract amendments are integrated. Record approval evidence, exact runtime head and deployed-state parity in a Phase 5 implementation record. Level 3 pre-merge approval remains separate.
 
 Preserve Phase 3/4 identity, offline actions, camera, requirement snapshots and accepted physical evidence. Do not change FPP, Android package/signer, existing organization/seat authority or add client login. A client company is business context inside an organization, never a replacement tenant boundary.
 
@@ -157,9 +159,9 @@ If interrupted: pause worker/scheduler and new sends; retain outbox, IDs, sessio
 
 ## 9. Exact amendment application
 
-On recorded parent approval, apply these clauses to governing documents in the same runtime preparation line. Pending text cannot silently override a higher contract.
+The operator approved these clauses with this whole-phase plan; they are applied to the governing roadmap, integration/testing contracts and project profile in PR #38. The table records the superseded assumptions and their current replacements.
 
-| Current clause | Approved replacement to apply |
+| Current clause | Applied approved replacement |
 | --- | --- |
 | `INTEGRATION_CONTRACT.md`, Photo sync/upload: cleanup after confirmed remote success | “Local original/derivative cleanup requires confirmed applicable final client-package delivery, durable local/server bookkeeping, and verified private retention for excluded evidence. Private staging receipt alone never authorizes cleanup.” |
 | Integration, Google Drive/storage: permanent HNP-only destination | “Private Supabase holding is organization-controlled review storage. First final provider is configurable company-controlled Google Drive, with same-org/company authorized accounts/roots and immutable package destination snapshots. HNP is one configuration; contractors receive no reusable provider secrets.” |
@@ -172,7 +174,7 @@ These are narrow behavioral amendments. All unrelated organization, camera, offl
 
 ## 10. Verification and whole-phase completion
 
-Focused tests while building, then one complete automated suite on the exact proposed runtime head. Existing `android-ci`, `dashboard-ci` and `database-ci` remain owners of automated checks; extend meaningful suites/gates rather than duplicate implementations in tests. Record backend/live parity and advisor results. Documentation-only planning runs no runtime/device suite.
+Focused tests while building, then one complete automated suite on the exact proposed runtime head. Existing `android-ci`, `dashboard-ci` and `database-ci` remain owners of automated checks; extend meaningful suites/gates rather than duplicate implementations in tests. Record backend/live parity and advisor results. Documentation-only approval integration requires document/contract review; automated PR checks are recorded separately and are not device/provider evidence.
 
 | Boundary | Required automated evidence |
 | --- | --- |
@@ -194,7 +196,7 @@ One combined real phone/laptop/provider gate after independent automated work is
 
 Stage exact APK/dashboard/function/migration revisions, rollback artifact and one straight-line checklist. Real credentials/provider configuration and quota are genuine boundaries: automation cannot declare them passed. Optional notification tests belong to Phase 6 and cannot postpone this minimum usable release workflow.
 
-Phase 5 complete only when **usable private review, guarded On/Off package release, exact configured Drive delivery, protected interruption/restart, rejected-evidence retention and final-delivery-gated cleanup are proven**, required exact-head automation and live parity pass, explicit Level 3 merge approval is recorded and integration/publication checks agree. No runtime or physical evidence is claimed by this design draft.
+Phase 5 complete only when **usable private review, guarded On/Off package release, exact configured Drive delivery, protected interruption/restart, rejected-evidence retention and final-delivery-gated cleanup are proven**, required exact-head automation and live parity pass, explicit Level 3 merge approval is recorded and integration/publication checks agree. No runtime or physical evidence is claimed by this approved planning update.
 
 ## 11. Official implementation references checked for planning
 

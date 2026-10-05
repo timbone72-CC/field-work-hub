@@ -47,7 +47,7 @@ Cover:
 - Admin vs Contractor permissions;
 - server-authoritative assignment;
 - assign/reassign validation;
-- contractor receipt acknowledgement;
+- durable contractor download receipt versus one-tap human Accept, with fresh exact-instance facts and no automatic acknowledgment from Start/Finish;
 - consent-required handoff of in-progress work;
 - stale/unauthorized client requests denied by server;
 - narrow RPC behavior and direct-table privilege boundaries.
@@ -58,7 +58,7 @@ When Phase 3 is implemented, cover:
 - assigned WOs persisted locally;
 - cached WOs survive process/app restart;
 - offline opening of downloaded assignments;
-- offline Start/Complete intent persisted durably;
+- offline ACK/Start/Complete intent persisted durably;
 - reconnect sync is idempotent;
 - locally started work is not silently destroyed by remote reassignment/cancellation;
 - conflicts remain visible/recoverable until resolved;
@@ -94,7 +94,9 @@ Cover:
 - `UNCERTAIN`/ambiguous remote outcome stops blind retry;
 - duplicate-prevention/reconciliation rules;
 - one photo failure does not corrupt unrelated photos;
-- local original deletion occurs only after confirmed remote success + durable bookkeeping.
+- local original deletion requires confirmed applicable final client-package delivery + durable local/server bookkeeping + verified private retention/closure of excluded evidence;
+- private holding receipt, review/package approval, Send and notifications cannot authorize original cleanup;
+- rejected/excluded/cancelled/never-sent evidence stays truthful and protected; terminal cleanup restart never triggers re-upload.
 
 ### Admin visibility
 
@@ -102,9 +104,16 @@ Cover that dashboard/server-derived counts distinguish:
 - field status;
 - assignment receipt;
 - captured photos known to server;
-- uploaded photos;
+- privately received prepared evidence versus confirmed client-package delivery;
 - waiting/failed/uncertain photos;
-- complete/problem derived presentation without falsifying underlying states.
+- review policy/decisions, selected coverage and package approval separately from Send/confirmed delivery;
+- complete/problem derived presentation without falsely marking excluded evidence client-delivered.
+
+### Phase 5/6 workflow and optional alerts
+
+The complete plans approved 2026-10-05 govern additional coverage: company/template/destination isolation and defaults, private object authorization/content receipts, Review required On/Off, bulk revision races, approval invalidation, immutable Send/remote IDs, cross-run release coverage and active correction-obligation supersession. Follow-ups preserve same WO/client number and old history while requiring new run/assignment/receipt/Accept and zero capture counts. Verify bounded workspace navigation, server-saved drafts, stale refresh conflicts and account isolation.
+
+Optional alerts require per-type/channel/device authorization, timing/timezone/DST/quiet-hour rules, snooze versus resolution, deduplication, role/endpoint revocation, generic private payloads and authorized click. Real supported phone/computer delivery and OS/browser limitations are a Phase 6 device gate; mocked push success cannot prove them. Notification failure does not change job or photo authority. See the complete Phase 5/6 plans linked from the approved roadmap for exact combined gates; preserve accepted Phase 4 observations.
 
 ## Realistic integration tests
 
