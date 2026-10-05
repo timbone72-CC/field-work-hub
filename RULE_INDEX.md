@@ -18,4 +18,6 @@
 | Phase boundary, physical Android or provider gate | Relevant current/next roadmap phases, TESTING_CONTRACT.md, docs/PHASE_STAGING_DOCTRINE.md, INTEGRATION_CONTRACT.md when applicable | Underlying risk level |
 | Proposed FPP/FWH integration | Both projects' profiles/contracts, explicit integration design and FWH risk/verification rules | Usually Level 3 until boundaries proven |
 
+Approved team/tier/work-disablement/photo-recovery work additionally reads [shared-access amendment](docs/SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md) in full with both affected parent-phase plans. It governs owner-only grants/allowances, delegated lifecycle, exact recovery cutoffs, accepted transfers and optional Auth email; classify runtime authority/schema/session/Storage changes Level 3. The amendment was approved 2026-10-05 at 17:40:18 America/Chicago in PR #39; 6F belongs to the whole Phase 6 plan. Its production domain/sender setup remains a genuine Phase 8 gate.
+
 If work crosses into another row, load its required rules and reclassify **before** implementing. Existing FWH detailed contracts retain their mandatory reread requirements; this routing index does not waive them, invent a new product rule or authorize an unplanned phase.
