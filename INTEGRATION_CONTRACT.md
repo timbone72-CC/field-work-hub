@@ -6,6 +6,8 @@ Protect the boundaries between the Admin dashboard, Android contractor app, Supa
 
 This contract does not authorize unfinished roadmap phases. It defines safety rules those phases must preserve once implemented.
 
+The complete Phase 5/6 amendments were approved on **2026-10-05 at 16:32:14 America/Chicago** and integrated through [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38). Their approved private holding, controlled release, fresh Accept/follow-up and optional Admin notification boundaries replace the earlier HNP-only/direct-delivery assumptions. These are governing implementation rules, not claims that new infrastructure/runtime is deployed.
+
 ## Mandatory reread before integration work
 
 Before changing Supabase/Auth/RLS, local persistence, offline synchronization, reassignment, camera/photo state, background work, remote storage, upload, retry, reconciliation, or cleanup:
@@ -30,14 +32,17 @@ If the roadmap does not define the intended cross-system behavior, **STOP. Integ
 - current server assignment;
 - server-approved reassignment request/consent state;
 - server field-status state after successful synchronization;
-- server-visible photo metadata/sync state once reported.
+- server-visible photo metadata/sync state once reported;
+- verified private evidence receipts, review policy/decisions and correction obligations;
+- immutable approved package/destination snapshots, explicit Send authority and confirmed delivery/closure metadata.
 
 ### Android local persistence is authoritative for
 
 - whether a downloaded WO is available offline on that device;
 - locally captured photo files/metadata before server/remote confirmation;
 - pending offline field actions not yet accepted by the server;
-- pending local photo sync attempts/recovery evidence.
+- pending local photo sync attempts/recovery evidence;
+- durable exact-instance human Accept before server confirmation and owner-scoped final-delivery/cleanup receipts.
 
 Local pending state must never be falsely presented as already confirmed by Supabase.
 
@@ -67,10 +72,13 @@ A local queue update alone cannot prove remote success.
 - Local cached WOs are keyed by Team WO UUID.
 - Photo binding uses Team WO UUID, not address text or visible WO number.
 
-## Assignment and receipt
+## Assignment, download receipt and human Accept
 
 - Assignment is server-authoritative.
-- Contractor receipt means the assigned authenticated contractor successfully received/downloaded that assignment and acknowledged it to the server.
+- Download receipt means the assigned authenticated contractor app durably received/downloaded that exact assignment/run before recording receipt to the server. It does not prove human acknowledgment.
+- Accept is one deliberate contractor tap, durably persisted before the phone says Accepted, then idempotently confirmed for the exact user/run/assignment instance. Pending sync and server confirmation remain distinct.
+- Receipt, Accept, Start and Finish are separate facts; none invents another. Accept is not a mandatory Start prerequisite.
+- Reassignment/follow-up requires fresh download receipt and human acknowledgment. Historical facts stay with their original instance; stale ACK is not rebound.
 - Receipt is tied to the current assignee; reassignment clears/invalidates prior-assignee receipt.
 - Repeated receipt acknowledgement must be idempotent.
 - `ASSIGNED` work may be reassigned by Admin under the approved server action.
@@ -85,7 +93,7 @@ Phase 3 must define the exact implementation before code is added. Once implemen
 
 - downloaded assigned WOs persist locally without contractor configuration;
 - previously downloaded work remains readable without network after app/process restart;
-- offline Start/Complete actions are persisted locally before the UI claims they are queued;
+- offline ACK/Start/Complete actions are persisted locally before the UI claims they are queued;
 - local pending actions synchronize through narrow server-authorized operations;
 - retries are idempotent;
 - reconnect must not silently overwrite or erase locally started work;
@@ -142,18 +150,38 @@ The Team upload implementation may differ from FPP's SAF path, but it must prese
 - ambiguous/uncertain remote outcome must not trigger blind duplicate create;
 - retry/reconciliation must preserve original photo and destination identity;
 - one photo's failure must not corrupt unrelated queue items;
-- local original/derivative cleanup occurs only after confirmed remote success and durable local bookkeeping.
+- local original/derivative cleanup requires confirmed applicable final client-package delivery, durable local/server bookkeeping, and verified private retention for excluded evidence; private staging receipt alone never authorizes cleanup;
+- rejected/unselected photos retain private evidence/history without false client-delivery flags; cancelled/never-sent/conflicted work lacking delivered closure keeps protected originals;
+- terminal cleanup recovery preserves metadata and never recreates/re-uploads confirmed deliveries.
 
 ## Google Drive/storage boundary
 
-Initial permanent destination is company-controlled HNP Google storage, but Team business data remains Supabase-authoritative.
+Private Supabase holding is organization-controlled review storage. First final provider is configurable company-controlled Google Drive, with same-org/company authorized accounts/roots and immutable package destination snapshots. HNP is one configuration; contractors receive no reusable provider secrets. Supabase remains authoritative for business, review and release state.
 
 - Team must not become architecturally inseparable from Google Drive.
-- contractors never receive the HNP password or reusable privileged Google credentials;
+- contractors never receive a company password or reusable privileged provider credentials;
 - upload authorization must be mediated by approved backend/server logic;
 - no client may broaden Drive sharing/permissions unless explicitly planned;
 - visible folder names are organizational context, not permanent business identity;
 - uncertain Drive/API outcomes fail closed until reconciled.
+
+## Private review, client release and corrections
+
+- Actual verified private bytes, not registered metadata, make evidence available for review. No public/client holding access or implicit release.
+- Review required On requires individual approval of selected exact content; Off permits selected received non-rejected pending evidence without falsifying approval. Both require package approval and explicit Send.
+- Capture counts, review decisions, selected release coverage, package approval and final delivery remain independent facts. One photo counts once toward final Total and at most one named release item.
+- Explicit same-WO corrective runs may follow accepted FIELD_COMPLETE before first delivery; classify internal corrections versus client returns from confirmed delivery history. New run/assignment, fresh receipt/Accept and zero new capture counts preserve old evidence/history.
+- Narrow reference-photo access exposes only deliberately shared correction evidence to the currently authorized contractor; no unrestricted historical gallery.
+- Package selection may span eligible same-WO/company runs with explicit release-item/active correction-obligation mappings. Old photos cannot satisfy new-run capture/new-photo minima. Reasoned successor obligations preserve intermediate failures without forcing rejected evidence into final selection.
+- Freeze approved queued/in-flight/sent manifests and exact destination/remote IDs. Reconcile any unresolved delivery before conflicting follow-up/release. Delivered package folders do not move on contractor reassignment.
+- Private pilot retention has no automatic purge through Phases 5–7. Production retention/export/deletion is an explicit Phase 8 gate; storage pressure cannot bypass protected originals.
+
+## Optional Admin alert integration
+
+- Approved Phase 6 alerts have independent per-type Dashboard/Phone/Computer settings and authenticated enrollment on supported devices.
+- Browser Web Push/service worker is an interruption channel, not a second authorization, field-action, release or cleanup owner. Generic lock-screen payloads contain no customer details/photos/tokens.
+- Server checks current Admin/org access before dispatch; click fetches the job through ordinary authorization. Permission failure, endpoint expiry, quiet hours and OS/browser limitations remain truthful.
+- Deduplicate event production; acknowledge/snooze never resolves a protected job problem. Push service acceptance is not proof of OS display or human reading; notification failure cannot lose evidence or alter work state.
 
 ## Cross-system conflict rules
 

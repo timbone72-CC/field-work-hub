@@ -1,10 +1,45 @@
-# Field Photo Prep Team — Master Implementation Roadmap
+# Field Work Hub — Master Implementation Roadmap
 
-Planning status: **APPROVED / CURRENT — runtime work remains phase-gated**
+Planning status: **APPROVED / CURRENT — PHASE 5–6 AMENDMENT INTEGRATED — runtime work remains phase-gated**
 
-Operator approval recorded: **2026-09-14**.
+Original roadmap approval: **2026-09-14**. Phase 5/6 whole-phase amendment and documentation merge approved: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**.
 
-This is the authoritative product and implementation roadmap for Field Photo Prep Team. It defines the intended user workflow, authority boundaries, offline behavior, photo rules, work-order lifecycle, HNP delivery rules, phase boundaries, failure handling, verification, and real-device gates.
+## Approved consolidated Phase 5/6 amendment — 2026-10-05
+
+**APPROVED AND APPLIED.** The operator stated “i approve phase 5 and 6 amendments to be merged” after reviewing the complete revision-1 plans at `d4dc223f6c3d6df416ae0441a9c2565d8eaee87c`. [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38) records the approved planning integration. The direct HNP delivery, all-photos-client-delivered completion and early cleanup assumptions are replaced in the current sections below and corresponding contracts. Phase 3/4 evidence remains accepted. No runtime, production configuration or phase-completion status change is claimed.
+
+Authoritative planning line: `docs/dashboard-workflow-enhancements`, scope key `dashboard-workflow-enhancement-plan`; main baseline `7644fe3e48048d2f2068638494c8ece3348e23fe`.
+
+- [Complete combined product proposal](DASHBOARD_WORKFLOW_ENHANCEMENT_PLAN_2026-10-05.md).
+- [Complete Phase 5 amendment — sections 5A–5E](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md).
+- [Complete Phase 6 amendment — sections 6A–6E](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md).
+
+One parent-phase plan approval covers each phase's included lettered sections; letters do not create repeated design gates. Existing Level 3 pre-merge approval, exact-head tests and genuine device/provider boundaries remain governing. The approval covers these complete parent plans and their documentation merge; it is not a runtime/physical PASS or pre-merge approval for a future Level 3 runtime change.
+
+### Applied amendment register
+
+| Superseded baseline section / assumption | Current approved behavior |
+| --- | --- |
+| First finish line; FPP Team transfer adaptation; global authority's Drive/HNP wording | Universal company-configurable workflow; private Supabase evidence → Admin review/preparation → manually approved client package → explicit Send → confirmed first-provider Drive delivery. Supabase still owns business authority. |
+| Work types/templates | Existing flat templates gain optional company applicability, description/instructions, several selectable options per type, historical snapshot reuse and explicit Save as new/Update; dispatched/started snapshot protection stays. |
+| Assignment receipt | Preserve durable downloaded receipt; add separate one-tap Accept fact per exact instance, offline persistence/idempotency, fresh acknowledgment after reassign/follow-up; no new field state or mandatory Accept-before-Start gate. |
+| Reopen Work Order / completed-only correction | Explicit correction after accepted FIELD_COMPLETE may precede initial client delivery. Same WO/client number, new run/assignment, fresh receipt/Accept, zero new counts; classify internal versus client return from confirmed delivery history. Preserve one open run and earlier history. |
+| Fully Complete and Phase 6 all frozen photos delivered | Current accepted field/capture facts, latest required package coverage/approvals and confirmed delivery, all covered-run evidence privately received/retained and no open correction/protected conflict. Rejected/excluded evidence is not falsely client-delivered. |
+| HNP archive hierarchy and reassignment folder movement | Configured same-company root → address context → stable WO UUID folder → immutable package UUID folder. Exact IDs/destination snapshots; delivered packages do not move when contractor changes. HNP is a configuration. |
+| Phase 4 prospective HNP byte-delivery eligibility | Accepted Phase 4 metadata/Finish makes new Phase 5 private transfer eligible; it never makes unreviewed bytes automatically client-visible. Phase 4 implementation/result paragraphs remain accepted historical evidence. |
+| Phase 5 direct delivery, upload state and cleanup | Current phase is the linked 5A configuration/authorization, 5B recoverable holding transfer, 5C usable minimum review/toggle, 5D package preview/approval/Send/Drive receipt, 5E retention/cleanup/recovery and one combined device/provider gate. Private receipt is separate from final delivery and cannot clean originals. |
+| Phase 6 display/reopen/cancel outline | Current phase is the linked 6A compact workspace/status, 6B flexible templates/follow-up/Accept, 6C efficient review/correction, 6D multi-run final package/history, 6E optional alerts. Preserve existing cancellation/offline/conflict protection. |
+| Deferred business push notifications | Permit only the linked optional Admin dashboard/Web Push phone/computer path: enrolled supported devices, per-type/channel preferences, timing/quiet hours, generic payload, deduplication, role checks and real device gate. Broader messaging stays deferred. |
+| Deferred multiple-storage abstraction | One configurable Drive implementation and a narrow provider boundary are in scope; additional providers/portals require explicit integration plans. No general provider framework. |
+| Phase 7 scenarios | Add repeated review On/Off, internal/client-return corrections, offline Accept, company/destination isolation, cross-run release coverage, workspace recovery and optional alert failures; retain existing safe field/recovery scenarios. |
+| Phase 8 HNP-only hierarchy/pilot/retention | Configured-company production pilot, with HNP one possible company; verify roots/credentials, private holding budget/backup/export/retention/deletion, held evidence, supported alerts, updates and second device. No automatic private holding purge before the production policy gate. |
+| Integration/Testing contract remote-success cleanup wording | Require final applicable client-package delivery plus durable local/server bookkeeping and verified private retention of excluded evidence; distinguish staging, review, package approval, send and client receipt. See Phase 5 section 9 for exact clauses. |
+
+Approval application complete in this documentation integration: the linked plans, affected global/future roadmap sections and integration/testing/profile clauses now express the same approved behavior. Phase 4 remains COMPLETE; Phase 5 and Phase 6 remain PLANNED until their actual implementation, evidence and merge gates pass. Next checkpoint is Phase 5 runtime preparation, not another planning approval.
+
+---
+
+This is the authoritative product and implementation roadmap for Field Work Hub. It defines the intended user workflow, authority boundaries, offline behavior, photo rules, work-order lifecycle, private review/configurable-company delivery, phase boundaries, failure handling, verification and real-device gates.
 
 The existing single-user Field Photo Prep (`timbone72-CC/field-photo-prep`) remains separate, working, and read-only to Team development.
 
@@ -12,7 +47,7 @@ The existing single-user Field Photo Prep (`timbone72-CC/field-photo-prep`) rema
 
 The first Team version succeeds when:
 
-**Admin creates and assigns a work order on a PC/laptop → the contractor receives it on Android → the assignment remains usable without internet → the contractor starts/finishes field work and takes protected photos offline → work/photo state survives restart → after Finish Field Work the frozen evidence set synchronizes safely when connectivity permits → the office can distinguish field-complete work from delivery still pending/failed/uncertain → confirmed photos reach the exact company-controlled HNP destination without loss, wrong placement, or blind duplicates.**
+**Admin creates and assigns a work order on a PC/laptop → the contractor receives it on Android → the assignment remains usable without internet → the contractor starts/finishes field work and takes protected photos offline → work/photo state survives restart → after Finish Field Work the frozen evidence set synchronizes safely when connectivity permits → the office receives photos privately and reviews/prepares an eligible client package → Admin approves and explicitly sends that package → confirmed selected evidence reaches the exact configured company destination without loss, wrong placement, or blind duplicates.**
 
 ## Governing build rule
 
@@ -56,7 +91,7 @@ Team carries forward:
 - exact destination/remote identity never inferred from visible name once stable identity exists;
 - `UNCERTAIN` fails closed and reconciles before another create;
 - one photo failure does not corrupt unrelated photos;
-- remote confirmation must be durable before local image cleanup;
+- applicable final client-package delivery and local/server bookkeeping must be durable before local image cleanup; excluded evidence also requires verified private retention;
 - confirmed-delivery metadata survives local image cleanup;
 - the app is not a permanent local gallery;
 - physical evidence is recorded once and reused rather than repeatedly retested for reassurance.
@@ -66,9 +101,9 @@ Team carries forward:
 FPP concepts change where Team has multiple users and server authority:
 
 - FPP file-per-record persistence → Room structured local persistence;
-- FPP operator-selected SAF Drive tree → server-mediated company HNP storage;
+- FPP operator-selected SAF Drive tree → private Supabase review holding and server-mediated configured-company Drive delivery;
 - FPP destination business identity → Team WO UUID + server-stored Drive IDs;
-- FPP device-side Drive account selection → no reusable HNP credential on contractor phones;
+- FPP device-side Drive account selection → no reusable company-provider credential on contractor phones;
 - FPP manual/foreground upload → durable Team queue + WorkManager only once persistent network work is actually required;
 - FPP local selected address/WO → authenticated server assignment cached by immutable Team identity;
 - FPP name-based folder discovery → stored Drive ID and Team UUID metadata;
@@ -78,7 +113,7 @@ FPP concepts change where Team has multiple users and server authority:
 
 Do not carry forward:
 
-- Android SAF folder selection for HNP;
+- Android SAF folder selection for company storage;
 - contractor-side Google account/folder picker;
 - persisted SAF tree grants;
 - contractor-side Drive create/reuse/Clear & Reuse;
@@ -125,7 +160,7 @@ Display fields such as contractor name, email, address, WO number, work type, du
 - accepted server field status/timestamps;
 - requirement snapshots;
 - server-visible photo metadata;
-- confirmed remote delivery metadata;
+- verified private receipts, Admin review/policy, immutable package approvals and confirmed client-delivery metadata;
 - current conflict/problem state.
 
 ### Room/app-private storage is authoritative for
@@ -139,7 +174,7 @@ Display fields such as contractor name, email, address, WO number, work type, du
 
 Local pending state must never be presented as if the server already accepted it.
 
-### Google Drive/HNP is authoritative for
+### Private holding and configured-company Drive are authoritative for
 
 - the exact remote object/folder that existed when Team confirmed delivery;
 - the exact returned remote Drive folder/file identity at that time.
@@ -227,9 +262,9 @@ Each organization has a small flat reusable list of work types, for example:
 - Lock Change
 - Tree Work
 
-Each reusable work type owns its default photo requirement template.
+Each work type may have several selectable flat photo templates. Defaults resolve company-specific, then organization-wide, then Custom. A client company is business context within an authorized organization, never a tenant boundary.
 
-WO creation selects from this list so repeated work does not depend on free-text spelling.
+WO creation selects from this list so repeated work does not depend on free-text spelling. Admin may reuse a prior run snapshot, select another applicable template or create a custom/new template. Copy description/instructions/items into an editable job draft; explicit Save as new/Update template affects future choices only.
 
 A simple `Custom / Other` path remains available for one-off work without forcing creation of a permanent template.
 
@@ -291,7 +326,7 @@ Retains permanent WO identity and business fields, including:
 - property address;
 - current work-type display context;
 - current run pointer;
-- remote Drive WO folder identity when known;
+- exact remote WO-folder mapping per configured destination when known;
 - current operational projection used by existing APIs/dashboard during migration.
 
 ### `work_order_runs`
@@ -316,7 +351,7 @@ Preserve a narrow assignment history for each run sufficient to answer:
 
 - who the run was assigned to;
 - when assignment began;
-- whether/when that contractor received it;
+- whether/when that contractor downloaded and separately acknowledged it;
 - when assignment ended;
 - whether it ended by reassignment, handoff, cancellation, completion, or deactivation-related Admin action.
 
@@ -329,7 +364,7 @@ Existing Phase 2 current-assignment fields may remain as transactional projectio
 Once run identity exists:
 
 - every new photo binds to both WO UUID and run UUID;
-- every offline START/COMPLETE action binds to the exact run UUID;
+- every offline ACK/START/COMPLETE action binds to the exact run UUID and assignment instance;
 - run UUID is included in remote metadata/appProperties where practical;
 - a photo never moves from one run/WO identity to another.
 
@@ -362,6 +397,8 @@ It does **not** mean the human read every instruction.
 Receipt is acknowledged only after the assignment is durably committed locally.
 
 Every new assignment instance requiring redispatch gets its own receipt truth. Do not reuse an old contractor receipt as proof of a later assignment.
+
+**Accept** is a separate one-tap human acknowledgment for that exact contractor/run/assignment instance. Persist it durably offline and sync idempotently; show pending sync separately from server confirmation. Download receipt, Start and Finish never invent an Accepted timestamp. Reassignment/follow-up requires fresh receipt and acknowledgment; Accept is not a mandatory prerequisite for Start. Stale-instance taps preserve evidence and surface conflict. See Phase 6 section 3 for timing/authorization/reminder details.
 
 ## Post-start edit rule
 
@@ -400,48 +437,19 @@ Normal organization Admins may **Cancel Work Order** but may not hard-delete rea
 
 Principle: **before completion, cancel; after completion, reopen; normal Admins do not hard-delete real work.**
 
-## Reopen Work Order
+## Follow-up / Reopen Work Order
 
-A fully completed WO may be reopened only through explicit **Reopen Work Order**.
+An explicit reasoned follow-up may start after accepted FIELD_COMPLETE, before the first client submission or after confirmed delivery. Before any package is DELIVERED it is an internal correction; afterward it is a client-return correction. Reconcile any unresolved queued/in-flight/partial/failed/uncertain delivery first. Ordinary new/repeat work carrying a new client order creates a new WO.
 
-Required behavior:
+- Preserve permanent WO UUID, external client number, company, prior runs/Finish sets, assignments, receipts, photo/review/package/delivery history and stable archive identities.
+- Admin explicitly chooses an eligible contractor, due date and adjustable new snapshot before dispatch; no prior contractor ownership is implied.
+- Create one new run UUID/sequence and assignment instance, with fresh receipt, fresh Accept and zero new-run capture counters, including when assigning the same contractor.
+- Old photos remain reference/history and may be selected in a final client package, but cannot satisfy new-run capture minima.
+- Internal rejection/correction labels stay internal unless intentionally included in client-facing notes.
+- One open run per WO; no generic backward status edit, parallel correction branch or history deletion.
+- Explicit checked correction obligations and supersession prevent unsuccessful intermediate corrections from forcing rejected photos into the final package. Final coverage cannot silently fall below the release goals.
 
-- Admin must provide a reopen reason;
-- same Team WO UUID remains;
-- same Drive WO folder/archive identity remains;
-- all prior runs, assignments, receipts, requirements, photos, and delivery evidence remain preserved;
-- generic status editing cannot silently roll a completed WO backward;
-- reopening creates a new run UUID/sequence.
-
-### Reopened assignment
-
-Reopening does not return control to the prior contractor.
-
-Admin explicitly chooses an active contractor for the new run before redispatch.
-
-Prior assignment creates no continuing ownership right.
-
-If the previous contractor performed the work incorrectly or previously gave up/approved reassignment, Admin may choose someone else.
-
-### Reopened receipt
-
-Every reopened redispatch requires a fresh receipt even if Admin chooses the same contractor again.
-
-Prior receipt stays with prior history.
-
-### Reopened requirements and photo counts
-
-Admin sets the reopened run's new requirement snapshot before redispatch.
-
-The new run starts at **zero** for all of its own photo counters.
-
-Old photos remain preserved/reference history but do not satisfy any new-run Total or named-item requirements.
-
-Example:
-
-- prior run delivered 100 photos;
-- HNP requests 12 replacement/additional photos;
-- new run starts `0 / 12`.
+Full authority, cancellation, reference-photo access, revision races and coverage are governed by [Phase 6 sections 3–5](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md). An untouched cancelled follow-up keeps history and an unresolved obligation; started/photo-bearing cancellation retains protected evidence, not a false return to Complete.
 
 ## Field completion versus final Complete
 
@@ -455,7 +463,9 @@ Two truths remain separate:
 **Fully Complete**
 - current run is server field-complete;
 - server-known current-run requirement counts are satisfied;
-- every frozen current-run photo is resolved and confirmed delivered;
+- the latest required approved package has eligible selected coverage and confirmed final delivery;
+- all accepted evidence in its covered runs is privately received/retained, including excluded/rejected photos without false client-delivery flags;
+- no open correction remains;
 - no unresolved assignment, cancellation, delivery, or archive-placement problem remains.
 
 Do not invent another durable field state merely for the human-facing Complete label.
@@ -482,110 +492,35 @@ Credential storage remains app-private and uses appropriate current Android secu
 
 ---
 
-# HNP archive and delivery semantics
+# Private review, client archive and delivery semantics
 
-## Approved Drive hierarchy
+## Private holding
 
-Development root initially:
+Private Supabase bucket `fwh-review-private` holds immutable prepared JPEGs at org/WO/run/photo UUID paths. Narrow owner/accepted-Finish authorization governs upload; trusted byte/hash/size verification records private receipt. Active same-org Admin gets short-lived review reads. No public/client exposure, overwrite or ordinary delete permission. Metadata is not proof that review bytes arrived.
 
-`Field Photo Prep Team - HNP / TEST / Work Orders`
+## Configured final destination and stable identity
 
-Inside:
+Google Drive is the first supported final provider. Each client company has verified same-org/company account/root destinations, a default and an authorized package override. HNP is one possible configuration. Provider credentials remain server-only; additional portals/providers require concrete integration plans.
 
-```text
-Work Orders
-└── Contractor
-    └── Property Address
-        └── Work Order
-            ├── field-photo-<uuid>.jpg
-            └── field-photo-<uuid>.jpg
-```
+Hierarchy: **configured root → address context → WO UUID folder → package UUID folder**. Exact returned/preallocated IDs, not names, identify remote objects. Files use `field-photo-<photo UUID>.jpg`; preview also includes client-facing `submission.json`. Package revision/destination/content is immutable after approval and Send; changing defaults or contractor assignment never redirects a retry or moves historical delivered packages. No automatic permission/sharing changes.
 
-There is no extra `Photos` child in v1.
+## Review, release and confirmation
 
-## Contractor folder
+Review required defaults On. On requires individual approval for all selected photos; Off permits selected received PENDING photos without fake approvals. Rejected photos remain excluded unless deliberately changed. Both paths require package approval and explicit Send; neither bypasses required coverage, authorization or conflicts.
 
-- visible name uses current contractor display name;
-- permanent identity is Auth user UUID;
-- use contractor UUID `appProperties` where practical;
-- rename must not create another identity;
-- email is not permanent identity.
+Use one backend delivery owner, durable outbox/leases, resumable offsets, stable Drive IDs and fail-closed UNCERTAIN reconciliation. Package confirmation requires all selected files plus submission manifest at the exact destination and committed receipt bookkeeping. Partial provider visibility is not atomic package delivery or proof a human client viewed it. A zero-photo/all-off package still delivers its explicitly approved submission manifest.
 
-## Address folder
+## Retention and phone cleanup
 
-- organizational display context only;
-- no permanent `properties` table merely for Drive layout;
-- resolve/reuse only beneath the exact contractor parent;
-- same visible address may exist under multiple contractors;
-- do not auto-delete empty address folders.
+All verified prepared evidence and immutable provenance/review history are retained privately; automatic server purge is disabled through Phases 5–7. Production retention/export/deletion is a Phase 8 gate.
 
-## Work-order folder
+Phone originals/derivatives can clean only after applicable final client-package confirmation, durable owner-scoped local/server receipts and verified private retention/closure of excluded evidence. Finish, private upload receipt, review/package approval and Send are insufficient. Cancelled/rejected-only/never-sent/conflicted evidence without delivered closure stays protected and visible. Terminal cleanup recovery never re-uploads confirmed files.
 
-Human-facing name:
+## Delivery history is not permanent-presence policing
 
-`<WO number> - <work type>`
+Retain photo/WO/run/package identity, destination/file IDs, confirmation time and retention/exclusion facts. Client post-delivery retention is unknown unless documented. Later Drive absence does not undo historical confirmation or trigger automatic recreation. UNCERTAIN reconciliation concerns an ambiguous in-flight delivery, not perpetual auditing.
 
-Identity:
-
-- Team WO UUID in `appProperties` where practical;
-- exact returned Drive folder ID stored server-side;
-- once Drive ID exists, target it directly;
-- display edits never replace WO identity.
-
-## Reassignment/reopen folder movement
-
-The Drive hierarchy follows the **current approved assignment**, but only the exact WO archive moves.
-
-When current assignment changes and a remote WO folder already exists:
-
-- move the same WO folder ID beneath the new contractor's matching address parent;
-- preserve every existing historical/current photo inside;
-- do not move sibling WOs;
-- do not move the old contractor's entire address folder;
-- do not copy photos into a replacement WO folder;
-- do not auto-delete the old empty address folder;
-- in-progress move occurs only after consent actually changes the server assignee;
-- reopened redispatch to a different contractor may move the same completed WO folder after the new run assignment is committed;
-- ambiguous move preserves the same known folder ID, surfaces placement problem, and reconciles before any retry/create.
-
-If no remote WO folder exists yet, nothing is moved; first authorized delivery creates/resolves beneath the current assignment.
-
-## Photo remote identity
-
-Baseline filename:
-
-`field-photo-<photo UUID>.jpg`
-
-Remote metadata should include where practical:
-
-- Team photo UUID;
-- Team WO UUID;
-- Team run UUID.
-
-The confirmed Drive file ID becomes remote photo identity.
-
-## Delivery confirmation, not permanent-presence policing
-
-Team must prove each photo was successfully delivered to the exact authorized WO folder and retain lightweight evidence:
-
-- photo UUID;
-- WO UUID;
-- run UUID;
-- capturing/assigned contractor identity as required for history;
-- upload-confirmed timestamp;
-- Drive file ID that existed at confirmation.
-
-HNP post-delivery retention behavior is currently **UNKNOWN**.
-
-Therefore:
-
-- do not assume HNP keeps forever, moves, or deletes;
-- Team does not continuously police permanent Drive presence;
-- later file absence alone never triggers automatic recreation/re-upload;
-- `UNCERTAIN` reconciliation is for an ambiguous in-flight delivery, not perpetual retention auditing;
-- if HNP later documents a retention/consumption policy, adapt deliberately.
-
-Dashboard language says **delivery/upload confirmed**, not guaranteed permanent presence.
+The [complete Phase 5 plan](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md) governs exact storage/API/migration/recovery and provider gates; [Phase 6](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md) governs cross-run selection and correction obligations. These replace the earlier contractor-folder hierarchy/movement and every-photo-direct-client-upload assumptions for future implementation.
 
 ---
 
@@ -1048,367 +983,47 @@ Completion gate: **Admin custom/all-off rules, one-item counting, quick offline 
 
 ---
 
-# Phase 5 — Safe server-mediated HNP delivery — PLANNED
+# Phase 5 — Private holding, minimum Admin review and controlled delivery — APPROVED PLAN / PLANNED
 
-## Goal
+Whole numbered parent phase: [PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs behavior, owners, exact API/data boundaries, additive Room/server migrations, failure/recovery, rollback and evidence across all sections. Runtime has not started.
 
-Deliver the frozen completed-run photo set to the exact company-controlled HNP folder without reusable HNP credentials on the contractor phone and without duplicate creates during weak/interrupted connectivity.
+| Section | Responsibility |
+| --- | --- |
+| 5A | Configurable company/default/override destination and private-holding authorization. |
+| 5B | Protected resumable byte transfer, durable receipt/recovery and historical-run protection polling. |
+| 5C | Usable minimum Admin photo viewer, individual decisions and Review required On/Off. |
+| 5D | Selected coverage, exact preview, immutable package approval, explicit Send and confirmed configurable Drive delivery. |
+| 5E | Private pilot retention, final-delivery-gated cleanup, truthful Complete, migration/recovery and combined evidence gate. |
 
-## Security boundary
+No API-only finish or automatic temporary client exposure: Phase 5 must be usable from the current dashboard. Capture/field actions, private transfer, review, package approval and client delivery are distinct facts. A single guarded transfer/provider/cleanup path remains owner. Rejected surplus may be retained privately without being falsely marked delivered.
 
-Android calls authenticated Team backend with user JWT.
+Verification: focused tests while building, one complete suite on the final runtime head, org/role/object-path isolation, private receipt/content verification, review/coverage/revision/Send races, same-ID retry/uncertainty, Room/recovery and cleanup guards. One combined disposable phone/laptop/real-provider gate demonstrates actual Admin-private image access, On/Off without automatic Send, authorized destination override, interrupted duplicate-safe transfer/delivery and originals protected through final receipt/bookkeeping. Retain accepted Phase 4 camera evidence.
 
-Backend:
-
-- validates user/org/active account;
-- validates exact WO/run/photo;
-- validates current authorization/conflict state;
-- owns HNP Drive secrets;
-- never returns OAuth refresh/service secrets;
-- issues only narrow per-photo upload/session capability required for the authorized operation.
-
-## Drive hierarchy resolution
-
-Resolve from stable identity outward.
-
-### Contractor parent
-
-- use stored contractor Drive folder ID if valid;
-- otherwise search root by contractor UUID appProperties, not name alone;
-- one match reuse;
-- none create with current display name + UUID metadata;
-- multiple/inconclusive fail closed.
-
-### Address parent
-
-- resolve only beneath exact contractor parent;
-- exact suitable folder may be reused;
-- otherwise create;
-- never cross into same-named address under another contractor;
-- ambiguity fails closed.
-
-### WO folder
-
-- stored `remote_folder_id` first;
-- verify expected WO where practical;
-- if absent search intended parent by Team WO UUID metadata;
-- one reuse;
-- none create `<WO number> - <work type>`;
-- multiple/inconclusive fail closed;
-- persist exact returned Drive ID.
-
-Once known, Drive WO folder ID is authoritative remote destination.
-
-## Folder move
-
-On approved assignment change:
-
-- move same WO folder ID only;
-- keep all historical/current photos inside;
-- preserve WO UUID;
-- do not create replacement;
-- do not move siblings/address folder;
-- ambiguous outcome → archive-placement problem and reconciliation;
-- no remote folder → no move yet.
-
-## Upload baseline
-
-Prefer Drive resumable upload.
-
-Safe flow:
-
-1. prepared copy exists and size/hash evidence known;
-2. frozen photo metadata exists server-side and is authorized;
-3. server run completion/current ownership is accepted;
-4. backend starts resumable session for exact stored WO folder and deterministic filename;
-5. Android persists session capability/URI **before bytes**;
-6. transition/retain `UPLOADING`;
-7. send/resume bytes;
-8. final Drive result establishes exact file ID;
-9. server + local bookkeeping durably record delivery confirmation;
-10. only then local image cleanup becomes eligible.
-
-Session capability is sensitive app-private state and is never logged/displayed/committed.
-
-## Persistent background delivery
-
-WorkManager is appropriate here.
-
-Baseline:
-
-- network constraint `CONNECTED`;
-- cellular or Wi-Fi allowed in pilot;
-- no Wi-Fi-only preference unless field evidence proves need;
-- worker re-reads Room each attempt;
-- process restart/reboot resumes eligible work;
-- photos deliver sequentially by default;
-- one known retry-safe failure need not corrupt/block unrelated safe photos;
-- `UNCERTAIN` never authorizes blind duplicate create.
-
-## States
-
-Normal:
-
-`WAITING → UPLOADING → UPLOADED`
-
-Known retry-safe:
-
-`WAITING/FAILED → UPLOADING → FAILED`
-
-Ambiguous:
-
-`UPLOADING → UNCERTAIN`
-
-`UPLOADED` is terminal for automatic retry.
-
-## Interrupted resumable upload
-
-Preserve exact WO/run/photo, prepared bytes, session URI, attempt evidence.
-
-Then:
-
-- complete → confirm exact remote identity;
-- incomplete → continue from server position;
-- expired/missing session → reconcile exact stored WO folder using photo UUID/appProperties/deterministic name before replacement session;
-- inconclusive → `UNCERTAIN`, no blind create.
-
-## UNCERTAIN reconciliation
-
-1. validate local photo/run/WO/prepared evidence;
-2. use exact session/provisional evidence first;
-3. inspect exact stored WO folder by photo UUID/app metadata/deterministic name;
-4. exactly one strong candidate → verify metadata/size/checksum/hash as needed then confirm;
-5. multiple candidates → remain uncertain;
-6. authoritative absence + no unresolved provisional evidence → release to retry-safe `FAILED`;
-7. inaccessible/mismatched/ambiguous → remain uncertain;
-8. reconciliation never deletes/overwrites remote content merely to simplify state.
-
-## Post-Finish phone experience
-
-Finish means **field work is done**, not “wait on an upload screen.”
-
-After Finish:
-
-- contractor may leave WO screen;
-- open another WO;
-- lock phone;
-- close app;
-- restart device.
-
-Durable queue survives.
-
-Phone shows truthful states such as:
-
-- Waiting for connection;
-- Sending `18 of 42`;
-- Delivery problem — retrying;
-- Action needed.
-
-`UNCERTAIN` remains visibly unresolved.
-
-Sign Out stops authenticated network delivery but preserves frozen photos/queue; delivery resumes after the same contractor signs in and authorization validates.
-
-## Persistent failure surfacing
-
-V1 does not add a business push-notification subsystem merely for delivery failures.
-
-Instead:
-
-- unresolved delivery appears as persistent **Needs Attention / Delivery Problem** in contractor app whenever reopened;
-- Admin dashboard shows the WO as Problem;
-- job cannot disappear into Recently Completed while unresolved;
-- Android OS notifications required by WorkManager/foreground execution are implementation mechanics, not a separate product messaging system.
-
-## Cleanup
-
-After durable local + server delivery confirmation with Drive file ID:
-
-- protected original may be deleted safely;
-- prepared derivative may be deleted safely;
-- retain lightweight identity/delivery metadata;
-- cleanup failure does not roll remote state backward;
-- cleanup never triggers re-upload.
-
-## Delivery-confirmation retention rule
-
-Later Drive absence alone does not change `UPLOADED`/confirmed-delivery history and does not trigger re-upload.
-
-## Automated proof
-
-At minimum:
-
-- authorization/org/assignment/run guard;
-- no server/HNP secrets in clients;
-- unique contractor/address/WO resolution;
-- ambiguous hierarchy fails closed;
-- exact WO folder move only;
-- deterministic filename/metadata incl run;
-- session persisted before bytes;
-- restart/resume;
-- server-reported position;
-- retry-safe vs uncertain;
-- no blind duplicate create;
-- one remote candidate can reconcile;
-- authoritative absence can safely release retry;
-- multiple candidates remain uncertain;
-- cleanup only after confirmation;
-- WorkManager idempotency;
-- Sign Out pauses without deleting queue;
-- unresolved failures remain visible.
-
-## Provider gate
-
-Using disposable HNP TEST data:
-
-1. resolve contractor/address/WO folder;
-2. use Phase 4 frozen offline photos;
-3. restore connectivity;
-4. metadata + completion sync first;
-5. deliver several photos sequentially;
-6. kill/restart during queue;
-7. interrupt one upload safely;
-8. prove resume/reconcile without duplicate;
-9. verify exact Drive IDs retained;
-10. verify cleanup;
-11. reassign one disposable WO and move only same folder;
-12. verify unrelated TEST content untouched.
-
-Do not manufacture a dangerous ambiguity solely to satisfy a test.
-
-Completion gate: **frozen offline evidence survives interruption/restart and reaches the exact HNP TEST archive through server mediation without reusable contractor Drive credentials, wrong placement, or blind duplicates.**
+Completion gate: **usable secure private review and explicit controlled delivery operate end to end, exact provider receipts and protected cleanup/recovery are proven, required automation/live parity and real gates pass, and explicit Level 3 runtime merge approval/integration agree.** The approved plan is not implementation evidence.
 
 ---
 
-# Phase 6 — Admin operational truth, completion history, reopen/cancel, and problem resolution — PLANNED
+# Phase 6 — Compact Admin workspace, templates, follow-ups, review and optional alerts — APPROVED PLAN / PLANNED
 
-## Goal
+Whole numbered parent phase: [PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs all sections/dependencies and exact evidence boundaries. Phase 5 owns holding/review/package/provider/cleanup machinery; Phase 6 extends it, never duplicates it. Runtime has not started.
 
-Give the office a truthful operational view and the minimum lifecycle controls needed after the field/photo engine is proven.
+| Section | Responsibility |
+| --- | --- |
+| 6A | Bounded server-paged dashboard (25/50), company/address/WO filters, one workspace/tabs, retained saved context and truthful queues/history. |
+| 6B | Multiple flat company/work-type templates, editable copies, historical reuse, same-WO corrective runs, fresh receipt/Accept and offline one-tap acknowledgment. |
+| 6C | Efficient grouped/bulk review, one checked correction request, returned-photo-first review and revision-safe decisions. |
+| 6D | Selected evidence across eligible runs, explicit final-release mapping/new-run obligations, immutable package/history and the existing guarded Send path. |
+| 6E | Optional per-type Dashboard/Phone/Computer alerts, enrolled supported Web Push devices, timing/quiet hours/snooze/deduplication and authorized links. |
 
-## Dashboard facts
+Download, Accept, Start, Finish, private receipt, photo approval, package approval and final delivery never collapse into one status. No new durable field states; derive queues/next actions from server-confirmed facts and show freshness. Complete uses the global package/coverage/retention predicate, not all-photos-client-delivered. Admin Completed stays searchable; contractor Recently Completed is a seven-day UI window, not a deletion rule.
 
-At minimum per current run:
+Follow-ups preserve the external client WO number and permanent WO UUID, create a fresh run/assignment and zero counters, and classify internal corrections before first delivery versus client returns afterward. Old evidence may support the final package but never new-run capture. Freeze dispatched/started requirements, preserve cancellation/conflict history and use explicit correction-obligation supersession for further deficient visits.
 
-- contractor;
-- receipt;
-- due date;
-- server field state;
-- start time;
-- field-complete time;
-- frozen requirement snapshot;
-- server-known unique Total and per-item captured counts against the frozen snapshot (stage/framing is context, not overlapping credit);
-- delivered count;
-- waiting/uploading;
-- failed;
-- uncertain;
-- assignment/offline/cancellation conflict;
-- archive-placement problem;
-- pending handoff;
-- current run sequence/reopen reason when applicable.
+Alert preferences are independently selectable by type/channel; Dashboard defaults On, phone/computer Off, with supported device enrollment and truthful permission/background limits. Acknowledge/snooze does not resolve underlying job problems. Push service acceptance is not proof of OS display/human reading; generic payloads protect lock-screen privacy. Broader messaging stays deferred.
 
-Dashboard never claims knowledge of phone-only unsynchronized facts.
+Verification: bounded navigation/draft/refresh/account isolation; template copy/default/archive semantics; exact-instance ACK and offline recovery; fresh follow-up identity and delivery races; bulk review and multi-run coverage; notification preferences/timezone/quiet-hours/revocation/deduplication. Combine the whole laptop/phone workflow and supported notification device checks where feasible; no repeat Phase 4 camera gate for layout changes.
 
-## Derived views
-
-Use derived presentation, not extra field states:
-
-- Due/upcoming;
-- Overdue;
-- In progress;
-- Field complete — photos pending;
-- Complete;
-- Problem.
-
-**Complete** requires current-run requirements satisfied server-side, current run field-complete, all frozen current-run photos confirmed delivered, and no unresolved problem.
-
-A server that knows zero current-run photos cannot claim Complete if the run snapshot requires photos.
-
-## Metadata-first reconnect truth
-
-After offline Finish, synchronize small metadata/field facts before or alongside large photo bytes:
-
-- frozen photo metadata first;
-- field completion acceptance with requirement validation;
-- dashboard becomes `Field complete — photos pending`;
-- bytes continue;
-- final delivery turns derived view to Complete.
-
-## Completed visibility
-
-Admin:
-
-- fully Complete leaves normal Active queue automatically;
-- stays searchable in Completed/history indefinitely unless explicit later retention policy changes that.
-
-Contractor Android:
-
-- fully Complete leaves active work;
-- appears in lightweight Recently Completed for 7 days;
-- then drops from normal phone UI;
-- server metadata/history remains;
-- local delivered image bytes need not remain for 7 days.
-
-## Reopen UI/action
-
-Admin `Reopen Work Order`:
-
-- requires reason;
-- shows prior runs/requirements for reference;
-- creates new run;
-- Admin chooses active contractor;
-- Admin sets new requirement snapshot;
-- fresh receipt required;
-- photo counts start zero;
-- same WO UUID/Drive folder identity.
-
-If original contractor is inactive, that does not block reopen; Admin selects any eligible active contractor.
-
-## Cancel action
-
-Admin can cancel non-complete work under the global cancellation rules.
-
-If protected local evidence later reports conflict, dashboard surfaces resolution need rather than pretending cancellation erased it.
-
-## Conflict resolution
-
-Keep lean.
-
-Minimum actions may include:
-
-- restore/reassign to contractor whose protected offline work should be accepted;
-- reconcile exact existing Drive placement;
-- clear a resolved problem only after server/local evidence proves protection is no longer needed.
-
-Do not build generic case management.
-
-## Automated proof
-
-- derived counts/status from server facts;
-- org/RLS isolation;
-- no cross-contractor leakage;
-- required counts prevent false Complete;
-- field-complete does not imply delivered;
-- failed/uncertain/conflict/archive issue cannot render Complete;
-- Completed/Recent visibility rules;
-- Reopen creates new run, fresh receipt, zero counters, same WO;
-- old history remains unchanged;
-- Cancel preserves evidence;
-- repeated retries remain idempotent.
-
-## End-to-end gate
-
-1. contractor completes offline with required photos;
-2. Admin initially sees old server facts only;
-3. reconnect;
-4. metadata + completion arrive;
-5. Admin sees `Field complete — photos pending`;
-6. photos deliver;
-7. Admin sees Complete and contractor gets Recently Completed;
-8. reopen same WO to a chosen contractor with a new requirement;
-9. verify fresh receipt/zero counters/prior history;
-10. repeat one safe failure/conflict and show Problem.
-
-Completion gate: **office can accurately tell what is assigned, received, field-complete, delivering, fully complete, reopened, cancelled, or genuinely needs intervention without false certainty.**
+Completion gate: **Admin can select, assign, acknowledge, review, correct, prepare/send and track confirmed delivery without losing context or hiding protected problems; selected supported alerts pass their actual device boundary; required exact-head automation/live parity, Level 3 runtime merge approval and integration agree.**
 
 ---
 
@@ -1416,7 +1031,7 @@ Completion gate: **office can accurately tell what is assigned, received, field-
 
 ## Goal
 
-Use Team repeatedly under realistic field conditions before an outside HNP pilot.
+Use FWH repeatedly under realistic field conditions before an outside configured-company pilot; HNP may be one selected configuration.
 
 ## Rules
 
@@ -1455,15 +1070,25 @@ Exercise repeatedly:
 - reassignment while untouched;
 - approved in-progress handoff;
 - offline reassignment/cancel race;
-- exact single-WO Drive move with siblings unchanged;
+- stable historical package folders across contractor reassignment, with siblings unchanged;
 - completed → reopen to same contractor and different contractor;
-- fresh reopened receipt + zero counts;
+- fresh follow-up receipt/Accept + zero new-run counts;
 - signout/signin;
 - deactivation/reactivation recovery with disposable evidence if safe;
 - low-storage behavior where practical;
 - app update over existing install without state loss;
 - final archive placement;
 - Admin Completed/Problem views.
+- multi-company/address/WO selection, several templates per type and historical snapshot reuse;
+- offline Accept distinct from download/Start, with reminder timing and stale-instance recovery;
+- internal corrections before first client delivery and client returns after delivery;
+- Review required On/Off, rejected surplus and private retained evidence;
+- repeated deficient corrective visits with explicit successor obligations and preserved history;
+- final selected coverage across original/corrective runs, including new-run minima;
+- saved workspace navigation/draft recovery and bounded large synthetic lists/galleries;
+- same-company destination override/default change while retry identity stays fixed;
+- optional phone/computer alerts, quiet/off/denied/expired cases and authorized click;
+- one protected sync/storage/delivery problem with notification failure that cannot lose evidence or resolve the job.
 
 ## Failure bar
 
@@ -1490,7 +1115,7 @@ Completion gate: **repeated internal field sessions succeed without lost/misattr
 
 ---
 
-# Phase 8 — Production readiness and small HNP pilot — PLANNED
+# Phase 8 — Production readiness and small configured-company pilot — PLANNED
 
 ## Goal
 
@@ -1499,12 +1124,12 @@ Harden only what is required for a small outside pilot.
 ## 8A — Production identity/environment
 
 - production package `com.inandout.fieldphotoprep.team`;
-- production label `Field Photo Prep Team`;
+- production display label `Field Work Hub`; technical package/signer cutover remains separately governed;
 - production signing key outside public repo;
 - deliberate versionCode/versionName;
 - production Supabase environment separated from disposable development data where practical;
-- production HNP Drive root separated from TEST;
-- approved Contractor → Address → WO hierarchy;
+- selected company production Drive account/root separated from TEST; HNP is one possible configuration;
+- approved configured root → address context → stable WO UUID → package UUID hierarchy;
 - server-only secrets;
 - no test IDs/PII baked into clients;
 - known rollback APK/build identity.
@@ -1536,15 +1161,18 @@ Example deactivation warning:
 
 Document before outside use:
 
-- HNP owns/controls remote archive;
-- contractor-folder rename responsibility;
+- configured client company owns/controls the final archive; organization controls private review holding;
+- display-name changes never replace stored folder/package identities;
 - empty address folders remain unless manually cleaned;
-- local confirmed image bytes normally cleaned after durable delivery evidence;
+- local image cleanup requires confirmed applicable final package, durable local/server bookkeeping and private retention/closure of excluded evidence;
 - server metadata retention;
-- HNP post-delivery file retention remains unknown unless documented;
-- what happens if HNP Google account loses access/quota;
+- selected company post-delivery file retention remains unknown unless documented;
+- what happens if a configured provider account or private holding loses access/quota;
 - Supabase backup/export level for pilot;
-- whether free storage remains adequate.
+- actual private holding budget, capacity monitoring, backup/export and whether current storage remains adequate;
+- approved private evidence retention and recoverable export/deletion policy, including rejected/excluded/cancelled/never-sent/held evidence; no automatic private purge before this gate;
+- scheduler/worker operations, secret-reference rotation/revocation and partial-delivery recovery;
+- supported notification OS/browser/enrollment, privacy, VAPID rotation and quiet/denied/offline limits.
 
 Do not buy/build more storage complexity until real use requires it.
 
@@ -1569,10 +1197,10 @@ On another supported Android phone/account:
 - finish;
 - reconnect/deliver;
 - verify Admin truth;
-- verify exact HNP placement;
+- verify private review access and exact selected-company package placement;
 - prove nothing depends on developer phone local identity/session.
 
-## Small HNP pilot
+## Small configured-company pilot
 
 Start small: few users, low-risk/disposable pilot work where possible, close feedback.
 
@@ -1589,7 +1217,7 @@ Answer only:
 
 Only observed pilot needs authorize expansion.
 
-Completion gate: **small HNP pilot operates with controlled identity, seats/user lifecycle, safe updates, known storage recovery, and repeated end-to-end work without exposed privileged credentials or developer-only repair.**
+Completion gate: **small configured-company pilot operates with controlled identity, seats/user lifecycle, safe updates, known storage recovery, and repeated end-to-end work without exposed privileged credentials or developer-only repair.**
 
 ---
 
@@ -1604,7 +1232,7 @@ Keep out unless real evidence changes the roadmap:
 - OCR/AI photo classification/judging;
 - generalized conditional checklist/form builder beyond the approved flat photo-item list;
 - generic photo-requirement override/bypass;
-- business push-notification subsystem;
+- broader business messaging beyond the approved optional Phase 6 Admin dashboard/Web Push alerts;
 - video;
 - continuous/live location;
 - employee time tracking;
@@ -1612,7 +1240,7 @@ Keep out unless real evidence changes the roadmap:
 - public marketplace;
 - advanced analytics/report builder;
 - permanent local photo gallery;
-- multiple storage-provider abstraction;
+- generalized multiple-storage-provider abstraction and unsupported portal/provider integrations; configurable Drive destinations and a narrow provider boundary are approved;
 - permanent Property entity solely for Drive organization;
 - automatic deletion of empty contractor/address folders;
 - property-preservation management beyond dispatch/photo workflow;
@@ -1639,21 +1267,10 @@ Re-read current official documentation when implementing; do not rely on roadmap
 
 # Roadmap approval and runtime gate
 
-This roadmap was **approved by the operator on 2026-09-14** and is the current authoritative Team product/implementation plan.
+Original roadmap approved 2026-09-14. Complete Phase 5 and Phase 6 revision-1 amendments, including all 5A–5E/6A–6E sections and their documentation merge, approved **2026-10-05 at 16:32:14 America/Chicago** through the operator statement recorded above and [PR #38](https://github.com/timbone72-CC/field-work-hub/pull/38).
 
-Roadmap approval does **not** bypass runtime governance. Phase 3 runtime work, Room migration, Supabase run migration, WorkManager workers, CameraX Team work, template schema changes, Edge Functions, and Drive API integration remain subject to the governing change-control/Level-3 rules.
+Phase 4 is complete and its accepted evidence is retained. Next checkpoint is **Phase 5 implementation preparation**: reread governing documents/complete plan, inspect current source/live state, establish one authoritative runtime branch/impact/recovery record, and build the largest safe coherent automated-testable scope before the genuine device/provider boundary.
 
-Before Phase 3 runtime begins:
+One recorded parent-phase approval authorizes included implementation within unchanged scope; lettered sections/session boundaries do not create repeated plan approvals. Plan approval does not claim runtime completion or satisfy the separate explicit Level 3 pre-merge approval, exact-head automated/live parity and affected device/provider gates. Phase 6 depends on Phase 5 protection/release semantics; independent work may proceed only within the approved dependency plan.
 
-1. finish the compact remaining Phase 2 real-client reassignment/consent smoke if still pending;
-2. reread governance + this roadmap;
-3. obtain the explicit Level-3 runtime authorization required by the governing contracts;
-4. create a Level-3 impact/implementation record only where concrete schema/API details are not already sufficiently specified;
-5. implement Phase 3 in the largest safe automated-testable slices;
-6. stop once at the documented real-device boundary;
-7. record physical evidence once;
-8. continue only when evidence supports the next phase.
-
-Principle:
-
-**plan fully → build everything provable without the phone → stage at the genuine device/provider boundary → run the smallest reality gate → accept evidence → adjust only when reality contradicts the plan.**
+Principle: **plan fully → build everything provable without the phone → stage at the genuine device/provider boundary → run the smallest reality gate → accept evidence → adjust only when reality contradicts the plan.**

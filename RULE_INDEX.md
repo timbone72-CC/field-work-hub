@@ -13,7 +13,7 @@
 | Database schema, run identity, Room and encrypted session persistence | Relevant roadmap + impact record, CHANGE_CONTROL_CONTRACT.md, TESTING_CONTRACT.md, INTEGRATION_CONTRACT.md | Level 3 |
 | Offline Start/Finish, WorkManager, recovery, conflict/retry | Relevant roadmap, CHANGE_CONTROL_CONTRACT.md, TESTING_CONTRACT.md, INTEGRATION_CONTRACT.md | Level 3 when persisted/state authority changes |
 | Camera / protected capture / preparation / photo evidence | Relevant roadmap, CHANGE_CONTROL_CONTRACT.md, TESTING_CONTRACT.md, INTEGRATION_CONTRACT.md | Level 2–3 depending on identity/data risk |
-| Server-mediated HNP Drive folder identity, upload, UNCERTAIN or cleanup | Relevant roadmap, CHANGE_CONTROL_CONTRACT.md, TESTING_CONTRACT.md, INTEGRATION_CONTRACT.md | Level 3 for authorization, remote identity, retry or deletion |
+| Server-mediated private photo holding, configurable company Drive release, UNCERTAIN or cleanup | Relevant roadmap, CHANGE_CONTROL_CONTRACT.md, TESTING_CONTRACT.md, INTEGRATION_CONTRACT.md | Level 3 for authorization, remote identity, retry or deletion |
 | Android signer/package ID, hosted deployment, Auth redirect | Approved release/identity plan, CHANGE_CONTROL_CONTRACT.md, TESTING_CONTRACT.md, INTEGRATION_CONTRACT.md | Level 3 |
 | Phase boundary, physical Android or provider gate | Relevant current/next roadmap phases, TESTING_CONTRACT.md, docs/PHASE_STAGING_DOCTRINE.md, INTEGRATION_CONTRACT.md when applicable | Underlying risk level |
 | Proposed FPP/FWH integration | Both projects' profiles/contracts, explicit integration design and FWH risk/verification rules | Usually Level 3 until boundaries proven |
