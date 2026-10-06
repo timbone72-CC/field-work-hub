@@ -1,7 +1,7 @@
 # Phase 5–6 dashboard workflow — implementation record
 
 Scope key: `dashboard-workflow-enhancement-plan`. Change level: **Level 3**.
-Authoritative branch: `feat/phase-5-6-dashboard-workflow`; draft PR pending creation.
+Authoritative branch: `feat/phase-5-6-dashboard-workflow`; draft PR **#40** (https://github.com/timbone72-CC/field-work-hub/pull/40).
 Baseline / source rollback: main `62244e2c4c11831d4e8104821f851f19124b2616`.
 
 ## Approved scope and authority
@@ -39,3 +39,11 @@ Source rollback is the baseline. As nothing is deployed, discard/revert this iso
 ## Evidence and next gate
 
 Checkpoint 1 source now contains explicit teams, private work entitlements/memberships, gated Supervisor scopes, operator-supplied capacity records, private owner capability, a responsible-team FK/protection trigger and self-only current-session capability helpers. It does not yet implement photo recovery grants, account lifecycle RPCs, audited handoff or legacy authorization cutover. Embedded PostgreSQL (PGlite 0.3.14, temporary local harness) applied all 24 migrations and passed the focused access gate. This deterministic SQL evidence is not hosted Supabase or real multi-connection evidence. Existing dashboard tests passed 19/19; diff whitespace check passed. Actual PostgreSQL 17 CI is the next proof boundary. Installing a local system PostgreSQL was unavailable in this execution environment; no local native/race PASS is claimed. No final complete-suite, deployed permission, device, private transfer, provider, recovery email or phase-completion PASS is claimed. Next gate: focused synthetic database authority tests, then exact candidate CI; owner verification and reviewed legacy mapping remain required before live permission cutover. Phase 5/6 completion and runtime merge approval remain pending.
+
+
+## Checkpoint 1 native SQL evidence — 2026-10-06
+
+Tested runtime head: `b4bbf80d64e16066866604747176e6a7d6e760a4`; Git tree `58d3ada9f02e51b1835a3f5cd6bc3fe1efbdaf71` matches the local reviewed tree. Native PostgreSQL 17 CI run **37397169251** PASS: all 24 candidate migrations, controlled Phase 3A/3/4 and new Phase 5 capability/session gates, plus existing real two-connection mutation races. Admin CI **37397169108** and governance **37397169040** PASS. Android CI **37397168969** PASS: existing focused/complete JVM tests, candidate/recovery builds, schema and package/signer identity checks. All required checks passed for this checkpoint runtime head; whole-phase device/provider gates remain pending. This source-only candidate is not deployed and is not the final combined runtime.
+
+Next required setup review: bind the intended existing verified FWH Admin identity as Product Owner through the trusted operator procedure; explicitly map that Admin organization's 14 WOs and two Contractors to its initial team. Do not map the separate test-organization WO into that team. Actual account/organization UUIDs remain private; the operator must confirm the account/mapping before live changes. No additional plan approval is required. Capacity values, full legacy RPC/table policy cutover, recovery/transfer/release and all Phase 6 work remain pending on this same line.
+
