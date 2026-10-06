@@ -14,3 +14,8 @@ create function auth.jwt() returns jsonb language sql stable as $$select coalesc
 create function auth.uid() returns uuid language sql stable as $$select nullif(auth.jwt()->>'sub','')::uuid;$$;
 grant usage on schema auth to anon,authenticated,service_role;
 grant execute on function auth.jwt(),auth.uid() to anon,authenticated,service_role;
+-- Controlled sessions for new current-session authorization gates only.
+create table auth.sessions (
+ id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id),
+ created_at timestamptz not null default now(), not_after timestamptz
+);

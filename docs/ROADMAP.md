@@ -62,6 +62,10 @@ This is the authoritative product and implementation roadmap for Field Work Hub.
 
 The existing single-user Field Photo Prep (`timbone72-CC/field-photo-prep`) remains separate, working, and read-only to Team development.
 
+## Combined Phase 5–6 implementation — started 2026-10-06 UTC
+
+The operator authorized a coordinated build in dependency order with internal checkpoints on 2026-10-05 at 19:54:20 America/Chicago. The one authoritative runtime line is `feat/phase-5-6-dashboard-workflow`; see [the implementation record](PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md). Both numbered phases retain their complete approved plans and separate completion/evidence gates. Checkpoint 1 builds the common team/access foundation using synthetic accounts; legacy mapping, verified owner bootstrap and full old-client authorization cutover remain prerequisites before live activation. This execution notice supersedes “runtime has not started” only as an activity status, not as a claim of implemented phase outcomes. No live permission/storage/provider/email changes or phase completion are claimed.
+
 ## First finish line
 
 The first Team version succeeds when:
