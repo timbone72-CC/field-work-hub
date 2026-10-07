@@ -74,7 +74,11 @@ def run_case(kind):
                     results['first'] = activate(c, invited[0])
                 elif kind == 'recruiter-disabled-before-activation':
                     claims(c, owner, 'ADMIN', org)
-                    results['first'] = c.execute("select * from public.set_account_work_access(%s,%s,%s,false,'TEST RECRUITER','TEST')", (uuid.uuid4(), admin, admin_revision)).fetchone()
+                    review = c.execute("select public.review_account_work_access(%s,false,'TEST')", (admin,)).fetchone()[0]
+                    choices = [{'team_id': str(team), 'decision': 'NEEDS_MANAGER'}]
+                    results['first'] = c.execute(
+                        "select * from public.set_reviewed_account_work_access(%s,%s,%s,false,'TEST RECRUITER','TEST',%s,%s::jsonb)",
+                        (uuid.uuid4(), admin, admin_revision, review['review_fingerprint'], json.dumps(choices))).fetchone()
                 elif kind == 'session-revoked-before-activation':
                     c.execute('delete from auth.sessions where id=%s', (invited[0],))
                 else:

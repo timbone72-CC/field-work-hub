@@ -10,6 +10,25 @@ language sql as $$
   )::text,true);
 $$;
 
+-- Exercise retained office authority/capacity through the required reviewed API.
+create function pg_temp.reviewed_access(
+  p_action uuid,p_target uuid,p_revision uuid,p_active boolean,p_reason text,p_environment text
+) returns table(action_id uuid,target_user_id uuid,active boolean,revision uuid,recovery_grant_id uuid)
+language plpgsql as $$
+declare r jsonb; choices jsonb:='[]'; t jsonb;
+begin
+  r:=public.review_account_work_access(p_target,p_active,p_environment);
+  if not p_active then
+    for t in select * from jsonb_array_elements(r->'teams') loop
+      choices:=choices || jsonb_build_array(case when (t->>'manager_count')::integer>0 then
+        jsonb_build_object('team_id',t->>'team_id','decision','KEEP_MANAGER','manager_user_id',t->'manager_user_ids'->>0)
+        else jsonb_build_object('team_id',t->>'team_id','decision','NEEDS_MANAGER') end);
+    end loop;
+  end if;
+  return query select * from public.set_reviewed_account_work_access(
+    p_action,p_target,p_revision,p_active,p_reason,p_environment,r->>'review_fingerprint',choices);
+end; $$;
+
 do $gate$
 declare
   org uuid:=gen_random_uuid();
@@ -172,7 +191,7 @@ begin
   perform pg_temp.phase5_claims(owner_id,'ADMIN',org);
   select a.revision into revision from private.account_work_access a where a.user_id=admin_a;
   execute 'set local role authenticated';
-  select * into result from public.set_account_work_access(
+  select * into result from pg_temp.reviewed_access(
     action_disable_admin,admin_a,revision,false,'Owner pause for gate','TEST'
   );
   execute 'reset role';
@@ -187,7 +206,7 @@ begin
   denied:=false;
   begin
     execute 'set local role authenticated';
-    perform * from public.set_account_work_access(
+    perform * from pg_temp.reviewed_access(
       gen_random_uuid(),admin_a,admin_disabled_revision,true,'Manager restore attempt','TEST'
     );
     execute 'reset role';
@@ -203,7 +222,7 @@ begin
   denied:=false;
   begin
     execute 'set local role authenticated';
-    perform * from public.set_account_work_access(
+    perform * from pg_temp.reviewed_access(
       action_restore_admin,admin_a,admin_disabled_revision,true,'Owner restore','TEST'
     );
     execute 'reset role';
@@ -218,7 +237,7 @@ begin
   denied:=false;
   begin
     execute 'set local role authenticated';
-    perform * from public.set_account_work_access(
+    perform * from pg_temp.reviewed_access(
       action_restore_admin,admin_a,admin_disabled_revision,true,'Owner restore','TEST'
     );
     execute 'reset role';
@@ -229,7 +248,7 @@ begin
   if not denied then raise exception 'Admin restore bypassed configured office capacity';end if;
   update private.org_office_allowances set admin_limit=2 where organization_id=org;
   execute 'set local role authenticated';
-  select * into result from public.set_account_work_access(
+  select * into result from pg_temp.reviewed_access(
     action_restore_admin,admin_a,admin_disabled_revision,true,'Owner restore','TEST'
   );
   execute 'reset role';

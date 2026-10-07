@@ -18,7 +18,7 @@ declare org uuid:='00000000-0000-0000-0000-000000000001';
  a uuid:='00000000-0000-0000-0000-000000000011'; owner_id uuid:=gen_random_uuid();
  extra_team uuid:=gen_random_uuid(); foreign_team uuid:=gen_random_uuid(); other_admin uuid:=gen_random_uuid();
  invited uuid:=gen_random_uuid(); first_invite uuid; other_invite uuid; cancel_invite uuid; foreign_invite uuid;
- rev uuid; result record; n integer;
+ rev uuid; result record; n integer; review jsonb; choices jsonb;
 begin
  insert into public.admin_teams(id,organization_id,name) values(extra_team,org,'EXTRA'),(foreign_team,org,'FOREIGN');
  insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data) values
@@ -50,7 +50,11 @@ begin
  perform public.team_finalize_contractor_invitation(other_invite,'SENT',invited);
  select revision into rev from private.account_work_access where user_id=admin_id;
  perform pg_temp.claims(owner_id,'PLATFORM',org);execute 'set local role authenticated';
- perform public.set_account_work_access(gen_random_uuid(),admin_id,rev,false,'TEST RECRUITER PAUSE','TEST');
+ review:=public.review_account_work_access(admin_id,false,'TEST');
+ select jsonb_agg(jsonb_build_object('team_id',x->>'team_id','decision','NEEDS_MANAGER')) into choices
+  from jsonb_array_elements(review->'teams') x;
+ perform public.set_reviewed_account_work_access(gen_random_uuid(),admin_id,rev,false,
+  'TEST RECRUITER PAUSE','TEST',review->>'review_fingerprint',choices);
  perform pg_temp.claims(invited,'CONTRACTOR',org);
  perform pg_temp.expect('42501','select * from public.complete_contractor_invitation_activation()');
  execute 'reset role';
@@ -59,7 +63,9 @@ begin
  insert into private.org_office_allowances(organization_id,admin_limit,supervisor_limit) values(org,2,0);
  select revision into rev from private.account_work_access where user_id=admin_id;
  perform pg_temp.claims(owner_id,'PLATFORM',org);execute 'set local role authenticated';
- perform public.set_account_work_access(gen_random_uuid(),admin_id,rev,true,'TEST RECRUITER RESTORE','TEST');
+ review:=public.review_account_work_access(admin_id,true,'TEST');
+ perform public.set_reviewed_account_work_access(gen_random_uuid(),admin_id,rev,true,
+  'TEST RECRUITER RESTORE','TEST',review->>'review_fingerprint','[]');
  perform pg_temp.claims(invited,'CONTRACTOR',org);
  perform public.complete_contractor_invitation_activation();
  execute 'reset role';
