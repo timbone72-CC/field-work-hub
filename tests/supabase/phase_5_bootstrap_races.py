@@ -19,8 +19,12 @@ def race(kind):
             metadata = {'organization_id': str(org), 'role': role} if role else {}
             c.execute('insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data) values(%s,%s,now(),%s)',
                       (actor, 'race@example.invalid', Jsonb(metadata)))
+        # Historical pre-Phase-5 fixture only: bootstrap is what creates the new
+        # Contractor access/team rows. Never weaken the production trigger.
+        c.execute('alter table public.work_orders disable trigger work_orders_enforce_assignable_contractors')
         c.execute("insert into public.work_orders(id,organization_id,assigned_user_id,wo_number,property_address,work_type,due_date) values(%s,%s,%s,%s,'TEST','TEST',current_date)",
                   (wo, org, contractor, f'BOOTSTRAP-RACE-{wo}'))
+        c.execute('alter table public.work_orders enable trigger work_orders_enforce_assignable_contractors')
         snapshot = c.execute('select private.initial_team_work_snapshot(%s)', (org,)).fetchone()[0]
     args = (action, org, admin, owner, team, 'Initial TEST', [contractor], Jsonb(snapshot), 'TEST', 'Reviewed CI fixture')
     ready, release, second_ready = threading.Event(), threading.Event(), threading.Event()
