@@ -98,7 +98,27 @@ begin
       and coalesce(u.raw_app_meta_data->>'role','') not in ('ADMIN','CONTRACTOR')) then
     raise exception 'Account inventory changed or requires explicit multi-team review' using errcode='40001';
   end if;
-  if exists(select 1 from unnest(contractors) c where not private.is_assignable_contractor(c,p_org)) then
+  -- Bootstrap validates the pre-access accepted Auth identity. Operational
+  -- assignability is stricter after this function creates access/team rows.
+  if exists(
+    select 1
+    from unnest(contractors) c
+    where not exists(
+      select 1
+      from auth.users u
+      where u.id=c
+        and u.deleted_at is null
+        and u.email_confirmed_at is not null
+        and (u.banned_until is null or u.banned_until<=now())
+        and u.raw_app_meta_data->>'organization_id'=p_org::text
+        and u.raw_app_meta_data->>'role'='CONTRACTOR'
+        and not exists(
+          select 1
+          from public.contractor_invitations i
+          where i.auth_user_id=u.id and i.status<>'ACCEPTED'
+        )
+    )
+  ) then
     raise exception 'Contractor is not currently accepted and active' using errcode='42501';
   end if;
   if snapshot is distinct from private.initial_team_work_snapshot(p_org) then
