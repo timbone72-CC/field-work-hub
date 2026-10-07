@@ -1,5 +1,5 @@
--- Immutable prepared JPEG identity and receipt ledger, not a byte verifier.
--- No bucket, Storage grants, signed URLs, provider release or cleanup here.
+-- Immutable prepared JPEG identity, narrow private-Storage authority and receipt ledger.
+-- No bucket provisioning, signed Admin URLs, provider release or cleanup here.
 create table private.photo_transfers (
   photo_id uuid primary key references public.photos(id) on delete restrict,
   version uuid not null default gen_random_uuid(),
@@ -87,6 +87,117 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function private.photo_transfer_authorized_for_user(uuid,uuid,uuid) from public,anon,authenticated;
 grant execute on function private.photo_transfer_authorized_for_user(uuid,uuid,uuid) to service_role;
+
+
+-- Exact private holding authority for the authenticated original owner. A Storage row is
+-- eligible only after immutable transfer registration and only while the receipt is WAITING.
+-- No UPDATE/DELETE policy is created: upsert/overwrite and ordinary client deletion stay denied.
+create function private.photo_storage_object_allowed(
+  p_bucket text,p_name text,p_owner_id text
+) returns boolean
+language plpgsql stable security definer set search_path='' as $
+declare
+  actor uuid:=auth.uid();
+  session_id uuid;
+  photo uuid;
+begin
+  if actor is null or p_bucket is distinct from 'fwh-review-private'
+    or p_owner_id is distinct from actor::text then return false; end if;
+  begin
+    session_id:=(auth.jwt()->>'session_id')::uuid;
+  exception when invalid_text_representation then
+    return false;
+  end;
+  if session_id is null then return false; end if;
+  select t.photo_id into photo
+  from private.photo_transfers t
+  where t.bucket=p_bucket and t.object_key=p_name and t.captured_by=actor and t.state='WAITING'
+    and not exists(select 1 from private.photo_transfer_receipts r
+      where r.photo_id=t.photo_id and r.transfer_version=t.version);
+  if photo is null then return false; end if;
+  return private.photo_transfer_authorized_for_user(actor,session_id,photo);
+end;
+$;
+revoke all on function private.photo_storage_object_allowed(text,text,text) from public,anon;
+grant execute on function private.photo_storage_object_allowed(text,text,text) to authenticated,service_role;
+
+create policy fwh_review_private_insert on storage.objects
+for insert to authenticated
+with check(private.photo_storage_object_allowed(bucket_id,name,owner_id));
+
+-- Narrow SELECT supports exact upload response/TUS reconciliation for the same owner only.
+-- It does not expose received evidence or another user's objects.
+create policy fwh_review_private_select on storage.objects
+for select to authenticated
+using(private.photo_storage_object_allowed(bucket_id,name,owner_id));
+
+-- Service-only metadata target for a future trusted byte verifier. This reads the current
+-- Storage catalog row but does not trust metadata as proof of the object bytes.
+create function private.photo_object_verification_target(
+  p_photo uuid,p_transfer_version uuid
+) returns jsonb
+language plpgsql stable security definer set search_path='' as $
+declare
+  t private.photo_transfers%rowtype;
+  session_id uuid;
+  object_id uuid;
+  object_version text;
+  object_owner text;
+begin
+  select * into t
+  from private.photo_transfers
+  where photo_id=p_photo and version=p_transfer_version and state='WAITING';
+  if not found then
+    raise exception 'Waiting prepared transfer not found' using errcode='22023';
+  end if;
+
+  select s.id into session_id
+  from auth.sessions s
+  where s.user_id=t.captured_by
+    and (s.not_after is null or s.not_after>now())
+    and private.photo_transfer_authorized_for_user(t.captured_by,s.id,t.photo_id)
+  order by s.created_at desc,s.id
+  limit 1;
+  if session_id is null then
+    raise exception 'Current original-owner transfer session unavailable' using errcode='42501';
+  end if;
+
+  select o.id,o.version,o.owner_id
+    into object_id,object_version,object_owner
+  from storage.objects o
+  where o.bucket_id=t.bucket and o.name=t.object_key
+    and o.archived_at is null and not coalesce(o.is_delete_marker,false);
+
+  if object_id is null
+    or coalesce(char_length(object_version) between 1 and 256,false)=false
+    or object_owner is distinct from t.captured_by::text then
+    raise exception 'Exact private object is unavailable for verification' using errcode='22023';
+  end if;
+
+  return jsonb_build_object(
+    'photo_id',t.photo_id,
+    'transfer_version',t.version,
+    'owner_user_id',t.captured_by,
+    'owner_session_id',session_id,
+    'bucket',t.bucket,
+    'object_key',t.object_key,
+    'expected_sha256',t.prepared_sha256,
+    'expected_size',t.prepared_size,
+    'object_id',object_id,
+    'object_version',object_version
+  );
+end;
+$;
+create function public.photo_object_verification_target(
+  p_photo uuid,p_transfer_version uuid
+) returns jsonb
+language sql security invoker set search_path='' as $
+  select private.photo_object_verification_target(p_photo,p_transfer_version)
+$;
+revoke all on function private.photo_object_verification_target(uuid,uuid),
+  public.photo_object_verification_target(uuid,uuid) from public,anon,authenticated;
+grant execute on function private.photo_object_verification_target(uuid,uuid),
+  public.photo_object_verification_target(uuid,uuid) to service_role;
 
 create function private.begin_photo_transfer(p_action uuid,p_photo uuid,p_prepared_sha256 text,p_prepared_size bigint) returns jsonb
 language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
