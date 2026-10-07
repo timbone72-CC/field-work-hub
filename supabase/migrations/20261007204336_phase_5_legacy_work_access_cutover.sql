@@ -806,6 +806,17 @@ begin
   ) then
     raise exception 'Contractor invitation requires a current explicit team' using errcode='42501';
   end if;
+  if not exists(
+    select 1 from auth.users u
+    where u.id=auth.uid()
+      and u.deleted_at is null
+      and u.email_confirmed_at is not null
+      and (u.banned_until is null or u.banned_until<=now())
+      and u.raw_app_meta_data->>'organization_id'=invitation.organization_id::text
+      and u.raw_app_meta_data->>'role'='CONTRACTOR'
+  ) then
+    raise exception 'Current Contractor Auth identity no longer matches this invitation' using errcode='42501';
+  end if;
   if exists(select 1 from private.account_work_access a where a.user_id=auth.uid()) then
     raise exception 'Contractor activation identity already has work access' using errcode='42501';
   end if;
