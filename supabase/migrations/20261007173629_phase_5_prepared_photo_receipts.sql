@@ -95,7 +95,7 @@ grant execute on function private.photo_transfer_authorized_for_user(uuid,uuid,u
 create function private.photo_storage_object_allowed(
   p_bucket text,p_name text,p_owner_id text
 ) returns boolean
-language plpgsql stable security definer set search_path='' as $
+language plpgsql stable security definer set search_path='' as $$
 declare
   actor uuid:=auth.uid();
   session_id uuid;
@@ -117,7 +117,7 @@ begin
   if photo is null then return false; end if;
   return private.photo_transfer_authorized_for_user(actor,session_id,photo);
 end;
-$;
+$$;
 revoke all on function private.photo_storage_object_allowed(text,text,text) from public,anon;
 grant execute on function private.photo_storage_object_allowed(text,text,text) to authenticated,service_role;
 
@@ -136,7 +136,7 @@ using(private.photo_storage_object_allowed(bucket_id,name,owner_id));
 create function private.photo_object_verification_target(
   p_photo uuid,p_transfer_version uuid
 ) returns jsonb
-language plpgsql stable security definer set search_path='' as $
+language plpgsql stable security definer set search_path='' as $$
 declare
   t private.photo_transfers%rowtype;
   session_id uuid;
@@ -187,13 +187,13 @@ begin
     'object_version',object_version
   );
 end;
-$;
+$$;
 create function public.photo_object_verification_target(
   p_photo uuid,p_transfer_version uuid
 ) returns jsonb
-language sql security invoker set search_path='' as $
+language sql security invoker set search_path='' as $$
   select private.photo_object_verification_target(p_photo,p_transfer_version)
-$;
+$$;
 revoke all on function private.photo_object_verification_target(uuid,uuid),
   public.photo_object_verification_target(uuid,uuid) from public,anon,authenticated;
 grant execute on function private.photo_object_verification_target(uuid,uuid),
