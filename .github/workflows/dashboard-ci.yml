@@ -61,6 +61,8 @@ jobs:
           node --check dashboard/contractor-invite.js
       - name: Test automatic Admin updates and session races
         run: node --test tests/dashboard/*.test.js
+      - name: Verify trusted private photo bytes and failure handling
+        run: node --test tests/functions/*.test.mjs
       - name: Install isolated browser test runtime
         run: |
           npm install --prefix "$RUNNER_TEMP/fwh-browser" --no-audit --no-fund playwright@1.56.1

@@ -55,3 +55,4 @@ jobs:
           python3 tests/supabase/phase_5_lifecycle_races.py
           python3 tests/supabase/phase_5_invitation_races.py
           python3 tests/supabase/phase_5_reviewed_access_races.py
+          python3 tests/supabase/phase_5_verification_races.py

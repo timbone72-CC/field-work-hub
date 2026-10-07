@@ -112,6 +112,53 @@ begin
   begin perform public.begin_photo_transfer(gen_random_uuid(),unfinished,repeat('d',64),100000);exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Post-cutoff Finish created recovery upload authority';end if;
   execute 'reset role';
+  -- Controlled catalog/RLS only, never proof of physical object bytes.
+  execute 'set local role authenticated';
+  insert into storage.objects(id,bucket_id,name,owner_id,version) values(object_id,t.bucket,t.object_key,contractor::text,'TEST-V1');
+  if (select count(*) from storage.objects where id=object_id)<>1 then raise exception 'Exact waiting original-owner catalog not visible';end if;
+  denied:=false;
+  begin insert into storage.objects(bucket_id,name,owner_id,version) values(t.bucket,'wrong/path.jpg',contractor::text,'TEST');
+    exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Wrong-path direct Storage insert allowed';end if;
+  denied:=false;
+  begin insert into storage.objects(bucket_id,name,owner_id,version) values(t.bucket,t.object_key||'/wrong',other_user::text,'TEST');
+    exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Wrong-owner direct Storage insert allowed';end if;
+  denied:=false;
+  begin update storage.objects set version='CLIENT-OVERWRITE' where id=object_id;
+    exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Direct Storage overwrite allowed';end if;
+  execute 'reset role';
+  execute 'set local role service_role';
+  denied:=false;
+  begin perform public.photo_object_verification_target(p1,t.version);exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Unbound latest-session verification target remained exposed';end if;
+  prior:=public.photo_verification_target_for_session(p1,t.version,contractor,contractor);
+  if prior->>'object_id'<>object_id::text or prior->>'owner_session_id'<>contractor::text or prior->>'state'<>'WAITING' then
+    raise exception 'Exact request-bound target missing';end if;
+  execute 'reset role';
+  update storage.objects set version='REPLACED' where id=object_id;
+  denied:=false;
+  begin perform public.confirm_photo_transfer(receipt_action,p1,t.version,contractor,contractor,object_id,'TEST-V1',t.bucket,t.object_key,repeat('b',64),250000);
+    exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Replaced catalog version confirmed';end if;
+  update storage.objects set version='TEST-V1',archived_at=now() where id=object_id;
+  denied:=false;
+  begin perform public.confirm_photo_transfer(receipt_action,p1,t.version,contractor,contractor,object_id,'TEST-V1',t.bucket,t.object_key,repeat('b',64),250000);
+    exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Archived object confirmed';end if;
+  update storage.objects set archived_at=null,is_delete_marker=true where id=object_id;
+  denied:=false;
+  begin perform public.photo_verification_target_for_session(p1,t.version,contractor,contractor);
+    exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Deleted object target returned';end if;
+  update storage.objects set is_delete_marker=false,owner_id=other_user::text where id=object_id;
+  denied:=false;
+  begin perform public.confirm_photo_transfer(receipt_action,p1,t.version,contractor,contractor,object_id,'TEST-V1',t.bucket,t.object_key,repeat('b',64),250000);
+    exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Wrong catalog owner confirmed';end if;
+  update storage.objects set owner_id=contractor::text where id=object_id;
+  if exists(select 1 from private.photo_transfer_receipts where photo_id=p1) then raise exception 'Rejected catalog checks created receipt';end if;
   execute 'set local role service_role';
   denied:=false;
   begin perform public.confirm_photo_transfer(receipt_action,p1,t.version,contractor,contractor,object_id,'TEST-V1',t.bucket,t.object_key,repeat('a',64),8000000);
@@ -145,7 +192,17 @@ begin
   execute 'reset role';
   if (select state from private.photo_transfers where photo_id=p1)<>'RECEIVED' or (select count(*) from private.photo_transfer_receipts where photo_id=p1)<>1 then
     raise exception 'Receipt transition not atomic/unique';end if;
+  execute 'set local role authenticated';
+  if exists(select 1 from storage.objects where id=object_id) then raise exception 'Received catalog remained directly visible';end if;
+  execute 'reset role';
+  response:=public.photo_verification_target_for_session(p1,t.version,contractor,contractor);
+  if response->>'state'<>'RECEIVED' or response->>'receipt_id'<>receipt_action::text or response ? 'object_key' then
+    raise exception 'Historical receipt replay broadened access';end if;
+  insert into auth.sessions(id,user_id) values(gen_random_uuid(),contractor);
   update auth.sessions set not_after=now() where id=contractor;
+  denied:=false;
+  begin perform public.photo_verification_target_for_session(p1,t.version,contractor,contractor);exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Expired incoming session substituted another valid session';end if;
   denied:=false;
   begin perform public.confirm_photo_transfer(receipt_action,p1,t.version,contractor,contractor,object_id,'TEST-V1',t.bucket,t.object_key,repeat('b',64),250000);
     exception when insufficient_privilege then denied:=true;end;
@@ -166,7 +223,9 @@ begin
   begin update private.photo_transfer_receipts set object_version='TEST-V2' where photo_id=p1;exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Trusted receipt overwritten';end if;
   if has_table_privilege('authenticated','private.photo_transfers','select') or has_table_privilege('service_role','private.photo_transfer_receipts','insert')
-    or has_function_privilege('authenticated','private.photo_transfer_authorized_for_user(uuid,uuid,uuid)','execute') then raise exception 'Broad direct transfer privileges';end if;
+    or has_function_privilege('authenticated','private.photo_transfer_authorized_for_user(uuid,uuid,uuid)','execute')
+    or has_function_privilege('service_role','private.confirm_photo_transfer_engine(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,bigint)','execute')
+    or has_function_privilege('authenticated','public.photo_verification_target_for_session(uuid,uuid,uuid,uuid)','execute') then raise exception 'Broad direct transfer privileges';end if;
   if exists(select 1 from public.photos where id in (p1,p2,unfinished,other_photo) and (sync_status<>'WAITING' or remote_file_id is not null or uploaded_at is not null))
     or (select sha256 from public.photos where id=p1)<>repeat('a',64) or (select byte_size from public.photos where id=p1)<>8000000 then
     raise exception 'Private receipt fabricated client delivery or rewrote original facts';end if;
