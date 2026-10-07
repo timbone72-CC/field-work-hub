@@ -50,3 +50,4 @@ jobs:
           python3 tests/supabase/phase_5_bootstrap_races.py
           python3 tests/supabase/phase_5_recovery_races.py
           python3 tests/supabase/phase_5_legacy_work_races.py
+          python3 tests/supabase/phase_5_lifecycle_races.py
