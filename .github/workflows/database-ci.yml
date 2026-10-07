@@ -41,6 +41,7 @@ jobs:
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_recovery_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_transfer_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_legacy_work_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_lifecycle_gate.sql
       - name: Verify real two-connection mutation races
         run: |
           python3 -m pip install 'psycopg[binary]==3.2.10'
