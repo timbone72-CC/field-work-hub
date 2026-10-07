@@ -711,11 +711,11 @@ begin
   team:=private.legacy_admin_invite_team(org_id);
   select * into result
   from private.admin_reserve_contractor_invitation_legacy_engine(p_email,p_display_name);
-  update public.contractor_invitations
+  update public.contractor_invitations i
      set team_id=team
-   where id=result.invitation_id
-     and organization_id=org_id
-     and team_id is null;
+   where i.id=result.invitation_id
+     and i.organization_id=org_id
+     and i.team_id is null;
   if not found then
     raise exception 'Reserved Contractor invitation could not be bound to its team' using errcode='40001';
   end if;
