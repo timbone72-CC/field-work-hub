@@ -253,6 +253,29 @@ begin
   insert into auth.sessions(id,user_id) values(invited,invited);
   perform * from public.team_finalize_contractor_invitation(invite_id,'SENT',invited);
 
+  -- A signed but stale Contractor claim cannot override a changed current Auth row.
+  perform pg_temp.phase5_claims(invited,'CONTRACTOR',org);
+  update auth.users
+     set raw_app_meta_data=jsonb_set(raw_app_meta_data,'{role}','"ADMIN"')
+   where id=invited;
+  denied:=false;
+  begin
+    execute 'set local role authenticated';
+    perform * from public.complete_contractor_invitation_activation();
+    execute 'reset role';
+  exception when others then
+    execute 'reset role';
+    denied:=true;
+  end;
+  if not denied
+     or exists(select 1 from private.account_work_access a where a.user_id=invited)
+     or (select status from public.contractor_invitations where id=invite_id)<>'SENT' then
+    raise exception 'Stale Contractor activation claim created authority';
+  end if;
+  update auth.users
+     set raw_app_meta_data=jsonb_set(raw_app_meta_data,'{role}','"CONTRACTOR"')
+   where id=invited;
+
   perform pg_temp.phase5_claims(invited,'CONTRACTOR',org);
   execute 'set local role authenticated';
   perform * from public.complete_contractor_invitation_activation();
