@@ -15,6 +15,8 @@ from psycopg.types.json import Jsonb
 
 DSN = os.environ['FWH_TEST_DATABASE_URL']
 CALL = 'select private.freeze_photo_recovery_scope(%s,%s,%s,%s,%s,%s)'
+BEGIN = 'select public.begin_photo_transfer(%s,%s,%s,%s)'
+CONFIRM = 'select public.confirm_photo_transfer(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'
 # Reuse the controlled gate's public-RPC fixture, not implementation SQL.
 GATE = Path(__file__).with_name('phase_5_recovery_gate.sql').read_text()
 FIXTURE_SQL = GATE[GATE.index('create function pg_temp.recovery_fixture_photo'):GATE.index('do $gate$')]
@@ -29,7 +31,8 @@ def claims(c, actor, org, role):
 
 def race(kind):
     org, team, admin, contractor, action, later = [uuid.uuid4() for _ in range(6)]
-    target = contractor if kind == 'finish-after-cutoff' else admin
+    transfer_case = kind in ('same-begin', 'changed-begin', 'receipt-after-disable')
+    target = contractor if kind == 'finish-after-cutoff' or transfer_case else admin
     with psycopg.connect(DSN) as c:
         # This test is destructive only to a throwaway DB's lifetime, never a
         # hosted project. Refuse any substituted non-CI database or remote host.
@@ -51,6 +54,12 @@ def race(kind):
         finish = c.execute('select f.work_order_id,f.run_id,f.assignment_instance_id,f.requirement_revision,f.id,f.digest '
                            'from public.photo_finish_sets f join public.photos p on p.finish_set_id=f.id where p.id=%s',
                            (photo,)).fetchone()
+        begin_args = (action, photo, 'b' * 64, 250000)
+        if kind == 'receipt-after-disable':
+            claims(c, contractor, org, 'CONTRACTOR')
+            prepared = c.execute(BEGIN, begin_args).fetchone()[0]
+            receipt_args = (uuid.uuid4(), photo, uuid.UUID(prepared['transfer_version']), contractor, contractor,
+                            later, 'TEST-V1', prepared['bucket'], prepared['object_key'], 'b' * 64, 250000)
     args = (action, org, target, revision, [] if target == contractor else [team], 'TEST')
     ready, release, second_ready = threading.Event(), threading.Event(), threading.Event()
     results, errors, second_pid = {}, [], []
@@ -58,7 +67,14 @@ def race(kind):
     def first():
         try:
             with psycopg.connect(DSN) as c:
-                if kind == 'scope-removed':
+                if kind == 'receipt-after-disable':
+                    c.execute("update private.account_work_access set active=false,suspension_authority='OWNER',"
+                              "suspension_reason='TEST',disabled_at=now() where user_id=%s", (contractor,))
+                elif kind in ('same-begin', 'changed-begin'):
+                    claims(c, contractor, org, 'CONTRACTOR')
+                    c.execute('set local role authenticated')
+                    results['first'] = c.execute(BEGIN, begin_args).fetchone()[0]
+                elif kind == 'scope-removed':
                     c.execute('update private.admin_team_memberships set active=false where user_id=%s', (admin,))
                 elif kind == 'role-changed':
                     c.execute("update auth.users set raw_app_meta_data=jsonb_set(raw_app_meta_data,'{role}','\"SUPERVISOR\"') where id=%s", (admin,))
@@ -78,7 +94,19 @@ def race(kind):
             with psycopg.connect(DSN) as c:
                 second_pid.append(c.info.backend_pid)
                 second_ready.set()
-                if kind == 'photo-after-cutoff':
+                if transfer_case:
+                    try:
+                        if kind == 'receipt-after-disable':
+                            c.execute('set local role service_role')
+                            results['second'] = c.execute(CONFIRM, receipt_args).fetchone()[0]
+                        else:
+                            claims(c, contractor, org, 'CONTRACTOR')
+                            c.execute('set local role authenticated')
+                            changed_args = (uuid.uuid4(), photo, 'c' * 64, 250000) if kind == 'changed-begin' else begin_args
+                            results['second'] = c.execute(BEGIN, changed_args).fetchone()[0]
+                    except (psycopg.errors.InsufficientPrivilege, psycopg.errors.InvalidParameterValue) as error:
+                        results['second'] = error.sqlstate
+                elif kind == 'photo-after-cutoff':
                     c.execute('insert into public.photos(id,work_order_id,run_id,captured_by,captured_at) '
                               'select %s,work_order_id,run_id,captured_by,now() from public.photos where id=%s', (later, photo))
                     results['second'] = later
@@ -125,6 +153,19 @@ def race(kind):
     if errors:
         raise errors[0]
 
+    if transfer_case:
+        with psycopg.connect(DSN) as c:
+            transfers = c.execute('select prepared_sha256,prepared_size,state from private.photo_transfers where photo_id=%s', (photo,)).fetchall()
+            assert transfers == [('b' * 64, 250000, 'WAITING')], transfers
+            assert c.execute('select count(*) from private.photo_transfer_receipts where photo_id=%s', (photo,)).fetchone()[0] == 0
+            if kind == 'same-begin':
+                assert results['first'] == results['second'], results
+                assert c.execute('select count(*) from private.photo_transfer_actions where photo_id=%s', (photo,)).fetchone()[0] == 1
+            else:
+                assert results['second'] == ('22023' if kind == 'changed-begin' else '42501'), results
+        print(f'PASS Phase 5 transfer {kind}: real lock wait; no replacement or unauthorized receipt')
+        return
+
     denied = kind in ('scope-removed', 'role-changed', 'revision-changed')
     with psycopg.connect(DSN) as c:
         count = c.execute('select count(*) from private.photo_recovery_grants where action_id=%s', (action,)).fetchone()[0]
@@ -155,5 +196,6 @@ def race(kind):
     print(f'PASS Phase 5 recovery {kind}: real lock wait; fixed, identity-bound cutoff')
 
 
-for case in ['same-action', 'scope-removed', 'role-changed', 'revision-changed', 'photo-after-cutoff', 'finish-after-cutoff']:
+for case in ['same-action', 'scope-removed', 'role-changed', 'revision-changed', 'photo-after-cutoff', 'finish-after-cutoff',
+             'same-begin', 'changed-begin', 'receipt-after-disable']:
     race(case)
