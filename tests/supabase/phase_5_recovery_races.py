@@ -47,6 +47,7 @@ def race(kind):
                       (org, actor, role))
         c.execute('insert into private.admin_team_memberships(organization_id,team_id,user_id,active) values(%s,%s,%s,true)',
                   (org, team, admin))
+        c.execute('insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values(%s,%s,%s,true)', (org, team, contractor))
         c.execute(FIXTURE_SQL)
         photo = c.execute('select pg_temp.recovery_fixture_photo(%s,%s,%s,%s,%s)',
                           (admin, org, team, contractor, kind != 'finish-after-cutoff')).fetchone()[0]

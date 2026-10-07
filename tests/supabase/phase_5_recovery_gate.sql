@@ -56,9 +56,13 @@ begin
     insert into private.supervisor_grants(organization_id,user_id,tier,active,granted_by,reason) values(org,supervisors[tier_no],tier_no,true,owner_id,'TEST');
     insert into private.supervisor_team_scopes(organization_id,user_id,team_id) values(org,supervisors[tier_no],team_a);
   end loop;
+  insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values(org,team_a,contractor,true),(org,team_b,other_contractor,true),(other_org,other_team,foreign_contractor,true);
   p1:=pg_temp.recovery_fixture_photo(admin_id,org,team_a,contractor,true);
   p2:=pg_temp.recovery_fixture_photo(admin_id,org,team_a,contractor,false);
+  -- Trusted fixture setup temporarily grants B solely to construct its earlier evidence.
+  insert into private.admin_team_memberships(organization_id,team_id,user_id,active) values(org,team_b,admin_id,true);
   p3:=pg_temp.recovery_fixture_photo(admin_id,org,team_b,other_contractor,true);
+  delete from private.admin_team_memberships where organization_id=org and team_id=team_b and user_id=admin_id;
   p4:=pg_temp.recovery_fixture_photo(other_admin,other_org,other_team,foreign_contractor,true);
   select revision into rev from private.account_work_access where user_id=admin_id;
   select revision into contractor_rev from private.account_work_access where user_id=contractor;

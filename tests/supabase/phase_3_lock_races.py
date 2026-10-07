@@ -13,13 +13,13 @@ B='00000000-0000-0000-0000-000000000012'
 
 def context(c,user,role):
     import json
-    c.execute("select set_config('request.jwt.claims',%s,true)",(json.dumps({'sub':user,'role':'authenticated','app_metadata':{'role':role,'organization_id':ORG}}),))
+    c.execute("select set_config('request.jwt.claims',%s,true)",(json.dumps({'sub':user,'session_id':user,'role':'authenticated','app_metadata':{'role':role,'organization_id':ORG}}),))
     c.execute('set local role authenticated')
 
 def run_race(first_kind,second_kind):
     wo=uuid.uuid4();name=f'FWH-CI-RACE-{wo}';action=uuid.uuid4()
     with psycopg.connect(DSN) as c:
-        c.execute('insert into public.work_orders(id,organization_id,assigned_user_id,wo_number,property_address,work_type,due_date) values(%s,%s,%s,%s,%s,%s,current_date)',(wo,ORG,A,name,'CI TEST','TEST'))
+        c.execute('insert into public.work_orders(id,organization_id,responsible_team_id,assigned_user_id,wo_number,property_address,work_type,due_date) values(%s,%s,%s,%s,%s,%s,%s,current_date)',(wo,ORG,'00000000-0000-0000-0000-000000000020',A,name,'CI TEST','TEST'))
         run,instance=c.execute('select w.current_run_id,a.id from public.work_orders w join public.work_order_assignments a on a.run_id=w.current_run_id where w.id=%s and a.assignment_ended_at is null',(wo,)).fetchone()
     ready=threading.Event();release=threading.Event();errors=[];results={}
     def mutate(c,kind):

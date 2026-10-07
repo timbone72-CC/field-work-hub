@@ -47,6 +47,7 @@ begin
       values(org,actor,case when actor=admin_id then 'ADMIN' else 'CONTRACTOR' end,true);
   end loop;
   insert into private.admin_team_memberships(organization_id,team_id,user_id,active) values(org,team,admin_id,true);
+  insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values(org,team,contractor,true),(org,team,other_user,true);
   p1:=pg_temp.recovery_fixture_photo(admin_id,org,team,contractor,true);
   p2:=pg_temp.recovery_fixture_photo(admin_id,org,team,contractor,true);
   unfinished:=pg_temp.recovery_fixture_photo(admin_id,org,team,contractor,false);

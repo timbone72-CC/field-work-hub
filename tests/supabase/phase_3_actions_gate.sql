@@ -15,11 +15,11 @@ begin
  select id into a from auth.users where private.is_assignable_contractor(id,org) order by created_at,id limit 1;
  select id into b from auth.users where private.is_assignable_contractor(id,org) and id<>a order by created_at,id limit 1;
  if a is null or b is null or admin_id is null then raise exception 'Existing test actors required';end if;
- claims_a:=jsonb_build_object('sub',a,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
- claims_b:=jsonb_build_object('sub',b,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
- claims_admin:=jsonb_build_object('sub',admin_id,'role','authenticated','app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
+ claims_a:=jsonb_build_object('sub',a,'session_id',a,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
+ claims_b:=jsonb_build_object('sub',b,'session_id',b,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
+ claims_admin:=jsonb_build_object('sub',admin_id,'session_id',admin_id,'role','authenticated','app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
  foreach fname in array array['start_work','complete_field_work','acknowledge_assignment_received','admin_update_work_order','respond_reassignment'] loop
- if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='private' and p.proname=fname and p.prosrc like '%for update;%')then raise exception 'Missing common lock: %',fname;end if;
+ if not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='private' and p.proname=fname and (p.prosrc like '%for update;%' or (p.prosrc like '%private.guard_legacy_work_order(%' and exists(select 1 from pg_proc g join pg_namespace gn on gn.oid=g.pronamespace where gn.nspname='private' and g.proname='guard_legacy_work_order' and g.prosrc like '%for update;%'))))then raise exception 'Missing common lock: %',fname;end if;
  end loop;
  foreach fname in array array['INSERT','UPDATE','DELETE','TRUNCATE']loop
  if has_table_privilege('authenticated','public.field_actions',fname) or has_table_privilege('anon','public.field_actions',fname)then raise exception 'Ledger broad write grant';end if;
@@ -40,7 +40,7 @@ begin
  perform set_config('request.jwt.claims',claims_b,true);
  result:=public.accept_field_action(start_id,wo,run,instance,'START',event_start);
  if result->>'reason'<>'ASSIGNMENT_UNAVAILABLE' then raise exception 'Wrong user accepted';end if;
- perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',gen_random_uuid()))::text,true);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'session_id',a,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',gen_random_uuid()))::text,true);
  denied:=false;begin perform public.accept_field_action(start_id,wo,run,instance,'START',event_start);exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Wrong organization accepted';end if;
  perform set_config('request.jwt.claims',claims_a,true);
