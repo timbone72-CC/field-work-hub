@@ -1176,6 +1176,23 @@ begin
     private.contractor_team_memberships,private.supervisor_grants,private.supervisor_team_scopes,
     private.org_work_settings,public.admin_teams,public.contractor_invitations in share mode;
 
+  -- A competing identical request may have committed while this transaction waited
+  -- on the revocation lock. Re-read the immutable action before testing revision.
+  select * into prior
+  from private.account_work_access_actions a
+  where a.action_id=p_action;
+  if found then
+    if row(prior.actor_user_id,prior.target_user_id,prior.requested_active,prior.environment,
+           prior.expected_revision,prior.reason)
+       is distinct from
+       row(auth.uid(),p_target,p_active,p_environment,p_expected_revision,btrim(p_reason)) then
+      raise exception 'Account access action UUID reused with changed inputs' using errcode='22023';
+    end if;
+    return query select prior.action_id,prior.target_user_id,prior.requested_active,
+      prior.result_revision,prior.recovery_grant_id;
+    return;
+  end if;
+
   select * into access_row
   from private.account_work_access a
   where a.user_id=p_target
