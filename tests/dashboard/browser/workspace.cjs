@@ -32,7 +32,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await context.route('https://**/*', async route => {
       const req = route.request(), url = new URL(req.url()); requests.push(url.pathname + url.search);
-      const reply = (body, status = 200, headers = {}) => route.fulfill({ status, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+      const reply = (body, status = 200, headers = {}) => route.fulfill({ status, headers: { 'Content-Type': 'application/json', 'Access-Control-Expose-Headers': 'Content-Range', ...headers }, body: JSON.stringify(body) });
       if (url.pathname === '/auth/v1/token') return reply({ access_token: 'disposable-test-access', refresh_token: 'disposable-test-refresh', expires_in: 3600 });
       if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
       if (url.pathname === '/rest/v1/photo_templates') return reply([]);
