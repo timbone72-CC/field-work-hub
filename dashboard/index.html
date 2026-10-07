@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Field Work Hub Admin</title>
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
-  <link rel="stylesheet" href="styles.css?v=phase2-dispatch-20260914-3">
+  <link rel="stylesheet" href="styles.css?v=job-workspace-20261007-1">
 </head>
 <body>
   <main class="shell">
     <section class="card" id="login-card">
       <p class="eyebrow">Field Work Hub</p>
       <h1>Admin Login</h1>
-      <p class="muted">Sign in to dispatch Team work orders. Supabase remains the authorization boundary.</p>
+      <p class="muted">Sign in to manage your team’s work orders.</p>
       <form id="login-form" autocomplete="on">
         <label>Email
           <input id="email" name="email" type="email" autocomplete="username" required>
@@ -36,8 +36,8 @@
 
       <div id="rls-result" class="check" role="status" aria-live="polite"></div>
 
-      <section class="admin-action" aria-labelledby="create-heading">
-        <h2 id="create-heading">Create &amp; Assign Work Order</h2>
+      <details class="admin-action" aria-labelledby="create-heading">
+        <summary id="create-heading">Create &amp; Assign Work Order</summary>
         <p class="muted">A new assignment stays marked “Not yet received” until that contractor’s app confirms delivery.</p>
 
         <form id="create-wo-form" class="admin-form" autocomplete="off">
@@ -92,14 +92,40 @@
           <button id="create-wo" type="submit">Create &amp; Assign</button>
           <p id="create-status" class="status" role="status" aria-live="polite"></p>
         </form>
-      </section>
+      </details>
 
-      <section class="admin-action hidden" id="edit-work-order-section" aria-labelledby="edit-heading">
-        <h2 id="edit-heading">Edit Work Order</h2>
-        <p class="muted">Correct dispatch details or change the assignee. If field work is already in progress, a changed assignee becomes a handoff request that the current contractor must approve or decline.</p>
+      <dialog class="job-workspace hidden" id="edit-work-order-section" aria-labelledby="edit-heading">
+        <header class="workspace-header">
+          <p class="eyebrow">Job workspace</p>
+          <h2 id="edit-heading">Work Order</h2>
+          <p id="job-address"></p>
+          <p id="job-facts" class="muted"></p>
+          <p id="job-receipt" class="muted"></p>
+          <div class="workspace-navigation">
+            <button id="job-previous" type="button" class="secondary">Previous job</button>
+            <button id="job-next" type="button" class="secondary">Next job</button>
+            <button id="job-reload" type="button" class="secondary" hidden>Reload job</button>
+          </div>
+          <p id="job-context" class="muted" role="status"></p>
+          <nav class="workspace-tabs" aria-label="Job sections">
+            <button type="button" data-job-tab="details" aria-pressed="true" aria-controls="job-details">Details</button>
+            <button type="button" data-job-tab="assignment" aria-pressed="false" aria-controls="job-assignment">Assignment</button>
+            <button type="button" data-job-tab="requirements" aria-pressed="false" aria-controls="job-requirements">Photo requirements</button>
+          </nav>
+        </header>
+        <div id="job-unsaved" class="unsaved-choice" hidden role="region" aria-label="Unsaved changes">
+          <strong>You have unsaved changes.</strong>
+          <p>Save your changes, stay on this job, or discard them before continuing.</p>
+          <div class="workspace-navigation">
+            <button id="job-save-continue" type="button">Save and continue</button>
+            <button id="job-stay" type="button" class="secondary">Stay here</button>
+            <button id="job-discard" type="button" class="secondary">Discard changes</button>
+          </div>
+        </div>
 
         <form id="edit-wo-form" class="admin-form" autocomplete="off">
           <input id="edit-work-order-id" type="hidden">
+          <section id="job-details" data-job-panel="details">
 
           <label>WO number
             <input id="edit-wo-number" type="text" required maxlength="160">
@@ -124,6 +150,8 @@
             <textarea id="edit-instructions" rows="4" maxlength="4000"></textarea>
           </label>
 
+          </section>
+          <section id="job-assignment" data-job-panel="assignment" hidden>
           <label>Assign to / request handoff to
             <select id="edit-assignee" required disabled>
               <option value="">Choose Team user</option>
@@ -132,25 +160,43 @@
 
           <p id="edit-reassign-note" class="muted"></p>
 
+          </section>
+          <section id="job-requirements" data-job-panel="requirements" hidden>
           <div id="edit-photo-requirements"></div>
+          </section>
 
           <div class="row gap edit-actions">
             <button id="save-edit" type="submit">Save Changes</button>
-            <button id="cancel-edit" class="secondary" type="button">Close Editor</button>
+            <button id="cancel-edit" class="secondary" type="button">Close Job</button>
           </div>
           <p id="edit-status" class="status" role="status" aria-live="polite"></p>
         </form>
-      </section>
+      </dialog>
 
-      <h2>Current Work Orders</h2>
-      <p class="muted">No organization or assignee filter is sent by this page. Rows below are whatever Supabase RLS allows this Admin session to read.</p>
+      <h2>Work Orders</h2>
+      <p class="muted">Select a job to view its details and manage the work.</p>
+      <form id="job-filters" class="job-filters" autocomplete="off">
+        <label>Find by<select id="job-search-field"><option value="property_address">Address</option><option value="wo_number">WO number</option></select></label>
+        <label>Search<input id="job-search" type="search" maxlength="160" placeholder="Address or WO number"></label>
+        <label>Status<select id="job-status"><option value="">All statuses</option><option value="ASSIGNED">Assigned</option><option value="IN_PROGRESS">In progress</option><option value="FIELD_COMPLETE">Field complete</option><option value="CANCELLED">Cancelled</option></select></label>
+        <label>Order<select id="job-sort"><option value="created_at.desc">Newest first</option><option value="due_date.asc">Due date</option></select></label>
+        <label>Per page<select id="job-page-size"><option value="25">25</option><option value="50">50</option></select></label>
+        <button type="submit">Apply</button>
+      </form>
+      <div class="job-pagination">
+        <p id="job-page-info" role="status" aria-live="polite"></p>
+        <button id="job-page-previous" type="button" class="secondary" disabled>Previous page</button>
+        <button id="job-page-next" type="button" class="secondary" disabled>Next page</button>
+      </div>
+      <p id="job-list-status" class="status" role="status" aria-live="polite"></p>
       <div id="work-orders" class="work-orders"></div>
     </section>
   </main>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
-  <script src="app.js?v=admin-auto-refresh-20260930-1" defer></script>
+  <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
+  <script src="app.js?v=job-workspace-20261007-1" defer></script>
   <script src="session.js?v=admin-auto-refresh-20260930-1" defer></script>
-  <script src="contractors.js?v=admin-auto-refresh-20260930-1" defer></script>
-  <script src="auto-refresh.js?v=admin-auto-refresh-20260930-1" defer></script>
+  <script src="contractors.js?v=job-workspace-20261007-1" defer></script>
+  <script src="auto-refresh.js?v=job-workspace-20261007-1" defer></script>
 </body>
 </html>
