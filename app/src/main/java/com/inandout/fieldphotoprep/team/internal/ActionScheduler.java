@@ -11,10 +11,12 @@ final class ActionScheduler {
     static final String TAG = "fwh-field-actions";
     private final Context context;
     private final CachedWorkOrderDao dao;
+    private final PhotoTransferDao transfers;
 
-    ActionScheduler(Context context, CachedWorkOrderDao dao) {
+    ActionScheduler(Context context, CachedWorkOrderDao dao, PhotoTransferDao transfers) {
         this.context = context.getApplicationContext();
         this.dao = dao;
+        this.transfers = transfers;
     }
 
     static String workName(String owner, String org) {
@@ -46,7 +48,9 @@ final class ActionScheduler {
                 pending = true;
                 break;
             }
-        if (!pending && dao.unstagedAcceptedPhotos(session.userId, session.organizationId) == 0) return true;
+        if (!pending
+                && dao.unstagedAcceptedPhotos(session.userId, session.organizationId) == 0
+                && transfers.unresolved(session.userId, session.organizationId) == 0) return true;
         try {
             WorkManager.getInstance(context)
                     .enqueueUniqueWork(
