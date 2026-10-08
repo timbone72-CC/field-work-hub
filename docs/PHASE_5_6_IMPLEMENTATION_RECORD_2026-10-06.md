@@ -283,3 +283,18 @@ Documentation-only inventory correction; no application implementation, producti
 - **Continuity finding:** preceding conversation had already confirmed the existing Shared Drive, while the Phase 5/6 roadmap tracked Workspace integration as future setup. The two statuses were conflated, causing repeat setup instructions. For future handoffs, carry both facts forward: **Shared Drive exists and is accessible; FWH integration, tenant ownership and membership audit are still outstanding**.
 
 This section is an inventory record, not a credentials store or permission approval. Do not modify shares, Auth, DNS, subscriptions, Storage, provider paths or Drive files based on it. Phases 5/6 remain in progress on draft PR #40; no Level 3 merge approval is inferred.
+
+## Workspace Drive ownership and membership evidence — 2026-10-07
+
+Read-only operator screenshot of Google Drive **Manage members** and Drive **Details** for the previously recorded Shared Drive ID `0AHtmamX-k9mOUk9PVA` (In And Out Inspections LLC) confirms the following UI-visible state at inspection time:
+
+- Shared Drive **Owner** shown in Drive Details: `inandoutinspectionsllc.com` (Workspace organization/domain).
+- `tim@inandoutinspectionsllc.com` — **Manager** (shown as the signed-in user).
+- `inandoutinspections2026@gmail.com` — **Manager**.
+- `rushingl27@gmail.com` — **Content manager**.
+- `timbone72@gmail.com` — **Manager**.
+- Member count: **4**. Drive Details reported **No limitations applied** under Security limitations. This is a snapshot of displayed Drive settings, not a comprehensive external sharing/security audit.
+
+This resolves the **previously unverified Workspace organizational ownership and four drive-level member roles** in the preceding reconciliation section. The earlier access checks from two connected Gmail accounts and the Workspace Admin Console's active Business Starter license remain separate observations. Do not infer that the broader per-file ACLs, external links, future role changes, or the exact provider credential identity have been audited. No membership modification or security-policy change was made.
+
+**Still outstanding before FWH Phase 5 provider activation:** explicitly select/verify the intended destination root and environment, bind authorized provider identity and destination UUID, check per-company isolation and real read/create/status under a disposable test location, and validate delivery/retry receipts. The Shared Drive and its ownership are verified; **Field Work Hub integration remains unconfigured/unproven**. Field Photo Prep remains separate and untouched. No code, deployment, build, migration, Drive-file or permission change is authorized by this evidence record. Level 3 runtime pre-merge approval remains pending.
