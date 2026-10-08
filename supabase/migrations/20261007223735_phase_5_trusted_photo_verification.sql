@@ -38,6 +38,90 @@ revoke all on function private.photo_verification_target_for_session(uuid,uuid,u
 grant execute on function private.photo_verification_target_for_session(uuid,uuid,uuid,uuid),
   public.photo_verification_target_for_session(uuid,uuid,uuid,uuid) to service_role;
 
+-- Authenticated exact-object status for the original owner. This is the only source
+-- allowed to turn an uncertain/missing TUS session into authoritative object absence.
+-- It returns no reusable Storage URL, catalog id or object version.
+create function private.photo_transfer_status(
+  p_photo uuid,p_transfer_version uuid
+) returns jsonb
+language plpgsql stable security definer set search_path='' as $
+declare
+  actor uuid:=auth.uid();
+  session_id uuid;
+  t private.photo_transfers%rowtype;
+  o storage.objects%rowtype;
+  r private.photo_transfer_receipts%rowtype;
+begin
+  if actor is null then
+    raise exception 'Current original-owner transfer session required' using errcode='42501';
+  end if;
+  begin
+    session_id:=(auth.jwt()->>'session_id')::uuid;
+  exception when invalid_text_representation then
+    raise exception 'Current original-owner transfer session required' using errcode='42501';
+  end;
+  if session_id is null
+    or not private.photo_transfer_authorized_for_user(actor,session_id,p_photo) then
+    raise exception 'Current original-owner transfer session required' using errcode='42501';
+  end if;
+
+  select * into t
+  from private.photo_transfers
+  where photo_id=p_photo and version=p_transfer_version and captured_by=actor;
+  if not found then
+    raise exception 'Exact prepared transfer not found' using errcode='22023';
+  end if;
+
+  select * into r
+  from private.photo_transfer_receipts
+  where photo_id=p_photo and transfer_version=t.version;
+  if found then
+    return jsonb_build_object(
+      'photo_id',t.photo_id,
+      'transfer_version',t.version,
+      'receipt_id',r.action_id,
+      'state','RECEIVED'
+    );
+  end if;
+
+  select * into o
+  from storage.objects
+  where bucket_id=t.bucket and name=t.object_key;
+
+  if not found then
+    return jsonb_build_object(
+      'photo_id',t.photo_id,
+      'transfer_version',t.version,
+      'state','ABSENT'
+    );
+  end if;
+
+  if o.owner_id is distinct from actor::text
+    or o.archived_at is not null
+    or coalesce(o.is_delete_marker,false) then
+    return jsonb_build_object(
+      'photo_id',t.photo_id,
+      'transfer_version',t.version,
+      'state','CONFLICT'
+    );
+  end if;
+
+  return jsonb_build_object(
+    'photo_id',t.photo_id,
+    'transfer_version',t.version,
+    'state','PRESENT'
+  );
+end;
+$;
+create function public.photo_transfer_status(p_photo uuid,p_transfer_version uuid)
+returns jsonb language sql security invoker set search_path='' as $
+  select private.photo_transfer_status(p_photo,p_transfer_version)
+$;
+revoke all on function private.photo_transfer_status(uuid,uuid),
+  public.photo_transfer_status(uuid,uuid) from public,anon,authenticated,service_role;
+grant execute on function private.photo_transfer_status(uuid,uuid),
+  public.photo_transfer_status(uuid,uuid) to authenticated;
+
 -- Retain one receipt/action/state engine behind a guarded entrance.
 alter function private.confirm_photo_transfer(uuid,uuid,uuid,uuid,uuid,uuid,text,text,text,text,bigint)
   rename to confirm_photo_transfer_engine;
