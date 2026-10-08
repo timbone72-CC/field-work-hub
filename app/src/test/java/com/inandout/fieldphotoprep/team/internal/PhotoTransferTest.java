@@ -6,8 +6,9 @@ import android.graphics.Bitmap;
 import androidx.room.Room;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -93,6 +94,70 @@ public class PhotoTransferTest {
     }
     PhotoTransferCoordinator coordinator(boolean enabled) {
         return new PhotoTransferCoordinator(fields, queue, photos, sessions, new Object(), enabled);
+    }
+
+    PhotoTransferCoordinator coordinator(FakeRemote remote) {
+        return new PhotoTransferCoordinator(
+                fields, queue, photos, sessions, remote, new Object(), true);
+    }
+
+    final class FakeRemote implements PhotoTransferCoordinator.Remote {
+        final Map<String,String> statuses = new HashMap<>();
+        final Map<String,PhotoTransferCoordinator.Head> heads = new HashMap<>();
+        final Map<String,String> versions = new HashMap<>();
+        final List<String> events = new ArrayList<>();
+        final Set<String> failPatchOnce = new HashSet<>();
+        int registerCalls, statusCalls, createCalls, headCalls, patchCalls, verifyCalls;
+        long lastPatchOffset = -1;
+        boolean switchAccountOnRegister;
+
+        String transferVersion(PhotoTransfer row) {
+            return versions.computeIfAbsent(row.photoId, ignored ->
+                    UUID.nameUUIDFromBytes(row.photoId.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString());
+        }
+
+        @Override public PhotoTransferCoordinator.Registration register(String token, PhotoTransfer row) {
+            registerCalls++; events.add("register:" + row.photoId);
+            String v = transferVersion(row);
+            PhotoTransferCoordinator.Registration result = new PhotoTransferCoordinator.Registration(
+                    row.photoId, v, "fwh-review-private",
+                    row.organizationId + "/" + row.workOrderId + "/" + row.runId + "/" + row.photoId + ".jpg",
+                    row.preparedSha256, row.preparedSize, "WAITING");
+            if (switchAccountOnRegister) {
+                long next = sessions.beginLogin();
+                sessions.install(next, OfflineActionTest.session(id(99), org));
+            }
+            return result;
+        }
+
+        @Override public PhotoTransferCoordinator.Status status(String token, PhotoTransfer row) throws Exception {
+            statusCalls++; events.add("status:" + row.photoId);
+            String state = statuses.getOrDefault(row.photoId, "ABSENT");
+            String response = "RECEIVED".equals(state)
+                    ? receipt(row.photoId, row.transferVersion, id(9)) : "";
+            return new PhotoTransferCoordinator.Status(row.photoId, row.transferVersion, state, response);
+        }
+
+        @Override public String createSession(String token, PhotoTransfer row) {
+            createCalls++; events.add("create:" + row.photoId); return url;
+        }
+
+        @Override public PhotoTransferCoordinator.Head head(String token, PhotoTransfer row) {
+            headCalls++; events.add("head:" + row.photoId);
+            return heads.getOrDefault(row.photoId, PhotoTransferCoordinator.Head.missing());
+        }
+
+        @Override public long patch(String token, PhotoTransfer row, File prepared, int maxBytes)
+                throws Exception {
+            patchCalls++; lastPatchOffset = row.confirmedOffset; events.add("patch:" + row.photoId);
+            if (failPatchOnce.remove(row.photoId)) throw new IOException("response lost");
+            return Math.min(row.preparedSize, row.confirmedOffset + maxBytes);
+        }
+
+        @Override public String verify(String token, PhotoTransfer row) throws Exception {
+            verifyCalls++; events.add("verify:" + row.photoId);
+            return receipt(row.photoId, row.transferVersion, id(9));
+        }
     }
 
     @Test public void acceptedFinishStagesOnceWithStableBindingAndActionIds() throws Exception {
@@ -294,6 +359,113 @@ public class PhotoTransferTest {
             assertEquals(PhotoTransferCoordinator.Outcome.PAUSED, result.get(5, TimeUnit.SECONDS));
             assertNull(queue.find(photo.id)); assertTrue(queue.list(id(99), org).isEmpty());
         } finally { release.countDown(); runner.shutdownNow(); }
+    }
+
+    @Test public void durableDrainRegistersUploadsVerifiesAndPreservesBothFiles() throws Exception {
+        byte[] original = Files.readAllBytes(new File(photo.originalPath).toPath());
+        byte[] prepared = Files.readAllBytes(new File(photo.preparedPath).toPath());
+        FakeRemote remote = new FakeRemote();
+        assertEquals(PhotoTransferCoordinator.Outcome.STAGED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        PhotoTransfer done = queue.find(photo.id);
+        assertEquals("RECEIVED", done.state); assertEquals(id(9), done.receiptId);
+        assertEquals(1, remote.registerCalls); assertEquals(1, remote.statusCalls);
+        assertEquals(1, remote.createCalls); assertEquals(1, remote.patchCalls);
+        assertEquals(1, remote.verifyCalls);
+        assertArrayEquals(original, Files.readAllBytes(new File(photo.originalPath).toPath()));
+        assertArrayEquals(prepared, Files.readAllBytes(new File(photo.preparedPath).toPath()));
+        assertEquals("WAITING", fields.photo(photo.id).state);
+    }
+
+    @Test public void interruptedUploadHeadsExactSessionBeforeResumingFromServerOffset() throws Exception {
+        PhotoTransfer row = uploading(); queue.offsetConfirmed(ownerId, org, photo.id, version, url, 0, 12);
+        FakeRemote remote = new FakeRemote();
+        remote.heads.put(photo.id, PhotoTransferCoordinator.Head.present(row.preparedSize, 16));
+        assertEquals(PhotoTransferCoordinator.Outcome.STAGED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals("head:" + photo.id, remote.events.get(0));
+        assertEquals(16, remote.lastPatchOffset);
+        assertEquals("RECEIVED", queue.find(photo.id).state);
+    }
+
+    @Test public void lostCreateResponseRequiresExactAbsenceBeforeReplacementSession() throws Exception {
+        registered(); queue.confirmedAbsent(ownerId, org, photo.id, version);
+        queue.creating(ownerId, org, photo.id, version);
+        FakeRemote remote = new FakeRemote();
+        assertEquals(PhotoTransferCoordinator.Outcome.STAGED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals(0, remote.registerCalls);
+        assertTrue(remote.events.indexOf("status:" + photo.id)
+                < remote.events.indexOf("create:" + photo.id));
+        assertEquals("RECEIVED", queue.find(photo.id).state);
+    }
+
+    @Test public void exactPresentStatusSkipsReplacementUploadAndOnlyVerifies() throws Exception {
+        registered(); FakeRemote remote = new FakeRemote();
+        remote.statuses.put(photo.id, "PRESENT");
+        assertEquals(PhotoTransferCoordinator.Outcome.STAGED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals(0, remote.createCalls); assertEquals(0, remote.patchCalls);
+        assertEquals(1, remote.verifyCalls); assertEquals("RECEIVED", queue.find(photo.id).state);
+    }
+
+    @Test public void exactReceivedStatusSavesReceiptWithoutVerifierOrUpload() throws Exception {
+        registered(); FakeRemote remote = new FakeRemote();
+        remote.statuses.put(photo.id, "RECEIVED");
+        assertEquals(PhotoTransferCoordinator.Outcome.STAGED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals(0, remote.createCalls); assertEquals(0, remote.patchCalls);
+        assertEquals(0, remote.verifyCalls); assertEquals(id(9), queue.find(photo.id).receiptId);
+    }
+
+    @Test public void ambiguousPatchNeverAdvancesLocallyAndNextHeadCanFinishWithoutResend() throws Exception {
+        PhotoTransfer row = uploading(); FakeRemote remote = new FakeRemote();
+        remote.heads.put(photo.id, PhotoTransferCoordinator.Head.present(row.preparedSize, 0));
+        remote.failPatchOnce.add(photo.id);
+        assertEquals(PhotoTransferCoordinator.Outcome.RETRY,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals("UNCERTAIN", queue.find(photo.id).state);
+        assertEquals(0, queue.find(photo.id).confirmedOffset); assertEquals(1, remote.patchCalls);
+        remote.heads.put(photo.id,
+                PhotoTransferCoordinator.Head.present(row.preparedSize, row.preparedSize));
+        queue.find(photo.id).retryNotBefore = 0;
+        PhotoTransfer retryRow = queue.find(photo.id); retryRow.retryNotBefore = 0; queue.update(retryRow);
+        assertEquals(PhotoTransferCoordinator.Outcome.STAGED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals(1, remote.patchCalls); assertEquals("RECEIVED", queue.find(photo.id).state);
+    }
+
+    @Test public void changedPreparedDerivativeStopsBeforeAnyMoreBytes() throws Exception {
+        PhotoTransfer row = uploading();
+        Bitmap replacement = Bitmap.createBitmap(31, 63, Bitmap.Config.ARGB_8888);
+        try (FileOutputStream out = new FileOutputStream(photo.preparedPath)) {
+            assertTrue(replacement.compress(Bitmap.CompressFormat.JPEG, 70, out));
+        }
+        replacement.recycle();
+        FakeRemote remote = new FakeRemote();
+        remote.heads.put(photo.id, PhotoTransferCoordinator.Head.present(row.preparedSize, 0));
+        assertEquals(PhotoTransferCoordinator.Outcome.HELD,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals(0, remote.patchCalls); assertEquals("UNCERTAIN", queue.find(photo.id).state);
+        assertFalse(fields.photo(photo.id).prepared); assertTrue(new File(photo.originalPath).exists());
+    }
+
+    @Test public void accountSwitchDuringRegistrationCannotCommitOtherOwnersEvidence() throws Exception {
+        FakeRemote remote = new FakeRemote(); remote.switchAccountOnRegister = true;
+        assertEquals(PhotoTransferCoordinator.Outcome.PAUSED,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals(1, remote.registerCalls); assertEquals("REGISTER_PENDING", queue.find(photo.id).state);
+        assertEquals(id(99), sessions.load().userId); assertTrue(new File(photo.originalPath).exists());
+    }
+
+    @Test public void oneRemoteConflictDoesNotBlockAnotherPhotosReceipt() throws Exception {
+        ProtectedPhoto other = anotherPhoto(); FakeRemote remote = new FakeRemote();
+        remote.statuses.put(photo.id, "CONFLICT");
+        assertEquals(PhotoTransferCoordinator.Outcome.HELD,
+                coordinator(remote).drain(ownerId, org, () -> false));
+        assertEquals("UNCERTAIN", queue.find(photo.id).state);
+        assertEquals("RECEIVED", queue.find(other.id).state);
+        assertTrue(new File(photo.originalPath).exists()); assertTrue(new File(other.originalPath).exists());
     }
 
     @Test public void journaledMissingDerivativeIsNeverSilentlyRecompressed() throws Exception {
