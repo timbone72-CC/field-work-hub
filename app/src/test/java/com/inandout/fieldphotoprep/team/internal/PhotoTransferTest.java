@@ -468,6 +468,30 @@ public class PhotoTransferTest {
         assertTrue(new File(photo.originalPath).exists()); assertTrue(new File(other.originalPath).exists());
     }
 
+    @Test public void privateReceiptRemovesOnlyTheUnsyncedPhotoHandoffBlocker() throws Exception {
+        CachedWorkOrder cached = new CachedWorkOrder(
+                ownerId, org, wo, run, 1, ownerId, "WO-1", "TEST ADDRESS", "TEST",
+                "", "[]", "2026-10-08", "{}", "FIELD_COMPLETE", "", "", "", "", "",
+                "2026-10-08T00:01:01Z", 1);
+        cached.assignmentInstanceId = id(5);
+        fields.insertAll(List.of(cached));
+        ActionSyncCoordinator sync = new ActionSyncCoordinator(
+                fields, sessions, (token, action) -> { throw new AssertionError("Handoff gate sent network work."); });
+
+        assertThrows(IllegalStateException.class,
+                () -> sync.requireHandoffReady(ownerId, org, wo));
+
+        PhotoTransfer row = registered();
+        queue.verifiedResponse(ownerId, org, photo.id, version,
+                receipt(photo.id, version, id(9)), 123);
+
+        sync.requireHandoffReady(ownerId, org, wo);
+        assertEquals("RECEIVED", queue.find(photo.id).state);
+        assertEquals("WAITING", fields.photo(photo.id).state);
+        assertTrue(new File(photo.originalPath).exists());
+        assertEquals("", fields.photo(photo.id).problem);
+    }
+
     @Test public void journaledMissingDerivativeIsNeverSilentlyRecompressed() throws Exception {
         stage(); byte[] original = Files.readAllBytes(new File(photo.originalPath).toPath()); assertTrue(new File(photo.preparedPath).delete());
         photos.io.submit(() -> { photos.recover(); return null; }).get(5, TimeUnit.SECONDS);
