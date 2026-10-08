@@ -18,6 +18,8 @@ abstract class PhotoTransferDao {
     @Query("SELECT * FROM photo_transfers WHERE photoId=:id") abstract PhotoTransfer find(String id);
     @Query("SELECT * FROM photo_transfers WHERE ownerId=:owner AND organizationId=:org ORDER BY photoId")
     abstract List<PhotoTransfer> list(String owner, String org);
+    @Query("SELECT count(*) FROM photo_transfers WHERE ownerId=:owner AND organizationId=:org AND state<>'RECEIVED'")
+    abstract int unresolved(String owner, String org);
     @Query("SELECT * FROM protected_photos WHERE id=:id") abstract ProtectedPhoto photo(String id);
     @Query("SELECT * FROM field_actions WHERE actionId=:id") abstract FieldAction action(String id);
     @Insert abstract void insert(PhotoTransfer row);
@@ -100,6 +102,15 @@ abstract class PhotoTransferDao {
         // Only the future exact authorized object-status RPC may call this, never HTTP 404/410.
         row.state = "TRANSFER_PENDING"; row.tusUrl = ""; row.confirmedOffset = 0;
         row.problem = ""; row.retryNotBefore = 0; update(row);
+    }
+
+    @Transaction
+    void objectPresent(String owner, String org, String id, String version) {
+        PhotoTransfer row = bound(owner, org, id, version);
+        if ("RECEIVED".equals(row.state)) return;
+        if (!"UNCERTAIN".equals(row.state) && !"VERIFY_PENDING".equals(row.state))
+            throw new IllegalStateException("Present private object did not match reconciliation state.");
+        row.state = "VERIFY_PENDING"; row.problem = ""; row.retryNotBefore = 0; update(row);
     }
 
     @Transaction
