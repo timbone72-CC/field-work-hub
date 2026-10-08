@@ -87,6 +87,11 @@ final class PhotoOwner {
     }
     private void prepare(ProtectedPhoto initial) {
         if(initial==null||!initial.readable()) return;
+        if(dao.transfer(initial.id)!=null) {
+            // Prepared content is immutable once journaled; never silently recompress its binding.
+            dao.photoPrepared(initial.id,false,"Frozen prepared copy needs recovery; original protected.");
+            return;
+        }
         File temp=new File(initial.preparedPath+".tmp"); Bitmap decoded=null, oriented=null, scaled=null;
         try {
             BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
@@ -137,5 +142,38 @@ final class PhotoOwner {
             while(Math.max(bounds.outWidth,bounds.outHeight)/options.inSampleSize>2048)options.inSampleSize*=2;
             Bitmap bitmap=BitmapFactory.decodeFile(f.getAbsolutePath(),options);if(bitmap==null)return false;bitmap.recycle();return true;
         } catch(Exception e) {return false;}
+    }
+
+    static final class PreparedIdentity {
+        final String sha256; final long size;
+        PreparedIdentity(String sha256,long size) { this.sha256=sha256;this.size=size; }
+    }
+
+    /** Called on this owner's serial IO executor. Hash only the separately prepared JPEG. */
+    PreparedIdentity preparedIdentity(ProtectedPhoto p) throws IOException {
+        if(p==null||!p.readable()) throw new IOException("Original recovery is required.");
+        if(!p.prepared || !validImage(new File(p.preparedPath))) {
+            prepare(p); p=dao.photo(p.id);
+        }
+        if(p==null||!p.prepared) throw new IOException("Preparation or original recovery is required.");
+        File file=new File(p.preparedPath);
+        long size=file.length();
+        if(size<4||size>PhotoTransferDao.MAX_PREPARED_BYTES||!validImage(file))
+            throw new IOException("Prepared copy needs review; original protected.");
+        try {
+            java.security.MessageDigest sha=java.security.MessageDigest.getInstance("SHA-256");
+            long read=0;byte[] buffer=new byte[64*1024];
+            try(FileInputStream input=new FileInputStream(file)) {
+                int count;
+                while((count=input.read(buffer))!=-1) {
+                    if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException();
+                    read+=count;if(read>size)throw new IOException("Prepared copy changed.");sha.update(buffer,0,count);
+                }
+            }
+            if(read!=size||file.length()!=size)throw new IOException("Prepared copy changed.");
+            StringBuilder hash=new StringBuilder();
+            for(byte v:sha.digest())hash.append(String.format(java.util.Locale.ROOT,"%02x",v&255));
+            return new PreparedIdentity(hash.toString(),size);
+        } catch(java.security.NoSuchAlgorithmException impossible) {throw new IllegalStateException(impossible);}
     }
 }

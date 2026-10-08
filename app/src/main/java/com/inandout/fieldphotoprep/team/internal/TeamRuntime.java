@@ -13,6 +13,7 @@ final class TeamRuntime {
     final AssignmentRepository assignments;
     final ActionSyncCoordinator sync;
     final PhotoOwner photos;
+    final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
     private final Object actionCreationLock = new Object();
 
@@ -22,6 +23,8 @@ final class TeamRuntime {
         assignments = new AssignmentRepository(api, new RoomAssignmentStore(dao));
         photos = new PhotoOwner(context, dao, sessions);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
+        transfers = new PhotoTransferCoordinator(dao, TeamDatabase.getInstance(context).photoTransferDao(),
+                photos, sessions, sync.drainLock, BuildConfig.FIELD_SYNC_ENABLED);
         scheduler = new ActionScheduler(context, dao);
     }
 
@@ -44,6 +47,7 @@ final class TeamRuntime {
             if (BuildConfig.FIELD_SYNC_ENABLED) {
                 scheduler.ensure(s);
                 sync.drain(s.userId, s.organizationId, () -> false);
+                transfers.stageAccepted(s.userId, s.organizationId, () -> false);
             }
             return reconcile(s, generation);
         }

@@ -46,7 +46,7 @@ final class ActionScheduler {
                 pending = true;
                 break;
             }
-        if (!pending) return true;
+        if (!pending && dao.unstagedAcceptedPhotos(session.userId, session.organizationId) == 0) return true;
         try {
             WorkManager.getInstance(context)
                     .enqueueUniqueWork(

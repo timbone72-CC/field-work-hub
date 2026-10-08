@@ -34,7 +34,7 @@ public class RoomMigrationTest {
         verifyUpgrade("FIELD_COMPLETE", null);
     }
 
-    @Test public void realV2AcceptedActionsSurviveV3WithoutInventingPhotoIntent() throws Exception {
+    @Test public void realV2AcceptedActionsSurviveV4WithoutInventingPhotoIntent() throws Exception {
         Context context=RuntimeEnvironment.getApplication();String name="migration-v2-photos.db";context.deleteDatabase(name);
         java.io.InputStream resource=getClass().getResourceAsStream("/com.inandout.fieldphotoprep.team.internal.TeamDatabase/2.json");assertNotNull(resource);
         JSONObject schema=new JSONObject(new String(resource.readAllBytes(),StandardCharsets.UTF_8)).getJSONObject("database");
@@ -52,10 +52,78 @@ public class RoomMigrationTest {
             }
             JSONArray setup=schema.getJSONArray("setupQueries");for(int n=0;n<setup.length();n++)old.execSQL(setup.getString(n));old.setVersion(2);
         }
-        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name).addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3).allowMainThreadQueries().build();
+        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name).addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4).allowMainThreadQueries().build();
         FieldAction accepted=upgraded.cachedWorkOrderDao().action("accepted-v2");assertEquals("ACCEPTED",accepted.state);assertEquals("2026-10-03T12:00:00Z",accepted.eventTime);
         assertEquals("",accepted.requirementRevision);assertEquals("",accepted.finishSetId);assertEquals("",accepted.finishDigest);assertTrue(upgraded.cachedWorkOrderDao().allPhotos().isEmpty());
         upgraded.close();context.deleteDatabase(name);
+    }
+
+    @Test public void realV3FrozenPhotosAndTwoOwnersUpgradeWithoutInventingReceipts() throws Exception {
+        Context context = RuntimeEnvironment.getApplication(); String name = "migration-v3-transfers.db";
+        context.deleteDatabase(name);
+        java.io.File original = java.io.File.createTempFile("v3-original", ".jpg", context.getCacheDir());
+        java.io.File prepared = java.io.File.createTempFile("v3-prepared", ".jpg", context.getCacheDir());
+        byte[] originalBytes = new byte[] {1, 2, 3, 4, 5}, preparedBytes = new byte[] {6, 7, 8, 9};
+        java.nio.file.Files.write(original.toPath(), originalBytes); java.nio.file.Files.write(prepared.toPath(), preparedBytes);
+        String manifest = new JSONArray().put(new JSONObject().put("id", "photo-a")
+                .put("item_id", "item").put("captured_at", "2026-10-03T12:00:30Z")).toString();
+        java.io.InputStream stream = getClass().getResourceAsStream("/com.inandout.fieldphotoprep.team.internal.TeamDatabase/3.json");
+        assertNotNull(stream); JSONObject schema = new JSONObject(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getJSONObject("database");
+        try (SQLiteDatabase old = context.openOrCreateDatabase(name, Context.MODE_PRIVATE, null)) {
+            JSONArray entities = schema.getJSONArray("entities");
+            for (int n = 0; n < entities.length(); n++) {
+                JSONObject entity = entities.getJSONObject(n); String table = entity.getString("tableName");
+                old.execSQL(entity.getString("createSql").replace("${TABLE_NAME}", table));
+                JSONArray indices = entity.getJSONArray("indices");
+                for (int i = 0; i < indices.length(); i++) old.execSQL(indices.getJSONObject(i).getString("createSql").replace("${TABLE_NAME}", table));
+                for (String owner : new String[] {"a", "b"}) {
+                    android.content.ContentValues row = new android.content.ContentValues(); JSONArray fields = entity.getJSONArray("fields");
+                    for (int i = 0; i < fields.length(); i++) {
+                        JSONObject field = fields.getJSONObject(i); String column = field.getString("columnName");
+                        if ("INTEGER".equals(field.getString("affinity"))) row.put(column, 0); else row.put(column, "");
+                    }
+                    if ("cached_work_orders".equals(table)) {
+                        row.put("cache_owner_user_id", owner); row.put("organization_id", "org"); row.put("work_order_id", "1");
+                        row.put("run_id", "run-" + owner); row.put("assigned_user_id", owner); row.put("assignment_instance_id", "instance-" + owner);
+                        row.put("field_status", owner.equals("a") ? "FIELD_COMPLETE" : "IN_PROGRESS");
+                        row.put("conflict_reason", owner.equals("a") ? "" : "ASSIGNMENT_UNAVAILABLE"); row.put("requirement_snapshot_json", "{}");
+                    } else if ("field_actions".equals(table)) {
+                        row.put("actionId", "action-" + owner); row.put("ownerId", owner); row.put("organizationId", "org");
+                        row.put("workOrderId", "1"); row.put("runId", "run-" + owner); row.put("assignmentInstanceId", "instance-" + owner);
+                        row.put("kind", owner.equals("a") ? "COMPLETE" : "START"); row.put("state", owner.equals("a") ? "ACCEPTED" : "PENDING");
+                        row.put("sequence", owner.equals("a") ? 4 : 5); row.put("retryNotBefore", 123456); row.put("attempts", 3);
+                        row.put("eventTime", "2026-10-03T12:01:00Z");
+                        if (owner.equals("a")) {
+                            row.put("requirementRevision", "revision"); row.put("finishSetId", "finish"); row.put("finishPhotosJson", manifest);
+                            row.put("finishDigest", PhotoOwner.digest(manifest)); row.put("canonicalStatus", "FIELD_COMPLETE"); row.put("acceptedAt", "2026-10-03T12:01:01Z");
+                        }
+                    } else if ("protected_photos".equals(table)) {
+                        row.put("id", "photo-" + owner); row.put("ownerId", owner); row.put("organizationId", "org"); row.put("workOrderId", "1");
+                        row.put("runId", "run-" + owner); row.put("assignmentInstanceId", "instance-" + owner); row.put("requirementRevision", "revision");
+                        row.put("itemId", "item"); row.put("capturedAt", "2026-10-03T12:00:30Z");
+                        row.put("originalPath", original.getAbsolutePath()); row.put("preparedPath", prepared.getAbsolutePath());
+                        row.put("state", owner.equals("a") ? "WAITING" : "CAPTURING"); row.put("finishSetId", owner.equals("a") ? "finish" : "");
+                        row.put("originalBytes", originalBytes.length); row.put("prepared", owner.equals("a") ? 1 : 0);
+                    }
+                    old.insertOrThrow(table, null, row);
+                }
+            }
+            JSONArray setup = schema.getJSONArray("setupQueries"); for (int n = 0; n < setup.length(); n++) old.execSQL(setup.getString(n)); old.setVersion(3);
+        }
+        for (int opening = 0; opening < 2; opening++) {
+            TeamDatabase upgraded = Room.databaseBuilder(context, TeamDatabase.class, name)
+                    .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4).allowMainThreadQueries().build();
+            CachedWorkOrderDao dao = upgraded.cachedWorkOrderDao(); assertEquals(manifest, dao.action("action-a").finishPhotosJson);
+            assertEquals(PhotoOwner.digest(manifest), dao.action("action-a").finishDigest); assertEquals("ACCEPTED", dao.action("action-a").state);
+            assertEquals("PENDING", dao.action("action-b").state); assertEquals(123456, dao.action("action-b").retryNotBefore); assertEquals(6, dao.nextSequence());
+            assertEquals("finish", dao.photo("photo-a").finishSetId); assertEquals("CAPTURING", dao.photo("photo-b").state);
+            assertEquals("ASSIGNMENT_UNAVAILABLE", dao.find("b", "org", "1", "run-b").conflictReason);
+            assertEquals(original.getAbsolutePath(), dao.photo("photo-a").originalPath); assertEquals(prepared.getAbsolutePath(), dao.photo("photo-a").preparedPath);
+            assertTrue(upgraded.photoTransferDao().list("a", "org").isEmpty()); assertTrue(upgraded.photoTransferDao().list("b", "org").isEmpty());
+            assertArrayEquals(originalBytes, java.nio.file.Files.readAllBytes(original.toPath())); assertArrayEquals(preparedBytes, java.nio.file.Files.readAllBytes(prepared.toPath()));
+            upgraded.close();
+        }
+        context.deleteDatabase(name); assertTrue(original.delete()); assertTrue(prepared.delete());
     }
 
     private void verifyUpgrade(String state, String actionKind) throws Exception {
@@ -114,7 +182,7 @@ public class RoomMigrationTest {
         }
         TeamDatabase upgraded =
                 Room.databaseBuilder(context, TeamDatabase.class, name)
-                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3)
+                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4)
                         .allowMainThreadQueries()
                         .build();
         assertEquals(1, upgraded.cachedWorkOrderDao().listForOwner("a", "org").size());
@@ -147,7 +215,7 @@ public class RoomMigrationTest {
         upgraded.close();
         TeamDatabase reopened =
                 Room.databaseBuilder(context, TeamDatabase.class, name)
-                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3)
+                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4)
                         .allowMainThreadQueries()
                         .build();
         assertEquals("", reopened.cachedWorkOrderDao().find("a", "org", "1", "run-1").conflictReason);

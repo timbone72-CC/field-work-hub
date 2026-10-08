@@ -229,6 +229,9 @@ abstract class CachedWorkOrderDao {
     abstract List<ProtectedPhoto> photos(String owner, String org, String wo, String run);
     @Query("SELECT * FROM protected_photos ORDER BY id") abstract List<ProtectedPhoto> allPhotos();
     @Query("SELECT * FROM protected_photos WHERE id=:id") abstract ProtectedPhoto photo(String id);
+    @Query("SELECT * FROM photo_transfers WHERE photoId=:id") abstract PhotoTransfer transfer(String id);
+    @Query("SELECT count(*) FROM protected_photos p JOIN field_actions a ON a.finishSetId=p.finishSetId AND a.ownerId=p.ownerId AND a.organizationId=p.organizationId AND a.workOrderId=p.workOrderId AND a.runId=p.runId AND a.assignmentInstanceId=p.assignmentInstanceId AND a.requirementRevision=p.requirementRevision WHERE p.ownerId=:owner AND p.organizationId=:org AND p.state='WAITING' AND p.finishSetId<>'' AND a.state='ACCEPTED' AND a.kind='COMPLETE' AND a.canonicalStatus='FIELD_COMPLETE' AND a.acceptedAt<>'' AND NOT EXISTS (SELECT 1 FROM photo_transfers t WHERE t.photoId=p.id)")
+    abstract int unstagedAcceptedPhotos(String owner, String org);
     @Insert(onConflict=OnConflictStrategy.ABORT) abstract void insertPhoto(ProtectedPhoto p);
     @Query("UPDATE protected_photos SET state=:state,originalBytes=:bytes,problem=:problem WHERE id=:id AND state='CAPTURING'")
     abstract void publishCapture(String id,String state,long bytes,String problem);
