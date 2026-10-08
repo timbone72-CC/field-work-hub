@@ -58,6 +58,8 @@ jobs:
           test -n "$(find app/schemas -type f -name 2.json -print -quit)"
           test -n "$(find app/schemas -type f -name 3.json -print -quit)"
           test -n "$(find app/schemas -type f -name 4.json -print -quit)"
+          git ls-files --error-unmatch app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase/4.json
+          git diff --exit-code -- app/schemas
           echo "Room schema: ${SCHEMA}"
           python3 - <<'PY'
           import pathlib
