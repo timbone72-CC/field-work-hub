@@ -44,7 +44,7 @@ grant execute on function private.photo_verification_target_for_session(uuid,uui
 create function private.photo_transfer_status(
   p_photo uuid,p_transfer_version uuid
 ) returns jsonb
-language plpgsql stable security definer set search_path='' as $
+language plpgsql stable security definer set search_path='' as $photo_status$
 declare
   actor uuid:=auth.uid();
   session_id uuid;
@@ -112,11 +112,11 @@ begin
     'state','PRESENT'
   );
 end;
-$;
+$photo_status$;
 create function public.photo_transfer_status(p_photo uuid,p_transfer_version uuid)
-returns jsonb language sql security invoker set search_path='' as $
+returns jsonb language sql security invoker set search_path='' as $photo_wrapper$
   select private.photo_transfer_status(p_photo,p_transfer_version)
-$;
+$photo_wrapper$;
 revoke all on function private.photo_transfer_status(uuid,uuid),
   public.photo_transfer_status(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function private.photo_transfer_status(uuid,uuid),
