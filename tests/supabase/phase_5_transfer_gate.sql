@@ -112,10 +112,28 @@ begin
   begin perform public.begin_photo_transfer(gen_random_uuid(),unfinished,repeat('d',64),100000);exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Post-cutoff Finish created recovery upload authority';end if;
   execute 'reset role';
+  -- Exact authenticated status is the only authority for replacing an uncertain TUS session.
+  execute 'set local role authenticated';
+  response:=public.photo_transfer_status(p1,t.version);
+  if response->>'state'<>'ABSENT' or response ? 'object_key' then
+    raise exception 'Exact transfer status did not prove clean absence narrowly';end if;
+  denied:=false;
+  begin perform public.photo_transfer_status(p1,gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Wrong transfer version received status';end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',other_user,'session_id',other_user)::text,true);
+  denied:=false;
+  begin perform public.photo_transfer_status(p1,t.version);exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Other owner received transfer status';end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor,'session_id',contractor)::text,true);
+  execute 'reset role';
+
   -- Controlled catalog/RLS only, never proof of physical object bytes.
   execute 'set local role authenticated';
   insert into storage.objects(id,bucket_id,name,owner_id,version) values(object_id,t.bucket,t.object_key,contractor::text,'TEST-V1');
   if (select count(*) from storage.objects where id=object_id)<>1 then raise exception 'Exact waiting original-owner catalog not visible';end if;
+  response:=public.photo_transfer_status(p1,t.version);
+  if response->>'state'<>'PRESENT' or response ? 'object_key' or response ? 'object_id' then
+    raise exception 'Exact present status exposed catalog details or missed object';end if;
   denied:=false;
   begin insert into storage.objects(bucket_id,name,owner_id,version) values(t.bucket,'wrong/path.jpg',contractor::text,'TEST');
     exception when insufficient_privilege then denied:=true;end;
@@ -194,6 +212,10 @@ begin
     raise exception 'Receipt transition not atomic/unique';end if;
   execute 'set local role authenticated';
   if exists(select 1 from storage.objects where id=object_id) then raise exception 'Received catalog remained directly visible';end if;
+  response:=public.photo_transfer_status(p1,t.version);
+  if response->>'state'<>'RECEIVED' or response->>'receipt_id'<>receipt_action::text
+    or response ? 'object_key' or response ? 'object_id' then
+    raise exception 'Received transfer status did not return the immutable narrow receipt';end if;
   execute 'reset role';
   response:=public.photo_verification_target_for_session(p1,t.version,contractor,contractor);
   if response->>'state'<>'RECEIVED' or response->>'receipt_id'<>receipt_action::text or response ? 'object_key' then
