@@ -236,7 +236,8 @@ public class PhotoTransferTest {
         for (String bad : new String[] {"http://" + url.substring(8), url + "?token=secret", url + "#fragment",
                 url.replace("vyocaujuwrivoqynvitm", "otherproject"), url.replace("https://", "https://user@"),
                 url.replace(".co/", ".co:443/"), url.replace("test-session", "../object"),
-                url.replace("test-session", "%2e%2e/object"), url.replace("test-session", "")}) {
+                url.replace("test-session", "%2e%2e/object"), url + "/nested-session",
+                url.replace("test-session", "session/another"), url.replace("test-session", "")}) {
             assertFalse(bad, PhotoTransferDao.safeTusUrl(bad));
             assertThrows(IllegalStateException.class, () -> queue.sessionCreated(ownerId, org, photo.id, version, bad));
         }
