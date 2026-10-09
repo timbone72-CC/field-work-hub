@@ -200,14 +200,15 @@ abstract class PhotoTransferDao {
             URI project = URI.create(SupabaseConfig.PROJECT_URL), url = URI.create(value);
             String host = project.getHost().replace(".supabase.co", ".storage.supabase.co");
             String path = url.getRawPath();
+            String prefix = "/storage/v1/upload/resumable/";
+            String session = path == null || !path.startsWith(prefix) ? "" : path.substring(prefix.length());
+            // Location must identify exactly one opaque TUS session, not an arbitrary
+            // path beneath the authenticated Storage origin. OkHttp must not normalize it.
             return "https".equals(url.getScheme()) && host.equals(url.getHost())
                     && url.getPort() == -1 && url.getUserInfo() == null
                     && url.getRawQuery() == null && url.getRawFragment() == null
-                    && path != null && path.startsWith("/storage/v1/upload/resumable/")
-                    && path.length() > "/storage/v1/upload/resumable/".length()
-                    && !path.contains("%") && !path.contains("//")
-                    && !path.contains("/../") && !path.contains("/./")
-                    && !path.endsWith("/..") && !path.endsWith("/.");
+                    && !session.equals(".") && !session.equals("..")
+                    && session.matches("[A-Za-z0-9._~-]+");
         } catch (Exception error) { return false; }
     }
 }
