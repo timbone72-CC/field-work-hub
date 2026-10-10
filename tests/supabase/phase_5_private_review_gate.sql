@@ -52,6 +52,8 @@ declare
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
   pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
+  delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb;
+  delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   t private.photo_transfers%rowtype; denied boolean;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
@@ -173,6 +175,61 @@ begin
     or (select count(*) from private.client_package_actions where package_id=pkg_id
         and action_kind='SEND')<>1 then
     raise exception 'Send created duplicates or alleged delivered receipt';end if;
+  -- The browser role cannot claim a trusted delivery attempt.
+  execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_claim_delivery(%L)',gen_random_uuid()));
+  execute 'reset role';
+  execute 'set local role service_role';
+  delivery_claim:=public.service_claim_delivery(delivery_worker);
+  if delivery_claim->>'claimed'<>'true' or
+    (delivery_claim->>'package_id')::uuid<>pkg_id then
+    raise exception 'Single trusted claim not fenced';end if;
+  delivery_gen:=(delivery_claim->>'generation')::bigint;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_heartbeat_delivery(%L,%L,%s)',
+    pkg_id,gen_random_uuid(),delivery_gen));
+  if (public.service_claim_delivery(gen_random_uuid())->>'claimed')<>'false' then
+    raise exception 'Leased delivery was claimed twice';end if;
+  folder_id:='folder'||replace(pkg_id::text,'-','');
+  photo_file_id:='photo'||replace(photo::text,'-','');
+  manifest_file_id:='manifest'||replace(pkg_id::text,'-','');
+  perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
+    'FOLDER',null,folder_id,'DISPOSABLE-ONLY');
+  perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
+    'PHOTO',photo,photo_file_id,folder_id);
+  perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
+    'MANIFEST',null,manifest_file_id,folder_id);
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_reserve_delivery_file(%L,%L,%s,%L,%L,%L,%L)',
+    pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,'OTHER-GENERATED-ID',folder_id));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_confirm_delivery_file(%L,%L,%s,%L,%L,%L,%L,%L,%L,%s)',
+    pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,photo_file_id,folder_id,
+    'image/jpeg',repeat('0',64),250000));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_finish_delivery(%L,%L,%s)',
+    pkg_id,delivery_worker,delivery_gen));
+  perform public.service_confirm_delivery_file(pkg_id,delivery_worker,delivery_gen,
+    'FOLDER',null,folder_id,'DISPOSABLE-ONLY','application/vnd.google-apps.folder',null,null);
+  perform public.service_confirm_delivery_file(pkg_id,delivery_worker,delivery_gen,
+    'PHOTO',photo,photo_file_id,folder_id,'image/jpeg',repeat('a',64),250000);
+  frozen_size:=octet_length((delivery_claim->'manifest')::text);
+  perform public.service_confirm_delivery_file(pkg_id,delivery_worker,delivery_gen,
+    'MANIFEST',null,manifest_file_id,folder_id,'application/json',
+    pkg_preview->>'manifest_sha256',frozen_size);
+  delivery_done:=public.service_finish_delivery(pkg_id,delivery_worker,delivery_gen);
+  if delivery_done->>'status'<>'DELIVERED'
+    or (select count(*) from private.client_delivery_final_receipts where package_id=pkg_id)<>1
+    or (select count(*) from private.client_delivery_file_plans where package_id=pkg_id and state='VERIFIED')<>3 then
+    raise exception 'Synthetic delivery evidence did not finalize exactly once';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_finish_delivery(%L,%L,%s)',pkg_id,delivery_worker,delivery_gen));
+  execute 'reset role';
+  if has_function_privilege('authenticated','public.service_claim_delivery(uuid)','execute')
+    or has_function_privilege('anon','public.service_finish_delivery(uuid,uuid,bigint)','execute')
+    or has_table_privilege('authenticated','private.client_delivery_final_receipts','select') then
+    raise exception 'Client could read or claim trusted delivery evidence';end if;
   execute 'set local role authenticated';
   expected_revision:=(response->>'decision_revision')::uuid;
   perform pg_temp.expect_photo_review_error('22023',format(
