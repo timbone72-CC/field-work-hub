@@ -147,7 +147,7 @@ test('destination verification requires a real accessible folder, correct drive 
   }
   const {client}=fixture(url=>{
     assert.equal(url.searchParams.get('supportsAllDrives'),'true');
-    assert.match(url.searchParams.get('fields'),/capabilities\\(canAddChildren\\)/);
+    assert.match(url.searchParams.get('fields'),/capabilities\(canAddChildren\)/);
     return json(good);
   });
   assert.deepEqual(await client.verifyDestination({folderId:parent,expectedDriveId:driveId}),
