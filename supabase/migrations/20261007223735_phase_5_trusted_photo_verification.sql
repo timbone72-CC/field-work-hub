@@ -660,3 +660,76 @@ create trigger client_package_actions_immutable before update or delete on priva
  for each row execute function private.protect_photo_transfer_ledger();
 create trigger client_delivery_outbox_no_delete before delete on private.client_delivery_outbox
  for each row execute function private.protect_photo_transfer_ledger();
+
+-- Pure, authoritative release recalculation. All caller-facing mutations repeat
+-- it, so changing a reviewer/policy, WO run, photo receipt, or destination fails
+-- without replacing accepted field Finish or releasing local originals.
+create function private.client_package_manifest(p_package uuid) returns jsonb
+language plpgsql stable security definer set search_path='' as $manifest$
+declare k private.client_packages%rowtype; w public.work_orders%rowtype;
+  d private.client_delivery_destinations%rowtype; req jsonb; item jsonb;
+  v_photos jsonb:='[]'::jsonb; n integer:=0; selected_count integer; required_total integer;
+  selected_named integer; p record;
+begin
+  select * into k from private.client_packages where id=p_package;
+  if k.id is null then raise exception 'Package unavailable' using errcode='42501';end if;
+  select * into w from public.work_orders where id=k.work_order_id;
+  if w.organization_id is distinct from k.organization_id or w.client_company_id is distinct from k.company_id
+    or w.current_run_id is distinct from k.run_id or w.field_status<>'FIELD_COMPLETE' then
+    raise exception 'Current accepted work identity changed or Finish missing' using errcode='40001';end if;
+  if exists(select 1 from private.client_packages prior
+     where prior.work_order_id=w.id and prior.id<>k.id
+       and prior.status in ('QUEUED','DELIVERING','FAILED','UNCERTAIN')) then
+    raise exception 'Earlier client delivery unresolved' using errcode='40001';end if;
+  select * into d from private.client_delivery_destinations
+    where organization_id=k.organization_id and company_id=k.company_id and active and verified;
+  if d.id is null then raise exception 'Verified client destination required' using errcode='42501';end if;
+  select requirement_snapshot into req from public.work_order_runs where id=k.run_id;
+  perform private.validate_photo_requirements(req);
+  select count(*) into selected_count from private.client_package_photos where package_id=k.id;
+  if selected_count>5000 then raise exception 'Package selection too large' using errcode='22023';end if;
+  for p in
+    select s.ordinal,s.photo_id,t.run_id,t.version,r.observed_sha256,
+      ph.requirement_item_id,coalesce(dec.decision,'PENDING') as decision
+    from private.client_package_photos s
+    join private.photo_transfers t on t.photo_id=s.photo_id
+    join private.photo_transfer_receipts r on r.photo_id=t.photo_id and r.transfer_version=t.version
+    join public.photos ph on ph.id=t.photo_id and ph.work_order_id=k.work_order_id
+    left join private.photo_review_decisions dec on dec.photo_id=t.photo_id
+    join storage.objects ob on ob.id=r.object_id and ob.version=r.object_version
+      and ob.bucket_id=r.bucket and ob.name=r.object_key and ob.owner_id=r.owner_user_id::text
+      and ob.archived_at is null and not coalesce(ob.is_delete_marker,false)
+    where s.package_id=k.id and t.run_id=k.run_id and t.state='RECEIVED'
+    order by s.ordinal
+  loop
+    if p.decision='REJECTED' or (w.review_required and p.decision<>'APPROVED')
+      or not private.photo_has_accepted_finish(p.photo_id) then
+      raise exception 'Selected evidence not approved, received or Finish-accepted' using errcode='42501';end if;
+    n:=n+1;
+    v_photos:=v_photos||jsonb_build_array(jsonb_build_object('ordinal',p.ordinal,
+      'photo_id',p.photo_id,'run_id',p.run_id,'transfer_version',p.version,
+      'observed_sha256',p.observed_sha256,'item_id',p.requirement_item_id,
+      'review_decision',p.decision));
+  end loop;
+  if n<>selected_count then
+    raise exception 'Missing or foreign private receipt, rejected photo, or changed Storage object' using errcode='42501';end if;
+  required_total:=case when (req->'total'->>'enabled')::boolean then (req->'total'->>'minimum')::integer else 0 end;
+  if n<required_total then raise exception 'Package total photo coverage incomplete' using errcode='22023';end if;
+  for item in select value from jsonb_array_elements(req->'items') loop
+    if (item->>'enabled')::boolean then
+      select count(*) into selected_named from jsonb_array_elements(v_photos) photo
+        where photo->>'item_id'=item->>'id';
+      if selected_named<(item->>'minimum')::integer then
+        raise exception 'Required named photo coverage incomplete' using errcode='22023';end if;
+    end if;
+  end loop;
+  return jsonb_build_object('package_id',k.id,'organization_id',k.organization_id,
+    'work_order_id',w.id,'client_company_id',k.company_id,'client_wo_number',w.wo_number,
+    'client_notes',k.notes,'current_run_id',k.run_id,'requirements',req,
+    'review_required',w.review_required,'review_policy_revision',w.review_policy_revision,
+    'destination_id',d.id,'destination_revision',d.revision,'destination_provider',d.provider,
+    'destination_root',d.root_folder_id,'selected_photos',v_photos);
+end;
+$manifest$;
+revoke all on function private.client_package_manifest(uuid) from public,anon,authenticated;
+grant execute on function private.client_package_manifest(uuid) to service_role;
