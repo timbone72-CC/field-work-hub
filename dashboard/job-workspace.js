@@ -44,7 +44,7 @@ const JobWorkspace = (() => {
     return JSON.stringify([['edit-wo-number', 'edit-property-address', 'edit-work-type', 'edit-instructions',
       'edit-due-date', 'edit-assignee'].map(id => el(id).value), editPhotos.value]);
   }
-  function dirty() { return baseline !== null && fingerprint() !== baseline; }
+  function dirty() { return (baseline !== null && fingerprint() !== baseline) || !!ClientRelease.dirty(); }
   function reset() {
     PrivateReview.reset(); ClientRelease.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
@@ -168,7 +168,14 @@ const JobWorkspace = (() => {
     editSection.addEventListener('cancel', event => { event.preventDefault(); closeEditor(); });
     el('job-stay').addEventListener('click', () => { pending = null; el('job-unsaved').hidden = true; });
     el('job-discard').addEventListener('click', () => { const action = pending; pending = null; el('job-unsaved').hidden = true; if (action) action(); });
-    el('job-save-continue').addEventListener('click', () => editForm.requestSubmit());
+    el('job-save-continue').addEventListener('click', async () => {
+      if (ClientRelease.dirty()) {
+        const result = await ClientRelease.saveDraft();
+        if (result && pending) {
+          const action=pending;pending=null;el('job-unsaved').hidden=true;action();
+        } else if (!result) setEditStatus('Package changes were not saved; remain on this job to resolve.',true);
+      } else editForm.requestSubmit();
+    });
     el('job-reload').addEventListener('click', () => guard(() => load(editWorkOrderIdInput.value)));
     editForm.addEventListener('invalid', event => {
       const panel = event.target.closest('[data-job-panel]'); if (panel) tab(panel.dataset.jobPanel);
