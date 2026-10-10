@@ -331,3 +331,41 @@ revoke all on function private.admin_review_photo(uuid,uuid,uuid,uuid,uuid,text,
   public.admin_review_photo(uuid,uuid,uuid,uuid,uuid,text,text) from public,anon,authenticated;
 grant execute on function private.admin_review_photo(uuid,uuid,uuid,uuid,uuid,text,text),
   public.admin_review_photo(uuid,uuid,uuid,uuid,uuid,text,text) to authenticated,service_role;
+
+-- Trusted Admin-only image-read target. The service worker must validate the
+-- exact incoming JWT with Supabase Auth, then pass its sub+session_id verbatim.
+-- Neither normal office RPC callers nor a recovery-only account can use it.
+create function private.admin_private_photo_target_for_session(
+  p_photo uuid,p_transfer_version uuid,p_actor uuid,p_session uuid
+) returns jsonb language plpgsql stable security definer set search_path='' as $private_view$
+declare t private.photo_transfers%rowtype; r private.photo_transfer_receipts%rowtype;
+begin
+  if p_actor is null or p_session is null or p_photo is null or p_transfer_version is null
+    or not exists(select 1 from auth.users u join auth.sessions s on s.user_id=u.id
+      where u.id=p_actor and s.id=p_session and u.deleted_at is null and u.email_confirmed_at is not null
+        and (u.banned_until is null or u.banned_until<=now())
+        and (s.not_after is null or s.not_after>now())) then
+    raise exception 'Current office session required' using errcode='42501';end if;
+  select * into t from private.photo_transfers where photo_id=p_photo and version=p_transfer_version;
+  select * into r from private.photo_transfer_receipts where photo_id=p_photo and transfer_version=p_transfer_version;
+  if t.photo_id is null or r.photo_id is null or t.state<>'RECEIVED'
+    or not private.team_capability_for_user(p_actor,t.organization_id,
+      (select responsible_team_id from public.work_orders where id=t.work_order_id),'WORK')
+    or not exists(select 1 from storage.objects o where o.id=r.object_id and o.version=r.object_version
+      and o.bucket_id=r.bucket and o.name=r.object_key and o.owner_id=r.owner_user_id::text
+      and o.archived_at is null and not coalesce(o.is_delete_marker,false)) then
+    raise exception 'Current verified photo and scoped office access required' using errcode='42501';end if;
+  return jsonb_build_object('photo_id',t.photo_id,'transfer_version',t.version,
+    'bucket',r.bucket,'object_key',r.object_key,'object_id',r.object_id,'object_version',r.object_version);
+end;
+$private_view$;
+create function public.admin_private_photo_target_for_session(
+  p_photo uuid,p_transfer_version uuid,p_actor uuid,p_session uuid
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+  select private.admin_private_photo_target_for_session(p_photo,p_transfer_version,p_actor,p_session)
+$wrap$;
+revoke all on function private.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid),
+  public.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid)
+  from public,anon,authenticated,service_role;
+grant execute on function private.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid),
+  public.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid) to service_role;
