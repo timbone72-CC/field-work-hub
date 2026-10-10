@@ -90,12 +90,15 @@ const PrivateReview = (() => {
           const signed = await viewer({ photo_id: item.photo_id, transfer_version: item.transfer_version }, token);
           if (!active(gen,wo,token)) return;
           if (signed.photo_id !== item.photo_id || signed.transfer_version !== item.transfer_version
-            || !Number.isInteger(signed.expires_in) || signed.expires_in > 300
+            || !Number.isInteger(signed.expires_in) || signed.expires_in < 1 || signed.expires_in > 300
             || typeof signed.url !== 'string') throw new Error('Untrusted preview response.');
+          const expected = [currentUser?.app_metadata?.organization_id, wo, item.run_id, item.photo_id + '.jpg'];
+          if (expected.some(part => typeof part !== 'string' || !part)) throw new Error('Photo identity is unavailable.');
+          const expectedPath = '/storage/v1/object/sign/fwh-review-private/' + expected.map(encodeURIComponent).join('/');
           const url = new URL(signed.url);
           if (url.protocol !== 'https:' || url.origin !== SUPABASE_URL
-            || !url.pathname.startsWith('/storage/v1/object/sign/fwh-review-private/')
-            || !url.searchParams.has('token')) throw new Error('Untrusted private preview URL.');
+            || url.pathname !== expectedPath || url.searchParams.size !== 1
+            || !url.searchParams.get('token')) throw new Error('Untrusted private preview URL.');
           const img = document.createElement('img'); img.alt = 'Privately verified work photo';
           img.referrerPolicy = 'no-referrer'; img.loading = 'eager';
           img.addEventListener('load', () => {
