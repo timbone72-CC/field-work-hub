@@ -37,6 +37,15 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
       if (url.pathname === '/rest/v1/photo_templates') return reply([]);
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
+      if (url.pathname.endsWith('/admin_list_private_review_photos')) {
+        const args = req.postDataJSON();
+        assert.equal(args.p_limit, 25);
+        return reply({ work_order_id: args.p_work_order,
+          photos: [{ photo_id: uuid(9901), transfer_version: uuid(9902), run_id: uuid(9903),
+            requirement_item_id: null, captured_at: '2026-10-01T12:00:00Z',
+            verified_at: '2026-10-01T12:02:00Z', decision: 'PENDING',
+            decision_revision: null, reason: null }], next_photo: null });
+      }
       if (url.pathname.endsWith('/admin_get_contractor_seat_summary')) return reply([{ available_seats: 0, used_seats: 2, seat_limit: 2, pending_invitations: 0 }]);
       if (url.pathname.endsWith('/admin_list_pending_contractor_invitations')) return reply([]);
       if (url.pathname.endsWith('/admin_update_work_order_v4')) {
@@ -129,6 +138,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     failDetail = false; await page.locator('#job-reload').click(); await wait(page, () => document.querySelector('#job-reload').hidden);
     await page.screenshot({ path: path.join(output, 'workspace-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-job-tab="photos"]').click();
+    await wait(page, () => document.querySelectorAll('.private-review-photo').length === 1);
+    assert.equal(await page.locator('#private-review-list strong').innerText(), 'Photo 00000000 · PENDING');
+    assert.equal(await page.locator('.private-review-photo').getByRole('button', { name: 'Approve' }).isDisabled(), true,
+      'An Admin must actually preview a verified image before approving it');
+    assert.equal(await page.locator('#save-edit').isVisible(), false, 'Photo decisions must not look like ordinary WO save');
     await page.locator('[data-job-tab="requirements"]').click();
     assert.equal(await page.locator('dialog').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Mobile workspace must not require sideways scrolling');
     await page.screenshot({ path: path.join(output, 'workspace-mobile.png'), fullPage: true });
