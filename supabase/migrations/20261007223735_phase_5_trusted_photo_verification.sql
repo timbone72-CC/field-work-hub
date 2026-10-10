@@ -689,7 +689,7 @@ begin
   select count(*) into selected_count from private.client_package_photos where package_id=k.id;
   if selected_count>5000 then raise exception 'Package selection too large' using errcode='22023';end if;
   for p in
-    select s.ordinal,s.photo_id,t.run_id,t.version,r.observed_sha256,
+    select s.ordinal,s.photo_id,t.run_id,t.version,r.observed_sha256,r.observed_size,
       ph.requirement_item_id,coalesce(dec.decision,'PENDING') as decision
     from private.client_package_photos s
     join private.photo_transfers t on t.photo_id=s.photo_id
@@ -708,7 +708,7 @@ begin
     n:=n+1;
     v_photos:=v_photos||jsonb_build_array(jsonb_build_object('ordinal',p.ordinal,
       'photo_id',p.photo_id,'run_id',p.run_id,'transfer_version',p.version,
-      'observed_sha256',p.observed_sha256,'item_id',p.requirement_item_id,
+      'observed_sha256',p.observed_sha256,'observed_size',p.observed_size,'item_id',p.requirement_item_id,
       'review_decision',p.decision));
   end loop;
   if n<>selected_count then
