@@ -933,6 +933,10 @@ begin
   h:=encode(sha256(convert_to(m::text,'UTF8')),'hex');
   if h<>p_manifest_sha256 then
     raise exception 'Preview out of date; review new manifest' using errcode='40001';end if;
+  if not exists(select 1 from private.client_package_previews v
+    where v.package_id=k.id and v.actor_user_id=auth.uid()
+      and v.revision=k.revision and v.manifest_sha256=h) then
+    raise exception 'Open exact package preview before approval' using errcode='42501';end if;
   update private.client_packages set approved_manifest=m,approved_sha256=h,
     approved_at=clock_timestamp(),approved_by=auth.uid(),
     destination_id=(m->>'destination_id')::uuid,status='APPROVED',revision=gen_random_uuid()
