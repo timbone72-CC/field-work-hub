@@ -870,13 +870,22 @@ revoke all on function private.admin_save_package_draft(uuid,uuid,uuid,text,uuid
 grant execute on function private.admin_save_package_draft(uuid,uuid,uuid,text,uuid[]),
   public.admin_save_package_draft(uuid,uuid,uuid,text,uuid[]) to authenticated,service_role;
 
--- Preview records its exact actor/revision/hash without approving or sending.
+-- Private audited exact-preview evidence, no delivery side effect.
 create table private.client_package_previews (
  id uuid primary key default gen_random_uuid(),
  package_id uuid not null references private.client_packages(id) on delete restrict,
  actor_user_id uuid not null references auth.users(id) on delete restrict,
  revision uuid not null,
- manifest_sha256 text not null check(manifest_sha256 ~ '^[a-f0-9]{64}
+ manifest_sha256 text not null check(manifest_sha256 ~ '^[a-f0-9]{64}$'),
+ created_at timestamptz not null default clock_timestamp()
+);
+create index client_package_previews_exact on private.client_package_previews
+ (package_id,actor_user_id,revision,manifest_sha256);
+alter table private.client_package_previews enable row level security;
+revoke all on private.client_package_previews from public,anon,authenticated,service_role;
+grant select on private.client_package_previews to service_role;
+create trigger client_package_previews_immutable before update or delete on private.client_package_previews
+ for each row execute function private.protect_photo_transfer_ledger();
 create function private.admin_preview_package(
   p_wo uuid,p_package uuid,p_expected_revision uuid
 ) returns jsonb language plpgsql security definer set search_path='' as $preview$
@@ -934,150 +943,9 @@ begin
   if h<>p_manifest_sha256 then
     raise exception 'Preview out of date; review new manifest' using errcode='40001';end if;
   if not exists(select 1 from private.client_package_previews v
-    where v.package_id=k.id and v.actor_user_id=auth.uid()
-      and v.revision=k.revision and v.manifest_sha256=h) then
+    where v.package_id=k.id and v.actor_user_id=auth.uid() and v.revision=k.revision
+      and v.manifest_sha256=h) then
     raise exception 'Open exact package preview before approval' using errcode='42501';end if;
-  update private.client_packages set approved_manifest=m,approved_sha256=h,
-    approved_at=clock_timestamp(),approved_by=auth.uid(),
-    destination_id=(m->>'destination_id')::uuid,status='APPROVED',revision=gen_random_uuid()
-    where id=k.id returning * into k;
-  result:=jsonb_build_object('package_id',k.id,'revision',k.revision,
-    'status',k.status,'manifest_sha256',h);
-  insert into private.client_package_actions(action_id,package_id,actor_user_id,action_kind,
-    request_fingerprint,result) values(p_action,k.id,auth.uid(),'APPROVE',fingerprint,result);
-  return result;
-end;
-$approval$;
-create function public.admin_approve_package(
-  p_action uuid,p_wo uuid,p_package uuid,p_expected_revision uuid,p_manifest_sha256 text
-) returns jsonb language sql security invoker set search_path='' as $wrap$
-  select private.admin_approve_package(p_action,p_wo,p_package,p_expected_revision,p_manifest_sha256)
-$wrap$;
-revoke all on function private.admin_approve_package(uuid,uuid,uuid,uuid,text),
-  public.admin_approve_package(uuid,uuid,uuid,uuid,text) from public,anon,authenticated;
-grant execute on function private.admin_approve_package(uuid,uuid,uuid,uuid,text),
-  public.admin_approve_package(uuid,uuid,uuid,uuid,text) to authenticated,service_role;
-
--- Only an explicit Send with the latest approved revision queues one outbox
--- attempt. A missing verified provider worker leaves Send DENIED (not "Sent").
-create function private.admin_queue_package(
-  p_action uuid,p_wo uuid,p_package uuid,p_expected_revision uuid,p_manifest_sha256 text
-) returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $send$
-declare k private.client_packages%rowtype; prior private.client_package_actions%rowtype;
-  fingerprint text; m jsonb; result jsonb; verified boolean;
-begin
-  if p_action is null or p_wo is null or p_package is null or p_expected_revision is null
-    or p_manifest_sha256 is null or p_manifest_sha256 !~ '^[a-f0-9]{64}$' then
-    raise exception 'Explicit approved package Send identity required' using errcode='22023';end if;
-  fingerprint:=encode(sha256(convert_to(jsonb_build_array(p_wo,p_package,
-    p_expected_revision,p_manifest_sha256)::text,'UTF8')),'hex');
-  perform private.lock_account_lifecycle();
-  if not private.current_identity_valid() or not private.can_work_order(p_wo) then
-    raise exception 'Current scoped office Send authority required' using errcode='42501';end if;
-  select * into prior from private.client_package_actions where action_id=p_action;
-  if prior.action_id is not null then
-    if prior.actor_user_id is distinct from auth.uid() or prior.action_kind<>'SEND'
-      or prior.request_fingerprint<>fingerprint then
-      raise exception 'Changed Send action UUID' using errcode='22023';end if;
-    return prior.result;
-  end if;
-  select * into k from private.client_packages where id=p_package and work_order_id=p_wo for update;
-  if k.id is null or k.status<>'APPROVED' or k.revision is distinct from p_expected_revision
-    or k.approved_sha256 is distinct from p_manifest_sha256 then
-    raise exception 'Approved package or revision changed; no Send' using errcode='40001';end if;
-  if not exists(select 1 from private.client_delivery_runtime rt
-      where rt.organization_id=k.organization_id and rt.worker_ready) then
-    raise exception 'Verified trusted provider worker not enabled; no Send queued' using errcode='42501';end if;
-  m:=private.client_package_manifest(k.id);
-  if m is distinct from k.approved_manifest
-    or encode(sha256(convert_to(m::text,'UTF8')),'hex')<>k.approved_sha256 then
-    raise exception 'Approved manifest changed; no Send queued' using errcode='40001';end if;
-  if exists(select 1 from private.client_delivery_outbox where package_id=k.id) then
-    raise exception 'Delivery already requested; inspect prior attempt' using errcode='40001';end if;
-  update private.client_packages set status='QUEUED',revision=gen_random_uuid()
-    where id=k.id returning * into k;
-  result:=jsonb_build_object('package_id',k.id,'status','QUEUED','revision',k.revision,
-    'manifest_sha256',k.approved_sha256);
-  insert into private.client_package_actions(action_id,package_id,actor_user_id,action_kind,
-    request_fingerprint,result) values(p_action,k.id,auth.uid(),'SEND',fingerprint,result);
-  insert into private.client_delivery_outbox(package_id,action_id,approved_sha256,destination_id)
-    values(k.id,p_action,k.approved_sha256,k.destination_id);
-  return result;
-end;
-$send$;
-create function public.admin_queue_package(
-  p_action uuid,p_wo uuid,p_package uuid,p_expected_revision uuid,p_manifest_sha256 text
-) returns jsonb language sql security invoker set search_path='' as $wrap$
-  select private.admin_queue_package(p_action,p_wo,p_package,p_expected_revision,p_manifest_sha256)
-$wrap$;
-revoke all on function private.admin_queue_package(uuid,uuid,uuid,uuid,text),
-  public.admin_queue_package(uuid,uuid,uuid,uuid,text) from public,anon,authenticated;
-grant execute on function private.admin_queue_package(uuid,uuid,uuid,uuid,text),
-  public.admin_queue_package(uuid,uuid,uuid,uuid,text) to authenticated,service_role;
-),
- created_at timestamptz not null default clock_timestamp()
-);
-create index client_package_previews_exact on private.client_package_previews
- (package_id,actor_user_id,revision,manifest_sha256);
-alter table private.client_package_previews enable row level security;
-revoke all on private.client_package_previews from public,anon,authenticated,service_role;
-grant select on private.client_package_previews to service_role;
-create trigger client_package_previews_immutable before update or delete on private.client_package_previews
- for each row execute function private.protect_photo_transfer_ledger();
-create function private.admin_preview_package(
-  p_wo uuid,p_package uuid,p_expected_revision uuid
-) returns jsonb language plpgsql security definer set search_path='' as $preview$
-declare k private.client_packages%rowtype; m jsonb;
-begin
-  if p_wo is null or p_package is null or p_expected_revision is null
-    or not private.current_identity_valid() or not private.can_work_order(p_wo) then
-    raise exception 'Current scoped office authority required' using errcode='42501';end if;
-  select * into k from private.client_packages where id=p_package and work_order_id=p_wo;
-  if k.id is null or k.revision is distinct from p_expected_revision or k.status<>'DRAFT' then
-    raise exception 'Package changed; reload before preview' using errcode='40001';end if;
-  m:=private.client_package_manifest(k.id);
-  return jsonb_build_object('package_id',k.id,'revision',k.revision,
-    'manifest_sha256',encode(sha256(convert_to(m::text,'UTF8')),'hex'),'manifest',m);
-end;
-$preview$;
-create function public.admin_preview_package(
-  p_wo uuid,p_package uuid,p_expected_revision uuid
-) returns jsonb language sql security invoker set search_path='' as $wrap$
-  select private.admin_preview_package(p_wo,p_package,p_expected_revision)
-$wrap$;
-revoke all on function private.admin_preview_package(uuid,uuid,uuid),
-  public.admin_preview_package(uuid,uuid,uuid) from public,anon,authenticated;
-grant execute on function private.admin_preview_package(uuid,uuid,uuid),
-  public.admin_preview_package(uuid,uuid,uuid) to authenticated,service_role;
-
-create function private.admin_approve_package(
-  p_action uuid,p_wo uuid,p_package uuid,p_expected_revision uuid,p_manifest_sha256 text
-) returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $approval$
-declare k private.client_packages%rowtype; prior private.client_package_actions%rowtype;
-  m jsonb; h text; fingerprint text; result jsonb;
-begin
-  if p_action is null or p_wo is null or p_package is null or p_expected_revision is null
-    or p_manifest_sha256 is null or p_manifest_sha256 !~ '^[a-f0-9]{64}$' then
-    raise exception 'Exact preview hash and approval action required' using errcode='22023';end if;
-  fingerprint:=encode(sha256(convert_to(jsonb_build_array(p_wo,p_package,
-    p_expected_revision,p_manifest_sha256)::text,'UTF8')),'hex');
-  perform private.lock_account_lifecycle();
-  if not private.current_identity_valid() or not private.can_work_order(p_wo) then
-    raise exception 'Current scoped office approval required' using errcode='42501';end if;
-  select * into prior from private.client_package_actions where action_id=p_action;
-  if prior.action_id is not null then
-    if prior.actor_user_id is distinct from auth.uid() or prior.action_kind<>'APPROVE'
-      or prior.request_fingerprint<>fingerprint then
-      raise exception 'Changed package approval action UUID' using errcode='22023';end if;
-    return prior.result;
-  end if;
-  select * into k from private.client_packages where id=p_package and work_order_id=p_wo for update;
-  if k.id is null or k.status<>'DRAFT' or k.revision is distinct from p_expected_revision then
-    raise exception 'Package changed; reload preview and approve' using errcode='40001';end if;
-  m:=private.client_package_manifest(k.id);
-  h:=encode(sha256(convert_to(m::text,'UTF8')),'hex');
-  if h<>p_manifest_sha256 then
-    raise exception 'Preview out of date; review new manifest' using errcode='40001';end if;
   update private.client_packages set approved_manifest=m,approved_sha256=h,
     approved_at=clock_timestamp(),approved_by=auth.uid(),
     destination_id=(m->>'destination_id')::uuid,status='APPROVED',revision=gen_random_uuid()
