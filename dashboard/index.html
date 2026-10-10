@@ -111,6 +111,7 @@
             <button type="button" data-job-tab="details" aria-pressed="true" aria-controls="job-details">Details</button>
             <button type="button" data-job-tab="assignment" aria-pressed="false" aria-controls="job-assignment">Assignment</button>
             <button type="button" data-job-tab="requirements" aria-pressed="false" aria-controls="job-requirements">Photo requirements</button>
+            <button type="button" data-job-tab="photos" aria-pressed="false" aria-controls="job-photos">Photos</button>
           </nav>
         </header>
         <div id="job-unsaved" class="unsaved-choice" hidden role="region" aria-label="Unsaved changes">
@@ -164,6 +165,13 @@
           <section id="job-requirements" data-job-panel="requirements" hidden>
           <div id="edit-photo-requirements"></div>
           </section>
+          <section id="job-photos" data-job-panel="photos" hidden>
+            <h3>Private photo review</h3>
+            <p class="muted">Only privately verified photos are reviewable. Approving a photo does not approve a client package or send anything.</p>
+            <p id="private-review-status" class="status" aria-live="polite" role="status"></p>
+            <div id="private-review-list"></div>
+            <button id="private-review-more" type="button" class="secondary" hidden>Load more verified photos</button>
+          </section>
 
           <div class="row gap edit-actions">
             <button id="save-edit" type="submit">Save Changes</button>
@@ -193,6 +201,7 @@
     </section>
   </main>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
+  <script src="private-review.js?v=phase5c-20261010-1" defer></script>
   <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
   <script src="app.js?v=job-workspace-20261007-1" defer></script>
   <script src="session.js?v=admin-auto-refresh-20260930-1" defer></script>
