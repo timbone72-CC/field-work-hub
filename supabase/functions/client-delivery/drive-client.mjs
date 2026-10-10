@@ -92,7 +92,7 @@ export function createDriveClient({accessToken,fetcher=fetch}){
       return {id:f.id,drive_id:f.driveId??null,can_add_children:true};
     },
     async generateIds(count){
-      if(!Number.isInteger(count)||count<1||count>200)throw new DriveUncertain('BOUNDED_ID_REQUEST_REQUIRED');
+      if(!Number.isInteger(count)||count<1||count>250)throw new DriveUncertain('BOUNDED_ID_REQUEST_REQUIRED');
       const url=new URL('/drive/v3/files/generateIds',DRIVE_ORIGIN);
       url.searchParams.set('count',String(count));url.searchParams.set('space','drive');
       const resp=handleHttp(await request(url),[200]);
