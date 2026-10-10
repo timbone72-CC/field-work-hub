@@ -112,7 +112,19 @@ export function createPrivateSourceChunkReader({
         ||Number(match[3])!==current.size)unavailable();
       const length=response.headers.get('Content-Length');
       if(length!==null&&length!==String(count))unavailable();
-      return await bounded(response,count);
+      const bytes=await bounded(response,count);
+      // Check the lease and catalog receipt AGAIN after the network read,
+      // before any of these bytes can be sent to a client destination.
+      // A revoked worker or replaced private object must not race the GET.
+      const afterward=await ledger.getFilePlan(plan.plan_id);
+      exactPlan(current,afterward);
+      if(exactPhotoSource(afterward)!==key
+        ||afterward.source.object_id!==current.source.object_id
+        ||afterward.source.object_version!==current.source.object_version
+        ||afterward.source.owner_id!==current.source.owner_id
+        ||afterward.source.transfer_version!==current.source.transfer_version)
+        unavailable();
+      return bytes;
     }catch{
       unavailable();
     }finally{
