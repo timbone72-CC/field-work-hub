@@ -153,3 +153,10 @@ test('destination verification requires a real accessible folder, correct drive 
   assert.deepEqual(await client.verifyDestination({folderId:parent,expectedDriveId:driveId}),
     {id:parent,drive_id:driveId,can_add_children:true});
 });
+test('ambiguous transport failure never authorizes blind remote create or replacement ID',async()=>{
+  const {client,calls}=fixture(()=>{throw new Error('provider network lost after create');});
+  await expectCode(()=>client.createPreallocatedFolder({...metadata,
+    mime:'application/vnd.google-apps.folder',name:'DISPOSABLE FOLDER'}),'PROVIDER_OUTCOME_UNCERTAIN');
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].options.redirect,'error');
+});
