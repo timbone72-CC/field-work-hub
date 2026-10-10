@@ -3,13 +3,17 @@ begin;
 create function pg_temp.review_fixture_photo(p_admin uuid,p_org uuid,p_team uuid,p_actor uuid)
 returns uuid language plpgsql as $fixture$
 declare wo uuid; run uuid; instance uuid; rev uuid; set_id uuid:=gen_random_uuid(); photo uuid:=gen_random_uuid();
-  cfg jsonb; photos jsonb; digest text; result jsonb;
+  cfg jsonb; photos jsonb; digest text; result jsonb; company uuid:=gen_random_uuid(); client_revision uuid;
 begin
   cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
   perform set_config('request.jwt.claims',jsonb_build_object('sub',p_admin,'session_id',p_admin,
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',p_org))::text,true);
   select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,'REVIEW-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
   update public.work_orders set responsible_team_id=p_team where id=wo;
+  insert into private.client_companies(id,organization_id,name)
+    values(company,p_org,'FIXTURE REVIEW CLIENT '||company::text);
+  select review_policy_revision into client_revision from public.work_orders where id=wo;
+  perform public.admin_assign_client_company(gen_random_uuid(),wo,company,client_revision);
   select current_run_id into run from public.work_orders where id=wo;
   select id into instance from public.work_order_assignments where run_id=run and assignment_ended_at is null;
   select (requirement_snapshot->>'revision')::uuid into rev from public.work_order_runs where id=run;
@@ -46,6 +50,8 @@ declare
   other_admin uuid:=gen_random_uuid(); contractor uuid:=gen_random_uuid();
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
+  pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
+  package_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
   t private.photo_transfers%rowtype; denied boolean;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
@@ -110,6 +116,59 @@ begin
   response:=public.admin_review_photo(action,wo,photo,t.version,null,'APPROVED','');
   replay:=public.admin_review_photo(action,wo,photo,t.version,null,'APPROVED','');
   if response<>replay or response->>'decision'<>'APPROVED' then raise exception 'Review replay changed evidence';end if;
+
+  -- Controlled-only provider declaration; NO real Drive, real photos or live Send.
+  execute 'reset role';
+  select client_company_id into company from public.work_orders where id=wo;
+  insert into private.client_delivery_destinations(organization_id,company_id,provider,
+    provider_identity,root_folder_id,verified,verified_at,verification_receipt,active)
+  values(org,company,'GOOGLE_DRIVE','sandbox@example.invalid','DISPOSABLE-ONLY',
+    true,now(),jsonb_build_object('synthetic_test',true),true);
+  insert into private.client_delivery_runtime(organization_id,worker_ready) values(org,false);
+  execute 'set local role authenticated';
+  pkg_draft:=public.admin_save_package_draft(gen_random_uuid(),wo,null,'Synthetic client description',array[photo]);
+  package_id:=(pkg_draft->>'id')::uuid;
+  if pkg_draft->>'status'<>'DRAFT' then raise exception 'Draft save did not remain unsent';end if;
+  pkg_preview:=public.admin_preview_package(wo,package_id,(pkg_draft->>'revision')::uuid);
+  if pkg_preview->'manifest'->>'client_wo_number' is null
+    or jsonb_array_length(pkg_preview->'manifest'->'selected_photos')<>1 then
+    raise exception 'Exact preview missed WO, selected receipt or content';end if;
+  perform pg_temp.expect_photo_review_error('22023',format(
+    'select public.admin_approve_package(%L,%L,%L,%L,%L)',
+    gen_random_uuid(),wo,package_id,pkg_draft->>'revision',repeat('0',64)));
+  pkg_approval:=public.admin_approve_package(gen_random_uuid(),wo,package_id,
+    (pkg_draft->>'revision')::uuid,pkg_preview->>'manifest_sha256');
+  if pkg_approval->>'status'<>'APPROVED' then raise exception 'Preview approval not persisted';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_queue_package(%L,%L,%L,%L,%L)',
+    send_action,wo,package_id,pkg_approval->>'revision',pkg_preview->>'manifest_sha256'));
+  pkg_state:=public.admin_package_state(wo);
+  if pkg_state->'package'->>'can_send' is distinct from 'false' or
+    exists(select 1 from private.client_delivery_outbox where package_id=package_id) then
+    raise exception 'Unavailable worker incorrectly queued delivery';end if;
+  execute 'reset role';
+  update private.client_delivery_runtime set worker_ready=true,worker_identity='synthetic-ci-only',
+    last_verified_at=now() where organization_id=org;
+  execute 'set local role authenticated';
+  pkg_state:=public.admin_package_state(wo);
+  if pkg_state->'package'->>'can_send'<>'true' then
+    raise exception 'Verified synthetic worker readiness not reflected';end if;
+  pkg_send:=public.admin_queue_package(send_action,wo,package_id,
+    (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256');
+  if pkg_send->>'status'<>'QUEUED' then raise exception 'Explicit Send did not queue';end if;
+  if pkg_send is distinct from public.admin_queue_package(send_action,wo,package_id,
+      (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256') then
+    raise exception 'Duplicate Send was not idempotent';end if;
+  perform pg_temp.expect_photo_review_error('22023',format(
+    'select public.admin_queue_package(%L,%L,%L,%L,%L)',
+    send_action,wo,package_id,pkg_approval->>'revision',repeat('0',64)));
+  execute 'reset role';
+  if (select count(*) from private.client_delivery_outbox where package_id=package_id)<>1
+    or (select status from private.client_packages where id=package_id)<>'QUEUED'
+    or (select count(*) from private.client_package_actions where package_id=package_id
+        and action_kind='SEND')<>1 then
+    raise exception 'Send created duplicates or alleged delivered receipt';end if;
+  execute 'set local role authenticated';
   expected_revision:=(response->>'decision_revision')::uuid;
   perform pg_temp.expect_photo_review_error('22023',format(
     'select public.admin_review_photo(%L,%L,%L,%L,null,%L,%L)',
