@@ -15,13 +15,14 @@
 | Backend | `worker-runtime.mjs` + `worker-core.mjs` | Refresh before claim; verify account/destination; reserve all file identities without writing | A deployed runnable worker |
 | Backend | `upload-one.mjs` | One 256-KiB protected chunk per call; encrypted session saved before bytes; independent offset/GET verification | Hosted protected source-byte implementation |
 | Backend | `service-ledger.mjs` | Fixed Supabase service-only RPC allowlist; fail-closed ambiguous results | End-to-end production worker authorization |
+| Backend | `handler.mjs` + `index.ts` | Dedicated worker-secret-only **preallocation** route; default OFF regardless of valid caller; no CORS; errors redacted | Authorized deployed worker, real uploads, scheduler, released customer destination |
 
 ## Hard-stop provider gates
 
 1. Verify that the *backend* can legally authorize exactly the recorded Workspace provider identity (not a personal ChatGPT Drive connector). Obtain an approved OAuth flow/refresh token or tightly constrained delegated identity **outside the public repo**. Record provider identity, intended scope and revocation procedure.
 2. Configure the client-company-specific destination and prove folder ID, shared Drive ID and `canAddChildren` **using the actual backend OAuth token**. The internal Workspace Shared Drive is company holding; it is **not** the configured client destination and must never become shared with a client by mistake.
 3. Provision server-only credentials and the **32-byte AES-GCM key** via hosted secrets/Vault; no literal value in GitHub, dashboard, Android, SQL journal or test logs. Distinguish an inaccessible encrypted session from a known-safe nonexistent upload; **never allocate replacement remote IDs automatically**.
-4. Build the trusted private-source chunk reader against the exact Supabase catalog receipt and add a server-only worker entrypoint that validates a dedicated backend invocation secret; prevent direct user/publishable-key invocations.
+4. Implement the trusted private-source chunk reader against the exact Supabase catalog receipt and deploy the existing **default-off**, dedicated-secret-only preallocation entry only after operator provider gates. An entrypoint exists in source; it does not yet transfer, verify or Send real Google files, and must not be mistaken for a complete ClientDeliveryWorker. No ordinary JWT/publishable key can invoke it.
 5. Prove on a disposable client TEST destination: partial chunk, app restart/reconnect, provider offset probe, exact Drive file GET including SHA-256/size/parent, missing/foreign folder, wrong user, conflicting ID, and manifest verification. `DELIVERED` needs all exact files and the submission manifest; a 308 or 200 upload alone isn't enough.
 6. Only **after** the above: configure `pg_cron` + `pg_net` with a Vault-held secret, confirm pause/off behavior, validate failed/UNCERTAIN reconciliation and operator recovery. Enable `worker_ready` only after a recorded signed-off provider gate and staged deployment.
 
