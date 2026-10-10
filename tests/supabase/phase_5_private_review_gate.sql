@@ -208,6 +208,12 @@ begin
     where package_id=pkg_id and kind='PHOTO' and photo_id=photo;
   perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);
   perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);
+  if public.service_read_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan)->'encrypted'
+      is distinct from encrypted_session then
+    raise exception 'Private session cannot be recovered by the fenced worker';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_read_upload_session(%L,%L,%s,%L)',
+    pkg_id,gen_random_uuid(),delivery_gen,upload_plan));
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_store_upload_session(%L,%L,%s,%L,%L::jsonb)',
     pkg_id,delivery_worker,delivery_gen,upload_plan,
@@ -253,7 +259,8 @@ begin
   execute 'reset role';
   if has_function_privilege('authenticated','public.service_claim_delivery(uuid)','execute')
     or has_function_privilege('anon','public.service_finish_delivery(uuid,uuid,bigint)','execute')
-    or has_table_privilege('authenticated','private.client_delivery_final_receipts','select') then
+    or has_table_privilege('authenticated','private.client_delivery_final_receipts','select')
+    or has_function_privilege('authenticated','public.service_read_upload_session(uuid,uuid,bigint,uuid)','execute') then
     raise exception 'Client could read or claim trusted delivery evidence';end if;
   execute 'set local role authenticated';
   expected_revision:=(response->>'decision_revision')::uuid;
