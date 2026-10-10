@@ -277,3 +277,15 @@ button:focus-visible, summary:focus-visible { outline: 3px solid #3a82c0; outlin
   .private-review-photo .workspace-navigation { display: grid; grid-template-columns: 1fr; }
   .private-review-photo .workspace-navigation button { width: 100%; }
 }
+
+/* One workspace: long manifest IDs never stretch the mobile dialog. */
+.release-preview { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 300px; overflow-y: auto; padding: 12px; border: 1px solid #d8dbe0;
+  border-radius: 8px; font-size: .8rem; background: #f6f8fb; }
+#job-delivery .check { display: flex; gap: 10px; align-items: center; }
+#release-photo-list { max-height: 280px; overflow: auto; display: grid; gap: 6px; }
+#job-delivery .workspace-navigation button { flex: 0 1 auto; }
+@media (max-width: 620px) {
+  #job-delivery .workspace-navigation button { width: 100%; }
+  .release-preview { max-height: 220px; }
+}
