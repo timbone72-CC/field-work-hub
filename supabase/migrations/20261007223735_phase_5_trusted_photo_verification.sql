@@ -528,3 +528,60 @@ revoke all on function private.admin_set_review_required(uuid,uuid,uuid,boolean,
   public.admin_set_review_required(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
 grant execute on function private.admin_set_review_required(uuid,uuid,uuid,boolean,text),
   public.admin_set_review_required(uuid,uuid,uuid,boolean,text) to authenticated,service_role;
+
+-- A scoped job is the only route to client choices. Destination IDs and OAuth
+-- identity never leave the trusted service.
+create function private.admin_client_choices(p_wo uuid)
+returns jsonb language plpgsql stable security definer set search_path='' as $choices$
+declare w public.work_orders%rowtype; choices jsonb;
+begin
+  if p_wo is null or not private.current_identity_valid() or not private.can_work_order(p_wo) then
+    raise exception 'Scoped office job required' using errcode='42501';end if;
+  select * into w from public.work_orders where id=p_wo;
+  select coalesce(jsonb_agg(jsonb_build_object('id',id,'name',name) order by name,id),'[]'::jsonb)
+    into choices from private.client_companies
+    where organization_id=w.organization_id and active;
+  return jsonb_build_object('work_order_id',w.id,'client_company_id',w.client_company_id,
+    'review_required',w.review_required,'revision',w.review_policy_revision,'companies',choices);
+end;
+$choices$;
+create function public.admin_client_choices(p_wo uuid)
+returns jsonb language sql security invoker set search_path='' as $wrap$
+  select private.admin_client_choices(p_wo)
+$wrap$;
+revoke all on function private.admin_client_choices(uuid),public.admin_client_choices(uuid)
+  from public,anon,authenticated;
+grant execute on function private.admin_client_choices(uuid),public.admin_client_choices(uuid)
+  to authenticated,service_role;
+
+-- No automatic company guessing from HNP/WO labels; explicit name creation
+-- cannot grant a provider destination or permission to Send.
+create function private.admin_create_client_company(p_wo uuid,p_name text)
+returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $newcompany$
+declare w public.work_orders%rowtype; c private.client_companies%rowtype; label text:=btrim(coalesce(p_name,''));
+begin
+  if p_wo is null or char_length(label) not between 1 and 160 or label ~ '[[:cntrl:]]' then
+    raise exception 'Valid explicit client name required' using errcode='22023';end if;
+  perform private.lock_account_lifecycle();
+  if not private.current_identity_valid() or not private.can_work_order(p_wo) then
+    raise exception 'Scoped office authority required' using errcode='42501';end if;
+  select * into w from public.work_orders where id=p_wo;
+  perform pg_advisory_xact_lock(hashtextextended('fwh.client.'||w.organization_id||lower(label),0));
+  select * into c from private.client_companies
+    where organization_id=w.organization_id and lower(name)=lower(label);
+  if not found then
+    insert into private.client_companies(organization_id,name)
+      values(w.organization_id,label) returning * into c;
+  end if;
+  if not c.active then raise exception 'Inactive client cannot be reactivated here' using errcode='42501';end if;
+  return jsonb_build_object('id',c.id,'name',c.name);
+end;
+$newcompany$;
+create function public.admin_create_client_company(p_wo uuid,p_name text)
+returns jsonb language sql security invoker set search_path='' as $wrap$
+  select private.admin_create_client_company(p_wo,p_name)
+$wrap$;
+revoke all on function private.admin_create_client_company(uuid,text),
+  public.admin_create_client_company(uuid,text) from public,anon,authenticated;
+grant execute on function private.admin_create_client_company(uuid,text),
+  public.admin_create_client_company(uuid,text) to authenticated,service_role;
