@@ -39,6 +39,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
       if (url.pathname === '/rest/v1/photo_templates') return reply([]);
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
+      if (url.pathname.endsWith('/admin_client_choices')) {
+        const p = req.postDataJSON();
+        return reply({ work_order_id:p.p_wo, client_company_id:null, review_required:true,
+          revision:uuid(9980), companies:[{id:uuid(9981),name:'DISPOSABLE COMPANY'}] });
+      }
+      if (url.pathname.endsWith('/admin_package_state')) {
+        const p = req.postDataJSON();
+        return reply({work_order_id:p.p_wo,available_photos:[],too_many_photos:false,
+          coverage_message:'No verified photos',destination:null,package:null});
+      }
       if (url.pathname.endsWith('/admin_list_private_review_photos')) {
         const args = req.postDataJSON();
         assert.equal(args.p_limit, 25);
@@ -174,6 +184,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('.private-review-photo').getByRole('button', { name: 'Approve' }).click();
     await wait(page, () => document.querySelector('#private-review-list strong')?.textContent.includes('APPROVED'));
     assert.equal(reviewedDecision, 'APPROVED');
+    await page.locator('[data-job-tab="delivery"]').click();
+    await wait(page, () => document.querySelector('#release-status').textContent.includes('No package saved'));
+    assert.equal(await page.locator('#release-send').isDisabled(), true, 'No verified destination or approved package: no Send');
+    assert.equal(await page.locator('#release-approve').isDisabled(), true, 'No draft: no Approve');
+    assert.equal(requests.some(x => x.includes('admin_queue_package')), false, 'Preview/navigation cannot Send');
     await page.locator('[data-job-tab="requirements"]').click();
     assert.equal(await page.locator('dialog').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Mobile workspace must not require sideways scrolling');
     await page.screenshot({ path: path.join(output, 'workspace-mobile.png'), fullPage: true });
