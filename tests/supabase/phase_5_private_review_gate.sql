@@ -45,7 +45,7 @@ declare
   org uuid:=gen_random_uuid(); team uuid:=gen_random_uuid(); admin_id uuid:=gen_random_uuid();
   other_admin uuid:=gen_random_uuid(); contractor uuid:=gen_random_uuid();
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
-  register jsonb; gallery jsonb; response jsonb; replay jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
+  register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   t private.photo_transfers%rowtype; denied boolean;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
@@ -121,6 +121,15 @@ begin
   if response->>'decision'<>'REJECTED' or (select count(*) from private.photo_review_actions where photo_id=photo)<>2
     or (select reason from private.photo_review_decisions where photo_id=photo)<>'Missing side' then
     raise exception 'Review revision, reason or immutable audit was lost';end if;
+  target:=public.admin_private_photo_target_for_session(photo,t.version,admin_id,admin_id);
+  if target->>'photo_id'<>photo::text or target->>'bucket'<>'fwh-review-private'
+    or target->>'object_key'<>t.object_key then raise exception 'Trusted viewer object identity changed';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_private_photo_target_for_session(%L,%L,%L,%L)',
+    photo,t.version,other_admin,other_admin));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_private_photo_target_for_session(%L,%L,%L,%L)',
+    photo,t.version,admin_id,gen_random_uuid()));
 
   -- Same-organization role alone does not grant a gallery or review capability.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',other_admin,'session_id',other_admin,
@@ -152,6 +161,7 @@ begin
   if has_table_privilege('authenticated','private.photo_review_actions','select')
     or has_table_privilege('authenticated','private.photo_review_decisions','update')
     or has_function_privilege('anon','public.admin_review_photo(uuid,uuid,uuid,uuid,uuid,text,text)','execute')
+    or has_function_privilege('authenticated','public.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid)','execute')
     or (select count(*) from private.photo_transfer_receipts where photo_id=photo)<>1
     or (select count(*) from public.photos where id=photo and sync_status='WAITING')<>1 then
     raise exception 'Review broadened grants or altered protected receipt/field photos';end if;
