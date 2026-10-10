@@ -120,3 +120,36 @@ test('chunked upload is bounded, unaligned ranges rejected, 308 is not receipt',
   await expectCode(()=>client.uploadChunk(url,524288,0,new Uint8Array(10)),'INVALID_UPLOAD_RANGE');
   assert.equal(calls.length,1);
 });
+
+test('configured Workspace identity requires exact OAuth about.get owner',async()=>{
+  const {client,calls}=fixture(url=>{
+    assert.equal(url.pathname,'/drive/v3/about');
+    assert.equal(url.searchParams.get('fields'),'user(emailAddress,permissionId,me)');
+    return json({user:{emailAddress:'office@example.invalid',permissionId:'drive_permission_1',me:true}});
+  });
+  assert.deepEqual(await client.verifyProviderIdentity('office@example.invalid'),
+    {account:'office@example.invalid',permission_id:'drive_permission_1'});
+  await expectCode(()=>client.verifyProviderIdentity('different@example.invalid'),'WORKSPACE_ACCOUNT_MISMATCH');
+  assert.equal(calls.length,2);
+});
+test('destination verification requires a real accessible folder, correct drive and write capability',async()=>{
+  const driveId='drive_'+'d'.repeat(26);
+  const good={id:parent,mimeType:'application/vnd.google-apps.folder',
+    driveId,trashed:false,capabilities:{canAddChildren:true}};
+  for(const failure of [
+    {capabilities:{canAddChildren:false}},
+    {mimeType:'image/jpeg'},{trashed:true},{driveId:'some_other_drive'},
+    {capabilities:undefined}
+  ]){
+    const {client}=fixture(()=>json({...good,...failure}));
+    await expectCode(()=>client.verifyDestination({folderId:parent,expectedDriveId:driveId}),
+      'DESTINATION_NOT_VERIFIED');
+  }
+  const {client}=fixture(url=>{
+    assert.equal(url.searchParams.get('supportsAllDrives'),'true');
+    assert.match(url.searchParams.get('fields'),/capabilities\\(canAddChildren\\)/);
+    return json(good);
+  });
+  assert.deepEqual(await client.verifyDestination({folderId:parent,expectedDriveId:driveId}),
+    {id:parent,drive_id:driveId,can_add_children:true});
+});
