@@ -68,6 +68,7 @@ const ClientRelease = (() => {
       if(!valid(n,id,token))return;
       if(choice.work_order_id!==id || !Array.isArray(choice.companies)) throw Error('Client scope mismatch');
       config=choice;
+      status('review-policy-status',choice.review_required ? 'Individual photo review is required.' : 'Individual photo review is optional; package approval and Send are still required.');
       const options=el('release-company');options.replaceChildren(new Option('Choose company',''));
       for(const company of choice.companies)options.add(new Option(company.name,company.id));
       options.value=choice.client_company_id||'';
@@ -87,7 +88,7 @@ const ClientRelease = (() => {
       status('release-status',pkg ? `Package ${pkg.status}; explicit Send is separate.`
         : 'No package saved. Choose your photos and save a draft.');
       loaded=true;buttons();
-    }catch(error){if(valid(n,id,token)){status('release-status',error.message);loaded=false;buttons();}}
+    }catch(error){if(valid(n,id,token)){status('release-status',error.message);status('review-policy-status',error.message);loaded=false;buttons();}}
   }
   function renderPhotos() {
     const list=el('release-photo-list');list.replaceChildren();
@@ -114,7 +115,8 @@ const ClientRelease = (() => {
         : 'Saved. Refreshing the exact server revision.');
       if(reload)await load(id);
       return result;
-    }catch(error){if(valid(n,id,token))status('release-status',error.message+' Reload current job before retrying.');}
+    }catch(error){if(valid(n,id,token)){status('release-status',error.message+' Reload current job before retrying.');
+      if(kind==='admin_set_review_required')status('review-policy-status',error.message+' No policy change was confirmed.');}}
     finally{if(wo===id && token===accessToken)setBusy(false);}
   }
   async function saveDraft() {
