@@ -31,12 +31,13 @@ test('correct fenced lease identity is supplied for all upload session and deliv
  const {ledger,calls}=mock(()=>Response.json({exists:false}));
  const inner=ledger.forLease(pkg,worker,g);
  assert.equal(await inner.getSession(file),null);
+ await inner.getFilePlan(file);
  await inner.storeSession(pkg,worker,g,file,{version:1,nonce:'none',payload:'encrypted'});
  await inner.recordOffset(pkg,worker,g,file,131072,false);
  await inner.confirmFile({package_id:pkg,kind:'PHOTO',photo_id:uuid(4),mime:'image/jpeg'},
   worker,g,{id:'drive-file-123456',parent:'folder-123456',sha256:'a'.repeat(64),size:100});
  assert.deepEqual(calls.map(c=>new URL(c.url).pathname.split('/').pop()),
-  ['service_read_upload_session','service_store_upload_session',
+  ['service_read_upload_session','service_get_delivery_file_plan','service_store_upload_session',
    'service_record_upload_offset','service_confirm_delivery_file']);
  for(const c of calls){
    assert.equal(JSON.parse(c.options.body).p_package,pkg);
