@@ -264,3 +264,16 @@ button:focus-visible, summary:focus-visible { outline: 3px solid #3a82c0; outlin
   .workspace-tabs button { padding: 10px; font-size: .86rem; }
   .job-table th, .job-table td { padding: 10px; }
 }
+
+/* Phase 5C private review is inside the existing job workspace, not a new page. */
+#private-review-list { display: grid; gap: 12px; }
+.private-review-photo { display: grid; gap: 10px; padding: 14px; border: 1px solid #d8dbe0; border-radius: 10px; }
+.private-review-photo p { margin: 0; }
+.private-review-preview { max-width: 100%; }
+.private-review-preview img { max-width: 100%; max-height: 50vh; object-fit: contain; border-radius: 8px; }
+.private-review-photo .workspace-navigation button { margin: 0; }
+.private-review-photo input { max-width: 550px; }
+@media (max-width: 620px) {
+  .private-review-photo .workspace-navigation { display: grid; grid-template-columns: 1fr; }
+  .private-review-photo .workspace-navigation button { width: 100%; }
+}
