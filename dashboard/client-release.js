@@ -33,7 +33,12 @@ const ClientRelease = (() => {
   }
   function dirty() { return wo && (el('release-notes').value!==savedNotes
     || JSON.stringify([...chosen].sort())!==JSON.stringify(savedPhotoIds.slice().sort())); }
-  function setBusy(yes) { busy=yes; buttons(); }
+  function setBusy(yes) {
+    busy=yes; buttons();
+    // The photo checkboxes are created as elements, not covered by buttons().
+    // A completed save must restore their current permitted state as well.
+    if (loaded) renderPhotos();
+  }
   function buttons() {
     const assigned=!!config?.client_company_id, frozen=pkg && !['DRAFT'].includes(pkg.status);
     el('review-required').disabled=!loaded||busy;
