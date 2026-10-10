@@ -143,10 +143,11 @@ begin
     'select public.admin_queue_package(%L,%L,%L,%L,%L)',
     send_action,wo,pkg_id,pkg_approval->>'revision',pkg_preview->>'manifest_sha256'));
   pkg_state:=public.admin_package_state(wo);
-  if pkg_state->'package'->>'can_send' is distinct from 'false' or
-    exists(select 1 from private.client_delivery_outbox where package_id=pkg_id) then
-    raise exception 'Unavailable worker incorrectly queued delivery';end if;
+  if pkg_state->'package'->>'can_send' is distinct from 'false' then
+    raise exception 'Unavailable worker incorrectly showed Send as ready';end if;
   execute 'reset role';
+  if exists(select 1 from private.client_delivery_outbox where package_id=pkg_id) then
+    raise exception 'Unavailable worker incorrectly queued delivery';end if;
   update private.client_delivery_runtime set worker_ready=true,worker_identity='synthetic-ci-only',
     last_verified_at=now() where organization_id=org;
   execute 'set local role authenticated';
