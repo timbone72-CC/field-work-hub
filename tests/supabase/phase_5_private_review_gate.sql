@@ -54,6 +54,7 @@ declare
   pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
+  upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
   t private.photo_transfers%rowtype; denied boolean;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
@@ -203,6 +204,30 @@ begin
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_reserve_delivery_file(%L,%L,%s,%L,%L,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,'OTHER-GENERATED-ID',folder_id));
+  select id into upload_plan from private.client_delivery_file_plans
+    where package_id=pkg_id and kind='PHOTO' and photo_id=photo;
+  perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);
+  perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_store_upload_session(%L,%L,%s,%L,%L::jsonb)',
+    pkg_id,delivery_worker,delivery_gen,upload_plan,
+    (encrypted_session||jsonb_build_object('payload',repeat('C',160)))::text));
+  perform public.service_record_upload_offset(pkg_id,delivery_worker,delivery_gen,upload_plan,131072,false);
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_record_upload_offset(%L,%L,%s,%L,%s,false)',
+    pkg_id,delivery_worker,delivery_gen,upload_plan,1));
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_record_upload_offset(%L,%L,%s,%L,%s,false)',
+    pkg_id,delivery_worker,delivery_gen,upload_plan,250000));
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_record_upload_offset(%L,%L,%s,%L,%s,false)',
+    pkg_id,gen_random_uuid(),delivery_gen,upload_plan,140000));
+  perform public.service_record_upload_offset(pkg_id,delivery_worker,delivery_gen,upload_plan,250000,true);
+  if (select recorded_offset from private.client_delivery_upload_sessions where file_plan_id=upload_plan)<>250000
+     or (select state from private.client_delivery_upload_sessions where file_plan_id=upload_plan)<>'VERIFYING'
+     or exists(select 1 from private.client_delivery_upload_sessions u
+       where u.file_plan_id=upload_plan and u.ciphertext::text like '%googleapis%') then
+    raise exception 'Encrypted upload recovery or exact provider offset not persisted';end if;
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_confirm_delivery_file(%L,%L,%s,%L,%L,%L,%L,%L,%L,%s)',
     pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,photo_file_id,folder_id,
