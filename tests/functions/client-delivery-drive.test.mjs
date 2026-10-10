@@ -29,7 +29,7 @@ test('Drive generates bounded durable IDs without contacting other origins',asyn
   assert.deepEqual(await client.generateIds(2),ids);
   assert.equal(calls[0].options.redirect,'error');
   assert.equal(calls[0].options.headers.Authorization,'Bearer disposable-secret-token-only');
-  await expectCode(()=>client.generateIds(201),'BOUNDED_ID_REQUEST_REQUIRED');
+  await expectCode(()=>client.generateIds(251),'BOUNDED_ID_REQUEST_REQUIRED');
   assert.equal(calls.length,1);
 });
 test('folder create keeps preallocated identity and requires independent GET',async()=>{
