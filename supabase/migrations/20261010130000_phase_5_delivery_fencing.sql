@@ -176,9 +176,11 @@ begin
  else
    insert into private.client_delivery_file_plans(package_id,kind,photo_id,
      drive_file_id,drive_parent_id,expected_sha256,expected_size,mime_type)
-     values(p_package,p_kind,p_photo,p_file_id,p_parent_id,content_hash,content_size,mime);
+     values(p_package,p_kind,p_photo,p_file_id,p_parent_id,content_hash,content_size,mime)
+     returning * into existing;
  end if;
- return jsonb_build_object('package_id',p_package,'kind',p_kind,'photo_id',p_photo,
+ return jsonb_build_object('file_plan_id',existing.id,
+  'package_id',p_package,'kind',p_kind,'photo_id',p_photo,
   'drive_file_id',p_file_id,'drive_parent_id',p_parent_id,'expected_sha256',content_hash,
   'expected_size',content_size,'mime_type',mime);
 end;
