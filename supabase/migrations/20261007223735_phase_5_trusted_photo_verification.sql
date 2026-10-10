@@ -889,6 +889,8 @@ begin
   if k.id is null or k.revision is distinct from p_expected_revision or k.status<>'DRAFT' then
     raise exception 'Package changed; reload before preview' using errcode='40001';end if;
   m:=private.client_package_manifest(k.id);
+  insert into private.client_package_previews(package_id,actor_user_id,revision,manifest_sha256)
+    values(k.id,auth.uid(),k.revision,encode(sha256(convert_to(m::text,'UTF8')),'hex'));
   return jsonb_build_object('package_id',k.id,'revision',k.revision,
     'manifest_sha256',encode(sha256(convert_to(m::text,'UTF8')),'hex'),'manifest',m);
 end;
