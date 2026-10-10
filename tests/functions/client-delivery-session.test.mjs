@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSessionVault} from '../../supabase/functions/client-delivery/session-vault.mjs';
 const bytes=crypto.getRandomValues(new Uint8Array(32));
-const b64=b=>btoa(String.fromCharCode(...b)).replace(/=+$/,'');
+const b64=b=>btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const id={packageId:'package_'+'a'.repeat(23),fileId:'drive_'+'b'.repeat(25)};
 const url='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=PRIVATE-DISPOSABLE-SESSION';
 test('opaque encrypted session contains no bearer URL and can recover only with exact file identity',async()=>{
