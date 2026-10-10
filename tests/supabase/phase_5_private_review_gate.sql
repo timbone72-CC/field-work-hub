@@ -96,6 +96,11 @@ begin
     raise exception 'Exact private gallery omitted receipt, leaked object URL or fabricated review: %',gallery;end if;
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.admin_list_private_review_photos(%L,10)',wo));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_list_private_review_photos(%L,null)',wo));
+  perform pg_temp.expect_photo_review_error('22023',format(
+    'select public.admin_review_photo(%L,%L,%L,%L,null,null,%L)',
+    gen_random_uuid(),wo,photo,t.version,''));
   perform pg_temp.expect_photo_review_error('22023',format(
     'select public.admin_review_photo(%L,%L,%L,%L,null,%L,%L)',
     gen_random_uuid(),wo,photo,t.version,'REJECTED',''));
