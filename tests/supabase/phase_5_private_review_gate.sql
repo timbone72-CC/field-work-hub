@@ -55,6 +55,7 @@ declare
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
+  trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
@@ -206,7 +207,18 @@ begin
     pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,'OTHER-GENERATED-ID',folder_id));
   select id into upload_plan from private.client_delivery_file_plans
     where package_id=pkg_id and kind='PHOTO' and photo_id=photo;
-  perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);
+  perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);  trusted_plan:=public.service_get_delivery_file_plan(pkg_id,delivery_worker,delivery_gen,upload_plan);
+  if trusted_plan->>'plan_id'<>upload_plan::text
+     or trusted_plan->>'file_id'<>photo_file_id
+     or trusted_plan->>'sha256'<>repeat('a',64)
+     or (trusted_plan->>'size')::bigint<>250000
+     or trusted_plan->'source'->>'object_key'<>t.object_key
+     or trusted_plan->>'parent_id'<>folder_id then
+     raise exception 'Fenced protected source projection differed from immutable receipt';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_get_delivery_file_plan(%L,%L,%s,%L)',
+    pkg_id,gen_random_uuid(),delivery_gen,upload_plan));
+
   perform public.service_store_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan,encrypted_session);
   if public.service_read_upload_session(pkg_id,delivery_worker,delivery_gen,upload_plan)->'encrypted'
       is distinct from encrypted_session then
@@ -260,6 +272,7 @@ begin
   if has_function_privilege('authenticated','public.service_claim_delivery(uuid)','execute')
     or has_function_privilege('anon','public.service_finish_delivery(uuid,uuid,bigint)','execute')
     or has_table_privilege('authenticated','private.client_delivery_final_receipts','select')
+    or has_function_privilege('authenticated','public.service_get_delivery_file_plan(uuid,uuid,bigint,uuid)','execute')
     or has_function_privilege('authenticated','public.service_read_upload_session(uuid,uuid,bigint,uuid)','execute') then
     raise exception 'Client could read or claim trusted delivery evidence';end if;
   execute 'set local role authenticated';
