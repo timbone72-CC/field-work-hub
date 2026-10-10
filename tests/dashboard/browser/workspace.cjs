@@ -9,6 +9,8 @@ const output = process.env.FWH_BROWSER_OUTPUT || '/tmp/fwh-browser-evidence';
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
+let reviewedDecision = 'PENDING', reviewedRevision = null;
+const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
 const rows = Array.from({ length: 1000 }, (_, i) => ({ id: uuid(i + 1), organization_id: organization,
   assigned_user_id: contractor, pending_assignee_user_id: null, reassignment_requested_at: null,
   assignment_received_at: null, wo_number: `DEMO-${String(i + 1).padStart(4, '0')}`,
@@ -41,10 +43,33 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         const args = req.postDataJSON();
         assert.equal(args.p_limit, 25);
         return reply({ work_order_id: args.p_work_order,
-          photos: [{ photo_id: uuid(9901), transfer_version: uuid(9902), run_id: uuid(9903),
+          photos: [{ photo_id: reviewPhoto, transfer_version: reviewVersion, run_id: reviewRun,
             requirement_item_id: null, captured_at: '2026-10-01T12:00:00Z',
-            verified_at: '2026-10-01T12:02:00Z', decision: 'PENDING',
-            decision_revision: null, reason: null }], next_photo: null });
+            verified_at: '2026-10-01T12:02:00Z', decision: reviewedDecision,
+            decision_revision: reviewedRevision, reason: null }], next_photo: null });
+      }
+      if (url.pathname.endsWith('/admin_review_photo')) {
+        const p = req.postDataJSON();
+        assert.equal(p.p_photo, reviewPhoto);
+        assert.equal(p.p_transfer_version, reviewVersion);
+        assert.equal(p.p_expected_revision, reviewedRevision);
+        assert.equal(p.p_reason, '');
+        assert.equal(p.p_decision, 'APPROVED');
+        reviewedDecision = 'APPROVED';
+        reviewedRevision = uuid(9955);
+        return reply({ action_id: p.p_action, photo_id: reviewPhoto, transfer_version: reviewVersion,
+          work_order_id: p.p_work_order, decision: reviewedDecision, decision_revision: reviewedRevision });
+      }
+      if (url.pathname === '/functions/v1/admin-private-photo') {
+        const p = req.postDataJSON();
+        assert.equal(p.photo_id, reviewPhoto); assert.equal(p.transfer_version, reviewVersion);
+        return reply({ photo_id: reviewPhoto, transfer_version: reviewVersion, expires_in: 120,
+          url: `https://vyocaujuwrivoqynvitm.supabase.co/storage/v1/object/sign/fwh-review-private/${organization}/${uuid(51)}/${reviewRun}/${reviewPhoto}.jpg?token=disposable-preview` });
+      }
+      if (url.pathname.startsWith('/storage/v1/object/sign/fwh-review-private/')) {
+        assert.equal(url.searchParams.get('token'), 'disposable-preview');
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jUlkAAAAASUVORK5CYII=', 'base64');
+        return route.fulfill({ status: 200, headers: { 'Content-Type': 'image/png' }, body: png });
       }
       if (url.pathname.endsWith('/admin_get_contractor_seat_summary')) return reply([{ available_seats: 0, used_seats: 2, seat_limit: 2, pending_invitations: 0 }]);
       if (url.pathname.endsWith('/admin_list_pending_contractor_invitations')) return reply([]);
@@ -144,6 +169,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('.private-review-photo').getByRole('button', { name: 'Approve' }).isDisabled(), true,
       'An Admin must actually preview a verified image before approving it');
     assert.equal(await page.locator('#save-edit').isVisible(), false, 'Photo decisions must not look like ordinary WO save');
+    await page.locator('.private-review-photo').getByRole('button', { name: 'Preview photo' }).click();
+    await wait(page, () => !document.querySelectorAll('.private-review-photo button')[1].disabled);
+    await page.locator('.private-review-photo').getByRole('button', { name: 'Approve' }).click();
+    await wait(page, () => document.querySelector('#private-review-list strong')?.textContent.includes('APPROVED'));
+    assert.equal(reviewedDecision, 'APPROVED');
     await page.locator('[data-job-tab="requirements"]').click();
     assert.equal(await page.locator('dialog').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Mobile workspace must not require sideways scrolling');
     await page.screenshot({ path: path.join(output, 'workspace-mobile.png'), fullPage: true });
@@ -163,7 +193,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('dialog').evaluate(el => el.open), false);
     assert.equal(await page.locator('#edit-work-order-id').inputValue(), '');
     assert.equal(errors.length, 0, errors.join('\n'));
-    assert.equal(requests.some(url => /storage\/|work_order_photos/.test(url)), false, 'List selection does not fetch all photos');
+    assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 1,
+      'Private image access is on-demand, bounded to one verified preview');
+    assert.equal(requests.some(url => url.includes('work_order_photos')), false, 'List selection does not fetch all photos');
     console.log('PASS: bounded 1,000-job paging, 50 same-address results, UUID navigation, Save/Stay/Discard and requirements edits, failed save/read recovery, stale refresh, account/sign-out isolation, desktop/mobile workspace. No live backend traffic.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
