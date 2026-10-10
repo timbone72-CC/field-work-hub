@@ -2,7 +2,7 @@
  * authority, revisions, manifest content, worker permissions and idempotency. */
 const ClientRelease = (() => {
   let wo = '', seq = 0, config = null, pkg = null, chosen = new Set(), photoFacts = [];
-  let savedNotes = '', busy = false, loaded = false, previewedHash = null, tooMany = false;
+  let savedNotes = '', savedPhotoIds = [], busy = false, loaded = false, previewedHash = null, tooMany = false;
   const el = id => document.getElementById(id);
   const status = (id, message) => { el(id).textContent = message; };
   const valid = (n, id, token) => n === seq && wo === id && token && token === accessToken
@@ -17,7 +17,7 @@ const ClientRelease = (() => {
   };
   function reset() {
     seq++; wo=''; config=null; pkg=null; chosen.clear(); photoFacts=[];
-    busy=false; loaded=false; savedNotes=''; previewedHash=null; tooMany=false;
+    busy=false; loaded=false; savedNotes=''; savedPhotoIds=[]; previewedHash=null; tooMany=false;
     el('release-exact-preview').hidden=true; el('release-exact-preview').textContent='';
     for(const id of ['release-status','review-policy-status','release-coverage','release-target']) {
       const node=el(id);if(node)node.textContent='';
@@ -32,7 +32,7 @@ const ClientRelease = (() => {
     el('release-save').disabled=true;
   }
   function dirty() { return wo && (el('release-notes').value!==savedNotes
-    || (pkg && JSON.stringify([...chosen])!==JSON.stringify(pkg.photos.map(x=>x.photo_id)))); }
+    || JSON.stringify([...chosen].sort())!==JSON.stringify(savedPhotoIds.slice().sort())); }
   function setBusy(yes) { busy=yes; buttons(); }
   function buttons() {
     const assigned=!!config?.client_company_id, frozen=pkg && !['DRAFT'].includes(pkg.status);
@@ -71,7 +71,7 @@ const ClientRelease = (() => {
       if(!valid(n,id,token))return;
       if(response.work_order_id!==id||!Array.isArray(response.available_photos)) throw Error('Package scope mismatch');
       pkg=response.package||null;photoFacts=response.available_photos;tooMany=response.too_many_photos===true;
-      chosen=new Set(pkg?.photos?.map(p=>p.photo_id)||[]);
+      chosen=new Set(pkg?.photos?.map(p=>p.photo_id)||[]);savedPhotoIds=[...chosen];
       savedNotes=pkg?.notes||'';el('release-notes').value=savedNotes;
       renderPhotos();
       el('release-target').textContent=response.destination?.verified===true
@@ -112,6 +112,14 @@ const ClientRelease = (() => {
     }catch(error){if(valid(n,id,token))status('release-status',error.message+' Reload current job before retrying.');}
     finally{if(wo===id && token===accessToken)setBusy(false);}
   }
+  async function saveDraft() {
+    if(!loaded||busy||tooMany||!config?.client_company_id||pkg&&pkg.status!=='DRAFT')return false;
+    const result=await transact('admin_save_package_draft',
+      {p_action:crypto.randomUUID(),p_wo:wo,p_expected_revision:pkg?.revision||null,
+        p_notes:el('release-notes').value,
+        p_photo_ids:photoFacts.filter(p=>chosen.has(p.photo_id)).map(p=>p.photo_id)});
+    return !!result;
+  }
   function init(){
     el('review-policy-reason').addEventListener('input',buttons);
     el('review-required').addEventListener('change',buttons);
@@ -133,10 +141,7 @@ const ClientRelease = (() => {
       {p_action:crypto.randomUUID(),p_work_order:wo,p_company:el('release-company').value,
         p_expected_policy_revision:config?.revision}));
     el('release-notes').addEventListener('input',buttons);
-    el('release-save').addEventListener('click',()=>transact('admin_save_package_draft',
-      {p_action:crypto.randomUUID(),p_wo:wo,p_expected_revision:pkg?.revision||null,
-        p_notes:el('release-notes').value,
-        p_photo_ids:photoFacts.filter(p=>chosen.has(p.photo_id)).map(p=>p.photo_id)}));
+    el('release-save').addEventListener('click',()=>saveDraft());
     el('release-preview').addEventListener('click',async()=>{
       if (busy||!wo||!pkg||dirty())return;
       const id=wo,token=accessToken,n=seq;setBusy(true);
@@ -170,5 +175,5 @@ const ClientRelease = (() => {
         p_expected_revision:pkg?.revision,p_manifest_sha256:pkg?.manifest_sha256});
     });
   }
-  return {init,open:load,reset,dirty};
+  return {init,open:load,reset,dirty,saveDraft};
 })();
