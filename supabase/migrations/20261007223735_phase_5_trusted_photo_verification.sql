@@ -202,7 +202,7 @@ create function private.admin_list_private_review_photos(
 language plpgsql stable security definer set search_path='' as $review_list$
 declare items jsonb; page_count integer; last_photo uuid;
 begin
-  if p_work_order is null or p_limit not in (25,50)
+  if p_work_order is null or p_limit is null or p_limit not in (25,50)
     or not private.current_identity_valid() or not private.can_work_order(p_work_order) then
     raise exception 'Current scoped office review required' using errcode='42501';
   end if;
@@ -271,7 +271,7 @@ declare prior private.photo_review_actions%rowtype; current_review private.photo
   revision uuid:=gen_random_uuid();
 begin
   if p_action is null or p_work_order is null or p_photo is null or p_transfer_version is null
-    or p_decision not in ('PENDING','APPROVED','REJECTED')
+    or p_decision is null or p_decision not in ('PENDING','APPROVED','REJECTED')
     or coalesce(char_length(explanation)<=1000,false)=false
     or (p_decision='REJECTED' and explanation='')
     or (p_decision<>'REJECTED' and explanation<>'') then
