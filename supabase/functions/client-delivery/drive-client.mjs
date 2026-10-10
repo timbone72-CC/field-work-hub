@@ -56,8 +56,14 @@ export function createDriveClient({accessToken,fetcher=fetch}){
     const origin=new URL(url);
     if(origin.origin!==DRIVE_ORIGIN)throw new DriveUncertain('UNTRUSTED_DRIVE_ORIGIN');
     // Authorization is sent only to fixed Google host; redirects cannot forward it.
-    return fetcher(origin.toString(),{...options,redirect:'error',
-      headers:{Authorization:'Bearer '+accessToken,...(options.headers||{})}});
+    try {
+      return await fetcher(origin.toString(),{...options,redirect:'error',
+        headers:{Authorization:'Bearer '+accessToken,...(options.headers||{})}});
+    } catch {
+      // POST/PATCH/PUT may already have committed remotely. Never retry with
+      // a different ID or treat a thrown response as a known-safe absence.
+      throw new DriveUncertain('PROVIDER_OUTCOME_UNCERTAIN');
+    }
   };
   const get=async(id)=>{
     valid(id,ID,'REMOTE_ID_REQUIRED');
