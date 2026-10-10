@@ -51,7 +51,7 @@ declare
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
-  package_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
+  pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
   t private.photo_transfers%rowtype; denied boolean;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
@@ -127,24 +127,24 @@ begin
   insert into private.client_delivery_runtime(organization_id,worker_ready) values(org,false);
   execute 'set local role authenticated';
   pkg_draft:=public.admin_save_package_draft(gen_random_uuid(),wo,null,'Synthetic client description',array[photo]);
-  package_id:=(pkg_draft->>'id')::uuid;
+  pkg_id:=(pkg_draft->>'id')::uuid;
   if pkg_draft->>'status'<>'DRAFT' then raise exception 'Draft save did not remain unsent';end if;
-  pkg_preview:=public.admin_preview_package(wo,package_id,(pkg_draft->>'revision')::uuid);
+  pkg_preview:=public.admin_preview_package(wo,pkg_id,(pkg_draft->>'revision')::uuid);
   if pkg_preview->'manifest'->>'client_wo_number' is null
     or jsonb_array_length(pkg_preview->'manifest'->'selected_photos')<>1 then
     raise exception 'Exact preview missed WO, selected receipt or content';end if;
-  perform pg_temp.expect_photo_review_error('22023',format(
+  perform pg_temp.expect_photo_review_error('40001',format(
     'select public.admin_approve_package(%L,%L,%L,%L,%L)',
-    gen_random_uuid(),wo,package_id,pkg_draft->>'revision',repeat('0',64)));
-  pkg_approval:=public.admin_approve_package(gen_random_uuid(),wo,package_id,
+    gen_random_uuid(),wo,pkg_id,pkg_draft->>'revision',repeat('0',64)));
+  pkg_approval:=public.admin_approve_package(gen_random_uuid(),wo,pkg_id,
     (pkg_draft->>'revision')::uuid,pkg_preview->>'manifest_sha256');
   if pkg_approval->>'status'<>'APPROVED' then raise exception 'Preview approval not persisted';end if;
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.admin_queue_package(%L,%L,%L,%L,%L)',
-    send_action,wo,package_id,pkg_approval->>'revision',pkg_preview->>'manifest_sha256'));
+    send_action,wo,pkg_id,pkg_approval->>'revision',pkg_preview->>'manifest_sha256'));
   pkg_state:=public.admin_package_state(wo);
   if pkg_state->'package'->>'can_send' is distinct from 'false' or
-    exists(select 1 from private.client_delivery_outbox where package_id=package_id) then
+    exists(select 1 from private.client_delivery_outbox where package_id=pkg_id) then
     raise exception 'Unavailable worker incorrectly queued delivery';end if;
   execute 'reset role';
   update private.client_delivery_runtime set worker_ready=true,worker_identity='synthetic-ci-only',
@@ -153,19 +153,19 @@ begin
   pkg_state:=public.admin_package_state(wo);
   if pkg_state->'package'->>'can_send'<>'true' then
     raise exception 'Verified synthetic worker readiness not reflected';end if;
-  pkg_send:=public.admin_queue_package(send_action,wo,package_id,
+  pkg_send:=public.admin_queue_package(send_action,wo,pkg_id,
     (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256');
   if pkg_send->>'status'<>'QUEUED' then raise exception 'Explicit Send did not queue';end if;
-  if pkg_send is distinct from public.admin_queue_package(send_action,wo,package_id,
+  if pkg_send is distinct from public.admin_queue_package(send_action,wo,pkg_id,
       (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256') then
     raise exception 'Duplicate Send was not idempotent';end if;
   perform pg_temp.expect_photo_review_error('22023',format(
     'select public.admin_queue_package(%L,%L,%L,%L,%L)',
-    send_action,wo,package_id,pkg_approval->>'revision',repeat('0',64)));
+    send_action,wo,pkg_id,pkg_approval->>'revision',repeat('0',64)));
   execute 'reset role';
-  if (select count(*) from private.client_delivery_outbox where package_id=package_id)<>1
-    or (select status from private.client_packages where id=package_id)<>'QUEUED'
-    or (select count(*) from private.client_package_actions where package_id=package_id
+  if (select count(*) from private.client_delivery_outbox where package_id=pkg_id)<>1
+    or (select status from private.client_packages where id=pkg_id)<>'QUEUED'
+    or (select count(*) from private.client_package_actions where package_id=pkg_id
         and action_kind='SEND')<>1 then
     raise exception 'Send created duplicates or alleged delivered receipt';end if;
   execute 'set local role authenticated';
