@@ -874,7 +874,7 @@ grant execute on function private.admin_save_package_draft(uuid,uuid,uuid,text,u
 -- it never approves, queues, cleans local photos or contacts a client provider.
 create function private.admin_preview_package(
   p_wo uuid,p_package uuid,p_expected_revision uuid
-) returns jsonb language plpgsql stable security definer set search_path='' as $preview$
+) returns jsonb language plpgsql security definer set search_path='' as $preview$
 declare k private.client_packages%rowtype; m jsonb;
 begin
   if p_wo is null or p_package is null or p_expected_revision is null
