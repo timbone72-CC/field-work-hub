@@ -239,7 +239,7 @@ begin
     where t.work_order_id=p_work_order and t.state='RECEIVED'
       and (p_after_photo is null or t.photo_id>p_after_photo)
     order by t.photo_id limit p_limit+1
-  ) select count(*),max(photo_id) filter (where rn<=p_limit)
+  ) select count(*),(max(photo_id::text) filter (where rn<=p_limit))::uuid
     into page_count,last_photo
     from (select photo_id,row_number() over(order by photo_id) rn from eligible) q;
   return jsonb_build_object('work_order_id',p_work_order,'photos',items,
