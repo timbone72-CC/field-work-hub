@@ -129,6 +129,10 @@ begin
   pkg_draft:=public.admin_save_package_draft(gen_random_uuid(),wo,null,'Synthetic client description',array[photo]);
   pkg_id:=(pkg_draft->>'id')::uuid;
   if pkg_draft->>'status'<>'DRAFT' then raise exception 'Draft save did not remain unsent';end if;
+  pkg_state:=public.admin_package_state(wo);
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_approve_package(%L,%L,%L,%L,%L)',
+    gen_random_uuid(),wo,pkg_id,pkg_draft->>'revision',pkg_state->'package'->>'manifest_sha256'));
   pkg_preview:=public.admin_preview_package(wo,pkg_id,(pkg_draft->>'revision')::uuid);
   if pkg_preview->'manifest'->>'client_wo_number' is null
     or jsonb_array_length(pkg_preview->'manifest'->'selected_photos')<>1 then
