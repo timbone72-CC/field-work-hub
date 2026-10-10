@@ -5,6 +5,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file','service_read_upload_session',
  'service_store_upload_session','service_record_upload_offset',
+ 'service_get_delivery_file_plan',
  'service_confirm_delivery_file','service_finish_delivery',
  'service_quarantine_expired_delivery']);
 export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
@@ -44,6 +45,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     forLease:(pkg,worker,gen)=>({
       heartbeat:(p,w,g)=>rpc('service_heartbeat_delivery',
         {p_package:p,p_worker:w,p_generation:g}),
+      getFilePlan:plan=>rpc('service_get_delivery_file_plan',
+        {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan}),
       getSession:async plan=>{
         const result=await rpc('service_read_upload_session',
           {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan});
