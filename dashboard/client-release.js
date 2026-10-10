@@ -2,7 +2,7 @@
  * authority, revisions, manifest content, worker permissions and idempotency. */
 const ClientRelease = (() => {
   let wo = '', seq = 0, config = null, pkg = null, chosen = new Set(), photoFacts = [];
-  let savedNotes = '', busy = false, loaded = false;
+  let savedNotes = '', busy = false, loaded = false, previewedHash = null, tooMany = false;
   const el = id => document.getElementById(id);
   const status = (id, message) => { el(id).textContent = message; };
   const valid = (n, id, token) => n === seq && wo === id && token && token === accessToken
@@ -17,7 +17,8 @@ const ClientRelease = (() => {
   };
   function reset() {
     seq++; wo=''; config=null; pkg=null; chosen.clear(); photoFacts=[];
-    busy=false; loaded=false; savedNotes='';
+    busy=false; loaded=false; savedNotes=''; previewedHash=null; tooMany=false;
+    el('release-exact-preview').hidden=true; el('release-exact-preview').textContent='';
     for(const id of ['release-status','review-policy-status','release-coverage','release-target']) {
       const node=el(id);if(node)node.textContent='';
     }
@@ -43,15 +44,17 @@ const ClientRelease = (() => {
     el('release-assign-company').disabled=!loaded||busy||assigned||!el('release-company').value;
     el('release-new-company').disabled=!loaded||busy||assigned;
     el('release-notes').disabled=!loaded||busy||!!frozen;
-    el('release-save').disabled=!loaded||busy||!assigned||!!frozen;
+    el('release-save').disabled=!loaded||busy||!assigned||!!frozen||tooMany;
     el('release-preview').disabled=!loaded||busy||!pkg||pkg.status!=='DRAFT'||dirty();
-    el('release-approve').disabled=!loaded||busy||!pkg||pkg.status!=='DRAFT'||!pkg.ready_to_approve||dirty();
+    el('release-approve').disabled=!loaded||busy||!pkg||pkg.status!=='DRAFT'||!pkg.ready_to_approve||dirty()
+      || !previewedHash || previewedHash!==pkg.manifest_sha256;
     // Backend returns can_send only for the exact currently approved manifest.
     el('release-send').disabled=!loaded||busy||!pkg||pkg.status!=='APPROVED'||pkg.can_send!==true||dirty();
   }
   async function load(id, tab='delivery') {
     if (!id || !accessToken) return;
     if (wo!==id) reset();
+    previewedHash=null; el('release-exact-preview').hidden=true;
     wo=id; const n=++seq, token=accessToken;
     loaded=false; buttons();
     status('release-status','Loading current client and package state…');
@@ -67,14 +70,15 @@ const ClientRelease = (() => {
       const response=await rpc('admin_package_state',{p_wo:id},token);
       if(!valid(n,id,token))return;
       if(response.work_order_id!==id||!Array.isArray(response.available_photos)) throw Error('Package scope mismatch');
-      pkg=response.package||null;photoFacts=response.available_photos;
+      pkg=response.package||null;photoFacts=response.available_photos;tooMany=response.too_many_photos===true;
       chosen=new Set(pkg?.photos?.map(p=>p.photo_id)||[]);
       savedNotes=pkg?.notes||'';el('release-notes').value=savedNotes;
       renderPhotos();
       el('release-target').textContent=response.destination?.verified===true
         ? `Destination verified for ${response.destination.company_name} (company private configuration)`
         : 'No verified active destination. Package approval and Send remain blocked.';
-      el('release-coverage').textContent=response.coverage_message||'Select only privately received photos.';
+      el('release-coverage').textContent=(tooMany?'More than 200 photos: selection is blocked until paging is available. ':'')
+        +(response.coverage_message||'Select only privately received photos.');
       status('release-status',pkg ? `Package ${pkg.status}; explicit Send is separate.`
         : 'No package saved. Choose your photos and save a draft.');
       loaded=true;buttons();
@@ -106,7 +110,7 @@ const ClientRelease = (() => {
       if(reload)await load(id);
       return result;
     }catch(error){if(valid(n,id,token))status('release-status',error.message+' Reload current job before retrying.');}
-    finally{if(valid(n,id,token))setBusy(false);}
+    finally{if(wo===id && token===accessToken)setBusy(false);}
   }
   function init(){
     el('review-policy-reason').addEventListener('input',buttons);
@@ -133,13 +137,35 @@ const ClientRelease = (() => {
       {p_action:crypto.randomUUID(),p_wo:wo,p_expected_revision:pkg?.revision||null,
         p_notes:el('release-notes').value,
         p_photo_ids:photoFacts.filter(p=>chosen.has(p.photo_id)).map(p=>p.photo_id)}));
-    el('release-preview').addEventListener('click',()=>transact('admin_preview_package',
-      {p_wo:wo,p_package:pkg?.id,p_expected_revision:pkg?.revision}));
+    el('release-preview').addEventListener('click',async()=>{
+      if (busy||!wo||!pkg||dirty())return;
+      const id=wo,token=accessToken,n=seq;setBusy(true);
+      try {
+        const exact=await rpc('admin_preview_package',{p_wo:id,p_package:pkg.id,
+          p_expected_revision:pkg.revision},token);
+        if(!valid(n,id,token))return;
+        if(exact.package_id!==pkg.id||exact.revision!==pkg.revision
+          ||exact.manifest_sha256!==pkg.manifest_sha256||!exact.manifest)
+          throw new Error('Manifest changed; reload before approval.');
+        previewedHash=exact.manifest_sha256;
+        const m=exact.manifest;
+        el('release-exact-preview').textContent=JSON.stringify({
+          company_id:m.client_company_id,client_wo_number:m.client_wo_number,
+          notes:m.client_notes,destination_root:m.destination_root,
+          destination_provider:m.destination_provider,
+          review_required:m.review_required,requirements:m.requirements,
+          selected_photos:m.selected_photos,manifest_sha256:exact.manifest_sha256
+        },null,2);
+        el('release-exact-preview').hidden=false;
+        status('release-status','Review this exact manifest. Approval does NOT send it.');
+      }catch(error){if(valid(n,id,token)){previewedHash=null;status('release-status',error.message);}}
+      finally{if(wo===id&&token===accessToken)setBusy(false);}
+    });
     el('release-approve').addEventListener('click',()=>transact('admin_approve_package',
       {p_action:crypto.randomUUID(),p_wo:wo,p_package:pkg?.id,
         p_expected_revision:pkg?.revision,p_manifest_sha256:pkg?.manifest_sha256}));
     el('release-send').addEventListener('click',()=>{
-      if(pkg?.can_send!==true||!confirm('Queue this exact approved package for client delivery?'))return;
+      if(pkg?.can_send!==true||dirty()||!confirm('Queue this exact approved package for client delivery?'))return;
       transact('admin_queue_package',{p_action:crypto.randomUUID(),p_wo:wo,p_package:pkg?.id,
         p_expected_revision:pkg?.revision,p_manifest_sha256:pkg?.manifest_sha256});
     });
