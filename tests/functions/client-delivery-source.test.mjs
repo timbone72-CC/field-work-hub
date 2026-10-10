@@ -22,12 +22,13 @@ const photo={
 };
 const unavailable=e=>e instanceof DriveUncertain
    &&e.code==='PROTECTED_SOURCE_CHUNK_UNAVAILABLE';
-function rig({fresh=photo,bytes=new Uint8Array(262144),status=206,
+function rig({fresh=photo,afterward=null,bytes=new Uint8Array(262144),status=206,
   headers={},error=false,record=[]}={}){
+ let projections=0;
  const ledger={getFilePlan:async id=>{
    record.push(['projection',id]);
    if(error)throw Error('STALE_OR_REVOKED_LEASE_PRIVATE');
-   return fresh;
+   return projections++===0?fresh:(afterward??fresh);
  }};
  const fetcher=async (url,request)=>{
    record.push(['storage',url,request]);
@@ -46,7 +47,7 @@ test('reads only the private server-projected object with an exact bounded byte 
  const r=rig();
  const bytes=await r.read(photo,0,262144);
  assert.equal(bytes.length,262144);
- assert.deepEqual(r.record.map(x=>x[0]),['projection','storage']);
+ assert.deepEqual(r.record.map(x=>x[0]),['projection','storage','projection']);
  const request=r.record[1][2],uri=new URL(r.record[1][1]);
  assert.equal(uri.origin,projectUrl);
  assert.equal(uri.pathname,'/storage/v1/object/authenticated/fwh-review-private/'+objectKey);
@@ -57,6 +58,19 @@ test('reads only the private server-projected object with an exact bounded byte 
  assert.equal(request.headers.Authorization,'Bearer '+token);
  assert.equal(request.headers.apikey,token);
  assert.equal(request.headers['Accept-Encoding'],'identity');
+});
+test('second photo chunk requires an exact 206 and catalog recheck as well',async()=>{
+ const r=rig({bytes:new Uint8Array(37856),
+   headers:{'Content-Range':'bytes 262144-299999/300000',
+     'Content-Length':'37856'}});
+ assert.equal((await r.read(photo,262144,37856)).length,37856);
+ assert.equal(r.record[1][2].headers.Range,'bytes=262144-299999');
+ assert.deepEqual(r.record.map(x=>x[0]),['projection','storage','projection']);
+});
+test('catalog changes or revoked lease during a byte read prevent client-bound bytes',async()=>{
+ const r=rig({afterward:{...photo,source:{...photo.source,object_version:'V2'}}});
+ await assert.rejects(()=>r.read(photo,0,262144),unavailable);
+ assert.deepEqual(r.record.map(x=>x[0]),['projection','storage','projection']);
 });
 test('stale owner/lease, new file plan or altered catalog source cannot read any bytes',async()=>{
  const modified=[
