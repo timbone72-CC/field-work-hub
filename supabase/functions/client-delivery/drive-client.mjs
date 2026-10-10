@@ -69,7 +69,7 @@ export function createDriveClient({accessToken,fetcher=fetch}){
   };
   return {
     async verifyProviderIdentity(expectedEmail){
-      if(typeof expectedEmail!=='string'||!/^[-._+a-z0-9]+@[-.a-z0-9]+\\.[a-z]{2,}$/i.test(expectedEmail))
+      if(typeof expectedEmail!=='string'||!/^[-._+a-z0-9]+@[-.a-z0-9]+\.[a-z]{2,}$/i.test(expectedEmail))
         throw new DriveUncertain('CONFIGURED_ACCOUNT_REQUIRED');
       const url=new URL('/drive/v3/about',DRIVE_ORIGIN);
       url.searchParams.set('fields','user(emailAddress,permissionId,me)');
