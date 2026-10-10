@@ -11,6 +11,7 @@ alter table private.client_delivery_outbox
       or (worker_id is not null and lease_until is not null));
 
 create table private.client_delivery_file_plans (
+ id uuid primary key default gen_random_uuid(),
  package_id uuid not null references private.client_packages(id) on delete restrict,
  kind text not null check(kind in ('FOLDER','PHOTO','MANIFEST')),
  photo_id uuid,
@@ -23,7 +24,7 @@ create table private.client_delivery_file_plans (
  verified_at timestamptz,
  remote_evidence jsonb,
  created_at timestamptz not null default clock_timestamp(),
- primary key(package_id,kind,photo_id) nulls not distinct,
+ unique nulls not distinct(package_id,kind,photo_id),
  unique(drive_file_id),
  check ((kind='PHOTO' and photo_id is not null and expected_sha256 is not null and expected_size>0 and mime_type='image/jpeg')
   or (kind='MANIFEST' and photo_id is null and expected_sha256 is not null and expected_size>0 and mime_type='application/json')
