@@ -61,13 +61,36 @@ export function createDriveClient({accessToken,fetcher=fetch}){
   };
   const get=async(id)=>{
     valid(id,ID,'REMOTE_ID_REQUIRED');
-    const fields='id,name,mimeType,parents,sha256Checksum,size,appProperties,trashed,driveId';
+    const fields='id,name,mimeType,parents,sha256Checksum,size,appProperties,trashed,driveId,capabilities(canAddChildren)';
     const url=new URL('/drive/v3/files/'+encodeURIComponent(id),DRIVE_ORIGIN);
     url.searchParams.set('fields',fields);url.searchParams.set('supportsAllDrives','true');
     const response=handleHttp(await request(url),[200]);
     return boundedJson(response);
   };
   return {
+    async verifyProviderIdentity(expectedEmail){
+      if(typeof expectedEmail!=='string'||!/^[-._+a-z0-9]+@[-.a-z0-9]+\\.[a-z]{2,}$/i.test(expectedEmail))
+        throw new DriveUncertain('CONFIGURED_ACCOUNT_REQUIRED');
+      const url=new URL('/drive/v3/about',DRIVE_ORIGIN);
+      url.searchParams.set('fields','user(emailAddress,permissionId,me)');
+      const r=handleHttp(await request(url),[200]);
+      const about=await boundedJson(r);
+      if(about.user?.emailAddress?.toLowerCase()!==expectedEmail.toLowerCase()
+        ||about.user?.me!==true||!about.user.permissionId)
+        throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
+      return {account:about.user.emailAddress.toLowerCase(),permission_id:about.user.permissionId};
+    },
+    async verifyDestination({folderId,expectedDriveId=null}){
+      valid(folderId,PARENT,'DESTINATION_ID_REQUIRED');
+      if(expectedDriveId!==null)valid(expectedDriveId,PARENT,'EXPECTED_SHARED_DRIVE_REQUIRED');
+      const f=await get(folderId);
+      if(f.id!==folderId||f.trashed!==false
+        ||f.mimeType!=='application/vnd.google-apps.folder'
+        ||f.capabilities?.canAddChildren!==true
+        ||(expectedDriveId!==null&&f.driveId!==expectedDriveId))
+        throw new DriveUncertain('DESTINATION_NOT_VERIFIED');
+      return {id:f.id,drive_id:f.driveId??null,can_add_children:true};
+    },
     async generateIds(count){
       if(!Number.isInteger(count)||count<1||count>200)throw new DriveUncertain('BOUNDED_ID_REQUEST_REQUIRED');
       const url=new URL('/drive/v3/files/generateIds',DRIVE_ORIGIN);
