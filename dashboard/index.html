@@ -112,6 +112,7 @@
             <button type="button" data-job-tab="assignment" aria-pressed="false" aria-controls="job-assignment">Assignment</button>
             <button type="button" data-job-tab="requirements" aria-pressed="false" aria-controls="job-requirements">Photo requirements</button>
             <button type="button" data-job-tab="photos" aria-pressed="false" aria-controls="job-photos">Photos</button>
+            <button type="button" data-job-tab="delivery" aria-pressed="false" aria-controls="job-delivery">Delivery</button>
           </nav>
         </header>
         <div id="job-unsaved" class="unsaved-choice" hidden role="region" aria-label="Unsaved changes">
@@ -167,12 +168,34 @@
           </section>
           <section id="job-photos" data-job-panel="photos" hidden>
             <h3>Private photo review</h3>
+            <label class="check"><input id="review-required" type="checkbox" disabled> Require approval of each selected photo</label>
+            <label>Reason for policy change <input id="review-policy-reason" type="text" maxlength="1000" disabled></label>
+            <button id="review-policy-save" type="button" class="secondary" disabled>Save review policy</button>
+            <p id="review-policy-status" class="status" role="status" aria-live="polite"></p>
             <p class="muted">Only privately verified photos are reviewable. Approving a photo does not approve a client package or send anything.</p>
             <p id="private-review-status" class="status" aria-live="polite" role="status"></p>
             <div id="private-review-list"></div>
             <button id="private-review-more" type="button" class="secondary" hidden>Load more verified photos</button>
           </section>
 
+          <section id="job-delivery" data-job-panel="delivery" hidden>
+            <h3>Client package and delivery</h3>
+            <p class="muted">No photo is sent when you preview or approve. Only an explicit Send can queue a verified package.</p>
+            <label>Client company <select id="release-company" disabled><option value="">Not assigned</option></select></label>
+            <div class="workspace-navigation"><button id="release-new-company" type="button" class="secondary" disabled>Add client company</button>
+              <button id="release-assign-company" type="button" class="secondary" disabled>Save client assignment</button></div>
+            <label>Client-facing notes <textarea id="release-notes" rows="3" maxlength="2000" disabled></textarea></label>
+            <div id="release-photo-list" aria-label="Package photo selection"></div>
+            <p id="release-coverage" class="muted"></p>
+            <p id="release-target" class="muted"></p>
+            <div class="workspace-navigation">
+              <button id="release-save" type="button" class="secondary" disabled>Save package draft</button>
+              <button id="release-preview" type="button" class="secondary" disabled>Preview exact package</button>
+              <button id="release-approve" type="button" disabled>Approve package</button>
+              <button id="release-send" type="button" disabled>Send approved package</button>
+            </div>
+            <p id="release-status" class="status" role="status" aria-live="polite"></p>
+          </section>
           <div class="row gap edit-actions">
             <button id="save-edit" type="submit">Save Changes</button>
             <button id="cancel-edit" class="secondary" type="button">Close Job</button>
@@ -202,6 +225,7 @@
   </main>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
+  <script src="client-release.js?v=phase5d-20261010" defer></script>
   <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
   <script src="app.js?v=job-workspace-20261007-1" defer></script>
   <script src="session.js?v=admin-auto-refresh-20260930-1" defer></script>
