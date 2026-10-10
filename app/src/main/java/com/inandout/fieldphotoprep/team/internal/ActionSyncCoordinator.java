@@ -130,8 +130,13 @@ final class ActionSyncCoordinator {
         for (FieldAction a : dao.actions(owner, org))
             if (a.workOrderId.equals(wo) && !"ACCEPTED".equals(a.state)) return true;
         for (CachedWorkOrder r : dao.listForOwner(owner, org)) if (r.workOrderId.equals(wo))
-            for (ProtectedPhoto p : dao.photos(owner, org, wo, r.runId))
-                if (!"DISCARDED".equals(p.state)) return true;
+            for (ProtectedPhoto p : dao.photos(owner, org, wo, r.runId)) {
+                if ("DISCARDED".equals(p.state)) continue;
+                PhotoTransfer transfer = dao.transfer(p.id);
+                // A private receipt removes only the unsynchronized-photo handoff blocker.
+                // It is not client delivery and never permits local cleanup.
+                if (transfer == null || !"RECEIVED".equals(transfer.state)) return true;
+            }
         return false;
     }
 }

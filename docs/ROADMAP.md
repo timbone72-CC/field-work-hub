@@ -62,6 +62,12 @@ This is the authoritative product and implementation roadmap for Field Work Hub.
 
 The existing single-user Field Photo Prep (`timbone72-CC/field-photo-prep`) remains separate, working, and read-only to Team development.
 
+## Combined Phase 5–6 implementation — started 2026-10-06 UTC
+
+The operator authorized a coordinated build in dependency order with internal checkpoints on 2026-10-05 at 19:54:20 America/Chicago. The one authoritative runtime line is `feat/phase-5-6-dashboard-workflow`; see [the implementation record](PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md). Both numbered phases retain their complete approved plans and separate completion/evidence gates. Checkpoint 1 builds the common team/access foundation using synthetic accounts. On 2026-10-07 the operator confirmed the existing Admin's Product Owner binding and initial 14-WO/two-Contractor team mapping. A guarded operator-only bootstrap is in the source candidate; live activation still requires full old-client authorization cutover and exact recovery/transfer protections. This execution notice supersedes “runtime has not started” only as an activity status, not as a claim of implemented phase outcomes. No live permission/storage/provider/email changes or phase completion are claimed.
+
+Current source checkpoints on draft PR #40 include scoped legacy work access, exact recovery/prepared-receipt ledgers, audited work-access lifecycle, scoped invitation/capacity concurrency, reviewed office-scope/job warnings and explicit team continuity, a trusted request-bound private byte-verifier source with current Storage catalog receipt guards, plus the bounded job workspace layout. The Android source checkpoint now adds the Room-4 private-transfer journal and accepted-Finish staging, with passing final native migration/restart/JVM/build/signer/recovery checks on runtime `1c71cbec9107d0fc9d0f2a6daeed8c519f4e550a`. The actual compiler-generated v4 export is retained and checked unchanged after compilation; the implementation record pins complete evidence. TUS networking remains the next dependency. Both Phases 5 and 6 are IN PROGRESS. These source checks do not complete private-byte transfer/recovery/review/release or the shared controls/alerts/device/provider gates; Supervisor/account-management UI remains disabled. The implementation record pins exact tested runtime revisions and the next dependency. Live systems remain unchanged; Level 3 runtime merge approval is PENDING.
+
 ## First finish line
 
 The first Team version succeeds when:
@@ -1005,9 +1011,9 @@ Completion gate: **Admin custom/all-off rules, one-item counting, quick offline 
 
 ---
 
-# Phase 5 — Private holding, minimum Admin review and controlled delivery — APPROVED PLAN / PLANNED
+# Phase 5 — Private holding, minimum Admin review and controlled delivery — APPROVED / IN PROGRESS (draft PR #40)
 
-Whole numbered parent phase: [PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs behavior, owners, exact API/data boundaries, additive Room/server migrations, failure/recovery, rollback and evidence across all sections. Runtime has not started.
+Whole numbered parent phase: [PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_5_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs behavior, owners, exact API/data boundaries, additive Room/server migrations, failure/recovery, rollback and evidence across all sections. Implementation is in progress on draft PR #40; whole-phase completion and live gates remain pending.
 
 Approved amendment: [SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), revision 1, approved 2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC), adds scoped team/work-access foundations, exact recovery grants, accepted Finish-bound transfer continuation and minimum signed-in/same-device recovery across 5A–5E. Its governing replacements are applied; current authority is the whole baseline plus this amendment. Supervisor work controls activate only with completed Phase 6 checks. The combined Phase 5 gate additionally proves disable/reconnect/recovery without evidence loss.
 
@@ -1027,9 +1033,9 @@ Completion gate: **usable secure private review and explicit controlled delivery
 
 ---
 
-# Phase 6 — Compact Admin workspace, templates, follow-ups, review and optional alerts — APPROVED PLAN / PLANNED
+# Phase 6 — Compact Admin workspace, templates, follow-ups, review and optional alerts — APPROVED / IN PROGRESS (draft PR #40)
 
-Whole numbered parent phase: [PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs all sections/dependencies and exact evidence boundaries. Phase 5 owns holding/review/package/provider/cleanup machinery; Phase 6 extends it, never duplicates it. Runtime has not started.
+Whole numbered parent phase: [PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md](PHASE_6_IMPLEMENTATION_PLAN_2026-10-05.md), revision 1, approved 2026-10-05 at 16:32:14 America/Chicago. The linked complete plan governs all sections/dependencies and exact evidence boundaries. Phase 5 owns holding/review/package/provider/cleanup machinery; Phase 6 extends it, never duplicates it. Implementation is in progress on draft PR #40; whole-phase completion and live gates remain pending.
 
 Approved amendment: [SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md), revision 1, approved 2026-10-05 at 17:40:18 America/Chicago (22:40:18 UTC), adds shared team/capability authority across 6A–6E and integrated 6F account/tier/owner/recovery controls. The table below is the current whole-phase scope; the linked amendment governs its exact behavior, migration/rollback, verification and combined device/email gates. No separate 6F approval is required.
 

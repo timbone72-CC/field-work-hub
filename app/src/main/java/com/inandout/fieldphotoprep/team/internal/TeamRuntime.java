@@ -13,6 +13,7 @@ final class TeamRuntime {
     final AssignmentRepository assignments;
     final ActionSyncCoordinator sync;
     final PhotoOwner photos;
+    final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
     private final Object actionCreationLock = new Object();
 
@@ -22,7 +23,10 @@ final class TeamRuntime {
         assignments = new AssignmentRepository(api, new RoomAssignmentStore(dao));
         photos = new PhotoOwner(context, dao, sessions);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
-        scheduler = new ActionScheduler(context, dao);
+        PhotoTransferDao transferDao = TeamDatabase.getInstance(context).photoTransferDao();
+        transfers = new PhotoTransferCoordinator(dao, transferDao, photos, sessions, api,
+                sync.drainLock, BuildConfig.FIELD_SYNC_ENABLED);
+        scheduler = new ActionScheduler(context, dao, transferDao);
     }
 
     static TeamRuntime get(Context context) {
@@ -42,8 +46,10 @@ final class TeamRuntime {
             SupabaseApi.AuthSession s =
                     sessions.authorized(generation, expected.userId, expected.organizationId, true);
             if (BuildConfig.FIELD_SYNC_ENABLED) {
-                scheduler.ensure(s);
                 sync.drain(s.userId, s.organizationId, () -> false);
+                transfers.stageAccepted(s.userId, s.organizationId, () -> false);
+                // App refresh only wakes the durable worker; byte transfer never blocks the UI.
+                scheduler.ensure(s);
             }
             return reconcile(s, generation);
         }

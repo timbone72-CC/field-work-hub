@@ -12,9 +12,9 @@ renderSignedIn = function renderSignedInWithAutoRefresh(rows, users, organizatio
 };
 
 const openEditorBeforeAutoRefresh = openEditor;
-openEditor = function openEditorWithSnapshot(workOrderId) {
-  openEditorBeforeAutoRefresh(workOrderId);
-  adminEditSnapshot = JSON.stringify(workOrderRows.find(row => row.id === workOrderId));
+openEditor = function openEditorWithSnapshot(workOrderId, selectedRow = null) {
+  openEditorBeforeAutoRefresh(workOrderId, selectedRow);
+  adminEditSnapshot = JSON.stringify(selectedRow || workOrderRows.find(row => row.id === workOrderId));
 };
 
 signOutButton.addEventListener('click', stopAdminAutoRefresh);
@@ -70,6 +70,7 @@ async function refreshAdminViewAutomatically() {
     verifyAdminRls(rows, organizationId);
     if (!Array.isArray(users)) throw new Error('Unexpected Contractor response.');
 
+    if (typeof JobWorkspace !== 'undefined') JobWorkspace.accept(rows.page);
     const usersChanged = JSON.stringify(users) !== JSON.stringify(assignableUsers);
     const changed = JSON.stringify(rows) !== JSON.stringify(workOrderRows) || usersChanged;
     const scrollX = window.scrollX;
@@ -77,13 +78,14 @@ async function refreshAdminViewAutomatically() {
     workOrderRows = rows;
     assignableUsers = users;
 
+    if (typeof JobWorkspace !== 'undefined') JobWorkspace.refreshed(rows);
     if (changed) {
       if (usersChanged) preserveAdminAssigneeSelection(assigneeSelect, users);
       assigneeSelect.disabled = users.length === 0;
       if (!editSection.classList.contains('hidden')) {
         if (usersChanged) preserveAdminAssigneeSelection(editAssigneeSelect, users);
         const row = rows.find(item => item.id === editWorkOrderIdInput.value);
-        if (JSON.stringify(row) !== adminEditSnapshot) {
+        if (typeof JobWorkspace === 'undefined' && JSON.stringify(row) !== adminEditSnapshot) {
           setEditStatus('This work order changed on the server. Your unsaved edits were kept.', false);
         }
       }

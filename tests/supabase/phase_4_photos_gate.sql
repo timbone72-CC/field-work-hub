@@ -16,9 +16,9 @@ begin
  select id into a from auth.users where private.is_assignable_contractor(id,org) order by created_at,id limit 1;
  select id into b from auth.users where private.is_assignable_contractor(id,org) and id<>a order by created_at,id limit 1;
  if a is null or b is null or admin_id is null then raise exception 'Existing test actors required'; end if;
- claims_admin:=jsonb_build_object('sub',admin_id,'role','authenticated','app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
- claims_a:=jsonb_build_object('sub',a,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
- claims_b:=jsonb_build_object('sub',b,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
+ claims_admin:=jsonb_build_object('sub',admin_id,'session_id',admin_id,'role','authenticated','app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
+ claims_a:=jsonb_build_object('sub',a,'session_id',a,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
+ claims_b:=jsonb_build_object('sub',b,'session_id',b,'role','authenticated','app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
  cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),'total',jsonb_build_object('enabled',true,'minimum',5),'items',jsonb_build_array(
  jsonb_build_object('id',during_id,'label','During','enabled',true,'minimum',2,'instruction','Test instruction','stage','DURING','framing','NORMAL','order',1),
  jsonb_build_object('id',wide_id,'label','Front wide','enabled',true,'minimum',2,'instruction','','stage','NONE','framing','WIDE','order',0)));

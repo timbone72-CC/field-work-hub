@@ -148,8 +148,13 @@ createForm.addEventListener('submit', async (event) => {
 
 editForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (JobWorkspace.needsReload()) { setEditStatus('Reload the latest job before saving again. Your unsaved changes are still here.', true); return; }
   setEditStatus('Saving changes…', false);
   saveEditButton.disabled = true;
+  editForm.inert = true;
+  let committed = false;
+  let afterSave = null;
+  const savedId = editWorkOrderIdInput.value;
 
   try {
     const updatedRows = await updateWorkOrder({
@@ -169,6 +174,9 @@ editForm.addEventListener('submit', async (event) => {
       throw new Error('The server did not return the updated work order.');
     }
 
+    committed = true;
+    JobWorkspace.saved();
+    afterSave = await JobWorkspace.reconcileSaved(savedId);
     await refreshWorkOrders();
 
     if (updated.pending_assignee_user_id) {
@@ -177,9 +185,11 @@ editForm.addEventListener('submit', async (event) => {
       setEditStatus(`Saved ${updated.wo_number}.`, false);
     }
   } catch (error) {
-    setEditStatus(error instanceof Error ? error.message : 'Unable to update work order.', true);
+    if (accessToken) setEditStatus(committed ? (JobWorkspace.needsReload() ? 'Changes saved. Unable to refresh the latest job right now; reload before saving again.' : 'Changes saved. Unable to refresh the job list right now.') : (error instanceof Error ? error.message : 'Unable to update work order.'), true);
   } finally {
     saveEditButton.disabled = false;
+    editForm.inert = false;
+    if (afterSave && accessToken) afterSave();
   }
 });
 
@@ -201,7 +211,8 @@ signOutButton.addEventListener('click', () => {
   fillAssigneeSelect(assigneeSelect, [], 'Sign in to load Team users');
   assigneeSelect.disabled = true;
   createStatus.textContent = '';
-  closeEditor();
+  closeEditor(true);
+  JobWorkspace.reset();
   resultsCard.classList.add('hidden');
   loginCard.classList.remove('hidden');
   emailInput.focus();
@@ -238,6 +249,8 @@ async function fetchCurrentUser() {
 
 async function fetchWorkOrders() {
   requireAccessToken();
+  JobWorkspace.ensureAccount(currentUser);
+  const page = JobWorkspace.request();
   const select = [
     'id',
     'organization_id',
@@ -259,15 +272,31 @@ async function fetchWorkOrders() {
   // Intentionally broad request: no organization_id or assigned_user_id filter.
   // Supabase RLS is the authorization boundary for rows returned here.
   const response = await adminFetch(
-    `${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&order=created_at.asc`,
-    { headers: authHeaders() }
+    `${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&${JobViewRules.parameters(page)}`,
+    { headers: { ...authHeaders(), Prefer: 'count=exact' } }
   );
 
   if (!response.ok) {
     throw new Error(await readableError(response, 'Unable to load work orders.'));
   }
 
-  return response.json();
+  const rows = await response.json();
+  JobWorkspace.accept(page);
+  if (!Array.isArray(rows) || rows.length > page.size) throw new Error('Unexpected job page response.');
+  rows.page = { ...page, total: JobViewRules.total(response.headers.get('Content-Range')) };
+  return rows;
+}
+
+async function fetchWorkOrder(id) {
+  requireAccessToken();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid job identity.');
+  const select = 'id,organization_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)';
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&id=eq.${id}&limit=1`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(await readableError(response, 'Unable to open this job.'));
+  const rows = await response.json();
+  verifyAdminRls(rows, currentUser.app_metadata.organization_id);
+  if (rows.length !== 1 || rows[0].id !== id) throw new Error('This job is no longer available to your account.');
+  return rows[0];
 }
 
 async function fetchAssignableUsers() {
@@ -354,10 +383,6 @@ function verifyAdminRls(rows, expectedOrganizationId) {
   }
 
   const numbers = new Set(rows.map((row) => row.wo_number));
-  if (!numbers.has('TEST-0001') || !numbers.has('TEST-0002-ADMIN-ONLY')) {
-    throw new Error('RLS CHECK FAILED: expected in-organization test work orders were not both returned.');
-  }
-
   if (numbers.has('TEST-OTHER-ORG-CONTROL')) {
     throw new Error('RLS CHECK FAILED: the other-organization control work order was returned.');
   }
@@ -377,10 +402,7 @@ function renderSignedIn(rows, users, organizationId) {
 
 function renderRlsSummary(rows) {
   rlsResult.className = 'check pass';
-  rlsResult.textContent =
-    `RLS CHECK: PASS\nServer returned ${rows.length} in-organization work order(s). ` +
-    'Required Team control rows are visible to Admin, the other-organization control is hidden, ' +
-    'and no client-side organization filter was used.';
+  rlsResult.textContent = `Work orders updated ${new Date().toLocaleTimeString()}.`;
 }
 
 function renderAssignableUsers(users) {
@@ -402,74 +424,42 @@ function fillAssigneeSelect(select, users, placeholder, selectedUserId = '') {
 }
 
 function renderWorkOrders(rows, organizationId) {
+  JobWorkspace.page(rows);
   workOrders.replaceChildren();
-  const userById = new Map(assignableUsers.map((user) => [user.user_id, user]));
-
-  for (const row of rows) {
-    const article = document.createElement('article');
-    article.className = 'work-order';
-
-    const title = document.createElement('h3');
-    title.textContent = row.wo_number;
-
-    const address = document.createElement('p');
-    address.textContent = row.property_address;
-
-    const details = document.createElement('p');
-    details.className = 'muted';
-    details.textContent = `Work type: ${row.work_type} • Due: ${row.due_date} • Status: ${row.field_status}`;
-
-    const assignedUser = userById.get(row.assigned_user_id);
-    const assignee = document.createElement('p');
-    assignee.className = 'muted';
-    assignee.textContent = `Assigned: ${userLabel(assignedUser)}`;
-
-    const receipt = document.createElement('p');
-    receipt.className = row.assignment_received_at ? 'receipt received' : 'receipt waiting';
-    receipt.textContent = row.assignment_received_at
-      ? `Contractor receipt: Received ${formatTimestamp(row.assignment_received_at)}`
-      : 'Contractor receipt: Not yet received';
-
-    const instructions = document.createElement('p');
-    instructions.className = 'muted';
-    instructions.textContent = `Instructions: ${row.instructions || 'None'}`;
-
-    article.append(title, address, details, assignee, receipt, instructions);
-
-    if (row.pending_assignee_user_id) {
-      const pendingUser = userById.get(row.pending_assignee_user_id);
-      const pending = document.createElement('p');
-      pending.className = 'handoff pending';
-      pending.textContent = `Reassignment requested to ${userLabel(pendingUser)} — waiting for current contractor approval.`;
-      article.append(pending);
-    }
-
-    const actions = document.createElement('div');
-    actions.className = 'work-order-actions';
-
-    const editButton = document.createElement('button');
-    editButton.type = 'button';
-    editButton.className = 'secondary';
-    editButton.textContent = row.field_status === 'IN_PROGRESS'
-      ? 'Edit / Request Reassignment'
-      : row.field_status === 'ASSIGNED'
-        ? 'Edit / Reassign'
-        : 'Edit';
-    editButton.addEventListener('click', () => openEditor(row.id));
-
-    actions.append(editButton);
-    article.append(actions);
-    workOrders.append(article);
+  const userById = new Map(assignableUsers.map(user => [user.user_id, user]));
+  const table = document.createElement('table');
+  table.className = 'job-table';
+  const caption = document.createElement('caption'); caption.textContent = 'Current work orders'; caption.className = 'sr-only'; table.append(caption);
+  const head = table.createTHead().insertRow();
+  for (const title of ['WO / Address', 'Work type', 'Assigned to', 'Due', 'Status / Receipt']) {
+    const th = document.createElement('th'); th.scope = 'col'; th.textContent = title; head.append(th);
   }
-
-  const orgNote = document.createElement('p');
-  orgNote.className = 'tiny muted';
-  orgNote.textContent = `Verified organization: ${organizationId}`;
-  workOrders.append(orgNote);
+  const body = table.createTBody();
+  for (const row of rows) {
+    const tr = body.insertRow();
+    const title = tr.insertCell();
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'job-link';
+    button.textContent = row.wo_number;
+    button.setAttribute('aria-label', `Open ${row.wo_number}, ${row.property_address}`);
+    button.addEventListener('click', () => JobWorkspace.choose(row.id));
+    const address = document.createElement('div'); address.textContent = row.property_address;
+    title.append(button, address);
+    tr.insertCell().textContent = row.work_type;
+    tr.insertCell().textContent = userLabel(userById.get(row.assigned_user_id));
+    tr.insertCell().textContent = row.due_date;
+    const status = tr.insertCell();
+    const field = document.createElement('div'); field.textContent = row.field_status.replaceAll('_', ' ');
+    const receipt = document.createElement('small'); receipt.textContent = row.assignment_received_at ? 'Assignment received' : 'Not yet received';
+    status.append(field, receipt);
+    if (row.pending_assignee_user_id) {
+      const handoff = document.createElement('div'); handoff.className = 'handoff pending'; handoff.textContent = 'Handoff awaiting approval'; status.append(handoff);
+    }
+  }
+  workOrders.append(table);
 }
 
-function openEditor(workOrderId) {
-  const row = workOrderRows.find((item) => item.id === workOrderId);
+function openEditor(workOrderId, selectedRow = null) {
+  const row = selectedRow || workOrderRows.find((item) => item.id === workOrderId);
   if (!row) {
     setEditStatus('Work order is no longer available in the current list.', true);
     return;
@@ -502,10 +492,12 @@ function openEditor(workOrderId) {
 
   setEditStatus('', false);
   editSection.classList.remove('hidden');
-  editSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  JobWorkspace.opened(row);
 }
 
-function closeEditor() {
+function closeEditor(force = false) {
+  if (force !== true) { JobWorkspace.guard(() => closeEditor(true)); return; }
+  JobWorkspace.closed();
   editForm.reset();
   editWorkOrderIdInput.value = '';
   editAssigneeSelect.replaceChildren(new Option('Choose Team user', ''));
@@ -610,3 +602,5 @@ function setEditStatus(message, isError) {
   editStatus.textContent = message;
   editStatus.classList.toggle('error', isError);
 }
+
+JobWorkspace.init();

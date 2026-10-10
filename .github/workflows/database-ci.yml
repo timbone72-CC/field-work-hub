@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Guard private review bucket configuration (source only)
+        run: python3 tests/supabase/test_phase5_storage_config.py
       - name: Prepare disposable controlled Auth context
         run: psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/local_auth_context.sql
       - name: Apply every authoritative migration in order
@@ -36,8 +38,25 @@ jobs:
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_3a_database_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_3_actions_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_4_photos_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_access_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_bootstrap_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_recovery_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_transfer_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_private_review_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_client_policy_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_legacy_work_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_lifecycle_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_invitation_guard_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_reviewed_access_gate.sql
       - name: Verify real two-connection mutation races
         run: |
           python3 -m pip install 'psycopg[binary]==3.2.10'
           python3 tests/supabase/phase_3_lock_races.py
           python3 tests/supabase/phase_4_lock_races.py
+          python3 tests/supabase/phase_5_bootstrap_races.py
+          python3 tests/supabase/phase_5_recovery_races.py
+          python3 tests/supabase/phase_5_legacy_work_races.py
+          python3 tests/supabase/phase_5_lifecycle_races.py
+          python3 tests/supabase/phase_5_invitation_races.py
+          python3 tests/supabase/phase_5_reviewed_access_races.py
+          python3 tests/supabase/phase_5_verification_races.py
