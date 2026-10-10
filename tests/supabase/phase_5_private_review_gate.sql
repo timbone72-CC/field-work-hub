@@ -113,14 +113,14 @@ begin
     'select public.admin_review_photo(%L,%L,%L,%L,null,%L,%L)',
     gen_random_uuid(),wo,photo,t.version,'REJECTED','Missing side'));
   response:=public.admin_review_photo(gen_random_uuid(),wo,photo,t.version,expected_revision,'REJECTED','Missing side');
-  if response->>'decision'<>'REJECTED' or (select count(*) from private.photo_review_actions where photo_id=photo)<>2
-    or (select reason from private.photo_review_decisions where photo_id=photo)<>'Missing side' then
-    raise exception 'Review revision, reason or immutable audit was lost';end if;
   gallery:=public.admin_list_private_review_photos(wo);
   if gallery->'photos'->0->>'decision'<>'REJECTED' then raise exception 'Gallery decision not persisted';end if;
   perform pg_temp.expect_photo_review_error('42501',format(
     'update private.photo_review_actions set decision=%L where action_id=%L','APPROVED',action));
   execute 'reset role';
+  if response->>'decision'<>'REJECTED' or (select count(*) from private.photo_review_actions where photo_id=photo)<>2
+    or (select reason from private.photo_review_decisions where photo_id=photo)<>'Missing side' then
+    raise exception 'Review revision, reason or immutable audit was lost';end if;
 
   -- Same-organization role alone does not grant a gallery or review capability.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',other_admin,'session_id',other_admin,
