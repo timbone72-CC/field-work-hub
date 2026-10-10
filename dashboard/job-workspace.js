@@ -46,6 +46,7 @@ const JobWorkspace = (() => {
   }
   function dirty() { return baseline !== null && fingerprint() !== baseline; }
   function reset() {
+    PrivateReview.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address' };
   }
@@ -116,16 +117,21 @@ const JobWorkspace = (() => {
     el('job-receipt').textContent = row.assignment_received_at
       ? `Assignment received ${formatTimestamp(row.assignment_received_at)}` : 'Assignment not yet received';
     el('job-reload').hidden = true;
-    if (!editSection.open) { tab('details'); editSection.showModal(); }
+    PrivateReview.reset();
+    tab('details');
+    if (!editSection.open) editSection.showModal();
     navigation();
   }
   function tab(name) {
     document.querySelectorAll('[data-job-panel]').forEach(panel => { panel.hidden = panel.dataset.jobPanel !== name; });
+    saveEditButton.hidden = name === 'photos';
+    if (name === 'photos' && selectedRow?.id) PrivateReview.open(selectedRow.id);
     document.querySelectorAll('[data-job-tab]').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.jobTab === name));
     });
   }
   function closed() {
+    PrivateReview.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     el('job-unsaved').hidden = true;
     if (editSection.open) editSection.close();
@@ -147,6 +153,7 @@ const JobWorkspace = (() => {
     }
   }
   function init() {
+    PrivateReview.init();
     el('job-filters').addEventListener('submit', event => { event.preventDefault(); change(0); });
     el('job-page-previous').addEventListener('click', () => change(Math.max(0, state.offset - state.size)));
     el('job-page-next').addEventListener('click', () => change(state.offset + state.size));
