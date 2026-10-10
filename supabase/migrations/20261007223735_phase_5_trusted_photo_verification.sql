@@ -369,3 +369,162 @@ revoke all on function private.admin_private_photo_target_for_session(uuid,uuid,
   from public,anon,authenticated,service_role;
 grant execute on function private.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid),
   public.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid) to service_role;
+
+-- Approved Phase 5A + 5C continuation. Legacy jobs stay deliberately UNCONFIGURED.
+-- This migration is still candidate/source-only. No provider root, credential,
+-- company assignment or review decision is inferred from an existing job label.
+create table private.client_companies (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  name text not null check(char_length(btrim(name)) between 1 and 160),
+  active boolean not null default true,
+  revision uuid not null default gen_random_uuid(),
+  created_at timestamptz not null default clock_timestamp(),
+  unique(organization_id,id),
+  unique(organization_id,name)
+);
+create index client_companies_org_idx on private.client_companies(organization_id,active,name);
+alter table private.client_companies enable row level security;
+revoke all on private.client_companies from public,anon,authenticated,service_role;
+grant select on private.client_companies to service_role;
+
+-- Provider operator provisioning is service-only and not exposed to browser/phone.
+-- No row can claim verified access by knowing a Drive folder name alone.
+create table private.client_delivery_destinations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  company_id uuid not null,
+  provider text not null check(provider='GOOGLE_DRIVE'),
+  provider_identity text not null check(char_length(btrim(provider_identity)) between 3 and 320),
+  root_folder_id text not null check(char_length(btrim(root_folder_id)) between 3 and 320),
+  verified boolean not null default false,
+  verified_at timestamptz,
+  verification_receipt jsonb,
+  active boolean not null default false,
+  revision uuid not null default gen_random_uuid(),
+  foreign key(organization_id,company_id)
+    references private.client_companies(organization_id,id) on delete restrict,
+  check(not verified or (verified_at is not null and verification_receipt is not null
+    and jsonb_typeof(verification_receipt)='object')),
+  check(not active or verified)
+);
+create unique index client_delivery_one_active_per_company on
+  private.client_delivery_destinations(organization_id,company_id) where active;
+alter table private.client_delivery_destinations enable row level security;
+revoke all on private.client_delivery_destinations from public,anon,authenticated,service_role;
+grant select on private.client_delivery_destinations to service_role;
+
+alter table public.work_orders
+  add column client_company_id uuid,
+  add column review_required boolean not null default true,
+  add column review_policy_revision uuid not null default gen_random_uuid();
+alter table public.work_orders add constraint work_orders_client_company_org_fk
+  foreign key(organization_id,client_company_id)
+  references private.client_companies(organization_id,id) on delete restrict;
+
+-- Explicit assignment is one-time, and only before accepted field work.
+-- Never change client after dispatch/Finish, and never infer from WO number.
+create function private.admin_assign_client_company(
+  p_action uuid,p_work_order uuid,p_company uuid,p_expected_policy_revision uuid
+) returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $assign_company$
+declare w public.work_orders%rowtype; c private.client_companies%rowtype; result jsonb;
+begin
+  if p_action is null or p_work_order is null or p_company is null
+    or p_expected_policy_revision is null then
+    raise exception 'Explicit company, action and revision required' using errcode='22023';end if;
+  perform private.lock_account_lifecycle();
+  if not private.current_identity_valid() or not private.can_work_order(p_work_order) then
+    raise exception 'Current office authority required' using errcode='42501';end if;
+  select * into w from public.work_orders where id=p_work_order for update;
+  if w.id is null then raise exception 'Job unavailable' using errcode='42501';end if;
+  if w.review_policy_revision is distinct from p_expected_policy_revision then
+    raise exception 'Client binding changed; reload' using errcode='40001';end if;
+  select * into c from private.client_companies where id=p_company
+    and organization_id=w.organization_id and active;
+  if c.id is null then raise exception 'Company not configured for this organization' using errcode='42501';end if;
+  if w.client_company_id is not null and w.client_company_id is distinct from p_company then
+    raise exception 'Dispatched client binding cannot change' using errcode='42501';end if;
+  if exists(select 1 from public.field_actions where work_order_id=w.id)
+    or exists(select 1 from public.photos where work_order_id=w.id) then
+    raise exception 'Field evidence already exists; client identity frozen' using errcode='42501';end if;
+  if w.client_company_id is null then
+    update public.work_orders set client_company_id=c.id,review_policy_revision=gen_random_uuid()
+      where id=w.id returning * into w;
+  end if;
+  result:=jsonb_build_object('work_order_id',w.id,'company_id',w.client_company_id,
+    'review_policy_revision',w.review_policy_revision);
+  return result;
+end;
+$assign_company$;
+create function public.admin_assign_client_company(
+  p_action uuid,p_work_order uuid,p_company uuid,p_expected_policy_revision uuid
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+  select private.admin_assign_client_company(p_action,p_work_order,p_company,p_expected_policy_revision)
+$wrap$;
+revoke all on function private.admin_assign_client_company(uuid,uuid,uuid,uuid),
+  public.admin_assign_client_company(uuid,uuid,uuid,uuid) from public,anon,authenticated;
+grant execute on function private.admin_assign_client_company(uuid,uuid,uuid,uuid),
+  public.admin_assign_client_company(uuid,uuid,uuid,uuid) to authenticated,service_role;
+
+create table private.review_policy_actions (
+  action_id uuid primary key,
+  work_order_id uuid not null references public.work_orders(id) on delete restrict,
+  actor_user_id uuid not null references auth.users(id) on delete restrict,
+  expected_revision uuid not null,
+  required boolean not null,
+  reason text not null check(char_length(btrim(reason)) between 1 and 1000),
+  result jsonb not null,
+  recorded_at timestamptz not null default clock_timestamp()
+);
+alter table private.review_policy_actions enable row level security;
+revoke all on private.review_policy_actions from public,anon,authenticated,service_role;
+grant select on private.review_policy_actions to service_role;
+create trigger review_policy_actions_immutable before update or delete on private.review_policy_actions
+  for each row execute function private.protect_photo_transfer_ledger();
+
+-- Turn the explicit review requirement ON or OFF without fabricating approval.
+-- Approved packages must eventually freeze this revision and recheck it at Send.
+create function private.admin_set_review_required(
+  p_action uuid,p_work_order uuid,p_expected_revision uuid,p_required boolean,p_reason text
+) returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $policy$
+declare w public.work_orders%rowtype; prior private.review_policy_actions%rowtype;
+  explanation text:=btrim(coalesce(p_reason,'')); result jsonb;
+begin
+  if p_action is null or p_work_order is null or p_expected_revision is null or p_required is null
+    or char_length(explanation) not between 1 and 1000 then
+    raise exception 'Explicit policy review inputs required' using errcode='22023';end if;
+  perform private.lock_account_lifecycle();
+  if not private.current_identity_valid() or not private.can_work_order(p_work_order) then
+    raise exception 'Current scoped Admin review required' using errcode='42501';end if;
+  select * into w from public.work_orders where id=p_work_order for update;
+  if w.id is null then raise exception 'Job unavailable' using errcode='42501';end if;
+  select * into prior from private.review_policy_actions where action_id=p_action;
+  if prior.action_id is not null then
+    if row(prior.work_order_id,prior.actor_user_id,prior.expected_revision,prior.required,prior.reason)
+      is distinct from row(p_work_order,auth.uid(),p_expected_revision,p_required,explanation) then
+      raise exception 'Review action UUID reused with changed inputs' using errcode='22023';end if;
+    return prior.result;
+  end if;
+  if w.review_policy_revision is distinct from p_expected_revision then
+    raise exception 'Review policy changed; reload before saving' using errcode='40001';end if;
+  if w.review_required is distinct from p_required then
+    update public.work_orders set review_required=p_required,
+      review_policy_revision=gen_random_uuid() where id=w.id returning * into w;
+  end if;
+  result:=jsonb_build_object('work_order_id',w.id,'review_required',w.review_required,
+    'review_policy_revision',w.review_policy_revision);
+  insert into private.review_policy_actions(action_id,work_order_id,actor_user_id,
+    expected_revision,required,reason,result)
+  values(p_action,p_work_order,auth.uid(),p_expected_revision,p_required,explanation,result);
+  return result;
+end;
+$policy$;
+create function public.admin_set_review_required(
+  p_action uuid,p_work_order uuid,p_expected_revision uuid,p_required boolean,p_reason text
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+  select private.admin_set_review_required(p_action,p_work_order,p_expected_revision,p_required,p_reason)
+$wrap$;
+revoke all on function private.admin_set_review_required(uuid,uuid,uuid,boolean,text),
+  public.admin_set_review_required(uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
+grant execute on function private.admin_set_review_required(uuid,uuid,uuid,boolean,text),
+  public.admin_set_review_required(uuid,uuid,uuid,boolean,text) to authenticated,service_role;
