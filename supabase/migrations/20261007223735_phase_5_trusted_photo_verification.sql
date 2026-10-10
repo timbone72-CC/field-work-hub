@@ -585,3 +585,78 @@ revoke all on function private.admin_create_client_company(uuid,text),
   public.admin_create_client_company(uuid,text) from public,anon,authenticated;
 grant execute on function private.admin_create_client_company(uuid,text),
   public.admin_create_client_company(uuid,text) to authenticated,service_role;
+
+-- 5D immutable-selection package journal; neither private receipt nor approval
+-- alone is evidence of provider delivery. Provider availability defaults OFF.
+create table private.client_packages (
+ id uuid primary key default gen_random_uuid(),
+ organization_id uuid not null references public.organizations(id) on delete restrict,
+ work_order_id uuid not null references public.work_orders(id) on delete restrict,
+ run_id uuid not null,
+ company_id uuid not null,
+ notes text not null default '' check(char_length(notes)<=2000),
+ status text not null default 'DRAFT' check(status in ('DRAFT','APPROVED','QUEUED','DELIVERING','FAILED','UNCERTAIN','DELIVERED')),
+ revision uuid not null default gen_random_uuid(),
+ approved_manifest jsonb,
+ approved_sha256 text check(approved_sha256 ~ '^[a-f0-9]{64}$'),
+ approved_by uuid references auth.users(id) on delete restrict,
+ approved_at timestamptz,
+ destination_id uuid references private.client_delivery_destinations(id) on delete restrict,
+ created_at timestamptz not null default clock_timestamp(),
+ unique(work_order_id,run_id),
+ foreign key(run_id,work_order_id) references public.work_order_runs(id,work_order_id) on delete restrict,
+ foreign key(organization_id,company_id) references private.client_companies(organization_id,id) on delete restrict,
+ check(status='DRAFT' or (approved_manifest is not null and approved_sha256 is not null
+      and approved_by is not null and approved_at is not null and destination_id is not null))
+);
+create table private.client_package_photos (
+ package_id uuid not null references private.client_packages(id) on delete restrict,
+ photo_id uuid not null references private.photo_transfer_receipts(photo_id) on delete restrict,
+ ordinal integer not null check(ordinal>0 and ordinal<=5000),
+ primary key(package_id,photo_id),
+ unique(package_id,ordinal)
+);
+create table private.client_package_actions (
+ action_id uuid primary key,
+ package_id uuid not null references private.client_packages(id) on delete restrict,
+ actor_user_id uuid not null references auth.users(id) on delete restrict,
+ action_kind text not null check(action_kind in ('DRAFT','APPROVE','SEND')),
+ request_fingerprint text not null check(request_fingerprint ~ '^[a-f0-9]{64}$'),
+ result jsonb not null,
+ recorded_at timestamptz not null default clock_timestamp()
+);
+create table private.client_delivery_runtime (
+ organization_id uuid primary key references public.organizations(id) on delete restrict,
+ worker_ready boolean not null default false,
+ last_verified_at timestamptz,
+ worker_identity text,
+ check(not worker_ready or (last_verified_at is not null and worker_identity is not null))
+);
+create table private.client_delivery_outbox (
+ package_id uuid primary key references private.client_packages(id) on delete restrict,
+ action_id uuid not null unique references private.client_package_actions(action_id) on delete restrict,
+ approved_sha256 text not null,
+ destination_id uuid not null references private.client_delivery_destinations(id) on delete restrict,
+ state text not null default 'QUEUED' check(state in ('QUEUED','DELIVERING','FAILED','UNCERTAIN','DELIVERED')),
+ lease_generation bigint not null default 0,
+ lease_until timestamptz,
+ attempts integer not null default 0,
+ enqueued_at timestamptz not null default clock_timestamp(),
+ check(approved_sha256 ~ '^[a-f0-9]{64}$')
+);
+create index client_package_by_work on private.client_packages(work_order_id,status);
+create index delivery_outbox_state on private.client_delivery_outbox(state,enqueued_at);
+alter table private.client_packages enable row level security;
+alter table private.client_package_photos enable row level security;
+alter table private.client_package_actions enable row level security;
+alter table private.client_delivery_runtime enable row level security;
+alter table private.client_delivery_outbox enable row level security;
+revoke all on private.client_packages,private.client_package_photos,
+  private.client_package_actions,private.client_delivery_runtime,private.client_delivery_outbox
+  from public,anon,authenticated,service_role;
+grant select on private.client_packages,private.client_package_photos,
+  private.client_package_actions,private.client_delivery_runtime,private.client_delivery_outbox to service_role;
+create trigger client_package_actions_immutable before update or delete on private.client_package_actions
+ for each row execute function private.protect_photo_transfer_ledger();
+create trigger client_delivery_outbox_no_delete before delete on private.client_delivery_outbox
+ for each row execute function private.protect_photo_transfer_ledger();
