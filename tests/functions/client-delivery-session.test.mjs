@@ -13,7 +13,7 @@ test('opaque encrypted session contains no bearer URL and can recover only with 
  assert.equal(await vault.open(sealed,id),url);
  await assert.rejects(()=>vault.open(sealed,{...id,fileId:'otherfile_'+'x'.repeat(22)}),
   /SESSION_CIPHERTEXT_OR_IDENTITY_MISMATCH/);
- await assert.rejects(()=>vault.open({...sealed,payload:sealed.payload.slice(0,-1)+'A'},id),
+ await assert.rejects(()=>vault.open({...sealed,payload:(sealed.payload[0]==='A'?'B':'A')+sealed.payload.slice(1)},id),
   /SESSION_CIPHERTEXT_OR_IDENTITY_MISMATCH/);
 });
 test('nonce is fresh for each sealed upload session; refresh never exports key',async()=>{
