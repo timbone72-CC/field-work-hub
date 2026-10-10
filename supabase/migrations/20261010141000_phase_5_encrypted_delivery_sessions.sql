@@ -107,3 +107,37 @@ revoke all on function private.service_record_upload_offset(uuid,uuid,bigint,uui
  from public,anon,authenticated,service_role;
 grant execute on function private.service_record_upload_offset(uuid,uuid,bigint,uuid,bigint,boolean),
  public.service_record_upload_offset(uuid,uuid,bigint,uuid,bigint,boolean) to service_role;
+
+-- Encrypted session recovery is an internal service-role-only, current-lease
+-- capability. It must never be returned through an ordinary Admin RPC.
+create function private.service_read_upload_session(
+ p_package uuid,p_worker uuid,p_generation bigint,p_plan uuid
+) returns jsonb language plpgsql security definer set search_path='' as $readsession$
+declare f private.client_delivery_file_plans%rowtype;
+ sess private.client_delivery_upload_sessions%rowtype;
+begin
+ perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ select * into f from private.client_delivery_file_plans
+  where id=p_plan and package_id=p_package;
+ if f.id is null or f.kind not in ('PHOTO','MANIFEST') then
+  raise exception 'Exact reserved session file required' using errcode='42501';end if;
+ select * into sess from private.client_delivery_upload_sessions where file_plan_id=p_plan;
+ if sess.file_plan_id is null then
+   return jsonb_build_object('exists',false,'file_plan_id',p_plan);end if;
+ if sess.package_id<>p_package or sess.total_bytes<>f.expected_size or sess.state='UNCERTAIN' then
+   raise exception 'Remote session uncertain; explicit reconciliation required' using errcode='40001';end if;
+ return jsonb_build_object('exists',true,'package_id',sess.package_id,'plan_id',p_plan,
+  'total_bytes',sess.total_bytes,'encrypted',sess.ciphertext,
+  'recorded_offset',sess.recorded_offset,'session_state',sess.state);
+end;
+$readsession$;
+create function public.service_read_upload_session(
+ p_package uuid,p_worker uuid,p_generation bigint,p_plan uuid
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_read_upload_session(p_package,p_worker,p_generation,p_plan)
+$wrap$;
+revoke all on function private.service_read_upload_session(uuid,uuid,bigint,uuid),
+ public.service_read_upload_session(uuid,uuid,bigint,uuid)
+ from public,anon,authenticated,service_role;
+grant execute on function private.service_read_upload_session(uuid,uuid,bigint,uuid),
+ public.service_read_upload_session(uuid,uuid,bigint,uuid) to service_role;
