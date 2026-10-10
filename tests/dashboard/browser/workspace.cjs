@@ -11,6 +11,8 @@ const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
+const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
+let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
 const rows = Array.from({ length: 1000 }, (_, i) => ({ id: uuid(i + 1), organization_id: organization,
   assigned_user_id: contractor, pending_assignee_user_id: null, reassignment_requested_at: null,
   assignment_received_at: null, wo_number: `DEMO-${String(i + 1).padStart(4, '0')}`,
@@ -40,14 +42,54 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       if (url.pathname === '/rest/v1/photo_templates') return reply([]);
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
       if (url.pathname.endsWith('/admin_client_choices')) {
-        const p = req.postDataJSON();
-        return reply({ work_order_id:p.p_wo, client_company_id:null, review_required:true,
-          revision:uuid(9980), companies:[{id:uuid(9981),name:'DISPOSABLE COMPANY'}] });
+        const p=req.postDataJSON();
+        return reply({work_order_id:p.p_wo,client_company_id:selectedCompany,review_required:reviewRequired,
+          revision:reviewPolicyRevision,companies:[{id:uuid(9981),name:'DISPOSABLE COMPANY'}]});
+      }
+      if (url.pathname.endsWith('/admin_set_review_required')) {
+        const p=req.postDataJSON();assert.equal(p.p_expected_revision,reviewPolicyRevision);
+        assert.ok(p.p_reason);reviewRequired=p.p_required;reviewPolicyRevision=uuid(9982);
+        return reply({work_order_id:p.p_work_order,review_required:reviewRequired,review_policy_revision:reviewPolicyRevision});
+      }
+      if (url.pathname.endsWith('/admin_assign_client_company')) {
+        const p=req.postDataJSON();assert.equal(p.p_company,uuid(9981));
+        assert.equal(p.p_expected_policy_revision,reviewPolicyRevision);
+        selectedCompany=p.p_company;reviewPolicyRevision=uuid(9983);
+        return reply({work_order_id:p.p_work_order,company_id:selectedCompany,
+          review_policy_revision:reviewPolicyRevision});
       }
       if (url.pathname.endsWith('/admin_package_state')) {
-        const p = req.postDataJSON();
-        return reply({work_order_id:p.p_wo,available_photos:[],too_many_photos:false,
-          coverage_message:'No verified photos',destination:null,package:null});
+        const p=req.postDataJSON();
+        return reply({work_order_id:p.p_wo,available_photos:selectedCompany
+          ? [{photo_id:reviewPhoto,transfer_version:reviewVersion,decision:'APPROVED',requirement_label:'Extra'}]:[],
+          too_many_photos:false,coverage_message:'Release goals verified',
+          destination:selectedCompany?{verified:true,company_name:'DISPOSABLE COMPANY'}:null,
+          package:simulatedPackage});
+      }
+      if (url.pathname.endsWith('/admin_save_package_draft')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        assert.deepEqual(p.p_photo_ids,[reviewPhoto]);
+        assert.equal(p.p_expected_revision,null);
+        simulatedPackage={id:reviewPackageId,status:'DRAFT',revision:uuid(9992),
+          notes:p.p_notes,photos:[{photo_id:reviewPhoto}],manifest_sha256:approvedHash,
+          ready_to_approve:true,can_send:false};
+        return reply({id:reviewPackageId,revision:simulatedPackage.revision,status:'DRAFT'});
+      }
+      if (url.pathname.endsWith('/admin_preview_package')) {
+        const p=req.postDataJSON();assert.equal(p.p_package,reviewPackageId);
+        assert.equal(p.p_expected_revision,simulatedPackage.revision);
+        return reply({package_id:reviewPackageId,revision:simulatedPackage.revision,
+          manifest_sha256:approvedHash,manifest:{client_company_id:selectedCompany,
+            client_wo_number:'DEMO-0051',client_notes:simulatedPackage.notes,
+            destination_root:'DISPOSABLE VERIFIED TEST',destination_provider:'GOOGLE_DRIVE',
+            review_required:reviewRequired,requirements:{},selected_photos:[{photo_id:reviewPhoto}]}});
+      }
+      if (url.pathname.endsWith('/admin_approve_package')) {
+        const p=req.postDataJSON();assert.equal(p.p_package,reviewPackageId);
+        assert.equal(p.p_manifest_sha256,approvedHash);
+        simulatedPackage={...simulatedPackage,status:'APPROVED',revision:uuid(9993),
+          ready_to_approve:false,can_send:false};
+        return reply({package_id:reviewPackageId,status:'APPROVED',revision:simulatedPackage.revision});
       }
       if (url.pathname.endsWith('/admin_list_private_review_photos')) {
         const args = req.postDataJSON();
@@ -189,6 +231,25 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#release-send').isDisabled(), true, 'No verified destination or approved package: no Send');
     assert.equal(await page.locator('#release-approve').isDisabled(), true, 'No draft: no Approve');
     assert.equal(requests.some(x => x.includes('admin_queue_package')), false, 'Preview/navigation cannot Send');
+    await page.locator('#release-company').selectOption(uuid(9981));
+    await page.locator('#release-assign-company').click();
+    await wait(page, () => document.querySelector('#release-status').textContent.includes('No package saved'));
+    assert.equal(selectedCompany,uuid(9981));
+    await page.locator('#release-photo-list input[type=checkbox]').check();
+    await page.locator('#release-notes').fill('Verified mock client notes');
+    await page.locator('#release-save').click();
+    await wait(page, () => document.querySelector('#release-status').textContent.includes('Package DRAFT'));
+    assert.equal(await page.locator('#release-approve').isDisabled(), true,
+      'Approval cannot precede viewing the exact preview');
+    await page.locator('#release-preview').click();
+    await wait(page, () => !document.querySelector('#release-exact-preview').hidden);
+    assert.match(await page.locator('#release-exact-preview').innerText(), /DISPOSABLE VERIFIED TEST/);
+    await page.locator('#release-approve').click();
+    await wait(page, () => document.querySelector('#release-status').textContent.includes('Package APPROVED'));
+    assert.equal(await page.locator('#release-send').isDisabled(), true,
+      'Unverified trusted provider worker still prevents Send after approval');
+    assert.equal(requests.some(x => x.includes('admin_queue_package')), false,
+      'No client delivery can happen without explicit enabled Send');
     await page.locator('[data-job-tab="requirements"]').click();
     assert.equal(await page.locator('dialog').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Mobile workspace must not require sideways scrolling');
     await page.screenshot({ path: path.join(output, 'workspace-mobile.png'), fullPage: true });
