@@ -44,8 +44,8 @@ test('wrong scope, incomplete token and unexpected errors never authorize Drive 
    const refresh=createWorkspaceTokenProvider({...conf,fetcher:()=>json(bad)});
    await assert.rejects(refresh);
  }
- for(const mock of [()=>{throw Error('offline secret');},()=>json({},503)]){
-  const refresh=createWorkspaceTokenProvider({...conf,fetcher:mock});
-  await assert.rejects(refresh,expected('OAUTH_OUTCOME_UNCERTAIN'));
- }
+ const offline=createWorkspaceTokenProvider({...conf,fetcher:()=>{throw Error('offline secret');}});
+ await assert.rejects(offline,expected('OAUTH_OUTCOME_UNCERTAIN'));
+ const server=createWorkspaceTokenProvider({...conf,fetcher:()=>json({},503)});
+ await assert.rejects(server,expected('OAUTH_UNAVAILABLE'));
 });
