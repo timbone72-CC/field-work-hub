@@ -291,13 +291,14 @@ async function fetchWorkOrders() {
 // Read-only exact-address sibling lookup. The current signed-in user's RLS
 // still authorizes every row, with explicit company and org match checked
 // again before rendering. Never use a fuzzy or cross-company property search.
-async function fetchAddressWorkOrders(row) {
+async function fetchAddressWorkOrders(row,offset=0) {
   requireAccessToken();
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuid.test(row?.organization_id||'') || !uuid.test(row?.client_company_id||'')
     || !uuid.test(row?.id||'') || typeof row.property_address!=='string'
     || row.property_address.length<3 || row.property_address.length>500)
     throw new Error('Exact company/address identity required.');
+  if (!Number.isSafeInteger(offset)||offset<0||offset>100000) throw new Error('Invalid address page.');
   // PostgREST quoted exact string; escaped quotes/backslashes are data, not operators.
   const address='"'+row.property_address.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
   const params=new URLSearchParams({
@@ -305,7 +306,7 @@ async function fetchAddressWorkOrders(row) {
     organization_id:'eq.'+row.organization_id,
     client_company_id:'eq.'+row.client_company_id,
     property_address:'eq.'+address,
-    order:'id.asc',limit:'50',offset:'0'
+    order:'id.asc',limit:'50',offset:String(offset)
   });
   const response=await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?${params}`,{
     headers:{...authHeaders(),Prefer:'count=exact'}
