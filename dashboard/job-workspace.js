@@ -74,6 +74,20 @@ const JobWorkspace = (() => {
     el('job-contractor').value=state.contractor || '';
     el('job-due-date').value=state.dueDate || '';
   }
+  function populateContractors(users=[]) {
+    const select=el('job-contractor');
+    const previous=state.contractor || '';
+    select.replaceChildren(new Option('All contractors',''));
+    for (const user of users) {
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user?.user_id||''))
+        select.add(new Option(String(user.email||'Contractor'),user.user_id));
+    }
+    if (previous && ![...select.options].some(option=>option.value===previous)) {
+      // A revoked/removed contractor must not remain a silently active filter.
+      state.contractor='';
+    }
+    select.value=state.contractor;
+  }
   function fingerprint() {
     return JSON.stringify([['edit-wo-number', 'edit-property-address', 'edit-work-type', 'edit-instructions',
       'edit-due-date', 'edit-assignee'].map(id => el(id).value), editPhotos.value]);
@@ -223,5 +237,5 @@ const JobWorkspace = (() => {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   }
   return { init, ensureAccount, request, accept, page, choose, guard, opened, closed, reset, dirty, saved,
-    reconcileSaved, refreshed, needsReload: () => needsReload };
+    reconcileSaved, refreshed, populateContractors, needsReload: () => needsReload };
 })();
