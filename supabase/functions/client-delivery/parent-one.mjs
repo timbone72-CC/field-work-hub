@@ -29,7 +29,8 @@ export async function reconcileOnePreallocatedParent({
   ||fresh.remote_folder_id!==map.remote_folder_id
   ||fresh.parent_remote_id!==map.parent_remote_id
   ||fresh.remote_name!==map.remote_name
-  ||fresh.state!==map.state)deny();
+  ||fresh.state!==map.state
+  ||JSON.stringify(fresh.appProperties)!==JSON.stringify(map.appProperties))deny();
  const receipt={id:map.remote_folder_id,parent:map.parent_remote_id,
   mime:'application/vnd.google-apps.folder',name:map.remote_name,
   expectedDriveId,sha256:null,size:null,appProperties:map.appProperties};
