@@ -71,4 +71,5 @@ const ClientFolderLayout = (() => {
   }
   return {init,load};
 })();
+if(typeof document!=='undefined') ClientFolderLayout.init();
 if(typeof module!=='undefined'&&module.exports)module.exports=ClientFolderLayout;
