@@ -20,6 +20,8 @@ let templateSaves=[];
 const correctiveOriginalRun=uuid(9961),correctiveNewRun=uuid(9962);
 const correctionDraftRev=uuid(9963),correctionHash='c'.repeat(64);
 let correctionDraft=null,correctionPreviewCount=0,correctionDispatchCount=0;
+let cancelCount=0,replaceCount=0,managementStatus='ASSIGNED';
+const replacementRun=uuid(9979);
 let correctionRequest=null;
 const correctionBase=()=>({
   work_order_id:uuid(51),client_wo_number:'DEMO-0051',client_company_id:uuid(9981),
@@ -63,6 +65,39 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           description:payload.p_description,instructions:payload.p_instructions,
           requirements:payload.p_requirements,active:payload.p_active,is_default:payload.p_is_default};
         templateRows.push(saved);return reply(saved);
+      }
+      if (url.pathname.endsWith('/admin_followup_management_state')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        const active=correctionDispatchCount>0&&rows[50].current_run_id!==correctiveOriginalRun;
+        return reply({work_order_id:uuid(51),available:active,
+          run_id:rows[50].current_run_id,status:rows[50].field_status,
+          wo_number:rows[50].wo_number,company_id:uuid(9981),
+          expected_wo_updated_at:'2026-10-11T20:00:01Z',
+          obligation_id:uuid(9989),kind:'INTERNAL_CORRECTION',
+          reason:'Replace exterior evidence',assigned_user_id:contractor,due_date:'2026-10-22',
+          can_cancel:active&&rows[50].field_status==='ASSIGNED',
+          can_replace:active&&rows[50].field_status==='CANCELLED',
+          historical_run_id:correctiveOriginalRun});
+      }
+      if (url.pathname.endsWith('/admin_cancel_untouched_followup')) {
+        const p=req.postDataJSON();cancelCount++;
+        assert.equal(p.p_wo,uuid(51));assert.equal(p.p_run,correctiveNewRun);
+        assert.equal(p.p_expected_updated_at,'2026-10-11T20:00:01Z');
+        assert.equal(p.p_reason,'Schedule changed');
+        rows[50].field_status='CANCELLED';
+        return reply({work_order_id:uuid(51),run_id:correctiveNewRun,status:'CANCELLED',
+          obligation_id:uuid(9989),obligation_status:'OPEN'});
+      }
+      if (url.pathname.endsWith('/admin_replace_cancelled_followup')) {
+        const p=req.postDataJSON();replaceCount++;
+        assert.equal(p.p_wo,uuid(51));assert.equal(p.p_cancelled_run,correctiveNewRun);
+        assert.equal(p.p_assigned_user,contractor);
+        assert.equal(p.p_due_date,'2026-10-25');
+        assert.equal(p.p_reason,'Client requested another visit');
+        rows[50].field_status='ASSIGNED';rows[50].current_run_id=replacementRun;
+        return reply({work_order_id:uuid(51),run_id:replacementRun,
+          assignment_instance_id:uuid(9990),run_sequence:3,status:'ASSIGNED',
+          superseded_obligation_id:uuid(9989),new_obligation_id:uuid(9995)});
       }
       if (url.pathname.endsWith('/admin_correction_state')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
@@ -523,6 +558,34 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(rows[50].current_run_id,correctiveNewRun);
     assert.equal(correctionRequest.p_revision,correctionDraftRev);
     assert.equal(rows[50].wo_number,'DEMO-0051');
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
+    // Protected management happens separately from correction creation.
+    await page.locator('[data-job-tab="photos"]').click();
+    await wait(page,()=>!document.getElementById('followup-management').hidden);
+    await page.locator('#followup-management > summary').click();
+    assert.equal(await page.locator('#followup-replace').isVisible(),false);
+    await page.locator('#followup-management-reason').fill('Schedule changed');
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
+      page.locator('#followup-cancel').click()
+    ]);
+    await wait(page,()=>rows[50].field_status==='CANCELLED');
+    assert.equal(cancelCount,1,'Cancelled a never-acknowledged follow-up only once');
+    await page.locator('[data-job-tab="photos"]').click();
+    await wait(page,()=>!document.getElementById('followup-management').hidden);
+    if(!await page.locator('#followup-management').evaluate(el=>el.open))
+      await page.locator('#followup-management > summary').click();
+    await page.locator('#followup-management-reason').fill('Client requested another visit');
+    await page.locator('#followup-replacement-due').fill('2026-10-25');
+    await page.locator('#followup-replacement-instructions').fill('Retake the front');
+    await page.locator('#followup-replacement-assignee').selectOption(contractor);
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
+      page.locator('#followup-replace').click()
+    ]);
+    await wait(page,()=>rows[50].current_run_id===replacementRun);
+    assert.equal(replaceCount,1);
+    assert.equal(rows[50].wo_number,'DEMO-0051','Replacement retains original client number');
     assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
     await page.locator('#cancel-edit').click();
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
