@@ -541,8 +541,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('dialog').evaluate(el => el.open), false);
     assert.equal(await page.locator('#edit-work-order-id').inputValue(), '');
     assert.equal(errors.length, 0, errors.join('\n'));
-    assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 1,
-      'Private image access is on-demand, bounded to one verified preview');
+    assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 2,
+      'Two explicit inspector previews open exactly two short-lived private images; no gallery prefetch');
     assert.equal(requests.some(url => url.includes('work_order_photos')), false, 'List selection does not fetch all photos');
     console.log('PASS: bounded 1,000-job paging, 50 same-address results, UUID navigation, Save/Stay/Discard and requirements edits, failed save/read recovery, stale refresh, account/sign-out isolation, desktop/mobile workspace. No live backend traffic.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
