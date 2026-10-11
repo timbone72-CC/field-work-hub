@@ -126,11 +126,14 @@ export function createDriveClient({accessToken,fetcher=fetch}){
           // a streamed byte re-read before producing the equivalent proof.
           throw new DriveUncertain('REMOTE_CONTENT_UNVERIFIED');
       }
-      // Preserve the independently GET-verified folder identity facts for
-      // server-only one-shot receipts. Never rely on POST reply for a receipt.
-      return {id,parent,mime,name:file.name,drive_id:file.driveId??null,
-        trashed:file.trashed===true,appProperties:file.appProperties??null,
-        sha256:sha256??null,size:size??null};
+      // A folder needs the complete independently GET-verified identity for
+      // the server one-shot journal. Ordinary file checks retain their existing
+      // minimal response contract for the resumable upload path.
+      if(mime==='application/vnd.google-apps.folder')
+        return {id,parent,mime,name:file.name,drive_id:file.driveId??null,
+          trashed:file.trashed===true,appProperties:file.appProperties??null,
+          sha256:null,size:null};
+      return {id,parent,mime,sha256:sha256??null,size:size??null};
     },
     async createPreallocatedFolder(spec){
       const data=fixedObject(spec);
