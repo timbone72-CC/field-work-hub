@@ -129,6 +129,12 @@ begin
     raise exception 'Frozen package and current delivery required' using errcode='42501';
   end if;
   m:=k.approved_manifest;
+  -- Geographic layouts may not silently reserve legacy address-under-root
+  -- parents until their complete immutable ancestor chain is enabled.
+  if coalesce(m->>'folder_layout','ADDRESS_WORK_ORDER')<>'ADDRESS_WORK_ORDER' then
+    raise exception 'Geographic parent reservations require verified full hierarchy'
+      using errcode='42501';
+  end if;
   select * into d from private.client_delivery_destinations where id=k.destination_id;
   if d.id is null or d.organization_id is distinct from k.organization_id
      or d.company_id is distinct from k.company_id
