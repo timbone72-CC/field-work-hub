@@ -100,7 +100,7 @@ public class RoomMigrationTest {
             }
             JSONArray setup=schema.getJSONArray("setupQueries");for(int n=0;n<setup.length();n++)old.execSQL(setup.getString(n));old.setVersion(2);
         }
-        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name).addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4).allowMainThreadQueries().build();
+        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name).addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5).allowMainThreadQueries().build();
         FieldAction accepted=upgraded.cachedWorkOrderDao().action("accepted-v2");assertEquals("ACCEPTED",accepted.state);assertEquals("2026-10-03T12:00:00Z",accepted.eventTime);
         assertEquals("",accepted.requirementRevision);assertEquals("",accepted.finishSetId);assertEquals("",accepted.finishDigest);assertTrue(upgraded.cachedWorkOrderDao().allPhotos().isEmpty());
         upgraded.close();context.deleteDatabase(name);
