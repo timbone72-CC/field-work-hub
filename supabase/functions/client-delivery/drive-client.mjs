@@ -107,9 +107,11 @@ export function createDriveClient({accessToken,fetcher=fetch}){
         ||json.ids.some(id=>!ID.test(id)))throw new DriveUncertain('GENERATED_IDS_UNCERTAIN');
       return json.ids;
     },
-    async verifyFile({id,parent,mime,name=null,sha256,size,appProperties}){
+    async verifyFile({id,parent,mime,name=null,expectedDriveId=null,sha256,size,appProperties}){
+      if(expectedDriveId!==null)valid(expectedDriveId,PARENT,'EXPECTED_SHARED_DRIVE_REQUIRED');
       const file=await get(id);
       if(file.id!==valid(id,ID,'REMOTE_ID_REQUIRED')||file.trashed===true
+        ||(expectedDriveId!==null&&file.driveId!==expectedDriveId)
         ||(name!==null&&file.name!==name)
         ||file.mimeType!==mime||!Array.isArray(file.parents)
         ||file.parents.length!==1||file.parents[0]!==parent
