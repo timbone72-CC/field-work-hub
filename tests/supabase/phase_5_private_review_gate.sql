@@ -136,6 +136,37 @@ begin
   pkg_draft:=public.admin_save_package_draft(gen_random_uuid(),wo,null,'Synthetic client description',array[photo]);
   pkg_id:=(pkg_draft->>'id')::uuid;
   if pkg_draft->>'status'<>'DRAFT' then raise exception 'Draft save did not remain unsent';end if;
+  -- Exact approved Preview must inherit the Admin-chosen company layout and
+  -- authoritative verified geography, not a guess from the property address.
+  execute 'reset role';
+  insert into private.client_delivery_geography(
+   organization_id,company_id,work_order_id,state_name,county_name,city_name,
+   verification_source,verified_by,verified_at)
+  values(org,company,wo,'Oklahoma','Beckham','Elk City',
+   'disposable geography fixture',admin_id,now());
+  insert into private.client_delivery_folder_layouts(
+   destination_id,organization_id,company_id,layout,configured_by)
+  select d.id,org,company,'STATE_COUNTY_CITY_ADDRESS',admin_id
+    from private.client_delivery_destinations d
+    where d.organization_id=org and d.company_id=company and d.active and d.verified;
+  trusted_plan:=private.client_package_manifest(pkg_id);
+  if trusted_plan->>'folder_layout'<>'STATE_COUNTY_CITY_ADDRESS'
+    or trusted_plan->'geographic_path'->>'state'<>'oklahoma'
+    or trusted_plan->'geographic_path'->>'county'<>'beckham'
+    or trusted_plan->'geographic_path'->>'city'<>'elk city'
+    or length(trusted_plan->'geographic_path'->>'state_key')<>64
+    or length(trusted_plan->'geographic_path'->>'county_key')<>64
+    or length(trusted_plan->'geographic_path'->>'city_key')<>64
+    or trusted_plan->'geographic_path'->>'destination_id'
+       is distinct from trusted_plan->>'destination_id' then
+     raise exception 'Verified geographic Preview manifest identity missing';end if;
+  -- Restore the original unconfigured disposable company so the downstream
+  -- legacy delivery fixture still proves existing path compatibility.
+  delete from private.client_delivery_folder_layouts
+   where company_id=company and organization_id=org;
+  delete from private.client_delivery_geography where work_order_id=wo;
+  execute 'set local role authenticated';
+
   pkg_state:=public.admin_package_state(wo);
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.admin_approve_package(%L,%L,%L,%L,%L)',
