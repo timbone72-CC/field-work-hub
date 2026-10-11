@@ -8,8 +8,8 @@ declare
  company uuid:=gen_random_uuid(); wo uuid; oldrun uuid; newrun uuid;
  oldinstance uuid; newinstance uuid; oldrev timestamptz; action uuid:=gen_random_uuid();
  cfg jsonb; m jsonb:='[]'::jsonb; response jsonb; replay jsonb; denied boolean;
- start_time text:=to_char(now()-interval '5 minutes','YYYY-MM-DD"T"HH24:MI:SS.US"Z"');
- end_time text:=to_char(now()-interval '3 minutes','YYYY-MM-DD"T"HH24:MI:SS.US"Z"');
+ start_time text:=to_char(now()-interval '1 minute','YYYY-MM-DD"T"HH24:MI:SS.US"Z"');
+ end_time text:=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"');
  set_id uuid:=gen_random_uuid(); digest text:=encode(sha256(convert_to('[]','UTF8')),'hex');
  old_snapshot jsonb; old_number text; old_company uuid;
  claims_admin text; claims_contractor text; revision uuid;
@@ -32,15 +32,17 @@ begin
  perform public.admin_assign_client_company(gen_random_uuid(),wo,company,revision);
  select id into oldinstance from public.work_order_assignments
   where run_id=oldrun and assignment_ended_at is null;
+ select (requirement_snapshot->>'revision')::uuid into revision
+  from public.work_order_runs where id=oldrun;
  perform set_config('request.jwt.claims',claims_contractor,true);
  if public.accept_field_action_v4(gen_random_uuid(),wo,oldrun,oldinstance,
-    'START',start_time,(cfg->>'revision')::uuid,null,'')->>'outcome'<>'APPLIED'
+    'START',start_time,revision,null,'')->>'outcome'<>'APPLIED'
  then raise exception 'Fixture Start failed';end if;
  if public.register_photo_finish_set(set_id,wo,oldrun,oldinstance,
-    (cfg->>'revision')::uuid,'[]'::jsonb,digest,'[]')->>'outcome'<>'APPLIED'
+    revision,'[]'::jsonb,digest,'[]')->>'outcome'<>'APPLIED'
  then raise exception 'Fixture finish-set failed';end if;
  if public.accept_field_action_v4(gen_random_uuid(),wo,oldrun,oldinstance,
-    'COMPLETE',end_time,(cfg->>'revision')::uuid,set_id,digest)->>'outcome'<>'APPLIED'
+    'COMPLETE',end_time,revision,set_id,digest)->>'outcome'<>'APPLIED'
  then raise exception 'Fixture accepted Finish failed';end if;
  perform set_config('request.jwt.claims',claims_admin,true);
  select updated_at,wo_number,client_company_id,release_requirement_snapshot into
