@@ -60,6 +60,7 @@ declare
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
   trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
+  pending_oldrun uuid; pending_oldrev timestamptz; pending_capture jsonb;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
   insert into public.admin_teams(id,organization_id,name) values(team,org,'REVIEW');
@@ -81,6 +82,18 @@ begin
   execute 'set local role authenticated';
   gallery:=public.admin_list_private_review_photos(wo);
   if jsonb_array_length(gallery->'photos')<>0 then raise exception 'Unverified photo appeared in gallery';end if;
+  select w.current_run_id,w.updated_at,r.requirement_snapshot
+    into pending_oldrun,pending_oldrev,pending_capture
+    from public.work_orders w join public.work_order_runs r on r.id=w.current_run_id
+    where w.id=wo;
+  denied:=false;
+  begin perform public.admin_create_followup(gen_random_uuid(),wo,
+    pending_oldrun,pending_oldrev,'INTERNAL_CORRECTION',
+    'Protected previous photos must finish private transfer',
+    '{}'::uuid[],contractor,current_date,'Inspection again',
+    pending_capture,'[]'::jsonb,null);
+  exception when serialization_failure then denied:=true;end;
+  if not denied then raise exception 'Unreceived prior photos stranded by follow-up dispatch';end if;
   execute 'reset role';
 
   perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor,'session_id',contractor,
