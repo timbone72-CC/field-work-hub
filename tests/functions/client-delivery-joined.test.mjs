@@ -25,14 +25,14 @@ const plan={
 function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
   planChanged=false,shortRange=false}={}){
  const events=[],bytes=new Uint8Array(size);
- let offset=0,sessionStored=null,confirmed=0,posts=0,uploads=0;
+ let offset=0,sessionStored=null,confirmed=0,posts=0,uploads=0,projections=0;
  const lease={
   heartbeat:async()=>{events.push('lease');if(leaseRevoked)throw Error('LEASE_EXPIRED');},
   getFilePlan:async id=>{
    events.push('projection');
    if(leaseRevoked)throw Error('STALE_LEASE');
    assert.equal(id,planId);
-   return planChanged?{...plan,file_id:'wrong_identity'}:plan;
+   return planChanged&&++projections>1?{...plan,file_id:'wrong_identity'}:plan;
   },
   getSession:async()=>{events.push('load_session');return sessionStored;},
   storeSession:async(p,w,g,id,encrypted)=>{
@@ -145,12 +145,17 @@ test('wrong OAuth account or wrong client-drive folder prevents any remote creat
   assert.equal(r.events.includes('private_range'),false);
  }
 });
-test('revoked worker lease or swapped server file identity fails closed before outbound bytes',async()=>{
+test('revoked lease or mid-transfer changed file identity fails before sending bytes',async()=>{
  for(const scenario of [{leaseRevoked:true},{planChanged:true}]){
   const r=rig(scenario);
   await assert.rejects(()=>r.run());
-  assert.deepEqual(r.totals,{posts:0,uploads:0,confirmed:0,offset:0});
+  assert.equal(r.totals.uploads,0);
+  assert.equal(r.totals.confirmed,0);
+  assert.equal(r.totals.offset,0);
   assert.equal(r.events.includes('private_range'),false);
+  // A changed plan can be detected only after one already-journaled session
+  // is created; it must not be "fixed" by allocating a second remote ID.
+  assert.equal(r.totals.posts,scenario.planChanged?1:0);
  }
 });
 test('wrong private Storage byte range stops before any Google bytes or delivery receipt',async()=>{
