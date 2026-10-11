@@ -92,12 +92,7 @@ begin
  repeat:=public.admin_dispatch_correction_draft(action,wo,draftrev,previewhash);
  newrun:=(dispatched->>'run_id')::uuid;
  if dispatched is distinct from repeat or newrun=oldrun
-    or (public.admin_correction_state(wo)->'draft'->>'status')='DRAFT'
- then
-   -- state intentionally unavailable for newly assigned job: use private audit.
-   if dispatched is distinct from repeat or newrun=oldrun then
-      raise exception 'Exact idempotent correction dispatch failed';end if;
- end if;
+ then raise exception 'Exact idempotent correction dispatch failed';end if;
  execute 'reset role';
  if (select status from private.admin_correction_drafts where work_order_id=wo)<>'DISPATCHED'
  or (select dispatched_action_id from private.admin_correction_drafts where work_order_id=wo)<>action
