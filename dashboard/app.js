@@ -60,6 +60,14 @@ document.getElementById('prepare-repeat-work').addEventListener('click', () => {
       if (currentUser?.id!==actor || currentUser?.app_metadata?.organization_id!==org
         || !accessToken || editWorkOrderIdInput.value!==oldId) return;
       const snapshot=PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot);
+      const existingCreateDraft=Boolean(propertyAddressInput.value.trim()
+        || workTypeInput.value.trim() || instructionsInput.value.trim()
+        || dueDateInput.value || assigneeSelect.value
+        || createPhotos.value?.items?.length || createPhotos.value?.total?.enabled);
+      if (existingCreateDraft && !window.confirm(
+        'Replace the unfinished Create Work Order draft with the previous job details?')) return;
+      if (currentUser?.id!==actor || currentUser?.app_metadata?.organization_id!==org
+        || !accessToken || editWorkOrderIdInput.value!==oldId) return;
       closeEditor(true);
       createForm.reset();
       applyWoNumberMode('auto');
