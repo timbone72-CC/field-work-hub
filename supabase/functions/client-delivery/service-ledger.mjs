@@ -4,7 +4,8 @@ import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file','service_read_delivery_parent',
- 'service_reserve_delivery_parent','service_read_upload_session',
+ 'service_reserve_delivery_parent','service_begin_delivery_parent_create',
+ 'service_confirm_delivery_parent','service_read_upload_session',
  'service_store_upload_session','service_record_upload_offset',
  'service_get_delivery_file_plan',
  'service_confirm_delivery_file','service_finish_delivery',
@@ -50,6 +51,10 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     reserveParent:(pkg,worker,gen,kind,id,parent)=>rpc('service_reserve_delivery_parent',
       {p_package:pkg,p_worker:worker,p_generation:gen,p_kind:kind,
         p_remote_id:id,p_parent_id:parent}),
+    beginParentCreate:(pkg,worker,gen,map)=>rpc('service_begin_delivery_parent_create',
+      {p_package:pkg,p_worker:worker,p_generation:gen,p_map:map}),
+    confirmParent:(pkg,worker,gen,map,proof)=>rpc('service_confirm_delivery_parent',
+      {p_package:pkg,p_worker:worker,p_generation:gen,p_map:map,p_proof:proof}),
     forLease:(pkg,worker,gen)=>({
       heartbeat:(p,w,g)=>rpc('service_heartbeat_delivery',
         {p_package:p,p_worker:w,p_generation:g}),
