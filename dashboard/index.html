@@ -112,7 +112,13 @@
           </div>
           <p id="job-context" class="muted" role="status"></p>
           <div id="job-address-context" hidden>
-            <p class="muted">Other work orders at this exact address and company on the current page:</p>
+            <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
+            <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>
+            <div class="workspace-navigation">
+              <button id="job-address-load" type="button" class="secondary">Load address jobs</button>
+              <button id="job-address-previous" type="button" class="secondary" disabled>Previous address page</button>
+              <button id="job-address-next" type="button" class="secondary" disabled>Next address page</button>
+            </div>
             <div id="job-address-work-orders" class="workspace-navigation" aria-label="Work orders at this address"></div>
           </div>
           <nav class="workspace-tabs" aria-label="Job sections">
