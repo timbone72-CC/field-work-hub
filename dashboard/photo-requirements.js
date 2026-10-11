@@ -24,6 +24,21 @@ const PhotoRules = {
     const total = value.total.enabled ? value.total.minimum : 0;
     return { specified, additional: Math.max(0, total - specified), minimum: Math.max(total, specified) };
   },
+  suggestions(templates,workType) {
+    const type=String(workType||'').trim().toLowerCase();
+    if (!type || !Array.isArray(templates)) return [];
+    return templates.filter(t=>t?.active===true && typeof t.work_type==='string'
+      && t.work_type.trim().toLowerCase()===type)
+      .sort((a,b)=>Number(Boolean(b.is_default))-Number(Boolean(a.is_default))
+        || String(a.name).localeCompare(String(b.name))
+        || String(a.id).localeCompare(String(b.id)));
+  },
+  copyPriorSnapshot(value) {
+    const copied=structuredClone(value);
+    this.validate(copied);
+    copied.revision=crypto.randomUUID();
+    return copied;
+  },
   summary(value) {
     const c = this.validate(value);
     return c.minimum ? `${c.specified} specified photos${c.additional ? ` + at least ${c.additional} additional` : ''}. Minimum ${c.minimum} unique photos.` : 'Photos optional. Inspectors can still take Extra photos.';
@@ -51,12 +66,12 @@ class PhotoRequirementEditor {
     this.templates = await response.json(); this.render();
   }
   useDefault() {
-    const t = this.templates.find(t => t.active && t.is_default && t.work_type.toLowerCase() === this.getWorkType().trim().toLowerCase());
+    const t = PhotoRules.suggestions(this.templates,this.getWorkType()).find(t=>t.is_default);
     if (t && !this.locked) this.choose(t.id);
   }
   choose(id) {
     this.selectedId = id;
-    const t = this.templates.find(t => t.id === id);
+    const t = PhotoRules.suggestions(this.templates,this.getWorkType()).find(t => t.id === id);
     this.value = t ? structuredClone(t.requirements) : PhotoRules.empty(); this.value.revision = crypto.randomUUID(); this.render();
   }
   render() {
@@ -74,7 +89,8 @@ class PhotoRequirementEditor {
     };
     const action = (label, work, parent = host) => { const el = node('button', label, parent); el.type = 'button'; el.className = 'secondary'; el.disabled = this.locked; el.addEventListener('click', work); return el; };
     node('h3', 'Photo requirements');
-    select('Photo template', [['', 'Custom / all optional'], ...this.templates.filter(t => t.active).map(t => [t.id, `${t.name}${t.is_default ? ' · default' : ''}`])], this.selectedId, id => this.choose(id));
+    const suggested=PhotoRules.suggestions(this.templates,this.getWorkType());
+    select('Photo template', [['', 'Custom / all optional'], ...suggested.map(t => [t.id, `${t.name}${t.is_default ? ' · default' : ''}`])], this.selectedId, id => this.choose(id));
     const summary = node('p', '', host); summary.className = 'muted';
     const updateSummary = () => { try { summary.textContent = PhotoRules.summary(this.value); } catch (e) { summary.textContent = e.message; } };
     if (this.locked) node('p', 'Requirements are frozen after Start. Dispatch details can still be edited.');
