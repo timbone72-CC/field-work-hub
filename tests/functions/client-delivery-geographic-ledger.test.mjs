@@ -42,3 +42,19 @@ test('legacy ADDRESS and WORK_ORDER keep original guarded reservation methods',a
   'service_read_delivery_parent','service_reserve_delivery_parent',
   'service_read_delivery_parent','service_reserve_delivery_parent']);
 });
+
+test('geographic ADDRESS/WO leaves do not call the legacy root-folder RPC',async()=>{
+ const {ledger,calls}=make();
+ for(const kind of ['ADDRESS','WORK_ORDER']){
+  await ledger.readGeographicLeaf(pkg,worker,1,kind);
+  await ledger.reserveGeographicLeaf(pkg,worker,1,kind,'node_'+'a'.repeat(24),'city_'+'b'.repeat(24));
+ }
+ assert.deepEqual(calls.map(c=>c.name),[
+  'service_read_geographic_leaf','service_reserve_geographic_leaf',
+  'service_read_geographic_leaf','service_reserve_geographic_leaf']);
+ for(const c of calls){
+  assert.equal(c.body.p_package,pkg);
+  assert.equal(c.body.p_worker,worker);
+  assert.equal(c.body.p_generation,1);
+ }
+});
