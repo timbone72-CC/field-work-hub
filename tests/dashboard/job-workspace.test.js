@@ -166,5 +166,8 @@ test('Phase 6B repeat work is a new, explicit draft without copying old WO/assig
   "applyWoNumberMode('auto')","propertyAddressInput.value=old.property_address",
   'workTypeInput.value=old.work_type','createPhotos.load(snapshot)'])
    assert.ok(handler.includes(name),name);
+ assert.match(handler,/existingCreateDraft/);
+ assert.match(handler,/window\.confirm\(/);
+ assert.match(handler,/currentUser\?\.id!==actor/);
  assert.doesNotMatch(handler,/woNumberInput\.value\s*=|assigneeSelect\.value\s*=|dueDateInput\.value\s*=|createWorkOrder\(/);
 });
