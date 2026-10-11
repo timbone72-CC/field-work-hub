@@ -160,6 +160,20 @@ begin
     or trusted_plan->'geographic_path'->>'destination_id'
        is distinct from trusted_plan->>'destination_id' then
      raise exception 'Verified geographic Preview manifest identity missing';end if;
+  -- Alternate Admin-selected hierarchy skips COUNTY entirely and must
+  -- use a distinct path-derived CITY identity beneath STATE.
+  update private.client_delivery_folder_layouts set
+    layout='STATE_CITY_ADDRESS',revision=gen_random_uuid()
+    where company_id=company and organization_id=org;
+  folder_proof:=private.client_package_manifest(pkg_id);
+  if folder_proof->>'folder_layout'<>'STATE_CITY_ADDRESS'
+    or folder_proof->'geographic_path'->>'state_key'
+       is distinct from trusted_plan->'geographic_path'->>'state_key'
+    or folder_proof->'geographic_path'->>'city_key'
+       is not distinct from trusted_plan->'geographic_path'->>'city_key'
+    or folder_proof->'geographic_path'->>'layout'<>'STATE_CITY_ADDRESS' then
+    raise exception 'State City snapshot did not derive its distinct city parent';
+  end if;
   -- Restore the original unconfigured disposable company so the downstream
   -- legacy delivery fixture still proves existing path compatibility.
   delete from private.client_delivery_folder_layouts
