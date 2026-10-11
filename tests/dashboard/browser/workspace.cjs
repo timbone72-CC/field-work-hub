@@ -10,6 +10,7 @@ const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let reviewedDecision = 'PENDING', reviewedRevision = null;
+let bulkSaves = [], bulkConflict = false;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
@@ -160,6 +161,34 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           ready_to_approve:false,can_send:false};
         return reply({package_id:reviewPackageId,status:'APPROVED',revision:simulatedPackage.revision});
       }
+      if (url.pathname.endsWith('/admin_review_photo_page')) {
+        const p=req.postDataJSON(); assert.equal(p.p_wo,uuid(51));
+        assert.ok([25,50].includes(p.p_limit));
+        assert.equal(p.p_after_photo,null);assert.equal(p.p_after_sequence,null);
+        const visible=(!p.p_decision||p.p_decision===reviewedDecision)
+          &&(!p.p_item||p.p_item===null)
+          &&(!p.p_run||p.p_run===reviewRun)
+          &&(!p.p_stage||p.p_stage==='NONE');
+        return reply({work_order_id:p.p_wo,photos:visible?[{
+          photo_id:reviewPhoto,transfer_version:reviewVersion,run_id:reviewRun,run_sequence:1,
+          requirement_item_id:null,requirement_label:'Extra',stage:'NONE',
+          captured_at:'2026-10-01T12:00:00Z',verified_at:'2026-10-01T12:02:00Z',
+          decision:reviewedDecision,decision_revision:reviewedRevision,reason:null
+        }]:[],next_photo:null,next_sequence:null});
+      }
+      if (url.pathname.endsWith('/admin_review_photos_bulk')) {
+        const p=req.postDataJSON();bulkSaves.push(p);
+        assert.equal(p.p_work_order,uuid(51));
+        assert.equal(p.p_photos.length,1);
+        assert.equal(p.p_photos[0].photo_id,reviewPhoto);
+        assert.equal(p.p_photos[0].transfer_version,reviewVersion);
+        assert.equal(p.p_photos[0].expected_revision,reviewedRevision);
+        if(bulkConflict)return reply({outcome:'CONFLICT',work_order_id:uuid(51),
+          applied:0,conflicts:[{photo_id:reviewPhoto,reason:'CONTENT_OR_REVISION_CHANGED'}]});
+        reviewedDecision=p.p_decision;reviewedRevision=uuid(9956);
+        return reply({outcome:'APPLIED',work_order_id:uuid(51),
+          applied:1,photos:[{photo_id:reviewPhoto,decision:reviewedDecision}]});
+      }
       if (url.pathname.endsWith('/admin_list_private_review_photos')) {
         const args = req.postDataJSON();
         assert.equal(args.p_limit, 25);
@@ -295,6 +324,28 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('.private-review-photo').getByRole('button', { name: 'Approve' }).click();
     await wait(page, () => document.querySelector('#private-review-list strong')?.textContent.includes('APPROVED'));
     assert.equal(reviewedDecision, 'APPROVED');
+    // Bulk decisions are limited to actually inspected content versions;
+    // user must confirm the frozen explicit selection, not unseen additions.
+    await page.locator('.private-review-photo').getByLabel('Select reviewed photo '+reviewPhoto).check();
+    await page.locator('#private-review-bulk-reason').fill('Retake blurry photo');
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
+      page.locator('#private-review-bulk-reject').click()
+    ]);
+    await wait(page,()=>document.querySelector('#private-review-list strong')?.textContent.includes('REJECTED'));
+    assert.equal(bulkSaves.length,1);
+    assert.equal(bulkSaves[0].p_decision,'REJECTED');
+    assert.equal(bulkSaves[0].p_reason,'Retake blurry photo');
+    assert.equal(bulkSaves[0].p_photos.length,1);
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
+    await page.locator('#private-review-decision').selectOption('APPROVED');
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===0);
+    await page.locator('#private-review-decision').selectOption('');
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===1);
+    await page.locator('.private-review-photo').getByRole('button',{name:'Preview photo'}).click();
+    await wait(page,()=>!document.querySelectorAll('.private-review-photo button')[1].disabled);
+    await page.locator('.private-review-photo').getByRole('button',{name:'Approve'}).click();
+    await wait(page,()=>document.querySelector('#private-review-list strong')?.textContent.includes('APPROVED'));
     await page.locator('[data-job-tab="delivery"]').click();
     await wait(page, () => document.querySelector('#release-status').textContent.includes('No package saved'));
     assert.equal(await page.locator('#release-send').isDisabled(), true, 'No verified destination or approved package: no Send');
