@@ -182,6 +182,13 @@ begin
  if exists(select 1 from public.work_order_runs r where r.work_order_id=p_wo
    and r.run_sequence>w.current_run_sequence)
  then raise exception 'Another corrective run exists' using errcode='40001';end if;
+ -- A later request must explicitly supersede an unresolved correction and
+ -- identify its replacement obligation. Silently stacking new runs would
+ -- leave the previous required new-photo minimum enforceable without review.
+ if exists(select 1 from private.correction_obligations co
+    where co.work_order_id=p_wo and co.status='OPEN')
+ then raise exception 'Existing correction obligation unresolved; explicit reviewed supersession is required'
+   using errcode='40001';end if;
  if not private.is_assignable_contractor(p_assigned_user,org) or
     private.contractor_current_team(p_assigned_user,org) is distinct from w.responsible_team_id
  then raise exception 'Active contractor for responsible team required' using errcode='42501';end if;
