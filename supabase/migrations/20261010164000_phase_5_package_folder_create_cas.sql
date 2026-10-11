@@ -158,11 +158,16 @@ begin
      raise exception 'Package folder receipt conflict' using errcode='40001';end if;
    return jsonb_build_object('state','VERIFIED','plan_id',p_plan,'replayed',true);
  end if;
- if f.state<>'PREALLOCATED' then
+ -- A legacy service-only file receipt can precede this stronger
+ -- independent Drive GET proof. Reconcile that *same* immutable ID only;
+ -- never weaken the final one-shot journal gate or allocate a replacement.
+ if f.state='UNCERTAIN' or f.state not in ('PREALLOCATED','VERIFIED') then
    raise exception 'Uncertain package folder cannot be confirmed' using errcode='40001';end if;
- perform private.service_confirm_delivery_file(p_package,p_worker,p_generation,
-   'FOLDER',null,f.drive_file_id,f.drive_parent_id,
-   'application/vnd.google-apps.folder',null,null);
+ if f.state='PREALLOCATED' then
+   perform private.service_confirm_delivery_file(p_package,p_worker,p_generation,
+     'FOLDER',null,f.drive_file_id,f.drive_parent_id,
+     'application/vnd.google-apps.folder',null,null);
+ end if;
  update private.client_delivery_package_folder_attempts
    set verified_at=clock_timestamp(),remote_evidence=p_proof where file_plan_id=p_plan;
  return jsonb_build_object('state','VERIFIED','plan_id',p_plan,'replayed',false);
