@@ -23,6 +23,31 @@ const JobViewRules = {
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = JobViewRules;
 
+
+// Phase 6A: conservative operational state from fields actually returned by
+// the current server page. Unknown private-photo/review/delivery facts never
+// become a fabricated "Ready", "Completed" or "Awaiting review" status.
+const JobOperationalFacts = {
+  project(row) {
+    if (!row || typeof row !== 'object') return {label:'Status unavailable',next:'Open details',panel:'details'};
+    if (row.pending_assignee_user_id) return {
+      label:'Reassignment pending',next:'View assignment',panel:'assignment'};
+    switch (row.field_status) {
+      case 'ASSIGNED':
+        if (!row.assigned_user_id) return {label:'Needs assignment',next:'Assign',panel:'assignment'};
+        return row.assignment_received_at
+          ? {label:'Assignment delivered',next:'View acknowledgment',panel:'assignment'}
+          : {label:'Awaiting delivery receipt',next:'View assignment',panel:'assignment'};
+      case 'IN_PROGRESS': return {label:'In progress',next:'Open details',panel:'details'};
+      case 'FIELD_COMPLETE': return {label:'Field complete — review and delivery status not loaded',
+        next:'Check photos',panel:'photos'};
+      case 'CANCELLED': return {label:'Cancelled',next:'Open details',panel:'details'};
+      default: return {label:'Status unavailable',next:'Open details',panel:'details'};
+    }
+  }
+};
+if (typeof module !== 'undefined' && module.exports) module.exports.JobOperationalFacts = JobOperationalFacts;
+
 const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
@@ -114,6 +139,10 @@ const JobWorkspace = (() => {
     el('edit-heading').textContent = row.wo_number;
     el('job-address').textContent = row.property_address;
     el('job-facts').textContent = `${row.work_type} · ${row.field_status.replaceAll('_', ' ')} · Due ${row.due_date}`;
+    const operational = JobOperationalFacts.project(row);
+    el('job-next-action').textContent = operational.label + ' · ' + operational.next;
+    el('job-next-action-open').textContent = operational.next;
+    el('job-next-action-open').dataset.panel = operational.panel;
     el('job-receipt').textContent = row.assignment_received_at
       ? `Assignment received ${formatTimestamp(row.assignment_received_at)}` : 'Assignment not yet received';
     el('job-reload').hidden = true;
@@ -165,6 +194,7 @@ const JobWorkspace = (() => {
       if (index >= 0 && workOrderRows[index + delta]) choose(workOrderRows[index + delta].id);
     });
     document.querySelectorAll('[data-job-tab]').forEach(button => button.addEventListener('click', () => tab(button.dataset.jobTab)));
+    el('job-next-action-open').addEventListener('click', () => tab(el('job-next-action-open').dataset.panel || 'details'));
     editSection.addEventListener('cancel', event => { event.preventDefault(); closeEditor(); });
     el('job-stay').addEventListener('click', () => { pending = null; el('job-unsaved').hidden = true; });
     el('job-discard').addEventListener('click', () => { const action = pending; pending = null; el('job-unsaved').hidden = true; if (action) action(); });
