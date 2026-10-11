@@ -4,7 +4,8 @@
 create table private.admin_correction_drafts(
  id uuid primary key default gen_random_uuid(),
  organization_id uuid not null references public.organizations(id) on delete restrict,
- work_order_id uuid not null unique references public.work_orders(id) on delete restrict,
+ work_order_id uuid not null references public.work_orders(id) on delete restrict,
+ unique(work_order_id,origin_run_id),
  origin_run_id uuid not null,
  expected_wo_updated_at timestamptz not null,
  kind text not null check(kind in ('INTERNAL_CORRECTION','CLIENT_RETURN')),
@@ -100,7 +101,7 @@ begin
  b:=private.admin_correction_basis(p_wo);
  -- The draft's org is compared with the original WO, not the client company.
  select * into d from private.admin_correction_drafts
-   where work_order_id=p_wo;
+   where work_order_id=p_wo and origin_run_id=(b->>'origin_run_id')::uuid;
  if d.id is not null and d.organization_id is distinct from
    (select w.organization_id from public.work_orders w where w.id=p_wo)
  then raise exception 'Correction draft organization conflict' using errcode='42501';end if;
@@ -162,7 +163,8 @@ begin
    then raise exception 'Only accepted, verified work-order photos may be referenced'
        using errcode='42501';end if;
  end loop;
- select * into d from private.admin_correction_drafts where work_order_id=w.id for update;
+ select * into d from private.admin_correction_drafts
+   where work_order_id=w.id and origin_run_id=w.current_run_id for update;
  if d.id is null and p_expected_revision is not null
    or d.id is not null and (d.revision is distinct from p_expected_revision
       or d.status<>'DRAFT')
@@ -211,7 +213,8 @@ begin
  if p_revision is null then raise exception 'Saved draft revision required' using errcode='22023';end if;
  perform private.lock_account_lifecycle();
  b:=private.admin_correction_basis(p_wo);
- select * into d from private.admin_correction_drafts where work_order_id=p_wo for update;
+ select * into d from private.admin_correction_drafts
+   where work_order_id=p_wo and origin_run_id=(b->>'origin_run_id')::uuid for update;
  if d.id is null or d.revision is distinct from p_revision or
     d.status<>'DRAFT' or d.origin_run_id is distinct from (b->>'origin_run_id')::uuid
     or d.expected_wo_updated_at is distinct from (b->>'expected_wo_updated_at')::timestamptz
@@ -256,7 +259,8 @@ begin
  -- original one; only the exact originally dispatched action can replay.
  if not private.current_identity_valid() or not private.can_work_order(p_wo)
  then raise exception 'Current scoped office correction authority required' using errcode='42501';end if;
- select * into d from private.admin_correction_drafts where work_order_id=p_wo for update;
+ select * into d from private.admin_correction_drafts
+   where work_order_id=p_wo and revision=p_revision for update;
  if d.id is null or d.revision is distinct from p_revision then
    raise exception 'Correction draft revision changed' using errcode='40001';end if;
  if d.status='DISPATCHED' then
