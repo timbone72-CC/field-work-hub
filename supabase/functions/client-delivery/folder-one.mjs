@@ -30,8 +30,8 @@ function same(a,b){
   if(a.appProperties.fwh_package!==b.appProperties.fwh_package
     ||a.appProperties.fwh_manifest!==b.appProperties.fwh_manifest)deny();
 }
-const RECEIPT=plan=>({id:plan.file_id,parent:plan.parent_id,mime:plan.mime,
-  name:plan.name,sha256:null,size:null,appProperties:plan.appProperties});
+const RECEIPT=(plan,expectedDriveId)=>({id:plan.file_id,parent:plan.parent_id,mime:plan.mime,
+  name:plan.name,expectedDriveId,sha256:null,size:null,appProperties:plan.appProperties});
 
 /**
  * The ledger MUST implement current-lease-only RPCs:
@@ -66,7 +66,7 @@ export async function reconcileOnePreallocatedPackageFolder({
   // EXISTING, immutable ID. 404/403 cannot prove safe absence.
   if(current.state!=='PREALLOCATED'){
     await auth();
-    const checked=await drive.verifyFile(RECEIPT(current));
+    const checked=await drive.verifyFile(RECEIPT(current,expectedDriveId));
     await auth();
     await ledger.confirmFolder(current,workerId,generation,checked);
     return {state:'FOLDER_VERIFIED',plan_id:plan.plan_id};
@@ -87,7 +87,7 @@ export async function reconcileOnePreallocatedPackageFolder({
   // POST success is NOT a receipt. Read back exact file, parent, MIME,
   // package/manifest properties and folder name with a separate GET.
   await auth();
-  const checked=await drive.verifyFile(RECEIPT(current));
+  const checked=await drive.verifyFile(RECEIPT(current,expectedDriveId));
   await auth();
   await ledger.confirmFolder(current,workerId,generation,checked);
   return {state:'FOLDER_VERIFIED',plan_id:plan.plan_id};
