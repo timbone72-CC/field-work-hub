@@ -77,3 +77,17 @@ test('Phase 6A contractor/date filters are server-side and reject SQL operator i
  assert.equal(attack.get('order'),'created_at.desc.nullslast,id.asc');
  assert.equal(rules.normalize({contractor:uid,dueDate:'2026-10-10'}).contractor,undefined);
 });
+
+test('Phase 6A closing a job returns keyboard focus by UUID and clears transient account data',()=>{
+ const workspace=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ assert.match(workspace,/returnFocusId=id/);
+ assert.match(workspace,/node\.dataset\.jobOpenId===id/);
+ assert.match(workspace,/button\.isConnected/);
+ assert.match(workspace,/el\('job-search'\)\.focus\(\)/);
+ assert.match(app,/button\.dataset\.jobOpenId = row\.id/);
+ const reset=workspace.match(/function reset\(\) \{[\s\S]*?\n  \}/)?.[0];
+ assert.ok(reset);
+ assert.match(reset,/returnFocusId = null/);
+ assert.match(reset,/contractor:'',dueDate:''/);
+ assert.doesNotMatch(reset,/localStorage\.setItem/);
+});
