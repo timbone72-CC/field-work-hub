@@ -1,4 +1,4 @@
-// Service-only source candidate: one immutable ADDRESS or WORK_ORDER parent.
+// Service-only source candidate: one immutable geographic, ADDRESS or WORK_ORDER parent.
 // A trusted SQL lease supplies the saved map and its full company scope.
 // Never replay a Google POST after a recorded ATTEMPTED state.
 import {DriveUncertain} from './drive-client.mjs';
@@ -10,7 +10,7 @@ export async function reconcileOnePreallocatedParent({
 }={}){
  if(!map||!UUID.test(packageId??'')||!UUID.test(workerId??'')
   ||!Number.isSafeInteger(generation)||generation<1
-  ||!UUID.test(map.map_id??'')||!['ADDRESS','WORK_ORDER'].includes(map.kind)
+  ||!UUID.test(map.map_id??'')||!['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER'].includes(map.kind)
   ||!ID.test(map.remote_folder_id??'')||!ID.test(map.parent_remote_id??'')
   ||map.remote_folder_id===map.parent_remote_id
   ||typeof map.remote_name!=='string'||map.remote_name.length<3
