@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareTrustedDelivery}
+import {prepareTrustedDelivery,continueTrustedPackageFolder}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain} from '../../supabase/functions/client-delivery/drive-client.mjs';
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
@@ -68,4 +68,67 @@ test('valid OAuth reserves ADDRESS parent only until real folder verification',a
   'heartbeat','reserveParent']);
  assert.equal(r.events.includes('reserve'),false);
  assert.equal(JSON.stringify(data).includes('private-token'),false);
+});
+
+const folderId='folder_'+'e'.repeat(24), woId='wo_'+'f'.repeat(24);
+function folderRig(state='ATTEMPTED'){
+ const events=[],plan={package_id:uuid(3),plan_id:uuid(9),kind:'FOLDER',
+  parent_kind:'WORK_ORDER',file_id:folderId,parent_id:woId,
+  name:'package-'+uuid(3),work_order_id:uuid(8),
+  mime:'application/vnd.google-apps.folder',sha256:null,size:null,
+  appProperties:{fwh_package:uuid(3),fwh_manifest:'a'.repeat(64)},state};
+ const scoped={
+  heartbeat:async()=>{events.push('heartbeat');},
+  getFolderPlan:async()=>{events.push('plan');return plan;},
+  beginFolderCreate:async()=>{events.push('begin');return {state:'MAY_CREATE',
+   plan_id:plan.plan_id,file_id:plan.file_id,parent_id:plan.parent_id};},
+  confirmFolder:async(_plan,_worker,_gen,proof)=>{
+   events.push('confirm');assert.equal(proof.id,folderId);
+   assert.equal(proof.parent,woId);assert.equal(proof.drive_id,driveId);}
+ };
+ const ledger={forLease:()=>scoped};
+ const fetcher=async(url,opts)=>{
+  const u=new URL(url);events.push(opts.method??'GET');
+  assert.equal(u.origin,'https://www.googleapis.com');
+  assert.equal(opts.headers.Authorization,'Bearer private-token-not-for-client');
+  if(u.pathname==='/drive/v3/about')return Response.json({
+   user:{emailAddress:scope,me:true,permissionId:'perm_abc123'}});
+  if(u.pathname==='/drive/v3/files/'+folderId)return Response.json({
+   id:folderId,name:plan.name,driveId,trashed:false,
+   mimeType:plan.mime,parents:[woId],appProperties:plan.appProperties});
+  if(u.pathname==='/drive/v3/files/'+woId)return Response.json({
+   id:woId,driveId,trashed:false,mimeType:plan.mime,
+   capabilities:{canAddChildren:true}});
+  if(u.pathname==='/drive/v3/files'&&opts.method==='POST')return Response.json({
+   id:folderId});
+  throw Error('unexpected endpoint');
+ };
+ const input={workerId:uuid(1),packageId:uuid(3),planId:uuid(9),
+  generation:1,expectedEmail:scope,expectedDriveId:driveId,
+  tokenProvider:async()=>({accessToken:'private-token-not-for-client',expiresInSeconds:3600}),
+  ledger,fetcher};
+ return {events,input};
+}
+test('existing attempted folder uses independent GET, never repeats provider POST',async()=>{
+ const r=folderRig('ATTEMPTED');
+ const result=await continueTrustedPackageFolder(r.input);
+ assert.equal(result.state,'FOLDER_VERIFIED');
+ assert.equal(r.events.includes('POST'),false);
+ assert.equal(r.events.includes('begin'),false);
+ assert.equal(r.events.includes('confirm'),true);
+});
+test('first package folder create requires journal begin, then independent GET',async()=>{
+ const r=folderRig('PREALLOCATED');
+ const result=await continueTrustedPackageFolder(r.input);
+ assert.equal(result.state,'FOLDER_VERIFIED');
+ const a=r.events.indexOf('begin'),p=r.events.indexOf('POST'),v=r.events.indexOf('confirm');
+ assert.ok(a>=0&&p>a&&v>p);
+});
+test('wrong current OAuth identity refuses folder write before lease continuation',async()=>{
+ const r=folderRig();
+ r.input.expectedEmail='different@example.invalid';
+ await assert.rejects(()=>continueTrustedPackageFolder(r.input),e=>
+  e instanceof DriveUncertain&&e.code==='WORKSPACE_ACCOUNT_MISMATCH');
+ assert.equal(r.events.includes('POST'),false);
+ assert.equal(r.events.includes('plan'),false);
 });
