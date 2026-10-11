@@ -6,7 +6,7 @@ create function private.service_get_delivery_file_plan(
 declare f private.client_delivery_file_plans%rowtype;
  k private.client_packages%rowtype; o private.client_delivery_outbox%rowtype;
  r private.photo_transfer_receipts%rowtype;
- item jsonb; ordinal int; source jsonb;
+ item jsonb; source jsonb;
 begin
  -- Lease guard takes a row lock and must run in a non-STABLE function.
  perform private.service_delivery_guard(p_package,p_worker,p_generation);
@@ -35,7 +35,6 @@ begin
          and ob.owner_id=r.owner_user_id::text
          and ob.archived_at is null and not coalesce(ob.is_delete_marker,false)) then
       raise exception 'Source private receipt or catalog object is unavailable' using errcode='42501';end if;
-   ordinal:=(item->>'ordinal')::int;
    source:=jsonb_build_object('bucket',r.bucket,'object_key',r.object_key,
     'object_id',r.object_id,'object_version',r.object_version,
     'owner_id',r.owner_user_id,'photo_id',f.photo_id,
@@ -48,7 +47,7 @@ begin
  end if;
  return jsonb_build_object('package_id',p_package,'plan_id',f.id,'kind',f.kind,
    'photo_id',f.photo_id,'file_id',f.drive_file_id,'parent_id',f.drive_parent_id,
-   'name',case when f.kind='PHOTO' then lpad(ordinal::text,3,'0')||'.jpg' else 'submission.json' end,
+   'name',case when f.kind='PHOTO' then 'field-photo-'||f.photo_id::text||'.jpg' else 'submission.json' end,
    'sha256',f.expected_sha256,'size',f.expected_size,'mime',f.mime_type,
    'appProperties',jsonb_build_object('fwh_package',p_package::text,'fwh_manifest',k.approved_sha256),
    'source',source);
