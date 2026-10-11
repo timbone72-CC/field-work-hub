@@ -33,3 +33,34 @@ test('empty and partial authorized pages do not require synthetic control jobs; 
   assert.throws(() => verify([{ organization_id: 'org-one', wo_number: 'TEST-OTHER-ORG-CONTROL' }], 'org-one'), /control/);
   assert.throws(() => verify({}, 'org-one'), /Unexpected/);
 });
+
+
+test('Phase 6A operational guidance never invents Accept, photo readiness or client delivery', () => {
+  const facts = rules.JobOperationalFacts;
+  assert.deepEqual(facts.project({field_status:'ASSIGNED',assigned_user_id:null}),{
+    label:'Needs assignment',next:'Assign',panel:'assignment'});
+  assert.deepEqual(facts.project({field_status:'ASSIGNED',assigned_user_id:'contractor-uuid'}),{
+    label:'Awaiting delivery receipt',next:'View assignment',panel:'assignment'});
+  assert.deepEqual(facts.project({field_status:'ASSIGNED',assigned_user_id:'contractor-uuid',
+    assignment_received_at:'2026-10-10T18:00:00Z'}),{
+    label:'Assignment downloaded — human Accept not established',next:'View assignment',panel:'assignment'});
+  assert.deepEqual(facts.project({field_status:'IN_PROGRESS'}),{
+    label:'In progress',next:'Open details',panel:'details'});
+  assert.deepEqual(facts.project({field_status:'FIELD_COMPLETE'}),{
+    label:'Field complete — review and delivery status not loaded',next:'Check photos',panel:'photos'});
+  assert.deepEqual(facts.project({field_status:'ASSIGNED',pending_assignee_user_id:'pending'}),{
+    label:'Reassignment pending',next:'View assignment',panel:'assignment'});
+  assert.equal(facts.project({field_status:'CANCELLED'}).label,'Cancelled');
+  assert.equal(facts.project({field_status:'DELIVERED'}).label,'Status unavailable');
+  assert.equal(facts.project(null).label,'Status unavailable');
+});
+test('Phase 6A job guidance uses text-only rendering and existing protected tabs', () => {
+  const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
+  const js=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+  assert.match(html,/id="job-next-action"/);
+  assert.match(html,/id="job-next-action-open"/);
+  assert.match(js,/el\('job-next-action'\)\.textContent/);
+  assert.match(js,/el\('job-next-action-open'\)\.dataset\.panel/);
+  assert.doesNotMatch(js,/job-next-action'\)\.innerHTML/);
+  assert.match(app,/JobOperationalFacts\.project\(row\)\.label/);
+});
