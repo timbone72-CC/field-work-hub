@@ -2,7 +2,7 @@
 const JobViewRules = {
   normalize(value = {}) {
     return { size: value.size === 50 ? 50 : 25,
-      sort: ['created_at.desc', 'due_date.asc'].includes(value.sort) ? value.sort : 'created_at.desc',
+      sort: ['created_at.desc', 'due_date.asc', 'due_date.desc'].includes(value.sort) ? value.sort : 'created_at.desc',
       status: ['ASSIGNED', 'IN_PROGRESS', 'FIELD_COMPLETE', 'CANCELLED'].includes(value.status) ? value.status : '' };
   },
   parameters(state) {
@@ -10,6 +10,13 @@ const JobViewRules = {
     const query = new URLSearchParams({ limit: String(prefs.size), offset: String(state.offset || 0),
       order: `${prefs.sort}.nullslast,id.asc` });
     if (prefs.status) query.set('field_status', `eq.${prefs.status}`);
+    // Optional filters are server-side, from fixed columns and bounded values.
+    const contractor=String(state.contractor || '');
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contractor))
+      query.set('assigned_user_id',`eq.${contractor}`);
+    const due=String(state.dueDate || '');
+    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(due) && !Number.isNaN(Date.parse(due+'T00:00:00Z')))
+      query.set('due_date',`eq.${due}`);
     // Escape PostgREST pattern metacharacters; column and operator are never user supplied.
     const text = String(state.search || '').trim().slice(0, 160);
     if (text) query.set(state.searchField === 'wo_number' ? 'wo_number' : 'property_address',
@@ -49,7 +56,7 @@ const JobOperationalFacts = {
 if (typeof module !== 'undefined' && module.exports) module.exports.JobOperationalFacts = JobOperationalFacts;
 
 const JobWorkspace = (() => {
-  let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address' };
+  let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
   const el = id => document.getElementById(id);
   const JOB_VIEW_STORAGE_KEY = () => `fwh.jobView.${account}`;
@@ -64,6 +71,8 @@ const JobWorkspace = (() => {
     el('job-page-size').value = state.size; el('job-sort').value = state.sort;
     el('job-status').value = state.status; el('job-search').value = state.search;
     el('job-search-field').value = state.searchField;
+    el('job-contractor').value=state.contractor || '';
+    el('job-due-date').value=state.dueDate || '';
   }
   function fingerprint() {
     return JSON.stringify([['edit-wo-number', 'edit-property-address', 'edit-work-type', 'edit-instructions',
@@ -93,7 +102,8 @@ const JobWorkspace = (() => {
   async function change(offset) {
     if (adminWritesPending || saveEditButton.disabled) return;
     state = { ...state, size: Number(el('job-page-size').value), sort: el('job-sort').value,
-      status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value, offset };
+      status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
+      contractor:el('job-contractor').value,dueDate:el('job-due-date').value, offset };
     revision++;
     try { localStorage.setItem(JOB_VIEW_STORAGE_KEY(), JSON.stringify(JobViewRules.normalize(state))); } catch { /* Optional preference. */ }
     const ownRevision = revision;
