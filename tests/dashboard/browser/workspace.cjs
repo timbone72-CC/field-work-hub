@@ -338,6 +338,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     const choices=await page.locator('#edit-photo-requirements').getByLabel('Photo template').locator('option').allTextContents();
     assert.match(choices[1],/Company inspection.*default/);
     assert.ok(choices.every(t=>!t.includes('Foreign company')));
+    await page.locator('[data-job-tab="requirements"]').click();
     const templateChoice=page.locator('#edit-photo-requirements').getByLabel('Photo template');
     assert.equal(await templateChoice.isEnabled(),true,'Authorized unstarted work must allow template copy');
     assert.notEqual(await page.locator('#edit-instructions').inputValue(),'Company-specific instructions');
@@ -356,13 +357,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#edit-photo-requirements').getByText('Save or manage templates').click();
     await page.locator('#edit-photo-requirements').getByLabel('Template name').fill('Company inspection copy');
     await page.locator('#edit-photo-requirements').getByLabel('Template description').fill('Editable description');
-    await page.locator('#edit-photo-requirements').getByText('Save as new template', {exact:true}).click();
-    await wait(page, () => templateSaves.length>0);
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/admin_save_company_photo_template')
+        && response.request().method()==='POST'),
+      page.locator('#edit-photo-requirements').getByText('Save as new template', {exact:true}).click()
+    ]);
+    assert.ok(templateSaves.length>0);
     assert.equal(templateSaves.at(-1).p_company_id,uuid(9981));
     assert.equal(templateSaves.at(-1).p_description,'Editable description');
     assert.equal(templateSaves.at(-1).p_expected_revision,null);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
     await page.locator('#cancel-edit').click();
+    await page.locator('#job-discard').click();
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');
