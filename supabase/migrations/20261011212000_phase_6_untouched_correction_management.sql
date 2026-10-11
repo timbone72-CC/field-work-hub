@@ -193,15 +193,24 @@ begin
    field_status,requirement_snapshot,reopen_reason)
  values(fresh,p_wo,org,w.current_run_sequence+1,p_assigned_user,
    'ASSIGNED',cancelled.requirement_snapshot,btrim(p_reason));
- insert into public.work_order_assignments(id,run_id,organization_id,
-   assigned_user_id,assignment_started_at)
- values(fresh_assignment,fresh,org,p_assigned_user,clock_timestamp());
+ -- First advance the current WO; the existing run-sync trigger may create
+ -- the new assignment automatically if the contractor changes. Only create
+ -- one explicitly when no active assignment was created by that owner.
  update public.work_orders set current_run_id=fresh,
    current_run_sequence=w.current_run_sequence+1,assigned_user_id=p_assigned_user,
    field_status='ASSIGNED',assignment_received_at=null,started_at=null,
    field_completed_at=null,pending_assignee_user_id=null,reassignment_requested_at=null,
    instructions=nullif(btrim(p_instructions),''),due_date=p_due_date
  where id=p_wo;
+ select id into fresh_assignment from public.work_order_assignments
+    where run_id=fresh and assigned_user_id=p_assigned_user
+      and assignment_ended_at is null;
+ if fresh_assignment is null then
+   fresh_assignment:=gen_random_uuid();
+   insert into public.work_order_assignments(id,run_id,organization_id,
+     assigned_user_id,assignment_started_at)
+   values(fresh_assignment,fresh,org,p_assigned_user,clock_timestamp());
+ end if;
  insert into private.correction_obligations(id,organization_id,work_order_id,
    origin_run_id,replacement_run_id,kind,reason,prior_photo_ids,item_mapping,
    capture_requirements,release_requirements,release_revision,actor_id)
