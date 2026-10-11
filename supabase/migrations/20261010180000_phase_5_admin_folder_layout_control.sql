@@ -13,6 +13,9 @@ create table private.client_delivery_folder_layout_actions (
  created_at timestamptz not null default clock_timestamp(),
  unique(destination_id,resulting_revision)
 );
+create trigger client_delivery_folder_layout_action_immutable
+ before update or delete on private.client_delivery_folder_layout_actions
+ for each row execute function private.protect_photo_transfer_ledger();
 alter table private.client_delivery_folder_layout_actions enable row level security;
 revoke all on private.client_delivery_folder_layout_actions from public,anon,authenticated,service_role;
 
