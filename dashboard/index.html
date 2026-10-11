@@ -234,6 +234,29 @@
               <pre id="correction-summary" class="release-preview" hidden aria-label="Checked correction dispatch summary"></pre>
               <p id="correction-status" class="status" role="status" aria-live="polite"></p>
             </details>
+            <details id="followup-management" hidden>
+              <summary>Manage an existing follow-up</summary>
+              <p class="muted">Only an entirely untouched follow-up can be cancelled. Earlier photos, accepted Finish, client delivery and correction history are retained.</p>
+              <p id="followup-management-context" role="status" class="muted"></p>
+              <label>Office reason for cancelling or replacing
+                <textarea id="followup-management-reason" rows="3" maxlength="2000"></textarea>
+              </label>
+              <div id="followup-replacement" hidden>
+                <label>Contractor for replacement
+                  <select id="followup-replacement-assignee"><option value="">Choose authorized contractor</option></select>
+                </label>
+                <label>Replacement due date <input id="followup-replacement-due" type="date"></label>
+                <label>Instructions for replacement
+                  <textarea id="followup-replacement-instructions" rows="3" maxlength="4000"></textarea>
+                </label>
+                <p class="muted">Replacement copies the frozen correction requirements and release-goal mapping. It creates a fresh run, assignment and Accept; the cancelled run is never reopened.</p>
+              </div>
+              <div class="workspace-navigation">
+                <button id="followup-cancel" class="secondary" type="button" hidden>Cancel untouched follow-up</button>
+                <button id="followup-replace" class="secondary" type="button" hidden>Dispatch explicit replacement</button>
+              </div>
+              <p id="followup-management-status" role="status" aria-live="polite" class="status"></p>
+            </details>
           </section>
 
           <section id="job-delivery" data-job-panel="delivery" hidden>
@@ -302,6 +325,7 @@
   </main>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
   <script src="correction-draft.js?v=phase6c-20261011" defer></script>
+  <script src="followup-management.js?v=phase6c-20261011" defer></script>
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
   <script src="client-release.js?v=phase5d-20261010" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
