@@ -460,11 +460,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(correctionPreviewCount,1);
     assert.equal(correctionDispatchCount,0);
     await Promise.all([
-      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
-      page.locator('#correction-dispatch').click()
+      page.waitForResponse(response=>response.url().includes('/admin_dispatch_correction_draft')
+        && response.request().method()==='POST'),
+      (async()=>{
+        const accepted=page.waitForEvent('dialog').then(dialog=>dialog.accept());
+        await page.locator('#correction-dispatch').click();
+        await accepted;
+      })()
     ]);
-    await wait(page,()=>correctionDispatchCount===1);
-    await wait(page,()=>rows[50].current_run_id===correctiveNewRun);
+    assert.equal(correctionDispatchCount,1);
+    assert.equal(rows[50].current_run_id,correctiveNewRun);
     assert.equal(correctionRequest.p_revision,correctionDraftRev);
     assert.equal(rows[50].wo_number,'DEMO-0051');
     assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
