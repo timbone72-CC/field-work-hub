@@ -42,5 +42,8 @@ test('Phase 6B prior requirements are cloned with fresh revision, never mutating
  assert.notEqual(newer.revision,original.revision);
  assert.deepEqual(original,before);
  assert.deepEqual(newer.items,original.items);
- assert.throws(()=>rules.copyPriorSnapshot({}),/requirements|total|supported/i);
+ const legacy=rules.copyPriorSnapshot({});
+ assert.equal(legacy.total.enabled,false);
+ assert.deepEqual(legacy.items,[]);
+ assert.throws(()=>rules.copyPriorSnapshot({schema:2}),/requirements|total|supported/i);
 });
