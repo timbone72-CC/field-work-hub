@@ -288,6 +288,38 @@ async function fetchWorkOrders() {
   return rows;
 }
 
+// Read-only exact-address sibling lookup. The current signed-in user's RLS
+// still authorizes every row, with explicit company and org match checked
+// again before rendering. Never use a fuzzy or cross-company property search.
+async function fetchAddressWorkOrders(row) {
+  requireAccessToken();
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(row?.organization_id||'') || !uuid.test(row?.client_company_id||'')
+    || !uuid.test(row?.id||'') || typeof row.property_address!=='string'
+    || row.property_address.length<3 || row.property_address.length>500)
+    throw new Error('Exact company/address identity required.');
+  // PostgREST quoted exact string; escaped quotes/backslashes are data, not operators.
+  const address='"'+row.property_address.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
+  const params=new URLSearchParams({
+    select:'id,organization_id,client_company_id,wo_number,property_address',
+    organization_id:'eq.'+row.organization_id,
+    client_company_id:'eq.'+row.client_company_id,
+    property_address:'eq.'+address,
+    order:'id.asc',limit:'50',offset:'0'
+  });
+  const response=await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?${params}`,{
+    headers:{...authHeaders(),Prefer:'count=exact'}
+  });
+  if (!response.ok) throw new Error(await readableError(response,'Unable to load address work orders.'));
+  const rows=await response.json();
+  if (!Array.isArray(rows)||rows.length>50) throw new Error('Unexpected address-work-order page.');
+  verifyAdminRls(rows,row.organization_id);
+  if (rows.some(item=>item.client_company_id!==row.client_company_id
+    ||item.property_address!==row.property_address))
+    throw new Error('Address/company scope mismatch.');
+  return {rows,total:JobViewRules.total(response.headers.get('Content-Range'))};
+}
+
 async function fetchWorkOrder(id) {
   requireAccessToken();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid job identity.');
