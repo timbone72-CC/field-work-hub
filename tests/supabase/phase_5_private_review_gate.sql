@@ -569,6 +569,12 @@ begin
    'public.admin_review_photos_bulk(uuid,uuid,uuid,jsonb,text,text)','EXECUTE')
    or has_table_privilege('authenticated','private.photo_bulk_review_actions','UPDATE')
   then raise exception 'Bulk review exposed unscoped write';end if;
+  -- Restore the deliberately REJECTED baseline used by the following
+  -- Phase 6B cross-run client-package review regression. The bulk fixture
+  -- itself is isolated and must not pre-approve that historical photo.
+  perform public.admin_review_photo(gen_random_uuid(),wo,photo,t.version,
+    (select revision from private.photo_review_decisions where photo_id=photo),
+    'REJECTED','Missing side');
 
   -- Same-organization role alone does not grant a gallery or review capability.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',other_admin,'session_id',other_admin,
