@@ -76,6 +76,12 @@ abstract class CachedWorkOrderDao {
             String completed,
             String updated);
 
+    @Query("UPDATE cached_work_orders SET acknowledgment_received_at=:confirmed WHERE"
+            + " cache_owner_user_id=:owner AND organization_id=:org AND work_order_id=:wo"
+            + " AND run_id=:run AND assignment_instance_id=:instance")
+    abstract void confirmedAckCache(String owner,String org,String wo,String run,
+                                     String instance,String confirmed);
+
     boolean hasEvidence(CachedWorkOrder row, List<FieldAction> actions) {
         if (!row.startedAt.isEmpty()) return true;
         return hasLocalActions(row, actions) || !photos(row.cacheOwnerUserId, row.organizationId, row.workOrderId, row.runId).isEmpty();
@@ -184,7 +190,15 @@ abstract class CachedWorkOrderDao {
             throw new IllegalStateException(
                     "Refresh Assignments online before starting this work, or contact Admin if it"
                         + " needs review.");
-        PhotoRequirements requirements = PhotoRequirements.parse(row.requirementSnapshotJson);
+        if ("ACK".equals(kind)
+                && !"ASSIGNED".equals(row.fieldStatus)
+                && !"IN_PROGRESS".equals(row.fieldStatus)
+                && !"FIELD_COMPLETE".equals(row.fieldStatus))
+            throw new IllegalStateException("This assignment cannot be accepted.");
+        if ("ACK".equals(kind) && !row.acknowledgmentReceivedAt.isEmpty())
+            throw new IllegalStateException("This assignment is already acknowledged.");
+        PhotoRequirements requirements = "ACK".equals(kind)
+                ? null : PhotoRequirements.parse(row.requirementSnapshotJson);
         java.time.Instant event = java.time.Instant.parse(eventTime);
         FieldAction start = null;
         for (FieldAction a : actions(session.userId, session.organizationId))
@@ -195,7 +209,9 @@ abstract class CachedWorkOrderDao {
                     return a;
                 if (a.kind.equals("START")) start = a;
             }
-        if ("START".equals(kind)) {
+        if ("ACK".equals(kind)) {
+            // Deliberate Accept is independent of Start, and never freezes photos.
+        } else if ("START".equals(kind)) {
             if (!"ASSIGNED".equals(row.fieldStatus))
                 throw new IllegalStateException("This work cannot be started.");
         } else if ("COMPLETE".equals(kind)) {
@@ -219,7 +235,7 @@ abstract class CachedWorkOrderDao {
                         eventTime,
                         System.currentTimeMillis(),
                         nextSequence());
-        a.requirementRevision = requirements.revision;
+        if (requirements != null) a.requirementRevision = requirements.revision;
         if ("COMPLETE".equals(kind)) freezePhotos(row, requirements, a);
         insertAction(a);
         return a;
@@ -345,6 +361,11 @@ abstract class CachedWorkOrderDao {
         a.serverUpdatedAt = result.updatedAt;
         a.acceptedAt = result.acceptedAt;
         updateAction(a);
+        if ("ACK".equals(a.kind)) {
+            confirmedAckCache(a.ownerId,a.organizationId,a.workOrderId,a.runId,
+                    a.assignmentInstanceId,result.acknowledgmentReceivedAt);
+            return;
+        }
         canonicalCache(
                 a.ownerId,
                 a.organizationId,
