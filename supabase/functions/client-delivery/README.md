@@ -18,6 +18,12 @@
 | Backend | `service-ledger.mjs` | Fixed Supabase service-only RPC allowlist; fail-closed ambiguous results | End-to-end production worker authorization |
 | Backend | `handler.mjs` + `index.ts` | Dedicated worker-secret-only **preallocation** route; default OFF regardless of valid caller; no CORS; errors redacted | Authorized deployed worker, real uploads, scheduler, released customer destination |
 
+## Frozen client filename and package-folder dependency
+
+The trusted SQL source projection now names each selected JPEG `field-photo-<permanent-photo-UUID>.jpg`, as required by the approved Phase 5 plan. The photo's selected display order is **not** its file identity; changing the order cannot silently rename or replace remote evidence. The existing manifest remains `submission.json`. The exact projected name, SHA-256, size, parent and preallocated file ID travel through the single existing upload/GET verification path.
+
+**Still incomplete, not enabled:** preallocating a package folder ID does not create that folder. The candidate internal chunk continuation explicitly verifies an already-created authorized client package folder and therefore cannot perform the first folder creation itself. Also, the current source-only folder reservation is directly below the configured root, whereas the approved hierarchy calls for configured root → address grouping → stable WO UUID → immutable package UUID. This source discrepancy must be resolved with a fenced, recoverable single-owner folder-create/reconciliation path and same-company mapping **before** any real client delivery is enabled. Do not bypass that by aiming FWH at its internal Workspace Shared Drive, by creating a blind replacement folder, or by broadening company access.
+
 ## Hard-stop provider gates
 
 1. Verify that the *backend* can legally authorize exactly the recorded Workspace provider identity (not a personal ChatGPT Drive connector). Obtain an approved OAuth flow/refresh token or tightly constrained delegated identity **outside the public repo**. Record provider identity, intended scope and revocation procedure.
