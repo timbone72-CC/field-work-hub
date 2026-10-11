@@ -55,6 +55,7 @@ declare
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
+  address_map uuid; wo_map uuid; address_name text; wo_name text; address_proof jsonb; wo_proof jsonb;
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
   trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
@@ -128,7 +129,7 @@ begin
   insert into private.client_delivery_destinations(organization_id,company_id,provider,
     provider_identity,root_folder_id,verified,verified_at,verification_receipt,active)
   values(org,company,'GOOGLE_DRIVE','sandbox@example.invalid','DISPOSABLE-ONLY',
-    true,now(),jsonb_build_object('synthetic_test',true),true);
+    true,now(),jsonb_build_object('synthetic_test',true,'drive_id','client-drive-fixture'),true);
   insert into private.client_delivery_runtime(organization_id,worker_ready) values(org,false);
   execute 'set local role authenticated';
   pkg_draft:=public.admin_save_package_draft(gen_random_uuid(),wo,null,'Synthetic client description',array[photo]);
@@ -214,6 +215,34 @@ begin
   if address_row is distinct from public.service_reserve_delivery_parent(
        pkg_id,delivery_worker,delivery_gen,'ADDRESS',address_folder_id,'DISPOSABLE-ONLY') then
     raise exception 'Address retry replaced immutable ID';end if;
+  address_map:=(address_row->>'map_id')::uuid;
+  select remote_name into address_name from private.client_delivery_parent_maps
+    where id=address_map;
+  address_proof:=jsonb_build_object('id',address_folder_id,'parent','DISPOSABLE-ONLY',
+    'name',address_name,'mime','application/vnd.google-apps.folder',
+    'trashed',false,'drive_id','client-drive-fixture',
+    'appProperties',jsonb_build_object('fwh_org',org::text,'fwh_company',company::text,
+      'fwh_destination',(select destination_id::text from private.client_delivery_parent_maps where id=address_map),
+      'fwh_kind','ADDRESS',
+      'fwh_key',(select folder_key from private.client_delivery_parent_maps where id=address_map)));
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_confirm_delivery_parent(%L,%L,%s,%L,%L::jsonb)',
+    pkg_id,delivery_worker,delivery_gen,address_map,address_proof::text));
+  if public.service_begin_delivery_parent_create(pkg_id,delivery_worker,delivery_gen,address_map)->>'state'
+       <>'MAY_CREATE' then raise exception 'First address attempt missing';end if;
+  if public.service_begin_delivery_parent_create(pkg_id,delivery_worker,delivery_gen,address_map)->>'state'
+       <>'VERIFY_EXISTING' then raise exception 'Repeated address attempt offered duplicate POST';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_confirm_delivery_parent(%L,%L,%s,%L,%L::jsonb)',
+    pkg_id,delivery_worker,delivery_gen,address_map,
+    (address_proof||jsonb_build_object('parent','other-root'))::text));
+  if public.service_confirm_delivery_parent(
+      pkg_id,delivery_worker,delivery_gen,address_map,address_proof)->>'state'<>'VERIFIED' then
+    raise exception 'Independent address evidence was not committed';end if;
+  if public.service_confirm_delivery_parent(
+      pkg_id,delivery_worker,delivery_gen,address_map,address_proof)->>'replayed'<>'true' then
+    raise exception 'Exact address evidence retry was not idempotent';end if;
+
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'ADDRESS','different_generated_remote_id','DISPOSABLE-ONLY'));
@@ -230,6 +259,27 @@ begin
   if wo_row is distinct from public.service_reserve_delivery_parent(
     pkg_id,delivery_worker,delivery_gen,'WORK_ORDER',wo_folder_id,address_folder_id) then
     raise exception 'WO retry replaced immutable ID';end if;
+  wo_map:=(wo_row->>'map_id')::uuid;
+  select remote_name into wo_name from private.client_delivery_parent_maps
+    where id=wo_map;
+  wo_proof:=jsonb_build_object('id',wo_folder_id,'parent',address_folder_id,
+    'name',wo_name,'mime','application/vnd.google-apps.folder',
+    'trashed',false,'drive_id','client-drive-fixture',
+    'appProperties',jsonb_build_object('fwh_org',org::text,'fwh_company',company::text,
+      'fwh_destination',(select destination_id::text from private.client_delivery_parent_maps where id=wo_map),
+      'fwh_kind','WORK_ORDER',
+      'fwh_key',wo::text));
+  if public.service_begin_delivery_parent_create(pkg_id,delivery_worker,delivery_gen,wo_map)->>'state'
+       <>'MAY_CREATE' then raise exception 'First WO attempt missing';end if;
+  if public.service_begin_delivery_parent_create(pkg_id,delivery_worker,delivery_gen,wo_map)->>'state'
+       <>'VERIFY_EXISTING' then raise exception 'Repeated WO attempt would POST twice';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_confirm_delivery_parent(%L,%L,%s,%L,%L::jsonb)',
+    pkg_id,delivery_worker,delivery_gen,wo_map,
+    (wo_proof||jsonb_build_object('drive_id','foreign-drive'))::text));
+  if public.service_confirm_delivery_parent(pkg_id,delivery_worker,delivery_gen,wo_map,wo_proof)->>'state'
+       <>'VERIFIED' then raise exception 'Trusted WO folder evidence not stored';end if;
+
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
     pkg_id,gen_random_uuid(),delivery_gen,'WORK_ORDER',wo_folder_id,address_folder_id));
