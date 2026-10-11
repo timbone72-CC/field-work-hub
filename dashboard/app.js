@@ -442,6 +442,7 @@ function renderWorkOrders(rows, organizationId) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'job-link';
     button.textContent = row.wo_number;
     button.setAttribute('aria-label', `Open ${row.wo_number}, ${row.property_address}`);
+    button.dataset.jobOpenId = row.id;
     button.addEventListener('click', () => JobWorkspace.choose(row.id));
     const address = document.createElement('div'); address.textContent = row.property_address;
     title.append(button, address);
