@@ -125,7 +125,7 @@ export async function continueTrustedPackageFolder({
 }
 
 /**
- * Source-only ADDRESS / WORK_ORDER continuation. The map is obtained from the
+ * Source-only STATE / COUNTY / CITY / ADDRESS / WORK_ORDER continuation. The map is obtained from the
  * original SQL lease and never supplied by the caller. No public handler
  * invokes this function while provider readiness remains disabled.
  */
@@ -136,7 +136,7 @@ export async function continueTrustedDeliveryParent({
  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  if(!UUID.test(workerId??'')||!UUID.test(packageId??'')
   ||!Number.isSafeInteger(generation)||generation<1
-  ||!['ADDRESS','WORK_ORDER'].includes(kind)
+  ||!['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER'].includes(kind)
   ||typeof tokenProvider!=='function'||typeof ledger?.readParent!=='function'
   ||typeof expectedEmail!=='string'||!expectedEmail
   ||typeof expectedDriveId!=='string'||!expectedDriveId)
