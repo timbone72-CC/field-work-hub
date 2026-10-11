@@ -221,6 +221,17 @@ const JobWorkspace = (() => {
   function init() {
     PrivateReview.init(); ClientRelease.init();
     el('job-filters').addEventListener('submit', event => { event.preventDefault(); change(0); });
+    el('job-clear-filters').addEventListener('click', () => {
+      if (adminWritesPending || saveEditButton.disabled) return;
+      el('job-search').value='';
+      el('job-search-field').value='property_address';
+      el('job-status').value='';
+      el('job-contractor').value='';
+      el('job-due-date').value='';
+      el('job-sort').value='created_at.desc';
+      el('job-page-size').value=25;
+      change(0);
+    });
     el('job-page-previous').addEventListener('click', () => change(Math.max(0, state.offset - state.size)));
     el('job-page-next').addEventListener('click', () => change(state.offset + state.size));
     for (const [id, delta] of [['job-previous', -1], ['job-next', 1]]) el(id).addEventListener('click', () => {
