@@ -144,12 +144,13 @@ begin
     manifest:=manifest||jsonb_build_object(
       'folder_layout',selected_layout->>'layout',
       'folder_layout_revision',selected_layout->>'revision');
-    if selected_layout->>'layout'='STATE_COUNTY_CITY_ADDRESS' then
+    if selected_layout->>'layout' in ('STATE_COUNTY_CITY_ADDRESS','STATE_CITY_ADDRESS') then
       select * into geo from private.client_delivery_geography
         where organization_id=k.organization_id and company_id=k.company_id
           and work_order_id=k.work_order_id;
       -- Existing strict verification and no-fallback rule; no guess from ZIP.
       k.destination_id:=d.id;
+      k.approved_manifest:=jsonb_build_object('folder_layout',selected_layout->>'layout');
       -- Draft previews do not yet have the approval trigger's frozen address.
       -- Compute the same canonical key, then the trigger independently freezes
       -- that identical current WO address at the approval transaction.
@@ -160,9 +161,6 @@ begin
         lower(regexp_replace(btrim(w.property_address),'[[:space:]]+',' ','g')),'UTF8')),'hex');
       manifest:=manifest||jsonb_build_object(
         'geographic_path',private.phase_5_expected_geographic_path(k,geo));
-    elsif selected_layout->>'layout'='STATE_CITY_ADDRESS' then
-      raise exception 'State/City delivery layout not enabled'
-        using errcode='42501';
     end if;
   end if;
   return manifest;
