@@ -61,12 +61,12 @@ const JobAddressContext = {
   siblings(rows, selected) {
     if (!Array.isArray(rows) || !selected?.organization_id || !selected?.client_company_id
       || typeof selected.property_address!=='string') return [];
-    const address=selected.property_address.trim().replace(/\\s+/g,' ').toLowerCase();
+    const address=selected.property_address.trim().replace(/\s+/g,' ').toLowerCase();
     if (!address) return [];
     return rows.filter(row=>row?.organization_id===selected.organization_id
       && row.client_company_id===selected.client_company_id
       && typeof row.property_address==='string'
-      && row.property_address.trim().replace(/\\s+/g,' ').toLowerCase()===address
+      && row.property_address.trim().replace(/\s+/g,' ').toLowerCase()===address
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id||''));
   }
 };
