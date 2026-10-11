@@ -279,6 +279,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
+    assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');
+    assert.equal(await page.locator('#instructions').inputValue(), '', 'Repeat draft instructions must be cleared between accounts');
+    assert.equal(await page.locator('#due-date').inputValue(), '', 'Repeat draft due date must be cleared between accounts');
+    assert.equal(await page.locator('#create-photo-requirements .photo-item').count(),0,'Repeat photo requirements must clear between accounts');
     assert.equal(await page.locator('#job-page-size').inputValue(), '25');
     assert.equal(await page.locator('#job-search').inputValue(), ''); assert.equal(await page.locator('#edit-work-order-id').inputValue(), '');
     const preferences = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('fwh.jobView.')));
