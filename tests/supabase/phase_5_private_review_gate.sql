@@ -213,7 +213,8 @@ begin
      or trusted_plan->>'sha256'<>repeat('a',64)
      or (trusted_plan->>'size')::bigint<>250000
      or trusted_plan->'source'->>'object_key'<>t.object_key
-     or trusted_plan->>'parent_id'<>folder_id then
+     or trusted_plan->>'parent_id'<>folder_id
+     or trusted_plan->>'name'<>'field-photo-'||photo::text||'.jpg' then
      raise exception 'Fenced protected source projection differed from immutable receipt';end if;
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_get_delivery_file_plan(%L,%L,%s,%L)',
