@@ -181,6 +181,21 @@
           <section id="job-delivery" data-job-panel="delivery" hidden>
             <h3>Client package and delivery</h3>
             <p class="muted">No photo is sent when you preview or approve. Only an explicit Send can queue a verified package.</p>
+            <details id="client-folder-settings">
+              <summary>Client folder organization (Admin)</summary>
+              <p class="muted">Choose an authorized, verified client destination. Applies only to newly approved packages; existing deliveries are unchanged.</p>
+              <label>Client destination <select id="folder-layout-destination" disabled><option value="">Load verified clients</option></select></label>
+              <label>Folder layout <select id="folder-layout-choice" disabled>
+                <option value="ADDRESS_WORK_ORDER">Address → Work Order → Package</option>
+                <option value="STATE_CITY_ADDRESS">State → City → Address → Work Order → Package</option>
+                <option value="STATE_COUNTY_CITY_ADDRESS">State → County → City → Address → Work Order → Package</option>
+              </select></label>
+              <div class="workspace-navigation">
+                <button id="folder-layout-refresh" type="button" class="secondary">Load verified destinations</button>
+                <button id="folder-layout-save" type="button" disabled>Save folder preference</button>
+              </div>
+              <p id="folder-layout-status" class="status" aria-live="polite" role="status"></p>
+            </details>
             <label>Client company <select id="release-company" disabled><option value="">Not assigned</option></select></label>
             <div class="workspace-navigation"><button id="release-new-company" type="button" class="secondary" disabled>Add client company</button>
               <button id="release-assign-company" type="button" class="secondary" disabled>Save client assignment</button></div>
@@ -227,6 +242,7 @@
   <script src="photo-requirements.js?v=phase4-1" defer></script>
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
   <script src="client-release.js?v=phase5d-20261010" defer></script>
+  <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
   <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
   <script src="app.js?v=job-workspace-20261007-1" defer></script>
   <script src="session.js?v=admin-auto-refresh-20260930-1" defer></script>
