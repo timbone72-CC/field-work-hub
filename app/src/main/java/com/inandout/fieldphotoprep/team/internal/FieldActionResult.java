@@ -5,6 +5,7 @@ import org.json.JSONObject;
 final class FieldActionResult {
     final boolean conflict;
     final String reason, status, startedAt, completedAt, updatedAt, acceptedAt;
+    final String acknowledgmentReceivedAt;
 
     FieldActionResult(FieldAction action, String body) throws Exception {
         JSONObject r = new JSONObject(body);
@@ -21,7 +22,16 @@ final class FieldActionResult {
         completedAt = value(r, "field_completed_at");
         updatedAt = value(r, "server_updated_at");
         acceptedAt = value(r, "accepted_at");
-        if (!conflict) {
+        acknowledgmentReceivedAt = value(r, "acknowledgment_received_at");
+        if (!conflict && "ACK".equals(action.kind)) {
+            if (!"ASSIGNED".equals(status) && !"IN_PROGRESS".equals(status)
+                    && !"FIELD_COMPLETE".equals(status))
+                throw new IllegalStateException("Invalid ACK work state.");
+            java.time.Instant.parse(acknowledgmentReceivedAt);
+            java.time.Instant.parse(acceptedAt);
+            if (!acknowledgmentReceivedAt.equals(acceptedAt))
+                throw new IllegalStateException("ACK server receipt did not match.");
+        } else if (!conflict) {
             if (!"IN_PROGRESS".equals(status) && !"FIELD_COMPLETE".equals(status))
                 throw new IllegalStateException("Invalid canonical state.");
             java.time.Instant.parse(startedAt);
