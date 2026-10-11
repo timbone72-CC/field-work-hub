@@ -396,6 +396,7 @@ function renderSignedIn(rows, users, organizationId) {
   workOrderRows = rows;
   renderRlsSummary(rows);
   renderAssignableUsers(users);
+  JobWorkspace.populateContractors(users);
   renderWorkOrders(rows, organizationId);
   Promise.all([createPhotos.reloadTemplates(), editPhotos.reloadTemplates()]).then(fillWorkTypes).catch(e => setCreateStatus(e.message, true));
 }
