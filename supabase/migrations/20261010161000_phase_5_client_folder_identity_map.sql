@@ -178,8 +178,7 @@ begin
     or found.parent_map_id is distinct from map_parent
     or found.address_key is distinct from k.folder_address_key
     or found.work_order_id is distinct from
-       (case when p_kind='WORK_ORDER' then k.work_order_id else null end)
-    or found.remote_name is distinct from label then
+       (case when p_kind='WORK_ORDER' then k.work_order_id else null end) then
     raise exception 'Existing remote folder identity must be preserved' using errcode='40001';
   end if;
   return jsonb_build_object('map_id',found.id,'kind',found.kind,
