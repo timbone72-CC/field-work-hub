@@ -49,7 +49,7 @@ export async function continueTrustedDeliveryFile({
     ||typeof tokenProvider!=='function'||typeof ledger?.forLease!=='function'
     ||typeof expectedEmail!=='string'||!expectedEmail
     ||typeof expectedDriveId!=='string'||!expectedDriveId
-    ||!vault||typeof fetcher!=='function)
+    ||!vault||typeof fetcher!=='function')
     throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
   const scoped=ledger.forLease(packageId,workerId,generation);
   // The frozen file source is private, and every projection is fenced by
