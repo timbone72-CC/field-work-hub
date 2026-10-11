@@ -54,10 +54,12 @@ document.getElementById('prepare-repeat-work').addEventListener('click', () => {
   JobWorkspace.guard(async () => {
     const oldId=editWorkOrderIdInput.value;
     const actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+    const epoch=adminSessionEpoch, editorId=editWorkOrderIdInput.value;
     if (!oldId || !actor || !org) return;
     try {
       const old=await fetchWorkOrder(oldId);
-      if (currentUser?.id!==actor || currentUser?.app_metadata?.organization_id!==org
+      if (adminSessionEpoch!==epoch || currentUser?.id!==actor
+        || currentUser?.app_metadata?.organization_id!==org
         || !accessToken || editWorkOrderIdInput.value!==oldId) return;
       const snapshot=PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot);
       const existingCreateDraft=Boolean(propertyAddressInput.value.trim()
@@ -66,8 +68,10 @@ document.getElementById('prepare-repeat-work').addEventListener('click', () => {
         || createPhotos.value?.items?.length || createPhotos.value?.total?.enabled);
       if (existingCreateDraft && !window.confirm(
         'Replace the unfinished Create Work Order draft with the previous job details?')) return;
-      if (currentUser?.id!==actor || currentUser?.app_metadata?.organization_id!==org
-        || !accessToken || editWorkOrderIdInput.value!==oldId) return;
+      if (adminSessionEpoch!==epoch || currentUser?.id!==actor
+        || currentUser?.app_metadata?.organization_id!==org
+        || !accessToken || editWorkOrderIdInput.value!==editorId) return;
+      if (JobWorkspace.dirty()) throw Error('The current job has unsaved changes. Save or discard them before preparing repeat work.');
       closeEditor(true);
       createForm.reset();
       applyWoNumberMode('auto');
