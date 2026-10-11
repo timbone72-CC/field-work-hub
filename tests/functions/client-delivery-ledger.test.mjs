@@ -64,6 +64,18 @@ test('scoped address and WO folder lookups retain server-only current-lease argu
    assert.equal(call.options.headers.Authorization,'Bearer '+token);
    assert.equal(call.options.redirect,'error');
  }
+ const mapId=uuid(9),proof={id:'generated-folder-0001',parent:'root-folder-0001',name:'address-123'};
+ await ledger.beginParentCreate(pkg,worker,g,mapId);
+ await ledger.confirmParent(pkg,worker,g,mapId,proof);
+ assert.deepEqual(calls.slice(-2).map(call=>new URL(call.url).pathname.split('/').pop()),[
+   'service_begin_delivery_parent_create','service_confirm_delivery_parent']);
+ const begin=JSON.parse(calls.at(-2).options.body);
+ const confirm=JSON.parse(calls.at(-1).options.body);
+ for(const a of [begin,confirm]){
+   assert.equal(a.p_package,pkg);assert.equal(a.p_worker,worker);
+   assert.equal(a.p_generation,g);assert.equal(a.p_map,mapId);
+ }
+ assert.deepEqual(confirm.p_proof,proof);
  const missing=JSON.parse(calls[0].options.body);
  assert.equal('p_remote_id' in missing,false);
  const present=JSON.parse(calls[1].options.body);
