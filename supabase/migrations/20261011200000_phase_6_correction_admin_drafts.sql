@@ -20,13 +20,14 @@ create table private.admin_correction_drafts(
  revision uuid not null default gen_random_uuid(),
  status text not null default 'DRAFT' check(status in ('DRAFT','DISPATCHED')),
  dispatched_action_id uuid unique,
+ dispatched_by uuid references auth.users(id) on delete restrict,
  dispatched_result jsonb,
  saved_by uuid not null references auth.users(id) on delete restrict,
  updated_at timestamptz not null default clock_timestamp(),
  foreign key(origin_run_id,work_order_id)
    references public.work_order_runs(id,work_order_id) on delete restrict,
- check ((status='DRAFT' and dispatched_action_id is null and dispatched_result is null)
-     or (status='DISPATCHED' and dispatched_action_id is not null and dispatched_result is not null))
+ check ((status='DRAFT' and dispatched_action_id is null and dispatched_by is null and dispatched_result is null)
+     or (status='DISPATCHED' and dispatched_action_id is not null and dispatched_by is not null and dispatched_result is not null))
 );
 create table private.admin_correction_previews(
  id uuid primary key default gen_random_uuid(),
@@ -264,8 +265,8 @@ begin
  if d.id is null or d.revision is distinct from p_revision then
    raise exception 'Correction draft revision changed' using errcode='40001';end if;
  if d.status='DISPATCHED' then
-   if d.dispatched_action_id is distinct from p_action
-   then raise exception 'Correction already dispatched; reload its result' using errcode='40001';end if;
+   if d.dispatched_action_id is distinct from p_action or d.dispatched_by is distinct from auth.uid()
+   then raise exception 'Correction already dispatched by a different action/actor; reload its result' using errcode='40001';end if;
    return d.dispatched_result;
  end if;
  b:=private.admin_correction_basis(p_wo);
@@ -294,7 +295,7 @@ begin
    d.reason,d.reference_photos,d.assigned_user_id,d.due_date,
    d.instructions,d.capture_requirements,d.item_mapping,d.release_requirements);
  update private.admin_correction_drafts
- set status='DISPATCHED',dispatched_action_id=p_action,dispatched_result=result,
+ set status='DISPATCHED',dispatched_action_id=p_action,dispatched_by=auth.uid(),dispatched_result=result,
      updated_at=clock_timestamp()
  where id=d.id;
  return result;
