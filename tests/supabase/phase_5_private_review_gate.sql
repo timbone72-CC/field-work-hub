@@ -771,7 +771,7 @@ begin
  then raise exception 'Cross-run retained original evidence/coverage failed: %',selected;end if;
  -- A received original photo and valid DRAFT are NOT a new delivery. The only
  -- closure path is the exact provider worker completing an approved package.
- perform pg_temp.expect_photo_review_error('42501',format(
+ perform pg_temp.expect_photo_review_error('40001',format(
    'select public.service_finish_delivery(%L,%L,1)',
    next_pkg->>'id',gen_random_uuid()));
  if (select status from private.correction_obligations
