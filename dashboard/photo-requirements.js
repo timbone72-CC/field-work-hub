@@ -65,9 +65,15 @@ class PhotoRequirementEditor {
     if (!response.ok) throw Error(await readableError(response, 'Unable to load photo templates.'));
     this.templates = await response.json(); this.render();
   }
+  refreshSuggestions() {
+    if (this.selectedId && !PhotoRules.suggestions(this.templates,this.getWorkType()).some(t=>t.id===this.selectedId))
+      this.selectedId='';
+    this.render();
+  }
   useDefault() {
     const t = PhotoRules.suggestions(this.templates,this.getWorkType()).find(t=>t.is_default);
     if (t && !this.locked) this.choose(t.id);
+    else this.refreshSuggestions();
   }
   choose(id) {
     this.selectedId = id;
