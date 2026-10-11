@@ -45,6 +45,31 @@ test('correct fenced lease identity is supplied for all upload session and deliv
    assert.equal(JSON.parse(c.options.body).p_generation,g);
  }
 });
+test('scoped address and WO folder lookups retain server-only current-lease arguments',async()=>{
+ const pkg=uuid(1),worker=uuid(2),g=7;
+ const {ledger,calls}=mock(()=>Response.json({exists:false}));
+ await ledger.readParent(pkg,worker,g,'ADDRESS');
+ await ledger.reserveParent(pkg,worker,g,'ADDRESS','generated-folder-0001','root-folder-0001');
+ await ledger.readParent(pkg,worker,g,'WORK_ORDER');
+ await ledger.reserveParent(pkg,worker,g,'WORK_ORDER','generated-folder-0002','generated-folder-0001');
+ assert.deepEqual(calls.map(c=>new URL(c.url).pathname.split('/').pop()),[
+  'service_read_delivery_parent','service_reserve_delivery_parent',
+  'service_read_delivery_parent','service_reserve_delivery_parent']);
+ for(const call of calls){
+   const arg=JSON.parse(call.options.body);
+   assert.equal(arg.p_package,pkg);
+   assert.equal(arg.p_worker,worker);
+   assert.equal(arg.p_generation,g);
+   assert.ok(['ADDRESS','WORK_ORDER'].includes(arg.p_kind));
+   assert.equal(call.options.headers.Authorization,'Bearer '+token);
+   assert.equal(call.options.redirect,'error');
+ }
+ const missing=JSON.parse(calls[0].options.body);
+ assert.equal('p_remote_id' in missing,false);
+ const present=JSON.parse(calls[1].options.body);
+ assert.equal(present.p_remote_id,'generated-folder-0001');
+ assert.equal(present.p_parent_id,'root-folder-0001');
+});
 test('unauthorized and ambiguous backend failures never reveal service secrets or claim delivery',async()=>{
  for(const status of [401,403,503]){
   const {ledger}=mock(()=>Response.json({secret:'not to show'}, {status}));
