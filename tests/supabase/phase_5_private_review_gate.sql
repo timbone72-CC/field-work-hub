@@ -691,6 +691,7 @@ declare
  cfg jsonb; revision uuid; action uuid:=gen_random_uuid(); result jsonb; next_pkg jsonb;
  selected jsonb; oldrev timestamptz; claims_admin text; claims_worker text;
  set_id uuid:=gen_random_uuid(); digest text:=encode(sha256(convert_to('[]','UTF8')),'hex');
+ old_decision_revision uuid; old_transfer_version uuid;
 begin
  select * into old_pkg from private.client_packages
   where status='DELIVERED' and approved_manifest is not null limit 1;
@@ -748,6 +749,18 @@ begin
  perform set_config('request.jwt.claims',claims_admin,true);
  next_pkg:=public.admin_save_package_draft(gen_random_uuid(),wo,null,
   'Complete corrected return submission',array[old_photo]);
+ execute 'reset role';
+ -- Historic delivery does not override a later explicit REJECTED review state.
+ perform pg_temp.expect_photo_review_error('42501',format(
+   'select private.client_package_manifest(%L)',next_pkg->>'id'));
+ select d.revision,t.version into old_decision_revision,old_transfer_version
+  from private.photo_review_decisions d
+  join private.photo_transfers t on t.photo_id=d.photo_id
+  where d.photo_id=old_photo;
+ perform set_config('request.jwt.claims',claims_admin,true);
+ execute 'set local role authenticated';
+ perform public.admin_review_photo(gen_random_uuid(),wo,old_photo,
+    old_transfer_version,old_decision_revision,'APPROVED','');
  execute 'reset role';
  selected:=private.client_package_manifest((next_pkg->>'id')::uuid);
  if selected->>'current_run_id'<>newrun::text
