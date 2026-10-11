@@ -604,4 +604,22 @@ begin
  raise notice 'Admin layout scope, revision, replay, contractor denial PASS';
 end;
 $folder_layout$;
+-- Geographic reservation service RPCs must remain inaccessible to app JWTs.
+do $geo_rpc_gate$
+begin
+ if has_function_privilege('authenticated',
+    'public.service_reserve_geographic_parent(uuid,uuid,bigint,text,text,text)','execute')
+  or has_function_privilege('authenticated',
+    'public.service_read_geographic_parent(uuid,uuid,bigint,text)','execute')
+  or has_function_privilege('authenticated',
+    'public.service_reserve_geographic_leaf(uuid,uuid,bigint,text,text,text)','execute')
+  or has_function_privilege('anon',
+    'public.service_read_geographic_leaf(uuid,uuid,bigint,text)','execute')
+  or has_table_privilege('authenticated','private.client_delivery_parent_maps','insert')
+ then
+  raise exception 'Geographic delivery authority was exposed to a browser/phone';
+ end if;
+ raise notice 'Geographic reservation RPC service-only boundary PASS';
+end;
+$geo_rpc_gate$;
 rollback;
