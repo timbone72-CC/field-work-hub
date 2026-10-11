@@ -24,3 +24,23 @@ test('display order and stage/framing do not add another counting rule', () => {
   const c = configuration(null, [4, 4]); c.items[0].stage = 'DURING'; c.items[0].framing = 'WIDE'; c.items[0].order = 9;
   assert.equal(rules.validate(c).minimum, 8);
 });
+
+test('Phase 6B suggestions include only active matching work-type templates, default first',()=>{
+ const entries=[
+  {id:'z',name:'Alternate',active:true,work_type:' Inspection ',is_default:false},
+  {id:'a',name:'Main',active:true,work_type:'inspection',is_default:true},
+  {id:'x',name:'Other',active:true,work_type:'Grass Cut',is_default:true},
+  {id:'h',name:'Archived',active:false,work_type:'Inspection',is_default:false}
+ ];
+ assert.deepEqual(PhotoRules.suggestions(entries,'INSPECTION').map(t=>t.id),['a','z']);
+ assert.deepEqual(PhotoRules.suggestions(entries,''),[]);
+});
+test('Phase 6B prior requirements are cloned with fresh revision, never mutating original',()=>{
+ const original=PhotoRules.empty();
+ const before=structuredClone(original);
+ const newer=PhotoRules.copyPriorSnapshot(original);
+ assert.notEqual(newer.revision,original.revision);
+ assert.deepEqual(original,before);
+ assert.deepEqual(newer.items,original.items);
+ assert.throws(()=>PhotoRules.copyPriorSnapshot({}),/requirements|total|supported/i);
+});
