@@ -89,7 +89,8 @@ abstract class CachedWorkOrderDao {
 
     private boolean hasLocalActions(CachedWorkOrder row, List<FieldAction> actions) {
         for (FieldAction a : actions)
-            if (a.workOrderId.equals(row.workOrderId) && a.runId.equals(row.runId)) return true;
+            if (a.workOrderId.equals(row.workOrderId) && a.runId.equals(row.runId)
+                    && (!"ACK".equals(a.kind) || !"ACCEPTED".equals(a.state))) return true;
         return false;
     }
 
