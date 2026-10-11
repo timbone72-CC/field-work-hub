@@ -6,6 +6,7 @@ import {reserveProviderIdentities} from './worker-core.mjs';
 import {createPrivateSourceChunkReader} from './private-source.mjs';
 import {transferOnePreparedChunk} from './upload-one.mjs';
 import {reconcileOnePreallocatedPackageFolder} from './folder-one.mjs';
+import {reconcileOnePreallocatedParent} from './parent-one.mjs';
 export async function prepareTrustedDelivery({
   tokenProvider,ledger,workerId,expectedEmail,expectedDriveId,
   fetcher=fetch
@@ -121,4 +122,40 @@ export async function continueTrustedPackageFolder({
   return reconcileOnePreallocatedPackageFolder({
     plan,workerId,generation,drive,ledger:scoped,expectedDriveId
   });
+}
+
+/**
+ * Source-only ADDRESS / WORK_ORDER continuation. The map is obtained from the
+ * original SQL lease and never supplied by the caller. No public handler
+ * invokes this function while provider readiness remains disabled.
+ */
+export async function continueTrustedDeliveryParent({
+ tokenProvider,ledger,workerId,generation,packageId,kind,
+ expectedEmail,expectedDriveId,fetcher=fetch
+}={}){
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ if(!UUID.test(workerId??'')||!UUID.test(packageId??'')
+  ||!Number.isSafeInteger(generation)||generation<1
+  ||!['ADDRESS','WORK_ORDER'].includes(kind)
+  ||typeof tokenProvider!=='function'||typeof ledger?.readParent!=='function'
+  ||typeof expectedEmail!=='string'||!expectedEmail
+  ||typeof expectedDriveId!=='string'||!expectedDriveId)
+  throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+ let auth;
+ try{auth=await tokenProvider();}
+ catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+ if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+  ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+  throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+ const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+ const account=await drive.verifyProviderIdentity(expectedEmail);
+ if(account.account.toLowerCase()!==expectedEmail.toLowerCase())
+  throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
+ await ledger.heartbeat(packageId,workerId,generation);
+ const map=await ledger.readParent(packageId,workerId,generation,kind);
+ if(map?.exists!==true||map.kind!==kind)
+  throw new DriveUncertain('EXACT_PREALLOCATED_PARENT_REQUIRED');
+ return reconcileOnePreallocatedParent({
+  map,packageId,workerId,generation,drive,ledger,expectedDriveId
+ });
 }
