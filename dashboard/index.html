@@ -230,7 +230,9 @@
         <label>Find by<select id="job-search-field"><option value="property_address">Address</option><option value="wo_number">WO number</option></select></label>
         <label>Search<input id="job-search" type="search" maxlength="160" placeholder="Address or WO number"></label>
         <label>Status<select id="job-status"><option value="">All statuses</option><option value="ASSIGNED">Assigned</option><option value="IN_PROGRESS">In progress</option><option value="FIELD_COMPLETE">Field complete</option><option value="CANCELLED">Cancelled</option></select></label>
-        <label>Order<select id="job-sort"><option value="created_at.desc">Newest first</option><option value="due_date.asc">Due date</option></select></label>
+        <label>Contractor<select id="job-contractor"><option value="">All contractors</option></select></label>
+        <label>Due date<input id="job-due-date" type="date"></label>
+        <label>Order<select id="job-sort"><option value="created_at.desc">Newest first</option><option value="due_date.asc">Due date (earliest)</option><option value="due_date.desc">Due date (latest)</option></select></label>
         <label>Per page<select id="job-page-size"><option value="25">25</option><option value="50">50</option></select></label>
         <button type="submit">Apply</button>
       </form>
