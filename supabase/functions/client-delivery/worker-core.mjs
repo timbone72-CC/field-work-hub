@@ -1,57 +1,105 @@
-// Trusted, source-only delivery *preflight and reservation* coordinator.
-// Does NOT touch photo bytes, create folders, send clients or enable jobs.
-// Run only after the protected OAuth provider identity + destination have been verified,
-// with the service-role-only RPC adapter. No token/secret is accepted from browsers.
-import { DriveUncertain } from './drive-client.mjs';
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Trusted single-worker identity preallocation only. NO Drive create, upload,
+// provider Send, cleanup, extra queue or retry with replacement IDs.
+// Required hierarchy: destination root -> ADDRESS -> WORK_ORDER -> PACKAGE.
+// Each transition is fenced by the current Supabase delivery lease and its
+// frozen company/destination identity, not by a browser/phone address string.
+import {DriveUncertain} from './drive-client.mjs';
+const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const HASH=/^[a-f0-9]{64}$/;
-export async function reserveProviderIdentities({ledger,drive,workerId,expectedEmail,expectedDriveId=null}){
-  if(!UUID.test(workerId??'')||!ledger||!drive||!expectedEmail)
-    throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
-  const claim=await ledger.claim(workerId);
-  if(!claim||claim.claimed===false)return {claimed:false};
-  if(claim.claimed!==true||!UUID.test(claim.package_id??'')
-    ||!Number.isSafeInteger(claim.generation)||claim.generation<1
-    ||!HASH.test(claim.approved_sha256??'')
-    ||!claim.manifest||claim.manifest.package_id!==claim.package_id
-    ||claim.manifest.destination_id!==claim.destination_id
-    ||claim.manifest.review_policy_revision==null
-    ||!Array.isArray(claim.manifest.selected_photos)
-    ||claim.manifest.selected_photos.length>200)
-    throw new DriveUncertain('FROZEN_CLAIM_INVALID');
-  const photos=claim.manifest.selected_photos;
-  const ids=new Set();
-  for(const p of photos){
-    if(!UUID.test(p.photo_id??'')||!HASH.test(p.observed_sha256??'')
-      ||!Number.isSafeInteger(p.observed_size)||p.observed_size<=0
-      ||ids.has(p.photo_id))throw new DriveUncertain('FROZEN_PHOTO_INVALID');
-    ids.add(p.photo_id);
-  }
-  // No generated IDs, folder creation or bytes until BOTH checks pass.
-  const verified=await drive.verifyProviderIdentity(expectedEmail);
-  if(verified.account.toLowerCase()!==expectedEmail.toLowerCase())
-    throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
-  const destination=await drive.verifyDestination({
-    folderId:claim.manifest.destination_root,expectedDriveId
-  });
-  if(destination.id!==claim.manifest.destination_root)
-    throw new DriveUncertain('DESTINATION_NOT_VERIFIED');
-  await ledger.heartbeat(claim.package_id,workerId,claim.generation);
-  const preallocated=await drive.generateIds(photos.length+2);
-  const folder=preallocated[0],manifestFile=preallocated[preallocated.length-1];
-  // Reserve EVERY remote identity BEFORE any create/upload operation.
-  await ledger.reserve(claim.package_id,workerId,claim.generation,
-    'FOLDER',null,folder,destination.id);
-  for(let i=0;i<photos.length;i++){
-    await ledger.heartbeat(claim.package_id,workerId,claim.generation);
-    await ledger.reserve(claim.package_id,workerId,claim.generation,
-      'PHOTO',photos[i].photo_id,preallocated[i+1],folder);
-  }
-  await ledger.heartbeat(claim.package_id,workerId,claim.generation);
-  await ledger.reserve(claim.package_id,workerId,claim.generation,
-    'MANIFEST',null,manifestFile,folder);
-  // Return safe work facts only. The provider token never leaves the adapter.
-  return {claimed:true,package_id:claim.package_id,generation:claim.generation,
-    reserved_count:photos.length+2,ready_for_provider_reconciliation:true,
-    provider_writes_performed:false};
+const ID=/^[A-Za-z0-9_-]{10,160}$/;
+function fail(code){throw new DriveUncertain(code);}
+export async function reserveProviderIdentities({
+ ledger,drive,workerId,expectedEmail,expectedDriveId=null
+}={}){
+ if(!UUID.test(workerId??'')||!ledger||!drive||!expectedEmail
+   ||typeof ledger.claim!=='function'||typeof ledger.heartbeat!=='function'
+   ||typeof ledger.readParent!=='function'||typeof ledger.reserveParent!=='function'
+   ||typeof ledger.reserve!=='function')
+   fail('TRUSTED_WORKER_NOT_CONFIGURED');
+ const claim=await ledger.claim(workerId);
+ if(!claim||claim.claimed===false)return {claimed:false};
+ if(claim.claimed!==true||!UUID.test(claim.package_id??'')
+   ||!Number.isSafeInteger(claim.generation)||claim.generation<1
+   ||!HASH.test(claim.approved_sha256??'')
+   ||!claim.manifest||claim.manifest.package_id!==claim.package_id
+   ||claim.manifest.destination_id!==claim.destination_id
+   ||claim.manifest.review_policy_revision==null
+   ||!ID.test(claim.manifest.destination_root??'')
+   ||!Array.isArray(claim.manifest.selected_photos)
+   ||claim.manifest.selected_photos.length>200)
+   fail('FROZEN_CLAIM_INVALID');
+ const photos=claim.manifest.selected_photos;
+ const ids=new Set();
+ for(const p of photos){
+   if(!UUID.test(p.photo_id??'')||!HASH.test(p.observed_sha256??'')
+     ||!Number.isSafeInteger(p.observed_size)||p.observed_size<=0
+     ||ids.has(p.photo_id))fail('FROZEN_PHOTO_INVALID');
+   ids.add(p.photo_id);
+ }
+ // Never generate a remote ID until both the OAuth account and exact
+ // client-designated destination root have been independently verified.
+ const verified=await drive.verifyProviderIdentity(expectedEmail);
+ if(verified.account.toLowerCase()!==expectedEmail.toLowerCase())
+   fail('WORKSPACE_ACCOUNT_MISMATCH');
+ const destination=await drive.verifyDestination({
+   folderId:claim.manifest.destination_root,expectedDriveId
+ });
+ if(destination.id!==claim.manifest.destination_root)
+   fail('DESTINATION_NOT_VERIFIED');
+ const pkg=claim.package_id,gen=claim.generation;
+ const heartbeat=()=>ledger.heartbeat(pkg,workerId,gen);
+ const stage=(kind,n)=>({
+   claimed:true,package_id:pkg,generation:gen,reserved_count:n,
+   next_parent_kind:kind,ready_for_provider_reconciliation:true,
+   provider_writes_performed:false
+ });
+ // The backend owns all scope checks. Lookup BEFORE generateIds is critical
+ // for reuse across packages and safe restart after unknown provider writes.
+ async function addressOrWo(kind,parentId){
+   await heartbeat();
+   const existing=await ledger.readParent(pkg,workerId,gen,kind);
+   if(existing?.exists===true){
+     if(existing.kind!==kind||!ID.test(existing.remote_folder_id??'')
+       ||existing.parent_remote_id!==parentId
+       ||!['RESERVED','ATTEMPTED','VERIFIED'].includes(existing.state))
+       fail('FROZEN_PARENT_IDENTITY_UNCERTAIN');
+     return {id:existing.remote_folder_id,state:existing.state,newCount:0};
+   }
+   if(existing?.exists!==false)fail('FROZEN_PARENT_IDENTITY_UNCERTAIN');
+   await heartbeat();
+   const generated=await drive.generateIds(1);
+   if(!Array.isArray(generated)||generated.length!==1||!ID.test(generated[0]))
+     fail('REMOTE_IDS_UNAVAILABLE');
+   await heartbeat();
+   const saved=await ledger.reserveParent(pkg,workerId,gen,kind,generated[0],parentId);
+   if(saved?.kind!==kind||saved.remote_folder_id!==generated[0]
+     ||saved.parent_remote_id!==parentId||saved.state!=='RESERVED')
+     fail('FROZEN_PARENT_IDENTITY_UNCERTAIN');
+   return {id:generated[0],state:'RESERVED',newCount:1};
+ }
+ const address=await addressOrWo('ADDRESS',destination.id);
+ if(address.state!=='VERIFIED')return stage('ADDRESS',address.newCount);
+ const wo=await addressOrWo('WORK_ORDER',address.id);
+ if(wo.state!=='VERIFIED')return stage('WORK_ORDER',wo.newCount);
+ // Even after both database receipts, the current provider token must
+ // independently prove the saved exact client WORK_ORDER destination.
+ await drive.verifyDestination({folderId:wo.id,expectedDriveId});
+ await heartbeat();
+ const preallocated=await drive.generateIds(photos.length+2);
+ if(!Array.isArray(preallocated)||preallocated.length!==photos.length+2
+   ||preallocated.some(id=>!ID.test(id))
+   ||new Set(preallocated).size!==preallocated.length
+   ||preallocated.includes(wo.id)||preallocated.includes(address.id))
+   fail('REMOTE_IDS_UNAVAILABLE');
+ const folder=preallocated[0],manifestFile=preallocated.at(-1);
+ await ledger.reserve(pkg,workerId,gen,'FOLDER',null,folder,wo.id);
+ for(let i=0;i<photos.length;i++){
+   await heartbeat();
+   await ledger.reserve(pkg,workerId,gen,'PHOTO',photos[i].photo_id,preallocated[i+1],folder);
+ }
+ await heartbeat();
+ await ledger.reserve(pkg,workerId,gen,'MANIFEST',null,manifestFile,folder);
+ return {claimed:true,package_id:pkg,generation:gen,
+   reserved_count:photos.length+2,
+   ready_for_provider_reconciliation:true,provider_writes_performed:false};
 }
