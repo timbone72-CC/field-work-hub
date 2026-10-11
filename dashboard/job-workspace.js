@@ -113,7 +113,7 @@ const JobWorkspace = (() => {
   function detailsDirty() { return baseline !== null && fingerprint() !== baseline; }
   function dirty() { return detailsDirty() || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
   function reset() {
-    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
@@ -226,7 +226,7 @@ const JobWorkspace = (() => {
     el('job-receipt').textContent = row.assignment_received_at
       ? `Assignment received ${formatTimestamp(row.assignment_received_at)}` : 'Assignment not yet received';
     el('job-reload').hidden = true;
-    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset();
     tab('details');
     if (!editSection.open) editSection.showModal();
     navigation();
@@ -237,6 +237,7 @@ const JobWorkspace = (() => {
     if (name === 'photos' && selectedRow?.id) {
       PrivateReview.open(selectedRow.id); ClientRelease.open(selectedRow.id, name);
       CorrectionDraft.open(selectedRow.id, selectedRow.field_status);
+      FollowupManagement.open(selectedRow.id, selectedRow.field_status);
     }
     if (name === 'delivery' && selectedRow?.id) ClientRelease.open(selectedRow.id, name);
     document.querySelectorAll('[data-job-tab]').forEach(button => {
@@ -244,7 +245,7 @@ const JobWorkspace = (() => {
     });
   }
   function closed() {
-    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
@@ -274,7 +275,7 @@ const JobWorkspace = (() => {
     }
   }
   function init() {
-    CorrectionDraft.init(); PrivateReview.init(); ClientRelease.init();
+    CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
     el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));
     el('job-address-previous').addEventListener('click',()=>loadAddressContext(Math.max(0,addressOffset-50)));
@@ -322,5 +323,5 @@ const JobWorkspace = (() => {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   }
   return { init, ensureAccount, request, accept, page, choose, guard, opened, closed, reset, dirty, saved,
-    reconcileSaved, refreshed, populateContractors, detailsDirty, needsReload: () => needsReload };
+    reconcileSaved, refreshed, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
 })();
