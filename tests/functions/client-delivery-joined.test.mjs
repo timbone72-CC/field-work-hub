@@ -16,7 +16,7 @@ const session='https://www.googleapis.com/upload/drive/v3/files?uploadType=resum
 const size=300000,sha='a'.repeat(64);
 const plan={
  package_id:pkg,plan_id:planId,kind:'PHOTO',photo_id:photo,
- file_id:file,parent_id:parent,name:'001.jpg',mime:'image/jpeg',sha256:sha,size,
+ file_id:file,parent_id:parent,name:'field-photo-'+photo+'.jpg',mime:'image/jpeg',sha256:sha,size,
  appProperties:{fwh_package:pkg,fwh_manifest:'b'.repeat(64)},
  source:{bucket:'fwh-review-private',object_key:[org,wo,run,photo+'.jpg'].join('/'),
   object_id:uuid(9),object_version:'v1',owner_id:owner,photo_id:photo,
@@ -76,6 +76,10 @@ function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
    }
    if(u.pathname==='/upload/drive/v3/files'){
     if(opts.method==='POST'){
+     const metadata=JSON.parse(opts.body);
+     assert.equal(metadata.name,'field-photo-'+photo+'.jpg');
+     assert.equal(metadata.id,file);
+     assert.deepEqual(metadata.parents,[parent]);
      posts++;events.push('create');
      return new Response(null,{status:200,headers:{Location:session}});
     }
