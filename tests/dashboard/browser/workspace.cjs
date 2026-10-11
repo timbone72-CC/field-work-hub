@@ -325,9 +325,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         description:'Unavailable',instructions:'Never copy',requirements:optionalTemplate()}
     );
     await page.evaluate(async()=>{await Promise.all([createPhotos.reloadTemplates(),editPhotos.reloadTemplates()]);fillWorkTypes();});
+    await page.locator('#work-type').fill('Property inspection');
+    await page.locator('#work-type').dispatchEvent('change');
     assert.equal(await page.locator('#create-photo-requirements').getByLabel('Photo template').locator('option').count(),2,
       'An unassigned Create draft has only organization-wide templates');
     rows[50].client_company_id=uuid(9981);
+    await page.evaluate(async()=>{await refreshWorkOrders();});
     await page.locator('.job-link').first().click();
     await wait(page, () => document.querySelector('dialog').open);
     assert.equal(await page.locator('#edit-photo-requirements').getByLabel('Photo template').locator('option').count(),3,
