@@ -36,7 +36,7 @@
 
       <div id="rls-result" class="check" role="status" aria-live="polite"></div>
 
-      <details class="admin-action" aria-labelledby="create-heading">
+      <details class="admin-action" id="create-wo-details" aria-labelledby="create-heading">
         <summary id="create-heading">Create &amp; Assign Work Order</summary>
         <p class="muted">A new assignment stays marked “Not yet received” until that contractor’s app confirms delivery.</p>
 
@@ -111,6 +111,7 @@
             <button id="job-reload" type="button" class="secondary" hidden>Reload job</button>
           </div>
           <p id="job-context" class="muted" role="status"></p>
+          <button id="prepare-repeat-work" class="secondary" type="button">Prepare new work from this job</button>
           <div id="job-address-context" hidden>
             <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
             <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>
