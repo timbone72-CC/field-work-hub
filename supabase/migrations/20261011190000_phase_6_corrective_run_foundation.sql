@@ -192,9 +192,18 @@ begin
    then 'CLIENT_RETURN' else 'INTERNAL_CORRECTION' end;
  if p_kind is distinct from current_kind then
    raise exception 'Follow-up type disagrees with confirmed delivery history' using errcode='40001';end if;
- newgoal:=coalesce(p_release_requirements,w.release_requirement_snapshot);
- perform private.validate_correction_mapping(
-    p_capture_requirements,w.release_requirement_snapshot,newgoal,p_item_mapping);
+ -- Run 1's frozen capture snapshot is the first client release baseline;
+ -- the initial WO placeholder is not allowed to relax its actual requirements.
+ -- Subsequent corrections use the already explicit revisioned release goals.
+ if w.current_run_sequence=1 then
+   newgoal:=coalesce(p_release_requirements,oldrun.requirement_snapshot);
+   perform private.validate_correction_mapping(
+     p_capture_requirements,oldrun.requirement_snapshot,newgoal,p_item_mapping);
+ else
+   newgoal:=coalesce(p_release_requirements,w.release_requirement_snapshot);
+   perform private.validate_correction_mapping(
+     p_capture_requirements,w.release_requirement_snapshot,newgoal,p_item_mapping);
+ end if;
  if exists(select 1 from unnest(p_reference_photos) photo
    group by photo having count(*)>1)
  then raise exception 'Repeated reference photo' using errcode='22023';end if;
