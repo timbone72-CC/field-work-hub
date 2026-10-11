@@ -199,11 +199,15 @@ begin
   end if;
   address_folder_id:='addr'||replace(pkg_id::text,'-','');
   wo_folder_id:='wofolder'||replace(wo::text,'-','');
+  if public.service_read_delivery_parent(pkg_id,delivery_worker,delivery_gen,'ADDRESS')->>'exists'<>'false' then
+    raise exception 'Existing address ID fabricated before reservation';end if;
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'WORK_ORDER',wo_folder_id,address_folder_id));
   address_row:=public.service_reserve_delivery_parent(pkg_id,delivery_worker,delivery_gen,
      'ADDRESS',address_folder_id,'DISPOSABLE-ONLY');
+  if public.service_read_delivery_parent(pkg_id,delivery_worker,delivery_gen,'ADDRESS')->>'remote_folder_id'
+       <>address_folder_id then raise exception 'Original address ID lookup failed';end if;
   if address_row->>'state'<>'RESERVED' or address_row->>'remote_folder_id'<>address_folder_id
      or address_row->>'kind'<>'ADDRESS' then
     raise exception 'Address map reservation identity failed: %',address_row;end if;
@@ -218,6 +222,8 @@ begin
     pkg_id,delivery_worker,delivery_gen,'ADDRESS',address_folder_id,'WRONG-ROOT'));
   wo_row:=public.service_reserve_delivery_parent(pkg_id,delivery_worker,delivery_gen,
     'WORK_ORDER',wo_folder_id,address_folder_id);
+  if public.service_read_delivery_parent(pkg_id,delivery_worker,delivery_gen,'WORK_ORDER')->>'remote_folder_id'
+       <>wo_folder_id then raise exception 'Original WO folder ID lookup failed';end if;
   if wo_row->>'state'<>'RESERVED' or wo_row->>'remote_folder_id'<>wo_folder_id
     or wo_row->>'parent_remote_id'<>address_folder_id then
     raise exception 'WO map parent identity failed: %',wo_row;end if;
@@ -241,6 +247,9 @@ begin
     raise exception 'Leased delivery was claimed twice';end if;
   -- A browser/contractor cannot reserve or read service-only folder IDs.
   execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_read_delivery_parent(%L,%L,%s,%L)',
+    pkg_id,delivery_worker,delivery_gen,'ADDRESS'));
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'ADDRESS',address_folder_id,'DISPOSABLE-ONLY'));
