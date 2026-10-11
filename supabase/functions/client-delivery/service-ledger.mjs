@@ -5,7 +5,9 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file','service_read_delivery_parent',
  'service_reserve_delivery_parent','service_begin_delivery_parent_create',
- 'service_confirm_delivery_parent','service_read_upload_session',
+ 'service_confirm_delivery_parent','service_get_delivery_folder_plan',
+ 'service_begin_delivery_folder_create','service_confirm_delivery_folder',
+ 'service_read_upload_session',
  'service_store_upload_session','service_record_upload_offset',
  'service_get_delivery_file_plan',
  'service_confirm_delivery_file','service_finish_delivery',
@@ -60,6 +62,14 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         {p_package:p,p_worker:w,p_generation:g}),
       getFilePlan:plan=>rpc('service_get_delivery_file_plan',
         {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan}),
+      getFolderPlan:plan=>rpc('service_get_delivery_folder_plan',
+        {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan}),
+      beginFolderCreate:plan=>rpc('service_begin_delivery_folder_create',
+        {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan}),
+      confirmFolder:(folder,w,g,proof)=>rpc('service_confirm_delivery_folder',{
+        p_package:folder.package_id,p_worker:w,p_generation:g,
+        p_plan:folder.plan_id,p_proof:proof
+      }),
       getSession:async plan=>{
         const result=await rpc('service_read_upload_session',
           {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan});
