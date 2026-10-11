@@ -42,6 +42,7 @@ create table private.correction_obligations(
  prior_photo_ids uuid[] not null default '{}',
  item_mapping jsonb not null check(jsonb_typeof(item_mapping)='array'),
  capture_requirements jsonb not null check(jsonb_typeof(capture_requirements)='object'),
+ release_requirements jsonb not null check(jsonb_typeof(release_requirements)='object'),
  release_revision uuid not null,
  status text not null default 'OPEN' check(status in ('OPEN','SATISFIED','SUPERSEDED')),
  superseded_by uuid references private.correction_obligations(id) on delete restrict,
@@ -242,10 +243,10 @@ begin
  insert into private.correction_obligations(
    organization_id,work_order_id,origin_run_id,replacement_run_id,
    kind,reason,prior_photo_ids,item_mapping,capture_requirements,
-   release_revision,actor_id)
+   release_requirements,release_revision,actor_id)
  select org,p_wo,p_expected_run,newrun,p_kind,btrim(p_reason),
    p_reference_photos,p_item_mapping,p_capture_requirements,
-   w2.release_requirement_revision,auth.uid()
+   newgoal,w2.release_requirement_revision,auth.uid()
  from public.work_orders w2 where w2.id=p_wo;
  result:=jsonb_build_object('work_order_id',p_wo,'run_id',newrun,
     'run_sequence',w.current_run_sequence+1,'assignment_instance_id',newassign,
