@@ -104,3 +104,31 @@ test('Phase 6A clear filters resets only bounded list controls, not selected job
  assert.match(handler,/adminWritesPending \|\| saveEditButton\.disabled/);
  assert.doesNotMatch(handler,/ClientRelease\.reset|editForm\.reset|selectedRow\s*=/);
 });
+
+test('Phase 6A address navigation stays within exact same-company authorized page',()=>{
+ const uid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+ const selected={id:uid(1),organization_id:uid(10),client_company_id:uid(20),
+  property_address:'123 Main St Apt 2',wo_number:'WO-1'};
+ const page=[
+  selected,{...selected,id:uid(2),property_address:' 123  Main ST Apt 2 '},
+  {...selected,id:uid(3),client_company_id:uid(21)},
+  {...selected,id:uid(4),organization_id:uid(11)},
+  {...selected,id:uid(5),property_address:'123 Main St Apt 20'},
+  {...selected,id:'not-a-uuid'}
+ ];
+ const matches=rules.JobAddressContext.siblings(page,selected);
+ assert.deepEqual(matches.map(x=>x.id),[uid(1),uid(2)]);
+ assert.deepEqual(rules.JobAddressContext.siblings(page,{...selected,client_company_id:null}),[]);
+ assert.deepEqual(rules.JobAddressContext.siblings([],selected),[]);
+});
+test('Phase 6A address links use existing unsaved-change navigation and current-page disclosure',()=>{
+ const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
+ const workspace=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ assert.match(html,/id="job-address-work-orders"/);
+ assert.match(html,/on the current page/);
+ assert.match(workspace,/JobAddressContext\.siblings\(workOrderRows,selectedRow\)/);
+ assert.match(workspace,/button\.addEventListener\('click',\(\)=>choose\(item\.id\)\)/);
+ assert.match(workspace,/list\.replaceChildren\(\)/);
+ assert.doesNotMatch(workspace,/function addressContext\(\)[\s\S]*?function navigation\(\)/g,
+  /fetch\(/);
+});
