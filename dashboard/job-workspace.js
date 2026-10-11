@@ -15,7 +15,7 @@ const JobViewRules = {
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contractor))
       query.set('assigned_user_id',`eq.${contractor}`);
     const due=String(state.dueDate || '');
-    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(due) && !Number.isNaN(Date.parse(due+'T00:00:00Z')))
+    if (/^\d{4}-\d{2}-\d{2}$/.test(due) && !Number.isNaN(Date.parse(due+'T00:00:00Z')))
       query.set('due_date',`eq.${due}`);
     // Escape PostgREST pattern metacharacters; column and operator are never user supplied.
     const text = String(state.search || '').trim().slice(0, 160);
