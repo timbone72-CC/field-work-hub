@@ -34,6 +34,54 @@ public class RoomMigrationTest {
         verifyUpgrade("FIELD_COMPLETE", null);
     }
 
+    @Test public void existingV4SavedFieldEvidenceUpgradesWithoutInventingHumanAccept() throws Exception {
+        Context context=RuntimeEnvironment.getApplication();
+        String name="migration-v4-human-accept.db";
+        context.deleteDatabase(name);
+        java.io.InputStream resource=getClass().getResourceAsStream(
+            "/com.inandout.fieldphotoprep.team.internal.TeamDatabase/4.json");
+        assertNotNull(resource);
+        JSONObject schema=new JSONObject(new String(resource.readAllBytes(),StandardCharsets.UTF_8))
+            .getJSONObject("database");
+        try(SQLiteDatabase old=context.openOrCreateDatabase(name,Context.MODE_PRIVATE,null)) {
+            for(int n=0;n<schema.getJSONArray("entities").length();n++){
+                JSONObject entity=schema.getJSONArray("entities").getJSONObject(n);
+                String table=entity.getString("tableName");
+                old.execSQL(entity.getString("createSql").replace("${TABLE_NAME}",table));
+                JSONArray indices=entity.getJSONArray("indices");
+                for(int i=0;i<indices.length();i++)
+                    old.execSQL(indices.getJSONObject(i).getString("createSql").replace("${TABLE_NAME}",table));
+                if("cached_work_orders".equals(table)) {
+                    android.content.ContentValues values=new android.content.ContentValues();
+                    JSONArray fields=entity.getJSONArray("fields");
+                    for(int i=0;i<fields.length();i++){
+                        JSONObject field=fields.getJSONObject(i);
+                        if("INTEGER".equals(field.getString("affinity"))) values.put(field.getString("columnName"),0);
+                        else values.put(field.getString("columnName"),"");
+                    }
+                    values.put("cache_owner_user_id","a");values.put("organization_id","org");
+                    values.put("work_order_id","wo");values.put("run_id","run");
+                    values.put("assigned_user_id","a");values.put("field_status","ASSIGNED");
+                    values.put("requirement_snapshot_json","{}");
+                    old.insertOrThrow(table,null,values);
+                }
+            }
+            JSONArray setup=schema.getJSONArray("setupQueries");
+            for(int n=0;n<setup.length();n++)old.execSQL(setup.getString(n));
+            old.setVersion(4);
+        }
+        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name)
+            .addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3,
+                TeamDatabase.MIGRATION_3_4,TeamDatabase.MIGRATION_4_5)
+            .allowMainThreadQueries().build();
+        CachedWorkOrder row=upgraded.cachedWorkOrderDao().find("a","org","wo","run");
+        assertNotNull(row);
+        assertEquals("",row.acknowledgmentReceivedAt);
+        assertEquals("",row.reopenReason);
+        assertEquals("ASSIGNED",row.fieldStatus);
+        upgraded.close();context.deleteDatabase(name);
+    }
+
     @Test public void realV2AcceptedActionsSurviveV4WithoutInventingPhotoIntent() throws Exception {
         Context context=RuntimeEnvironment.getApplication();String name="migration-v2-photos.db";context.deleteDatabase(name);
         java.io.InputStream resource=getClass().getResourceAsStream("/com.inandout.fieldphotoprep.team.internal.TeamDatabase/2.json");assertNotNull(resource);
@@ -112,7 +160,7 @@ public class RoomMigrationTest {
         }
         for (int opening = 0; opening < 2; opening++) {
             TeamDatabase upgraded = Room.databaseBuilder(context, TeamDatabase.class, name)
-                    .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4).allowMainThreadQueries().build();
+                    .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5).allowMainThreadQueries().build();
             CachedWorkOrderDao dao = upgraded.cachedWorkOrderDao(); assertEquals(manifest, dao.action("action-a").finishPhotosJson);
             assertEquals(PhotoOwner.digest(manifest), dao.action("action-a").finishDigest); assertEquals("ACCEPTED", dao.action("action-a").state);
             assertEquals("PENDING", dao.action("action-b").state); assertEquals(123456, dao.action("action-b").retryNotBefore); assertEquals(6, dao.nextSequence());
@@ -182,7 +230,7 @@ public class RoomMigrationTest {
         }
         TeamDatabase upgraded =
                 Room.databaseBuilder(context, TeamDatabase.class, name)
-                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4)
+                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5)
                         .allowMainThreadQueries()
                         .build();
         assertEquals(1, upgraded.cachedWorkOrderDao().listForOwner("a", "org").size());
@@ -215,7 +263,7 @@ public class RoomMigrationTest {
         upgraded.close();
         TeamDatabase reopened =
                 Room.databaseBuilder(context, TeamDatabase.class, name)
-                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4)
+                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5)
                         .allowMainThreadQueries()
                         .build();
         assertEquals("", reopened.cachedWorkOrderDao().find("a", "org", "1", "run-1").conflictReason);
