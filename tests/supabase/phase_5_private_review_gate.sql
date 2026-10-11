@@ -312,8 +312,13 @@ begin
   folder_id:='folder'||replace(pkg_id::text,'-','');
   photo_file_id:='photo'||replace(photo::text,'-','');
   manifest_file_id:='manifest'||replace(pkg_id::text,'-','');
+  -- Even after an independently verified address/WO chain, the old
+  -- direct-root path must fail. No package folder can bypass company isolation.
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_reserve_delivery_file(%L,%L,%s,%L,null,%L,%L)',
+    pkg_id,delivery_worker,delivery_gen,'FOLDER',folder_id,'DISPOSABLE-ONLY'));
   perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
-    'FOLDER',null,folder_id,'DISPOSABLE-ONLY');
+    'FOLDER',null,folder_id,wo_folder_id);
   perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
     'PHOTO',photo,photo_file_id,folder_id);
   perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
@@ -371,7 +376,7 @@ begin
     'select public.service_finish_delivery(%L,%L,%s)',
     pkg_id,delivery_worker,delivery_gen));
   perform public.service_confirm_delivery_file(pkg_id,delivery_worker,delivery_gen,
-    'FOLDER',null,folder_id,'DISPOSABLE-ONLY','application/vnd.google-apps.folder',null,null);
+    'FOLDER',null,folder_id,wo_folder_id,'application/vnd.google-apps.folder',null,null);
   perform public.service_confirm_delivery_file(pkg_id,delivery_worker,delivery_gen,
     'PHOTO',photo,photo_file_id,folder_id,'image/jpeg',repeat('a',64),250000);
   frozen_size:=octet_length((delivery_claim->'manifest')::text);
