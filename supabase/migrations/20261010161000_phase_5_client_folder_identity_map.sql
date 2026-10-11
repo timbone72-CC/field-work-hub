@@ -198,3 +198,62 @@ revoke all on function private.service_reserve_delivery_parent(uuid,uuid,bigint,
  from public,anon,authenticated,service_role;
 grant execute on function private.service_reserve_delivery_parent(uuid,uuid,bigint,text,text,text),
  public.service_reserve_delivery_parent(uuid,uuid,bigint,text,text,text) to service_role;
+
+
+-- Before generating another Drive ID, inspect the existing ID behind the
+-- same CURRENT service delivery lease. A second package at the same address
+-- must reuse the original mapped parent rather than create a competing folder.
+create function private.service_read_delivery_parent(
+  p_package uuid,p_worker uuid,p_generation bigint,p_kind text
+) returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s'
+as $read$
+declare
+  k private.client_packages%rowtype;
+  o private.client_delivery_outbox%rowtype;
+  d private.client_delivery_destinations%rowtype;
+  existing private.client_delivery_parent_maps%rowtype;
+  part text;
+begin
+  perform private.service_delivery_guard(p_package,p_worker,p_generation);
+  if p_kind not in ('ADDRESS','WORK_ORDER') then
+    raise exception 'Exact folder kind required' using errcode='22023';end if;
+  select * into k from private.client_packages where id=p_package;
+  select * into o from private.client_delivery_outbox where package_id=p_package;
+  if k.id is null or o.package_id is null or k.status<>'DELIVERING'
+    or k.approved_sha256 is distinct from o.approved_sha256
+    or k.destination_id is distinct from o.destination_id
+    or k.folder_address_key is null then
+    raise exception 'Frozen package and lease required' using errcode='42501';end if;
+  select * into d from private.client_delivery_destinations where id=k.destination_id;
+  if d.id is null or d.organization_id is distinct from k.organization_id
+     or d.company_id is distinct from k.company_id or not d.verified or not d.active
+     or d.revision::text is distinct from k.approved_manifest->>'destination_revision'
+     or d.root_folder_id is distinct from k.approved_manifest->>'destination_root' then
+     raise exception 'Frozen company destination revision required' using errcode='42501';end if;
+  part:=case when p_kind='ADDRESS' then k.folder_address_key else k.work_order_id::text end;
+  select * into existing from private.client_delivery_parent_maps
+    where organization_id=k.organization_id and company_id=k.company_id
+      and destination_id=d.id and destination_revision=d.revision
+      and kind=p_kind and folder_key=part;
+  if existing.id is null then
+    return jsonb_build_object('exists',false,'kind',p_kind);
+  end if;
+  if existing.address_key is distinct from k.folder_address_key
+    or (p_kind='WORK_ORDER' and existing.work_order_id is distinct from k.work_order_id) then
+    raise exception 'Existing parent folder belongs to another frozen identity'
+      using errcode='42501';end if;
+  return jsonb_build_object('exists',true,'map_id',existing.id,'kind',existing.kind,
+    'remote_folder_id',existing.remote_folder_id,'parent_remote_id',existing.parent_remote_id,
+    'remote_name',existing.remote_name,'state',existing.state);
+end;
+$read$;
+create function public.service_read_delivery_parent(
+  p_package uuid,p_worker uuid,p_generation bigint,p_kind text
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+  select private.service_read_delivery_parent(p_package,p_worker,p_generation,p_kind)
+$wrap$;
+revoke all on function private.service_read_delivery_parent(uuid,uuid,bigint,text),
+ public.service_read_delivery_parent(uuid,uuid,bigint,text)
+ from public,anon,authenticated,service_role;
+grant execute on function private.service_read_delivery_parent(uuid,uuid,bigint,text),
+ public.service_read_delivery_parent(uuid,uuid,bigint,text) to service_role;
