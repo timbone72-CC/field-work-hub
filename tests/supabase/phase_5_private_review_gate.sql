@@ -239,6 +239,17 @@ begin
     pkg_id,gen_random_uuid(),delivery_gen));
   if (public.service_claim_delivery(gen_random_uuid())->>'claimed')<>'false' then
     raise exception 'Leased delivery was claimed twice';end if;
+  -- A browser/contractor cannot reserve or read service-only folder IDs.
+  execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
+    pkg_id,delivery_worker,delivery_gen,'ADDRESS',address_folder_id,'DISPOSABLE-ONLY'));
+  execute 'reset role';
+  -- Approved path must stay frozen even if a caller attempts to alter it.
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'update private.client_packages set folder_address_snapshot=%L where id=%L',
+    'FORGED DIFFERENT ADDRESS',pkg_id));
+  execute 'set local role service_role';
   folder_id:='folder'||replace(pkg_id::text,'-','');
   photo_file_id:='photo'||replace(photo::text,'-','');
   manifest_file_id:='manifest'||replace(pkg_id::text,'-','');
