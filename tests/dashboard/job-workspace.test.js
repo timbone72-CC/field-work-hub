@@ -91,3 +91,16 @@ test('Phase 6A closing a job returns keyboard focus by UUID and clears transient
  assert.match(reset,/contractor:'',dueDate:''/);
  assert.doesNotMatch(reset,/localStorage\.setItem/);
 });
+
+test('Phase 6A clear filters resets only bounded list controls, not selected job drafts',()=>{
+ const workspace=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
+ assert.match(html,/id="job-clear-filters"/);
+ const handler=workspace.match(/el\('job-clear-filters'\)\.addEventListener\('click',[\s\S]*?\n    \}\);/)?.[0];
+ assert.ok(handler);
+ for(const control of ['job-search','job-status','job-contractor','job-due-date','job-sort','job-page-size'])
+  assert.ok(handler.includes(control),control);
+ assert.match(handler,/change\(0\)/);
+ assert.match(handler,/adminWritesPending \|\| saveEditButton\.disabled/);
+ assert.doesNotMatch(handler,/ClientRelease\.reset|editForm\.reset|selectedRow\s*=/);
+});
