@@ -185,6 +185,18 @@ begin
  if not private.is_assignable_contractor(p_assigned_user,org) or
     private.contractor_current_team(p_assigned_user,org) is distinct from w.responsible_team_id
  then raise exception 'Active contractor for responsible team required' using errcode='42501';end if;
+ -- Older Finish-bound photos must not be stranded by advancing the current-run
+ -- pointer while an original-owner private transfer is still unconfirmed.
+ -- This is not client delivery; it is the private evidence-protection gate.
+ if exists(select 1 from public.photos ph
+   where ph.work_order_id=p_wo and ph.run_id=p_expected_run
+     and not exists(select 1 from private.photo_transfers t
+       join private.photo_transfer_receipts receipt
+         on receipt.photo_id=t.photo_id and receipt.transfer_version=t.version
+       where t.photo_id=ph.id and t.work_order_id=p_wo
+         and t.run_id=p_expected_run and t.state='RECEIVED'))
+ then raise exception 'Prior-run protected photos still require verified private receipts'
+   using errcode='40001';end if;
  if exists(select 1 from private.client_packages k where k.work_order_id=p_wo
    and k.status in ('QUEUED','DELIVERING','FAILED','UNCERTAIN'))
  then raise exception 'Unresolved package delivery blocks follow-up' using errcode='40001';end if;
