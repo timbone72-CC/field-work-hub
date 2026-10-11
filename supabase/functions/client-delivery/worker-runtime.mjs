@@ -159,3 +159,44 @@ export async function continueTrustedDeliveryParent({
   map,packageId,workerId,generation,drive,ledger,expectedDriveId
  });
 }
+
+/**
+ * Provider-disabled candidate continuation for geographic ADDRESS/WORK_ORDER.
+ * Its distinct scoped SQL lookup cannot silently fall back to the legacy
+ * Address-under-client-root layout. Same original one-shot parent journal.
+ */
+export async function continueTrustedGeographicLeaf({
+ tokenProvider,ledger,workerId,generation,packageId,kind,
+ expectedEmail,expectedDriveId,fetcher=fetch
+}={}){
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ if(!UUID.test(workerId??'')||!UUID.test(packageId??'')
+  ||!Number.isSafeInteger(generation)||generation<1
+  ||!['ADDRESS','WORK_ORDER'].includes(kind)
+  ||typeof tokenProvider!=='function'
+  ||typeof ledger?.readGeographicLeaf!=='function'
+  ||typeof ledger?.heartbeat!=='function'
+  ||typeof expectedEmail!=='string'||!expectedEmail
+  ||typeof expectedDriveId!=='string'||!expectedDriveId
+  ||typeof fetcher!=='function')
+   throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+ let auth;
+ try{auth=await tokenProvider();}
+ catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+ if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+  ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+  throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+ const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+ const account=await drive.verifyProviderIdentity(expectedEmail);
+ if(account.account.toLowerCase()!==expectedEmail.toLowerCase())
+  throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
+ await ledger.heartbeat(packageId,workerId,generation);
+ const map=await ledger.readGeographicLeaf(packageId,workerId,generation,kind);
+ if(map?.exists!==true||map.kind!==kind)
+  throw new DriveUncertain('EXACT_PREALLOCATED_GEOGRAPHIC_LEAF_REQUIRED');
+ // The same reconciler validates the server-fetched remote ID, company
+ // appProperties, expected Shared Drive, original create attempt, and GET.
+ return reconcileOnePreallocatedParent({
+  map,packageId,workerId,generation,drive,ledger,expectedDriveId
+ });
+}
