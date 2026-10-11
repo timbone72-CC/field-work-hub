@@ -58,6 +58,17 @@ begin
   'Take updated exterior photos','{}'::uuid[],contractor,current_date,
   'Follow-up review',config,map,config);
  draftrev:=(saved->>'revision')::uuid;
+ -- Compare-and-swap edits create a new revision; old preview is invalid.
+ saved:=public.admin_save_correction_draft(wo,oldrun,jobtime,draftrev,
+  'Take updated exterior photos','{}'::uuid[],contractor,current_date,
+  'Follow-up review',config,map,config);
+ if (saved->>'revision')::uuid=draftrev then
+   raise exception 'Draft update kept stale revision';end if;
+ denied:=false;
+ begin perform public.admin_preview_correction_draft(wo,draftrev);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Old saved correction revision still previewable';end if;
+ draftrev:=(saved->>'revision')::uuid;
  if saved->>'status'<>'DRAFT' or
    (public.admin_correction_state(wo)->'draft'->>'reason')
     <>'Take updated exterior photos'
@@ -96,6 +107,7 @@ begin
  execute 'reset role';
  if (select status from private.admin_correction_drafts where work_order_id=wo)<>'DISPATCHED'
  or (select dispatched_action_id from private.admin_correction_drafts where work_order_id=wo)<>action
+ or (select dispatched_by from private.admin_correction_drafts where work_order_id=wo)<>office
  or (select count(*) from private.correction_obligations where replacement_run_id=newrun)<>1
  or (select field_status from public.work_order_runs where id=oldrun)<>'FIELD_COMPLETE'
  or (select count(*) from public.work_order_assignments where run_id=newrun
