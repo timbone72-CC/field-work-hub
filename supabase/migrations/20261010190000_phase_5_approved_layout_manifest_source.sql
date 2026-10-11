@@ -20,7 +20,9 @@ begin
        and prior.status in ('QUEUED','DELIVERING','FAILED','UNCERTAIN')) then
     raise exception 'Earlier client delivery unresolved' using errcode='40001';end if;
   select * into d from private.client_delivery_destinations
-    where organization_id=k.organization_id and company_id=k.company_id and active and verified;
+    where organization_id=k.organization_id and company_id=k.company_id
+      and active and verified
+      and (k.status='DRAFT' or id=k.destination_id);
   if d.id is null then raise exception 'Verified client destination required' using errcode='42501';end if;
   select requirement_snapshot into req from public.work_order_runs where id=k.run_id;
   perform private.validate_photo_requirements(req);
@@ -67,6 +69,26 @@ begin
     'review_required',w.review_required,'review_policy_revision',w.review_policy_revision,
     'destination_id',d.id,'destination_revision',d.revision,'destination_provider',d.provider,
     'destination_root',d.root_folder_id,'selected_photos',v_photos);
+  -- Rebuild live release evidence, but retain the ORIGINAL approved layout
+  -- and remote destination snapshot. A newer company configuration cannot
+  -- redirect an already approved package during Send reconciliation.
+  if k.status<>'DRAFT' and k.approved_manifest is not null then
+    if k.approved_manifest->>'destination_id' is distinct from d.id::text
+      or k.approved_manifest->>'destination_revision' is distinct from d.revision::text
+      or k.approved_manifest->>'destination_root' is distinct from d.root_folder_id then
+      raise exception 'Approved destination identity changed' using errcode='40001';
+    end if;
+    if k.approved_manifest ? 'folder_layout' then
+      manifest:=manifest||jsonb_build_object(
+        'folder_layout',k.approved_manifest->>'folder_layout',
+        'folder_layout_revision',k.approved_manifest->>'folder_layout_revision');
+    end if;
+    if k.approved_manifest ? 'geographic_path' then
+      manifest:=manifest||jsonb_build_object(
+        'geographic_path',k.approved_manifest->'geographic_path');
+    end if;
+    return manifest;
+  end if;
   selected_layout:=private.phase_5_current_folder_layout(d.id,k.organization_id,k.company_id);
   if selected_layout->>'configured'='true' then
     manifest:=manifest||jsonb_build_object(
