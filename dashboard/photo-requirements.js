@@ -53,7 +53,8 @@ const PhotoRules = {
 if (typeof module !== 'undefined') module.exports = PhotoRules;
 
 class PhotoRequirementEditor {
-  constructor(element, getWorkType, onTemplateApplied = null) {
+  constructor(element, getWorkType, onTemplateApplied = null, manageTemplates = true) {
+    this.manageTemplates = manageTemplates;
     this.element = element; this.getWorkType = getWorkType; this.onTemplateApplied = onTemplateApplied;
     this.value = PhotoRules.empty(); this.templates = []; this.selectedId = ''; this.locked = false;
     this.companyId = null; this.fetchEpoch = 0;
@@ -151,6 +152,7 @@ class PhotoRequirementEditor {
       this.value.items.push({ id: crypto.randomUUID(), label: '', enabled: true, minimum: 1, instruction: '', stage: 'NONE', framing: 'NORMAL', order: this.value.items.length }); this.render(); });
     action('Make every requirement optional', () => { this.value.total.enabled = false; this.value.items.forEach(i => i.enabled = false); this.render(); });
     node('p', 'One photo satisfies one selected item and counts once toward the total. Inspectors choose any order.').className = 'muted';
+    if (!this.manageTemplates) { updateSummary(); return; }
     const manage = node('details'); node('summary', 'Save or manage templates', manage);
     const selected = suggested.find(t => t.id === this.selectedId);
     const name = input('Template name', 'text', selected?.name || '', () => {}, manage); name.maxLength = 100;

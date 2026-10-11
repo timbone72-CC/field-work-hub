@@ -115,7 +115,12 @@ const PrivateReview = (() => {
         } finally { if (active(gen,wo,token)) show.disabled = false; }
       }, false);
       controls.append(show, approval, rejection);
-      row.append(heading, detail, preview, controls, explanation);
+      const reference=document.createElement('label');reference.className='check';
+      const refChoice=document.createElement('input');refChoice.type='checkbox';
+      refChoice.checked=CorrectionDraft.hasReference(item.photo_id);
+      refChoice.addEventListener('change',()=>CorrectionDraft.reference(item.photo_id,refChoice.checked));
+      reference.append(refChoice,document.createTextNode(' Reference in follow-up'));
+      row.append(heading, detail, preview, controls, explanation, reference);
       list.append(row);
     }
   }

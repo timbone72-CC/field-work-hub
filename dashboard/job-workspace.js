@@ -110,9 +110,10 @@ const JobWorkspace = (() => {
     return JSON.stringify([['edit-wo-number', 'edit-property-address', 'edit-work-type', 'edit-instructions',
       'edit-due-date', 'edit-assignee'].map(id => el(id).value), editPhotos.value]);
   }
-  function dirty() { return (baseline !== null && fingerprint() !== baseline) || !!ClientRelease.dirty(); }
+  function detailsDirty() { return baseline !== null && fingerprint() !== baseline; }
+  function dirty() { return detailsDirty() || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
   function reset() {
-    PrivateReview.reset(); ClientRelease.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
@@ -225,7 +226,7 @@ const JobWorkspace = (() => {
     el('job-receipt').textContent = row.assignment_received_at
       ? `Assignment received ${formatTimestamp(row.assignment_received_at)}` : 'Assignment not yet received';
     el('job-reload').hidden = true;
-    PrivateReview.reset(); ClientRelease.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset();
     tab('details');
     if (!editSection.open) editSection.showModal();
     navigation();
@@ -235,6 +236,7 @@ const JobWorkspace = (() => {
     saveEditButton.hidden = name === 'photos' || name === 'delivery';
     if (name === 'photos' && selectedRow?.id) {
       PrivateReview.open(selectedRow.id); ClientRelease.open(selectedRow.id, name);
+      CorrectionDraft.open(selectedRow.id, selectedRow.field_status);
     }
     if (name === 'delivery' && selectedRow?.id) ClientRelease.open(selectedRow.id, name);
     document.querySelectorAll('[data-job-tab]').forEach(button => {
@@ -242,7 +244,7 @@ const JobWorkspace = (() => {
     });
   }
   function closed() {
-    PrivateReview.reset(); ClientRelease.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
@@ -300,9 +302,15 @@ const JobWorkspace = (() => {
     el('job-stay').addEventListener('click', () => { pending = null; el('job-unsaved').hidden = true; });
     el('job-discard').addEventListener('click', () => { const action = pending; pending = null; el('job-unsaved').hidden = true; if (action) action(); });
     el('job-save-continue').addEventListener('click', async () => {
-      if (ClientRelease.dirty()) {
-        const result = await ClientRelease.saveDraft();
-        if (result && pending) {
+      if (CorrectionDraft.dirty()) {
+        const saved=await CorrectionDraft.save();
+        if (!saved) { setEditStatus('Correction draft is not saved. Stay on this job to resolve.',true);return; }
+        if (!dirty() && pending) {
+          const action=pending;pending=null;el('job-unsaved').hidden=true;action();
+        } else setEditStatus('Correction saved. Save other changes before leaving this job.',false);
+      } else if (ClientRelease.dirty()) {
+        const result=await ClientRelease.saveDraft();
+        if (result && !dirty() && pending) {
           const action=pending;pending=null;el('job-unsaved').hidden=true;action();
         } else if (!result) setEditStatus('Package changes were not saved; remain on this job to resolve.',true);
       } else editForm.requestSubmit();
@@ -314,5 +322,5 @@ const JobWorkspace = (() => {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   }
   return { init, ensureAccount, request, accept, page, choose, guard, opened, closed, reset, dirty, saved,
-    reconcileSaved, refreshed, populateContractors, needsReload: () => needsReload };
+    reconcileSaved, refreshed, populateContractors, detailsDirty, needsReload: () => needsReload };
 })();
