@@ -126,7 +126,11 @@ export function createDriveClient({accessToken,fetcher=fetch}){
           // a streamed byte re-read before producing the equivalent proof.
           throw new DriveUncertain('REMOTE_CONTENT_UNVERIFIED');
       }
-      return {id,parent,mime,sha256:sha256??null,size:size??null};
+      // Preserve the independently GET-verified folder identity facts for
+      // server-only one-shot receipts. Never rely on POST reply for a receipt.
+      return {id,parent,mime,name:file.name,drive_id:file.driveId??null,
+        trashed:file.trashed===true,appProperties:file.appProperties??null,
+        sha256:sha256??null,size:size??null};
     },
     async createPreallocatedFolder(spec){
       const data=fixedObject(spec);
