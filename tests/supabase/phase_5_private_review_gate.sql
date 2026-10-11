@@ -769,6 +769,14 @@ begin
    or jsonb_array_length(selected->'correction_obligations')<>1
    or (select count(*) from private.client_packages where work_order_id=wo and status='DELIVERED')<>1
  then raise exception 'Cross-run retained original evidence/coverage failed: %',selected;end if;
+ -- A received original photo and valid DRAFT are NOT a new delivery. The only
+ -- closure path is the exact provider worker completing an approved package.
+ perform pg_temp.expect_photo_review_error('42501',format(
+   'select public.service_finish_delivery(%L,%L,1)',
+   next_pkg->>'id',gen_random_uuid()));
+ if (select status from private.correction_obligations
+     where replacement_run_id=newrun)<>'OPEN' then
+   raise exception 'Private photo receipt or draft silently satisfied correction';end if;
  raise notice 'Phase 6B/6D original delivered photo retained, follow-up new run and cross-run draft PASS';
 end;$phase6_multi_run$;
 rollback;
