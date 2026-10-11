@@ -566,10 +566,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#followup-replace').isVisible(),false);
     await page.locator('#followup-management-reason').fill('Schedule changed');
     await Promise.all([
-      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
-      page.locator('#followup-cancel').click()
+      page.waitForResponse(response=>response.url().includes('/admin_cancel_untouched_followup')
+        && response.request().method()==='POST'),
+      (async()=>{const acknowledged=page.waitForEvent('dialog').then(dialog=>dialog.accept());
+        await page.locator('#followup-cancel').click();await acknowledged;})()
     ]);
-    await wait(page,()=>rows[50].field_status==='CANCELLED');
+    assert.equal(rows[50].field_status,'CANCELLED');
     assert.equal(cancelCount,1,'Cancelled a never-acknowledged follow-up only once');
     await page.locator('[data-job-tab="photos"]').click();
     await wait(page,()=>!document.getElementById('followup-management').hidden);
@@ -580,10 +582,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#followup-replacement-instructions').fill('Retake the front');
     await page.locator('#followup-replacement-assignee').selectOption(contractor);
     await Promise.all([
-      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
-      page.locator('#followup-replace').click()
+      page.waitForResponse(response=>response.url().includes('/admin_replace_cancelled_followup')
+        && response.request().method()==='POST'),
+      (async()=>{const acknowledged=page.waitForEvent('dialog').then(dialog=>dialog.accept());
+        await page.locator('#followup-replace').click();await acknowledged;})()
     ]);
-    await wait(page,()=>rows[50].current_run_id===replacementRun);
+    assert.equal(rows[50].current_run_id,replacementRun);
     assert.equal(replaceCount,1);
     assert.equal(rows[50].wo_number,'DEMO-0051','Replacement retains original client number');
     assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
