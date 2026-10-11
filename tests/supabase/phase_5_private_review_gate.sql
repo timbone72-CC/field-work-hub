@@ -505,4 +505,47 @@ begin
   raise notice 'Phase 5C scoped verified-photo gallery, revision-safe decisions, immutable audit and wrong-role denial PASS';
 end;
 $gate$;
+-- Geographic approved-manifest regression: verified path contains immutable
+-- destination and nested keys; wrong company or missing geography fails closed.
+do $geo_manifest_gate$
+declare
+  k private.client_packages%rowtype;
+  g private.client_delivery_geography%rowtype;
+  path jsonb;
+begin
+  select * into k from private.client_packages
+    where folder_address_key is not null
+      and exists(select 1 from private.client_delivery_destinations d
+       where d.id=destination_id and d.active and d.verified)
+    limit 1;
+  if k.id is null then
+    raise exception 'Expected approved fixture for geographic manifest gate';
+  end if;
+  insert into private.client_delivery_geography(
+    organization_id,company_id,work_order_id,
+    state_name,county_name,city_name,verification_source,
+    verified_by,verified_at)
+  values(k.organization_id,k.company_id,k.work_order_id,
+    'Oklahoma','Beckham','Elk City','verified disposable gate fixture',
+    gen_random_uuid(),clock_timestamp())
+  returning * into g;
+  path:=private.phase_5_expected_geographic_path(k,g);
+  if path->>'layout'<>'STATE_COUNTY_CITY_ADDRESS'
+    or path->>'destination_id'<>k.destination_id::text
+    or path->>'geography_revision'<>g.revision::text
+    or path->>'address_key'<>k.folder_address_key
+    or length(path->>'state_key')<>64
+    or length(path->>'county_key')<>64
+    or length(path->>'city_key')<>64 then
+    raise exception 'Frozen geographic path did not bind expected scope';
+  end if;
+  g.company_id:=gen_random_uuid();
+  begin
+    perform private.phase_5_expected_geographic_path(k,g);
+    raise exception 'Foreign-company geography accepted';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'Geographic approved-manifest company/destination/key gate PASS';
+end;
+$geo_manifest_gate$;
 rollback;
