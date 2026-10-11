@@ -64,3 +64,16 @@ test('Phase 6A job guidance uses text-only rendering and existing protected tabs
   assert.doesNotMatch(js,/job-next-action'\)\.innerHTML/);
   assert.match(app,/JobOperationalFacts\.project\(row\)\.label/);
 });
+
+test('Phase 6A contractor/date filters are server-side and reject SQL operator injection',()=>{
+ const uid='11111111-1111-4111-8111-111111111111';
+ const filters=rules.parameters({size:50,contractor:uid,dueDate:'2026-10-10',sort:'due_date.desc'});
+ assert.equal(filters.get('assigned_user_id'),'eq.'+uid);
+ assert.equal(filters.get('due_date'),'eq.2026-10-10');
+ assert.equal(filters.get('order'),'due_date.desc.nullslast,id.asc');
+ const attack=rules.parameters({contractor:'eq.'+uid+',other',dueDate:'2026-10-10,or.true',sort:'organization_id.asc'});
+ assert.equal(attack.has('assigned_user_id'),false);
+ assert.equal(attack.has('due_date'),false);
+ assert.equal(attack.get('order'),'created_at.desc.nullslast,id.asc');
+ assert.equal(rules.normalize({contractor:uid,dueDate:'2026-10-10'}).contractor,undefined);
+});
