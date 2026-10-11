@@ -191,9 +191,28 @@
             <button id="review-policy-save" type="button" class="secondary" disabled>Save review policy</button>
             <p id="review-policy-status" class="status" role="status" aria-live="polite"></p>
             <p class="muted">Only privately verified photos are reviewable. Approving a photo does not approve a client package or send anything.</p>
+            <div class="form-grid" id="private-review-filters" aria-label="Server photo review filters">
+              <label>Run <select id="private-review-run"><option value="">All runs — newest first</option><option value="CURRENT">Newest current run only</option></select></label>
+              <label>Photo item <select id="private-review-item"><option value="">All categories</option><option value="EXTRA">Extra photos</option></select></label>
+              <label>Stage <select id="private-review-stage"><option value="">All stages</option><option value="NONE">No stage</option><option value="BEFORE">Before</option><option value="DURING">During</option><option value="AFTER">After</option></select></label>
+              <label>Decision <select id="private-review-decision"><option value="">All decisions</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select></label>
+              <label>Photos per page <select id="private-review-size"><option value="25">25</option><option value="50">50</option></select></label>
+            </div>
             <p id="private-review-status" class="status" aria-live="polite" role="status"></p>
+            <div class="workspace-navigation" aria-label="Exact selected photo bulk review">
+              <button id="private-review-select-reviewed" type="button" class="secondary">Select previewed pending photos on this page</button>
+              <button id="private-review-clear-selection" type="button" class="secondary">Clear selections</button>
+              <span id="private-review-selected-count" class="muted" role="status"></span>
+            </div>
+            <label>Reason for selected-photo rejection <input id="private-review-bulk-reason" type="text" maxlength="1000" placeholder="Required when rejecting selected photos"></label>
+            <div class="workspace-navigation">
+              <button id="private-review-bulk-approve" type="button" class="secondary" disabled>Approve selected</button>
+              <button id="private-review-bulk-reject" type="button" class="secondary" disabled>Reject selected</button>
+              <button id="private-review-previous-photo" type="button" class="secondary">Previous photo</button>
+              <button id="private-review-next-photo" type="button" class="secondary">Next photo</button>
+            </div>
             <div id="private-review-list"></div>
-            <button id="private-review-more" type="button" class="secondary" hidden>Load more verified photos</button>
+            <button id="private-review-more" type="button" class="secondary" hidden>Load next verified page</button>
             <details id="correction-details" hidden>
               <summary>Prepare same-WO follow-up</summary>
               <p class="muted">Save a correction draft first. Original finished photos and previous client delivery remain untouched. Dispatch is separate and requires an exact checked preview.</p>
