@@ -29,9 +29,9 @@ export async function reserveProviderIdentities({
    ||claim.manifest.selected_photos.length>200)
    fail('FROZEN_CLAIM_INVALID');
  const layout=claim.manifest.folder_layout??'ADDRESS_WORK_ORDER';
- if(!['ADDRESS_WORK_ORDER','STATE_COUNTY_CITY_ADDRESS'].includes(layout))
+ if(!['ADDRESS_WORK_ORDER','STATE_COUNTY_CITY_ADDRESS','STATE_CITY_ADDRESS'].includes(layout))
    fail('FROZEN_FOLDER_LAYOUT_UNSUPPORTED');
- const geographic=layout==='STATE_COUNTY_CITY_ADDRESS';
+ const geographic=layout!=='ADDRESS_WORK_ORDER';
  if(geographic && (!claim.manifest.geographic_path
    ||typeof ledger.readGeographicLeaf!=='function'
    ||typeof ledger.reserveGeographicLeaf!=='function'))
@@ -90,9 +90,11 @@ export async function reserveProviderIdentities({
      fail('FROZEN_PARENT_IDENTITY_UNCERTAIN');
    return {id:generated[0],state:'RESERVED',newCount:1};
  }
- const kinds=geographic
+ const kinds=layout==='STATE_COUNTY_CITY_ADDRESS'
    ? ['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER']
-   : ['ADDRESS','WORK_ORDER'];
+   : layout==='STATE_CITY_ADDRESS'
+     ? ['STATE','CITY','ADDRESS','WORK_ORDER']
+     : ['ADDRESS','WORK_ORDER'];
  let parentId=destination.id;
  const usedParentIds=new Set([parentId]);
  for(const kind of kinds){
