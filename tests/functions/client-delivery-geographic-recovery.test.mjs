@@ -26,7 +26,7 @@ function setup(layout,{restart=false,wrongCompany=false,wrongDrive=false}={}){
  });
  const ledger={
   heartbeat:async()=>{},
-  readParent:async(_p,_w,_g,kind)=>({exists:true,...maps.get(kind)}),
+  readParent:async(_p,_w,_g,kind)=>{\n    const m=maps.get(kind);\n    if(m?.appProperties.fwh_company!==company||m?.appProperties.fwh_destination!==dest)\n      throw Error('SERVER_COMPANY_SCOPE_DENIED');\n    return {exists:true,...m};\n  },
   beginParentCreate:async(_p,_w,_g,id)=>{
     const m=[...maps.values()].find(m=>m.map_id===id);
     m.state='ATTEMPTED';events.push('BEGIN:'+m.kind);
