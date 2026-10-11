@@ -274,7 +274,7 @@ const JobWorkspace = (() => {
     }
   }
   function init() {
-    PrivateReview.init(); ClientRelease.init();
+    CorrectionDraft.init(); PrivateReview.init(); ClientRelease.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
     el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));
     el('job-address-previous').addEventListener('click',()=>loadAddressContext(Math.max(0,addressOffset-50)));
