@@ -84,7 +84,8 @@ function fillWorkTypes() {
     for (const type of types) select.add(new Option(type, type));
     select.value = types.includes(input.value) ? input.value : '';
     input.hidden = !!select.value;
-    select.onchange = () => { input.value = select.value; input.hidden = !!select.value; if (select.value) editor.useDefault(); };
+    select.onchange = () => { input.value = select.value; input.hidden = !!select.value; editor.useDefault(); };
+    input.onchange = () => editor.refreshSuggestions();
   }
 }
 
