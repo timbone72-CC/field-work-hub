@@ -277,6 +277,26 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#wo-number').inputValue(),'');
     assert.equal(await page.locator('#create-photo-requirements input[type="number"]').count(),2);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    // Phase 6B custom choice keeps the address but does not inherit the old
+    // work type, instructions, or photo minimums. Replacing a draft is explicit.
+    await page.locator('.job-link').first().click();
+    await wait(page, () => document.querySelector('dialog').open);
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.locator('#prepare-custom-work').click();
+    assert.equal(await page.locator('#work-type').inputValue(),rows[50].work_type,
+      'Cancelled replacement must preserve the existing repeat draft');
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#prepare-custom-work').click();
+    await wait(page, () => document.querySelector('#create-status').textContent.includes('New custom work-order draft'));
+    assert.equal(await page.locator('#property-address').inputValue(),rows[50].property_address);
+    assert.equal(await page.locator('#work-type').inputValue(),'');
+    assert.equal(await page.locator('#instructions').inputValue(),'');
+    assert.equal(await page.locator('#due-date').inputValue(),'');
+    assert.equal(await page.locator('#assignee').inputValue(),'');
+    assert.equal(await page.locator('#wo-number').inputValue(),'');
+    assert.equal(await page.locator('#wo-number-mode-auto').isChecked(),true);
+    assert.equal(await page.locator('#create-photo-requirements .photo-item').count(),0);
+    assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');

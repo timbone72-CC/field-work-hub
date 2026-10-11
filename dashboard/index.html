@@ -111,7 +111,10 @@
             <button id="job-reload" type="button" class="secondary" hidden>Reload job</button>
           </div>
           <p id="job-context" class="muted" role="status"></p>
-          <button id="prepare-repeat-work" class="secondary" type="button">Prepare new work from this job</button>
+          <div class="workspace-navigation" aria-label="Prepare a separate new work order">
+            <button id="prepare-repeat-work" class="secondary" type="button">Prepare repeat work</button>
+            <button id="prepare-custom-work" class="secondary" type="button">Prepare custom work at this address</button>
+          </div>
           <div id="job-address-context" hidden>
             <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
             <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>

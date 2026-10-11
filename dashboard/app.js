@@ -50,43 +50,52 @@ const editPhotos = new PhotoRequirementEditor(document.getElementById('edit-phot
 // Phase 6B: copy a server-read prior WO into a NEW, unsent draft only.
 // Never reuse the old client WO number, assignment, due date, photo evidence,
 // package or finished work identity; the user must explicitly create the WO.
-document.getElementById('prepare-repeat-work').addEventListener('click', () => {
+// Two distinct new-WO draft choices, never a same-WO corrective run.
+// The current authorized WO is read again before using even its address.
+function prepareWorkFromSelectedJob(copyPriorDetails) {
   JobWorkspace.guard(async () => {
     const oldId=editWorkOrderIdInput.value;
     const actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
-    const epoch=adminSessionEpoch, editorId=editWorkOrderIdInput.value;
+    const epoch=adminSessionEpoch;
     if (!oldId || !actor || !org) return;
     try {
       const old=await fetchWorkOrder(oldId);
       if (adminSessionEpoch!==epoch || currentUser?.id!==actor
         || currentUser?.app_metadata?.organization_id!==org
         || !accessToken || editWorkOrderIdInput.value!==oldId) return;
-      const snapshot=PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot);
+      const snapshot=copyPriorDetails ? PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot) : null;
       const existingCreateDraft=Boolean(propertyAddressInput.value.trim()
         || workTypeInput.value.trim() || instructionsInput.value.trim()
-        || dueDateInput.value || assigneeSelect.value
+        || dueDateInput.value || assigneeSelect.value || woNumberInput.value.trim()
         || createPhotos.value?.items?.length || createPhotos.value?.total?.enabled);
-      if (existingCreateDraft && !window.confirm(
-        'Replace the unfinished Create Work Order draft with the previous job details?')) return;
+      if (existingCreateDraft && !window.confirm(copyPriorDetails
+        ? 'Replace the unfinished Create Work Order draft with the previous job details?'
+        : 'Replace the unfinished Create Work Order draft with a new custom job at this address?')) return;
       if (adminSessionEpoch!==epoch || currentUser?.id!==actor
         || currentUser?.app_metadata?.organization_id!==org
-        || !accessToken || editWorkOrderIdInput.value!==editorId) return;
-      if (JobWorkspace.dirty()) throw Error('The current job has unsaved changes. Save or discard them before preparing repeat work.');
+        || !accessToken || editWorkOrderIdInput.value!==oldId) return;
+      if (JobWorkspace.dirty()) throw Error('The current job has unsaved changes. Save or discard them before preparing new work.');
       closeEditor(true);
       createForm.reset();
       applyWoNumberMode('auto');
-      document.getElementById('remember-wo-number-mode').checked=false;
+      rememberWoNumberMode.checked=false;
       propertyAddressInput.value=old.property_address;
-      workTypeInput.value=old.work_type;
-      instructionsInput.value=old.instructions || '';
+      if (copyPriorDetails) {
+        workTypeInput.value=old.work_type;
+        instructionsInput.value=old.instructions || '';
+      }
       createPhotos.load(snapshot);
       fillWorkTypes();
       document.getElementById('create-wo-details').open=true;
-      setCreateStatus('New work-order draft prepared from prior job. Enter a new due date and assignee; review all fields before creating.',false);
-      document.getElementById('due-date').focus();
+      setCreateStatus(copyPriorDetails
+        ? 'New work-order draft prepared from prior job. Enter a new due date and assignee; review all fields before creating.'
+        : 'New custom work-order draft at this address. Choose work type, instructions, photos, due date and assignee before creating.',false);
+      (copyPriorDetails ? dueDateInput : workTypeInput).focus();
     } catch(error) { setEditStatus(error.message,true); }
   });
-});
+}
+document.getElementById('prepare-repeat-work').addEventListener('click', () => prepareWorkFromSelectedJob(true));
+document.getElementById('prepare-custom-work').addEventListener('click', () => prepareWorkFromSelectedJob(false));
 
 function fillWorkTypes() {
   for (const [prefix, input, editor] of [['', workTypeInput, createPhotos], ['edit-', editWorkTypeInput, editPhotos]]) {
