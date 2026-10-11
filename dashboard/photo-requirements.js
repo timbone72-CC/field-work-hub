@@ -34,7 +34,10 @@ const PhotoRules = {
         || String(a.id).localeCompare(String(b.id)));
   },
   copyPriorSnapshot(value) {
-    const copied=structuredClone(value);
+    // A legacy job with no configured requirements is explicitly optional;
+    // it must not inherit fabricated required photo categories.
+    const copied=value && typeof value==='object' && !Array.isArray(value)
+      && Object.keys(value).length ? structuredClone(value) : this.empty();
     this.validate(copied);
     copied.revision=crypto.randomUUID();
     return copied;
