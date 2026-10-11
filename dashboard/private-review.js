@@ -1,11 +1,20 @@
 /* Phase 5C: one office-authorized review pane, no browser-owned credentials or URLs. */
 const PrivateReview = (() => {
   let current = '', generation = 0, next = null, entries = [];
+  let currentRun = '', selected = new Map(), inspected = new Map();
+  let bulkBusy = false, uncertain = false, inspectionIndex = 0;
   const el = id => document.getElementById(id);
   const UUID = /^[a-f0-9-]{36}$/i;
 
   function reset() {
     generation++; current = ''; next = null; entries = [];
+    currentRun = ''; selected.clear(); inspected.clear(); bulkBusy = false; uncertain = false;
+    inspectionIndex = 0;
+    for(const id of ['private-review-run','private-review-item','private-review-stage','private-review-decision'])
+      if(el(id)) el(id).value='';
+    if(el('private-review-size')) el('private-review-size').value='25';
+    if(el('private-review-bulk-reason')) el('private-review-bulk-reason').value='';
+    if(el('private-review-selected-count')) el('private-review-selected-count').textContent='0 photos selected';
     const list = el('private-review-list');
     if (list) list.replaceChildren();
     const status = el('private-review-status'); if (status) status.textContent = '';
@@ -43,17 +52,45 @@ const PrivateReview = (() => {
     button.type = 'button'; button.className = 'secondary'; button.textContent = label;
     button.disabled = disabled; button.addEventListener('click', action); return button;
   }
+  function selectionStatus(){
+    el('private-review-selected-count').textContent=selected.size+' photo(s) selected (max 50)';
+    el('private-review-bulk-approve').disabled=bulkBusy||uncertain||selected.size===0;
+    el('private-review-bulk-reject').disabled=bulkBusy||uncertain||selected.size===0
+      ||!el('private-review-bulk-reason').value.trim();
+    el('private-review-previous-photo').disabled=entries.length===0||inspectionIndex<=0;
+    el('private-review-next-photo').disabled=entries.length===0||inspectionIndex>=entries.length-1;
+  }
   function render() {
     const list = el('private-review-list'); list.replaceChildren();
-    if (entries.length === 0) { status('No verified private photos available for review yet. Transfer receipts may still be pending.'); return; }
+    if (entries.length === 0) {
+      status('No verified photos match this exact run/category/stage/decision filter, or private receipts remain pending.');
+      selectionStatus();return;
+    }
     status('Only privately verified photos are listed here. Nothing is sent to a client from this screen.');
     for (const item of entries) {
       const row = document.createElement('article'); row.className = 'private-review-photo';
       const heading = document.createElement('strong');
       heading.textContent = `Photo ${item.photo_id.slice(0,8)} · ${item.decision}`;
       const detail = document.createElement('p'); detail.className = 'muted';
-      detail.textContent = `Taken ${formatTimestamp(item.captured_at)} · Receipt ${formatTimestamp(item.verified_at)}`;
+      detail.textContent = 'Run '+item.run_sequence+' · '+(item.requirement_label||'Extra')+
+        ' · '+(item.stage||'NONE')+' · Taken '+formatTimestamp(item.captured_at)+
+        ' · Receipt '+formatTimestamp(item.verified_at);
       const preview = document.createElement('div'); preview.className = 'private-review-preview';
+      row.dataset.reviewPhotoId=item.photo_id;
+      const selectedLabel=document.createElement('label'); selectedLabel.className='check';
+      const choose=document.createElement('input');choose.type='checkbox';
+      choose.setAttribute('aria-label','Select reviewed photo '+item.photo_id);
+      choose.checked=selected.has(item.photo_id);
+      choose.disabled=bulkBusy||uncertain||inspected.get(item.photo_id)!==item.transfer_version;
+      choose.addEventListener('change',()=>{
+        if(choose.checked){
+          if(selected.size>=50){choose.checked=false;status('Select at most 50 inspected photos per bulk action.',true);return;}
+          selected.set(item.photo_id,{photo_id:item.photo_id,transfer_version:item.transfer_version,
+            expected_revision:item.decision_revision||null,run_id:item.run_id});
+        }else selected.delete(item.photo_id);
+        selectionStatus();
+      });
+      selectedLabel.append(choose,document.createTextNode(' Select for bulk review'));
       const controls = document.createElement('div'); controls.className = 'workspace-navigation';
       const explanation = document.createElement('input');
       explanation.type = 'text'; explanation.maxLength = 1000;
@@ -104,7 +141,9 @@ const PrivateReview = (() => {
           img.addEventListener('load', () => {
             if (!active(gen,wo,token)) return;
             approval.disabled = false; rejection.disabled = false;
-            status('Photo preview loaded. Review the image before deciding.');
+            inspected.set(item.photo_id,item.transfer_version);
+            choose.disabled=bulkBusy||uncertain;
+            status('Verified photo inspected. You may review or select this exact version.');
           }, { once: true });
           img.addEventListener('error', () => {
             if (active(gen,wo,token)) status('Could not load the verified image. No review decision is available.', true);
@@ -124,27 +163,39 @@ const PrivateReview = (() => {
           refChoice.checked=CorrectionDraft.hasReference(item.photo_id);
       });
       reference.append(refChoice,document.createTextNode(' Reference in follow-up'));
-      row.append(heading, detail, preview, controls, explanation, reference);
+      row.append(heading, detail, selectedLabel, preview, controls, explanation, reference);
       list.append(row);
     }
+    selectionStatus();
   }
   async function load(append = false) {
     const wo = current, token = accessToken, gen = generation;
     if (!wo || !token) return;
     status('Loading verified private photos…');
     const cursor = append ? next : null;
-    if (!append) { next = null; entries = []; }
+    if (!append) { next = null; entries = []; inspectionIndex=0; }
+    const runFilter=el('private-review-run').value==='CURRENT'?currentRun:null;
+    const itemValue=el('private-review-item').value;
     try {
-      const data = await rpc('admin_list_private_review_photos',
-        { p_work_order: wo, p_limit: 25, p_after_photo: cursor }, token);
+      const data = await rpc('admin_review_photo_page',{
+        p_wo:wo,p_limit:Number(el('private-review-size').value),
+        p_after_sequence:cursor?.sequence||null,p_after_photo:cursor?.photo||null,
+        p_run:runFilter||null,p_item:itemValue&&itemValue!=='EXTRA'?itemValue:null,
+        p_extra:itemValue==='EXTRA',
+        p_stage:el('private-review-stage').value||null,
+        p_decision:el('private-review-decision').value||null},token);
       if (!active(gen,wo,token)) return;
-      if (data.work_order_id !== wo || !Array.isArray(data.photos) || data.photos.length > 25
-        || data.photos.some(p => !UUID.test(p.photo_id) || !UUID.test(p.transfer_version))) {
+      if (data.work_order_id!==wo || !Array.isArray(data.photos)
+        || data.photos.length>Number(el('private-review-size').value)
+        || data.photos.some(p=>!UUID.test(p.photo_id)||!UUID.test(p.transfer_version)
+            || !UUID.test(p.run_id)||!Number.isInteger(p.run_sequence)
+            || !['PENDING','APPROVED','REJECTED'].includes(p.decision))) {
         throw new Error('Private photo list identity mismatch.');
       }
-      entries = append ? [...entries, ...data.photos] : data.photos;
-      next = data.next_photo;
-      el('private-review-more').hidden = !next;
+      entries=append?[...entries,...data.photos]:data.photos;
+      next=data.next_photo&&Number.isInteger(data.next_sequence)
+        ?{sequence:data.next_sequence,photo:data.next_photo}:null;
+      el('private-review-more').hidden=!next;
       render();
     } catch (error) {
       if (active(gen,wo,token)) {
@@ -153,12 +204,112 @@ const PrivateReview = (() => {
       }
     }
   }
-  function open(wo) {
-    if (!wo) return;
-    if (current !== wo) { reset(); current = wo; }
+  function applyFilter(){
+    selected.clear();inspected.clear();uncertain=false;next=null;
     load(false);
   }
-  function init() { el('private-review-more').addEventListener('click', () => load(true)); }
+  function populateCategories(){
+    const control=el('private-review-item');control.replaceChildren(new Option('All categories',''));
+    control.add(new Option('Extra photos','EXTRA'));
+    for(const item of editPhotos.value?.items||[]){
+      if(UUID.test(item.id))control.add(new Option(item.label,item.id));
+    }
+  }
+  async function bulk(decision,allReviewed=false){
+    if(bulkBusy||uncertain||!current)return;
+    if(allReviewed){
+      for(const entry of entries){
+        if(entry.decision==='PENDING'&&inspected.get(entry.photo_id)===entry.transfer_version){
+          if(selected.size>=50)break;
+          selected.set(entry.photo_id,{photo_id:entry.photo_id,
+            transfer_version:entry.transfer_version,
+            expected_revision:entry.decision_revision||null,run_id:entry.run_id});
+        }
+      }
+    }
+    if(selected.size===0){
+      status('Preview the private photos first. Only inspected current versions can be bulk reviewed.',true);return;
+    }
+    const reason=decision==='REJECTED'?el('private-review-bulk-reason').value.trim():'';
+    if(decision==='REJECTED'&&!reason){
+      status('Enter one explicit reason for the selected rejections.',true);return;
+    }
+    const photos=[...selected.values()].map(p=>({
+      photo_id:p.photo_id,transfer_version:p.transfer_version,
+      expected_revision:p.expected_revision})).sort((a,b)=>a.photo_id.localeCompare(b.photo_id));
+    const runIds=[...new Set([...selected.values()].map(p=>p.run_id))];
+    const scopedRun=runIds.length===1?runIds[0]:null;
+    const summary=photos.length+' exact inspected photo(s) · '+
+      (scopedRun?'single run '+scopedRun.slice(0,8):'multiple runs')+
+      ' · '+decision+
+      (reason?' · Reason: '+reason:'')+
+      '. No unseen or newly arriving photo will be changed. Confirm?';
+    if(!window.confirm(summary)){selectionStatus();return;}
+    const gen=generation,wo=current,token=accessToken;
+    bulkBusy=true;selectionStatus();status('Saving exact selected photo review…');
+    try{
+      const response=await rpc('admin_review_photos_bulk',{
+        p_action:crypto.randomUUID(),p_work_order:wo,p_run:scopedRun,
+        p_photos:photos,p_decision:decision,p_reason:reason},token);
+      if(!active(gen,wo,token))return;
+      if(response.work_order_id!==wo||!['APPLIED','CONFLICT'].includes(response.outcome))
+        throw Error('Unexpected bulk review receipt. Reload to verify.');
+      selected.clear();inspected.clear();
+      if(response.outcome==='CONFLICT'){
+        status('Nothing changed. '+response.conflicts.length+' selected photo(s) changed; reload and inspect again.',true);
+        await load(false);
+      }else{
+        status('Saved '+response.applied+' selected review decision(s). No client package was sent.');
+        await load(false);
+        ClientRelease.open(wo,'photos');
+      }
+    }catch(error){
+      if(active(gen,wo,token)){
+        uncertain=true;
+        status('Bulk review outcome unknown. Do not repeat blindly. Refresh this exact photo page to reconcile. '+error.message,true);
+      }
+    }finally{
+      if(active(gen,wo,token)){bulkBusy=false;selectionStatus();}
+    }
+  }
+  function navigate(delta){
+    inspectionIndex=Math.max(0,Math.min(entries.length-1,inspectionIndex+delta));
+    const entry=entries[inspectionIndex];
+    document.querySelector('[data-review-photo-id="'+entry?.photo_id+'"]')
+      ?.scrollIntoView({block:'nearest'});
+    selectionStatus();
+  }
+  function open(wo){
+    if(!wo)return;
+    if(current!==wo){
+      reset();current=wo;
+      currentRun=workOrderRows.find(r=>r.id===wo)?.current_run_id||'';
+      populateCategories();
+    }
+    load(false);
+  }
+  function init(){
+    el('private-review-more').addEventListener('click',()=>load(true));
+    for(const id of ['private-review-run','private-review-item','private-review-stage',
+      'private-review-decision','private-review-size'])
+      el(id).addEventListener('change',applyFilter);
+    el('private-review-bulk-reason').addEventListener('input',selectionStatus);
+    el('private-review-select-reviewed').addEventListener('click',()=>{
+      for(const item of entries)if(item.decision==='PENDING' &&
+        inspected.get(item.photo_id)===item.transfer_version && selected.size<50)
+        selected.set(item.photo_id,{photo_id:item.photo_id,
+          transfer_version:item.transfer_version,
+          expected_revision:item.decision_revision||null,run_id:item.run_id});
+      render();
+    });
+    el('private-review-clear-selection').addEventListener('click',()=>{
+      selected.clear();render();
+    });
+    el('private-review-bulk-approve').addEventListener('click',()=>bulk('APPROVED'));
+    el('private-review-bulk-reject').addEventListener('click',()=>bulk('REJECTED'));
+    el('private-review-previous-photo').addEventListener('click',()=>navigate(-1));
+    el('private-review-next-photo').addEventListener('click',()=>navigate(1));
+  }
   return { init, open, reset };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = PrivateReview;
