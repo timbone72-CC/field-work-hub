@@ -555,6 +555,7 @@ declare
  d private.client_delivery_destinations%rowtype;
  owner_id uuid; contractor_id uuid; action uuid:=gen_random_uuid();
  first jsonb; again jsonb; latest jsonb; destinations jsonb; failed boolean;
+ previous_pkg private.client_packages%rowtype; frozen_projection jsonb;
 begin
  select * into d from private.client_delivery_destinations
   where verified and active limit 1;
@@ -598,6 +599,19 @@ begin
  perform pg_temp.expect_photo_review_error('42501',format(
   'select public.admin_get_client_folder_layout(%L)',d.id));
  execute 'reset role';
+ -- A later Admin choice must not retroactively rewrite an approved package.
+ select * into previous_pkg from private.client_packages
+  where destination_id=d.id and status='DELIVERED' limit 1;
+ if previous_pkg.id is null then
+   raise exception 'Disposable delivered package fixture missing';end if;
+ frozen_projection:=private.client_package_manifest(previous_pkg.id);
+ if frozen_projection->>'folder_layout' is distinct from
+      previous_pkg.approved_manifest->>'folder_layout'
+    or frozen_projection->'geographic_path' is distinct from
+      previous_pkg.approved_manifest->'geographic_path'
+    or frozen_projection->>'destination_id' is distinct from d.id::text then
+   raise exception 'Admin layout change rewrote previously approved delivery';
+ end if;
  if has_table_privilege('authenticated','private.client_delivery_folder_layouts','update')
   or has_table_privilege('authenticated','private.client_delivery_folder_layout_actions','select')
  then raise exception 'Direct client layout table access became available';end if;
