@@ -54,6 +54,7 @@ declare
   pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
+  address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
   trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
@@ -188,6 +189,51 @@ begin
     (delivery_claim->>'package_id')::uuid<>pkg_id then
     raise exception 'Single trusted claim not fenced';end if;
   delivery_gen:=(delivery_claim->>'generation')::bigint;
+
+  -- Source-only client hierarchy reservation: immutable address group and
+  -- permanent WO UUID scoped to this verified company/destination revision.
+  select folder_address_snapshot into frozen_address
+    from private.client_packages where id=pkg_id;
+  if frozen_address is distinct from 'TEST' then
+    raise exception 'Approved package did not freeze its authoritative WO address';
+  end if;
+  address_folder_id:='addr'||replace(pkg_id::text,'-','');
+  wo_folder_id:='wofolder'||replace(wo::text,'-','');
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
+    pkg_id,delivery_worker,delivery_gen,'WORK_ORDER',wo_folder_id,address_folder_id));
+  address_row:=public.service_reserve_delivery_parent(pkg_id,delivery_worker,delivery_gen,
+     'ADDRESS',address_folder_id,'DISPOSABLE-ONLY');
+  if address_row->>'state'<>'RESERVED' or address_row->>'remote_folder_id'<>address_folder_id
+     or address_row->>'kind'<>'ADDRESS' then
+    raise exception 'Address map reservation identity failed: %',address_row;end if;
+  if address_row is distinct from public.service_reserve_delivery_parent(
+       pkg_id,delivery_worker,delivery_gen,'ADDRESS',address_folder_id,'DISPOSABLE-ONLY') then
+    raise exception 'Address retry replaced immutable ID';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
+    pkg_id,delivery_worker,delivery_gen,'ADDRESS','different_generated_remote_id','DISPOSABLE-ONLY'));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
+    pkg_id,delivery_worker,delivery_gen,'ADDRESS',address_folder_id,'WRONG-ROOT'));
+  wo_row:=public.service_reserve_delivery_parent(pkg_id,delivery_worker,delivery_gen,
+    'WORK_ORDER',wo_folder_id,address_folder_id);
+  if wo_row->>'state'<>'RESERVED' or wo_row->>'remote_folder_id'<>wo_folder_id
+    or wo_row->>'parent_remote_id'<>address_folder_id then
+    raise exception 'WO map parent identity failed: %',wo_row;end if;
+  if wo_row is distinct from public.service_reserve_delivery_parent(
+    pkg_id,delivery_worker,delivery_gen,'WORK_ORDER',wo_folder_id,address_folder_id) then
+    raise exception 'WO retry replaced immutable ID';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_reserve_delivery_parent(%L,%L,%s,%L,%L,%L)',
+    pkg_id,gen_random_uuid(),delivery_gen,'WORK_ORDER',wo_folder_id,address_folder_id));
+  if exists(select 1 from private.client_delivery_parent_maps a
+    join private.client_delivery_parent_maps w on w.parent_map_id=a.id
+    where a.remote_folder_id=address_folder_id and w.remote_folder_id=wo_folder_id
+     and (a.organization_id<>org or a.company_id<>company
+       or a.destination_id<>w.destination_id or a.destination_revision<>w.destination_revision
+       or a.address_key<>w.address_key or w.work_order_id<>wo)) then
+    raise exception 'Cross-company or changed hierarchy parent was allowed';end if;
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_heartbeat_delivery(%L,%L,%s)',
     pkg_id,gen_random_uuid(),delivery_gen));
