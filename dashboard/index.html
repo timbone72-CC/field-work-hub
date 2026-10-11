@@ -111,6 +111,10 @@
             <button id="job-reload" type="button" class="secondary" hidden>Reload job</button>
           </div>
           <p id="job-context" class="muted" role="status"></p>
+          <div id="job-address-context" hidden>
+            <p class="muted">Other work orders at this exact address and company on the current page:</p>
+            <div id="job-address-work-orders" class="workspace-navigation" aria-label="Work orders at this address"></div>
+          </div>
           <nav class="workspace-tabs" aria-label="Job sections">
             <button type="button" data-job-tab="details" aria-pressed="true" aria-controls="job-details">Details</button>
             <button type="button" data-job-tab="assignment" aria-pressed="false" aria-controls="job-assignment">Assignment</button>
