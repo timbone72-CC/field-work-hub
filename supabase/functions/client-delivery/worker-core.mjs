@@ -1,6 +1,6 @@
 // Trusted single-worker identity preallocation only. NO Drive create, upload,
 // provider Send, cleanup, extra queue or retry with replacement IDs.
-// Required hierarchy: destination root -> ADDRESS -> WORK_ORDER -> PACKAGE.
+// Approved hierarchy: client root -> selected frozen parents -> PACKAGE.
 // Each transition is fenced by the current Supabase delivery lease and its
 // frozen company/destination identity, not by a browser/phone address string.
 import {DriveUncertain} from './drive-client.mjs';
@@ -28,6 +28,14 @@ export async function reserveProviderIdentities({
    ||!Array.isArray(claim.manifest.selected_photos)
    ||claim.manifest.selected_photos.length>200)
    fail('FROZEN_CLAIM_INVALID');
+ const layout=claim.manifest.folder_layout??'ADDRESS_WORK_ORDER';
+ if(!['ADDRESS_WORK_ORDER','STATE_COUNTY_CITY_ADDRESS'].includes(layout))
+   fail('FROZEN_FOLDER_LAYOUT_UNSUPPORTED');
+ const geographic=layout==='STATE_COUNTY_CITY_ADDRESS';
+ if(geographic && (!claim.manifest.geographic_path
+   ||typeof ledger.readGeographicLeaf!=='function'
+   ||typeof ledger.reserveGeographicLeaf!=='function'))
+   fail('FROZEN_GEOGRAPHIC_PATH_UNAVAILABLE');
  const photos=claim.manifest.selected_photos;
  const ids=new Set();
  for(const p of photos){
@@ -55,9 +63,12 @@ export async function reserveProviderIdentities({
  });
  // The backend owns all scope checks. Lookup BEFORE generateIds is critical
  // for reuse across packages and safe restart after unknown provider writes.
- async function addressOrWo(kind,parentId){
+ async function reserveOneParent(kind,parentId){
    await heartbeat();
-   const existing=await ledger.readParent(pkg,workerId,gen,kind);
+   const geoLeaf=geographic&&['ADDRESS','WORK_ORDER'].includes(kind);
+   const existing=geoLeaf
+     ? await ledger.readGeographicLeaf(pkg,workerId,gen,kind)
+     : await ledger.readParent(pkg,workerId,gen,kind);
    if(existing?.exists===true){
      if(existing.kind!==kind||!ID.test(existing.remote_folder_id??'')
        ||existing.parent_remote_id!==parentId
@@ -71,16 +82,27 @@ export async function reserveProviderIdentities({
    if(!Array.isArray(generated)||generated.length!==1||!ID.test(generated[0]))
      fail('REMOTE_IDS_UNAVAILABLE');
    await heartbeat();
-   const saved=await ledger.reserveParent(pkg,workerId,gen,kind,generated[0],parentId);
+   const saved=geoLeaf
+     ? await ledger.reserveGeographicLeaf(pkg,workerId,gen,kind,generated[0],parentId)
+     : await ledger.reserveParent(pkg,workerId,gen,kind,generated[0],parentId);
    if(saved?.kind!==kind||saved.remote_folder_id!==generated[0]
      ||saved.parent_remote_id!==parentId||saved.state!=='RESERVED')
      fail('FROZEN_PARENT_IDENTITY_UNCERTAIN');
    return {id:generated[0],state:'RESERVED',newCount:1};
  }
- const address=await addressOrWo('ADDRESS',destination.id);
- if(address.state!=='VERIFIED')return stage('ADDRESS',address.newCount);
- const wo=await addressOrWo('WORK_ORDER',address.id);
- if(wo.state!=='VERIFIED')return stage('WORK_ORDER',wo.newCount);
+ const kinds=geographic
+   ? ['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER']
+   : ['ADDRESS','WORK_ORDER'];
+ let parentId=destination.id;
+ const usedParentIds=new Set([parentId]);
+ for(const kind of kinds){
+   const parent=await reserveOneParent(kind,parentId);
+   if(usedParentIds.has(parent.id))fail('FROZEN_PARENT_IDENTITY_UNCERTAIN');
+   usedParentIds.add(parent.id);
+   if(parent.state!=='VERIFIED')return stage(kind,parent.newCount);
+   parentId=parent.id;
+ }
+ const wo={id:parentId};
  // Even after both database receipts, the current provider token must
  // independently prove the saved exact client WORK_ORDER destination.
  await drive.verifyDestination({folderId:wo.id,expectedDriveId});
@@ -89,7 +111,7 @@ export async function reserveProviderIdentities({
  if(!Array.isArray(preallocated)||preallocated.length!==photos.length+2
    ||preallocated.some(id=>!ID.test(id))
    ||new Set(preallocated).size!==preallocated.length
-   ||preallocated.includes(wo.id)||preallocated.includes(address.id))
+   ||preallocated.some(id=>usedParentIds.has(id)))
    fail('REMOTE_IDS_UNAVAILABLE');
  const folder=preallocated[0],manifestFile=preallocated.at(-1);
  await ledger.reserve(pkg,workerId,gen,'FOLDER',null,folder,wo.id);
