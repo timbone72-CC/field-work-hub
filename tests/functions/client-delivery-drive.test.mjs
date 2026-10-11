@@ -160,3 +160,26 @@ test('ambiguous transport failure never authorizes blind remote create or replac
   assert.equal(calls.length,1);
   assert.equal(calls[0].options.redirect,'error');
 });
+
+test('geographic parent create accepts only exact scoped five-property identity',async()=>{
+  const scoped={fwh_org:'00000000-0000-4000-8000-000000000001',
+    fwh_company:'00000000-0000-4000-8000-000000000002',
+    fwh_destination:'00000000-0000-4000-8000-000000000003',
+    fwh_kind:'COUNTY',fwh_key:'a'.repeat(64)};
+  const id='geo_'+'x'.repeat(25);
+  const spec={id,parent,name:'Beckham County',
+    mime:'application/vnd.google-apps.folder',appProperties:scoped};
+  const {client,calls}=fixture((url,opts)=>{
+    assert.equal(url.pathname,'/drive/v3/files');
+    assert.deepEqual(JSON.parse(opts.body).appProperties,scoped);
+    return json({id},201);
+  });
+  assert.equal((await client.createPreallocatedFolder(spec)).created_id,id);
+  await expectCode(()=>client.createPreallocatedFolder({
+    ...spec,appProperties:{...scoped,fwh_company:'not-a-uuid'}}),'EXACT_APP_PROPERTIES_REQUIRED');
+  await expectCode(()=>client.createPreallocatedFolder({
+    ...spec,appProperties:{...scoped,unexpected:'extra'}}),'EXACT_APP_PROPERTIES_REQUIRED');
+  await expectCode(()=>client.startResumable({...spec,mime:'image/jpeg'},{size:123}),
+    'EXACT_APP_PROPERTIES_REQUIRED');
+  assert.equal(calls.length,1);
+});
