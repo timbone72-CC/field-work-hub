@@ -30,7 +30,7 @@ function rig({states={},unsupported=false,foreign=false}={}){
  };
  const ledger={
    claim:async()=>unsupported?{...claim,manifest:{...claim.manifest,
-     folder_layout:'STATE_CITY_ADDRESS'}}:claim,
+     folder_layout:'UNSUPPORTED_LAYOUT'}}:claim,
    heartbeat:async()=>{calls.push('heartbeat')},
    readParent:async(_p,_w,_g,k)=>read('readParent',k),
    reserveParent:async(_p,_w,_g,k,id,p)=>reserve('reserveParent',k,id,p),
@@ -76,7 +76,7 @@ test('verified geographic hierarchy reserves package beneath exact work order',a
  assert.ok(r.calls.includes('reserveFile:FOLDER'));
  assert.ok(!r.calls.includes('reserveParent:ADDRESS'));
 });
-test('wrong ancestor and unfinished State-City layout fail closed',async()=>{
+test('wrong ancestor and unsupported layout fail closed',async()=>{
  const r=rig({states:Object.fromEntries(kinds.map(k=>[k,'VERIFIED'])),foreign:true});
  await assert.rejects(()=>run(r),e=>e instanceof DriveUncertain
   &&e.code==='FROZEN_PARENT_IDENTITY_UNCERTAIN');
@@ -85,4 +85,24 @@ test('wrong ancestor and unfinished State-City layout fail closed',async()=>{
  await assert.rejects(()=>run(unsupported),e=>e instanceof DriveUncertain
   &&e.code==='FROZEN_FOLDER_LAYOUT_UNSUPPORTED');
  assert.deepEqual(unsupported.calls,[]);
+});
+
+test('State-City layout reserves STATE then CITY then ADDRESS then WORK_ORDER, never COUNTY',async()=>{
+ const original=claim.manifest;
+ const states={STATE:'VERIFIED'};
+ const r=rig({states});
+ const get=r.ledger.claim;
+ r.ledger.claim=async()=>({ ...claim,manifest:{...original,folder_layout:'STATE_CITY_ADDRESS'}});
+ const first=await run(r);
+ assert.equal(first.next_parent_kind,'CITY');
+ assert.ok(r.calls.includes('reserveParent:CITY'));
+ assert.ok(!r.calls.some(c=>c.includes('COUNTY')));
+});
+test('State-City path continues to geographic leaves under verified city',async()=>{
+ const r=rig({states:{STATE:'VERIFIED',CITY:'VERIFIED'}});
+ r.ledger.claim=async()=>({...claim,manifest:{...claim.manifest,folder_layout:'STATE_CITY_ADDRESS'}});
+ const out=await run(r);
+ assert.equal(out.next_parent_kind,'ADDRESS');
+ assert.ok(r.calls.includes('reserveGeographicLeaf:ADDRESS'));
+ assert.ok(!r.calls.some(c=>c.includes('COUNTY')));
 });
