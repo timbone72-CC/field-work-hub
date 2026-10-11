@@ -62,6 +62,8 @@ begin
  if response is distinct from replay then raise exception 'Retry created different correction';end if;
  newrun:=(response->>'run_id')::uuid;
  newinstance:=(response->>'assignment_instance_id')::uuid;
+ -- Server-private correction ledgers are not directly readable by office clients.
+ execute 'reset role';
  if newrun=oldrun or newinstance=oldinstance
  or (select current_run_id from public.work_orders where id=wo)<>newrun
  or (select current_run_sequence from public.work_orders where id=wo)<>2
@@ -77,6 +79,7 @@ begin
  or (select count(*) from public.work_order_assignments where id=newinstance
    and assignment_received_at is null and acknowledgment_received_at is null)<>1
  then raise exception 'Correction identity/history/new fresh assignment mismatch';end if;
+ execute 'set local role authenticated';
  denied:=false;
  begin perform public.admin_create_followup(action,wo,oldrun,oldrev,
    'INTERNAL_CORRECTION','Changed action replay',array[]::uuid[],photographer,
