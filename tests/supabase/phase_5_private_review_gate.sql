@@ -680,4 +680,82 @@ begin
  raise notice 'Geographic reservation RPC service-only boundary PASS';
 end;
 $geo_rpc_gate$;
+-- Phase 6B/6D combined real native SQL fixture: an already DELIVERED
+-- original package and its exact private receipt survive client-return
+-- dispatch; a new package may select the retained original photo without
+-- rebinding it to the replacement run. No real Drive object is touched.
+do $phase6_multi_run$
+declare
+ old_pkg private.client_packages%rowtype; orig_manifest jsonb; old_photo uuid;
+ admin_id uuid; worker uuid; org uuid; wo uuid; oldrun uuid; newrun uuid; instance uuid;
+ cfg jsonb; revision uuid; action uuid:=gen_random_uuid(); result jsonb; next_pkg jsonb;
+ selected jsonb; oldrev timestamptz; claims_admin text; claims_worker text;
+ set_id uuid:=gen_random_uuid(); digest text:=encode(sha256(convert_to('[]','UTF8')),'hex');
+begin
+ select * into old_pkg from private.client_packages
+  where status='DELIVERED' and approved_manifest is not null limit 1;
+ if old_pkg.id is null then raise exception 'Prior confirmed package fixture unavailable';end if;
+ select photo_id into old_photo from private.client_package_photos
+  where package_id=old_pkg.id order by ordinal limit 1;
+ if old_photo is null then raise exception 'Prior verified photo missing';end if;
+ select w.id,w.current_run_id,w.updated_at,w.organization_id
+  into wo,oldrun,oldrev,org from public.work_orders w where w.id=old_pkg.work_order_id;
+ select current_assignee_user_id into worker from public.work_order_runs where id=oldrun;
+ select user_id into admin_id from private.admin_team_memberships
+  where organization_id=org and active limit 1;
+ if admin_id is null or worker is null or old_pkg.run_id<>oldrun
+  then raise exception 'History fixture changed';end if;
+ orig_manifest:=old_pkg.approved_manifest;
+ cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+  'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
+ claims_admin:=jsonb_build_object('sub',admin_id,'session_id',admin_id,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
+ claims_worker:=jsonb_build_object('sub',worker,'session_id',worker,
+  'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
+ update private.account_work_access set active=true,suspension_authority=null,
+  disabled_at=null where user_id in (admin_id,worker);
+ perform set_config('request.jwt.claims',claims_admin,true);execute 'set local role authenticated';
+ result:=public.admin_create_followup(action,wo,oldrun,oldrev,'CLIENT_RETURN',
+   'Client requested new inspection evidence',array[old_photo],worker,
+   current_date,'Additional check',cfg,'[]'::jsonb,null);
+ newrun:=(result->>'run_id')::uuid;
+ instance:=(result->>'assignment_instance_id')::uuid;
+ if newrun=oldrun or result->>'kind'<>'CLIENT_RETURN' then
+  raise exception 'Confirmed delivery did not create client return';end if;
+ execute 'reset role';
+ if (select approved_manifest from private.client_packages where id=old_pkg.id)
+     is distinct from orig_manifest
+   or (select status from private.client_packages where id=old_pkg.id)<>'DELIVERED'
+   or (select run_id from public.photos where id=old_photo)<>oldrun
+   or (select count(*) from public.work_order_assignments
+      where id=instance and assignment_received_at is null
+       and acknowledgment_received_at is null)<>1
+ then raise exception 'Historical delivery/photo or fresh assignment was rewritten';end if;
+ select (requirement_snapshot->>'revision')::uuid into revision
+  from public.work_order_runs where id=newrun;
+ perform set_config('request.jwt.claims',claims_worker,true);execute 'set local role authenticated';
+ result:=public.accept_field_action_v4(gen_random_uuid(),wo,newrun,instance,
+  'START',to_char(now()-interval '1 minute','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  revision,null,'');
+ if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up Start failed: %',result;end if;
+ result:=public.register_photo_finish_set(set_id,wo,newrun,instance,revision,
+  '[]'::jsonb,digest,'[]');
+ if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up empty photo set failed: %',result;end if;
+ result:=public.accept_field_action_v4(gen_random_uuid(),wo,newrun,instance,
+  'COMPLETE',to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  revision,set_id,digest);
+ if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up Finish failed: %',result;end if;
+ perform set_config('request.jwt.claims',claims_admin,true);
+ next_pkg:=public.admin_save_package_draft(gen_random_uuid(),wo,null,
+  'Complete corrected return submission',array[old_photo]);
+ execute 'reset role';
+ selected:=private.client_package_manifest((next_pkg->>'id')::uuid);
+ if selected->>'current_run_id'<>newrun::text
+   or selected->'selected_photos'->0->>'photo_id'<>old_photo::text
+   or selected->'selected_photos'->0->>'run_id'<>oldrun::text
+   or jsonb_array_length(selected->'correction_obligations')<>1
+   or (select count(*) from private.client_packages where work_order_id=wo and status='DELIVERED')<>1
+ then raise exception 'Cross-run retained original evidence/coverage failed: %',selected;end if;
+ raise notice 'Phase 6B/6D original delivered photo retained, follow-up new run and cross-run draft PASS';
+end;$phase6_multi_run$;
 rollback;
