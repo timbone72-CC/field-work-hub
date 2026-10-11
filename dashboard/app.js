@@ -47,6 +47,35 @@ const editStatus = document.getElementById('edit-status');
 
 const createPhotos = new PhotoRequirementEditor(document.getElementById('create-photo-requirements'), () => workTypeInput.value);
 const editPhotos = new PhotoRequirementEditor(document.getElementById('edit-photo-requirements'), () => editWorkTypeInput.value);
+// Phase 6B: copy a server-read prior WO into a NEW, unsent draft only.
+// Never reuse the old client WO number, assignment, due date, photo evidence,
+// package or finished work identity; the user must explicitly create the WO.
+document.getElementById('prepare-repeat-work').addEventListener('click', () => {
+  JobWorkspace.guard(async () => {
+    const oldId=editWorkOrderIdInput.value;
+    const actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+    if (!oldId || !actor || !org) return;
+    try {
+      const old=await fetchWorkOrder(oldId);
+      if (currentUser?.id!==actor || currentUser?.app_metadata?.organization_id!==org
+        || !accessToken || editWorkOrderIdInput.value!==oldId) return;
+      const snapshot=PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot);
+      closeEditor(true);
+      createForm.reset();
+      applyWoNumberMode('auto');
+      document.getElementById('remember-wo-number-mode').checked=false;
+      propertyAddressInput.value=old.property_address;
+      workTypeInput.value=old.work_type;
+      instructionsInput.value=old.instructions || '';
+      createPhotos.load(snapshot);
+      fillWorkTypes();
+      document.getElementById('create-wo-details').open=true;
+      setCreateStatus('New work-order draft prepared from prior job. Enter a new due date and assignee; review all fields before creating.',false);
+      document.getElementById('due-date').focus();
+    } catch(error) { setEditStatus(error.message,true); }
+  });
+});
+
 function fillWorkTypes() {
   for (const [prefix, input, editor] of [['', workTypeInput, createPhotos], ['edit-', editWorkTypeInput, editPhotos]]) {
     const select = document.getElementById(`${prefix}work-type-choice`);
