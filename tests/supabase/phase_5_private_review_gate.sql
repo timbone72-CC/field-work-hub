@@ -526,6 +526,50 @@ begin
     'select public.admin_private_photo_target_for_session(%L,%L,%L,%L)',
     photo,t.version,admin_id,gen_random_uuid()));
 
+  -- Phase 6C: immutable exact selected-page bulk action; an unrelated or
+  -- stale review cannot be partly applied, and no unseen photo is selected.
+  target:=jsonb_build_array(jsonb_build_object('photo_id',photo,
+    'transfer_version',t.version,'expected_revision',response->>'decision_revision'));
+  action:=gen_random_uuid();
+  response:=public.admin_review_photos_bulk(action,wo,null,target,'APPROVED','');
+  replay:=public.admin_review_photos_bulk(action,wo,null,target,'APPROVED','');
+  if response is distinct from replay or response->>'outcome'<>'APPLIED'
+     or (response->>'applied')::int<>1
+     or (select decision from private.photo_review_decisions where photo_id=photo)<>'APPROVED'
+  then raise exception 'Bulk selected-page review did not atomically apply/replay';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.admin_review_photos_bulk(%L,%L,null,%L::jsonb,%L,%L)',
+    action,wo,target::text,'REJECTED','Changed input'));
+  replay:=public.admin_review_photos_bulk(gen_random_uuid(),wo,null,target,'APPROVED','');
+  if replay->>'outcome'<>'CONFLICT' or (replay->>'applied')::int<>0
+    or jsonb_array_length(replay->'conflicts')<>1
+  then raise exception 'Stale selected photo review was not all-or-none';end if;
+  target:=jsonb_build_array(jsonb_build_object('photo_id',photo,
+    'transfer_version',t.version,'expected_revision',
+    (select revision from private.photo_review_decisions where photo_id=photo)),
+    jsonb_build_object('photo_id',gen_random_uuid(),
+      'transfer_version',t.version,'expected_revision',null));
+  replay:=public.admin_review_photos_bulk(gen_random_uuid(),wo,null,target,'REJECTED','Retake requested');
+  if replay->>'outcome'<>'CONFLICT' or (replay->>'applied')::int<>0
+     or (select decision from private.photo_review_decisions where photo_id=photo)<>'APPROVED'
+  then raise exception 'Partial mutation on conflict with another photo identity';end if;
+  target:=public.admin_review_photo_page(wo,25,null,null,null,null,false,null,null);
+  if jsonb_array_length(target->'photos')<>1 or
+     target->'photos'->0->>'photo_id'<>photo::text or
+     target->'photos'->0->>'decision'<>'APPROVED' or
+     target->'photos'->0 ? 'object_key' or target->'photos'->0 ? 'url' or
+     target->'photos'->0->>'run_sequence'<>'1'
+  then raise exception 'Paged review leaked private data or wrong current run: %',target;end if;
+  if jsonb_array_length((public.admin_review_photo_page(
+       wo,25,null,null,null,null,false,null,'REJECTED'))->'photos')<>0
+  then raise exception 'Server-side review decision filter broadened';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_review_photo_page(%L,10,null,null,null,null,false,null,null)',wo));
+  if has_function_privilege('anon',
+   'public.admin_review_photos_bulk(uuid,uuid,uuid,jsonb,text,text)','EXECUTE')
+   or has_table_privilege('authenticated','private.photo_bulk_review_actions','UPDATE')
+  then raise exception 'Bulk review exposed unscoped write';end if;
+
   -- Same-organization role alone does not grant a gallery or review capability.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',other_admin,'session_id',other_admin,
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
