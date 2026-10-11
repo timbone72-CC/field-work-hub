@@ -257,6 +257,26 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.keyboard.press('Escape'); assert.equal(await page.locator('#job-unsaved').isVisible(), true, 'Requirement button edits are protected');
     await page.locator('#job-discard').click();
     await page.setViewportSize({ width: 1280, height: 900 });
+    // Phase 6B: the repeat action creates ONLY a fresh draft with a new
+    // requirement revision, never the old WO number/assignment/due date.
+    rows[50].run={requirement_snapshot:{schema:1,revision:uuid(7700),
+      total:{enabled:false,minimum:0},items:[{
+        id:uuid(7701),label:'Front',enabled:true,minimum:2,
+        instruction:'Front view',stage:'BEFORE',framing:'WIDE',order:0
+      }]}};
+    await page.locator('.job-link').first().click();
+    await wait(page, () => document.querySelector('dialog').open);
+    await page.locator('#prepare-repeat-work').click();
+    await wait(page, () => document.querySelector('#create-wo-details').open);
+    assert.equal(await page.locator('#property-address').inputValue(),rows[50].property_address);
+    assert.equal(await page.locator('#work-type').inputValue(),rows[50].work_type);
+    assert.equal(await page.locator('#instructions').inputValue(),rows[50].instructions);
+    assert.equal(await page.locator('#due-date').inputValue(),'');
+    assert.equal(await page.locator('#assignee').inputValue(),'');
+    assert.equal(await page.locator('#wo-number-mode-auto').isChecked(),true);
+    assert.equal(await page.locator('#wo-number').inputValue(),'');
+    assert.equal(await page.locator('#create-photo-requirements input[type="number"]').count(),2);
+    assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
     assert.equal(await page.locator('#job-page-size').inputValue(), '25');
