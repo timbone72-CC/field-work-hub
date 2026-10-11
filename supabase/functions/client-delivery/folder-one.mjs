@@ -76,9 +76,19 @@ export async function reconcileOnePreallocatedPackageFolder({
   await auth();
   const decision=await ledger.beginFolderCreate(plan.plan_id);
   // The authoritative one-shot attempt journal is durable BEFORE POST.
-  if(decision?.state!=='MAY_CREATE'||decision.plan_id!==plan.plan_id
+  if(!['MAY_CREATE','VERIFY_EXISTING'].includes(decision?.state)
+    ||decision.plan_id!==plan.plan_id
     ||decision.file_id!==plan.file_id||decision.parent_id!==plan.parent_id)
     deny();
+  // Another invocation may have recorded the same one-shot attempt after
+  // our initial read. Never POST in this case; reconcile the original ID.
+  if(decision.state==='VERIFY_EXISTING'){
+    await auth();
+    const checked=await drive.verifyFile(RECEIPT(current,expectedDriveId));
+    await auth();
+    await ledger.confirmFolder(current,workerId,generation,checked);
+    return {state:'FOLDER_VERIFIED',plan_id:plan.plan_id};
+  }
   await auth();
   await drive.createPreallocatedFolder({
     id:current.file_id,parent:current.parent_id,name:current.name,
