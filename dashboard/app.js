@@ -254,6 +254,7 @@ async function fetchWorkOrders() {
   const select = [
     'id',
     'organization_id',
+    'client_company_id',
     'assigned_user_id',
     'pending_assignee_user_id',
     'reassignment_requested_at',
@@ -290,7 +291,7 @@ async function fetchWorkOrders() {
 async function fetchWorkOrder(id) {
   requireAccessToken();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid job identity.');
-  const select = 'id,organization_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)';
+  const select = 'id,organization_id,client_company_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)';
   const response = await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&id=eq.${id}&limit=1`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await readableError(response, 'Unable to open this job.'));
   const rows = await response.json();
