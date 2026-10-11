@@ -101,6 +101,10 @@ begin
  perform set_config('request.jwt.claims',adminjwt,true);
  dispatched:=public.admin_dispatch_correction_draft(action,wo,draftrev,previewhash);
  repeat:=public.admin_dispatch_correction_draft(action,wo,draftrev,previewhash);
+ denied:=false;
+ begin perform public.admin_dispatch_correction_draft(action,wo,draftrev,repeat('b',64));
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Changed accepted preview hash was treated as same request';end if;
  newrun:=(dispatched->>'run_id')::uuid;
  if dispatched is distinct from repeat or newrun=oldrun
  then raise exception 'Exact idempotent correction dispatch failed';end if;
