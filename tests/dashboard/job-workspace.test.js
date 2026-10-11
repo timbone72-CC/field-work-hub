@@ -153,3 +153,18 @@ test('Phase 6A exact-address server lookup stays bounded, scoped and race fenced
  assert.match(html,/id="job-address-next"/);
  assert.match(html,/id="job-address-previous"/);
 });
+
+test('Phase 6B repeat work is a new, explicit draft without copying old WO/assignment/due date',()=>{
+ const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
+ const text=fs.readFileSync(require.resolve('../../dashboard/app.js'),'utf8');
+ const handler=text.split("document.getElementById('prepare-repeat-work').addEventListener")[1]?.split('function fillWorkTypes()')[0];
+ assert.ok(handler);
+ assert.match(html,/id="prepare-repeat-work"/);
+ assert.match(html,/id="create-wo-details"/);
+ for (const name of ['JobWorkspace.guard','fetchWorkOrder(oldId)','currentUser?.id!==actor',
+  'editWorkOrderIdInput.value!==oldId','PhotoRules.copyPriorSnapshot','createForm.reset()',
+  "applyWoNumberMode('auto')","propertyAddressInput.value=old.property_address",
+  'workTypeInput.value=old.work_type','createPhotos.load(snapshot)'])
+   assert.ok(handler.includes(name),name);
+ assert.doesNotMatch(handler,/woNumberInput\.value\s*=|assigneeSelect\.value\s*=|dueDateInput\.value\s*=|createWorkOrder\(/);
+});
