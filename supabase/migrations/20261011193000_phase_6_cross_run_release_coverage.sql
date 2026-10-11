@@ -93,16 +93,16 @@ begin
     from private.correction_obligations o
     where o.work_order_id=w.id and o.status in ('OPEN','SATISFIED')
   loop
-    select count(*) into obligation_count from jsonb_array_elements(v_photos) p
-      where p->>'run_id'=obligation.replacement_run_id::text;
+    select count(*) into obligation_count from jsonb_array_elements(v_photos) selected_photo
+      where selected_photo.value->>'run_id'=obligation.replacement_run_id::text;
     if (obligation.capture_requirements->'total'->>'enabled')::boolean
        and obligation_count<(obligation.capture_requirements->'total'->>'minimum')::int
     then raise exception 'Correction requires new-run total coverage' using errcode='22023';end if;
     for capture_item in select value from jsonb_array_elements(obligation.capture_requirements->'items') loop
       if (capture_item->>'enabled')::boolean then
-        select count(*) into new_covered from jsonb_array_elements(v_photos) p
-          where p->>'run_id'=obligation.replacement_run_id::text
-            and p->>'item_id'=capture_item->>'id';
+        select count(*) into new_covered from jsonb_array_elements(v_photos) selected_photo
+          where selected_photo.value->>'run_id'=obligation.replacement_run_id::text
+            and selected_photo.value->>'item_id'=capture_item->>'id';
         if new_covered<(capture_item->>'minimum')::int then
           raise exception 'Correction requires new-run named photo coverage' using errcode='22023';end if;
       end if;
