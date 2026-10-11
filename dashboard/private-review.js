@@ -117,8 +117,12 @@ const PrivateReview = (() => {
       controls.append(show, approval, rejection);
       const reference=document.createElement('label');reference.className='check';
       const refChoice=document.createElement('input');refChoice.type='checkbox';
+      refChoice.dataset.correctionPhotoId=item.photo_id;
       refChoice.checked=CorrectionDraft.hasReference(item.photo_id);
-      refChoice.addEventListener('change',()=>CorrectionDraft.reference(item.photo_id,refChoice.checked));
+      refChoice.addEventListener('change',()=>{
+        if(!CorrectionDraft.reference(item.photo_id,refChoice.checked))
+          refChoice.checked=CorrectionDraft.hasReference(item.photo_id);
+      });
       reference.append(refChoice,document.createTextNode(' Reference in follow-up'));
       row.append(heading, detail, preview, controls, explanation, reference);
       list.append(row);

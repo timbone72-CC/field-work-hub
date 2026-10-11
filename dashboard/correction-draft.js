@@ -23,11 +23,11 @@ const CorrectionDraft=(()=>{
   }
   function hasReference(id){return refs.has(id);}
   function reference(id,checked){
-    if(!data||!UUID.test(id)||busy)return;
-    if(checked&&refs.size>=200){status('Maximum 200 photo references.',true);return;}
+    if(!data||!UUID.test(id)||busy){status('Correction eligibility must load before selecting references.',true);return false;}
+    if(checked&&refs.size>=200){status('Maximum 200 photo references.',true);return false;}
     if(checked)refs.add(id);else refs.delete(id);
     el('correction-references').textContent=refs.size+' earlier photo reference(s) selected.';
-    invalidate();
+    invalidate();return true;
   }
   function invalidate(){preview=null;el('correction-summary').hidden=true;buttons();}
   function drawMaps(){
@@ -101,6 +101,8 @@ const CorrectionDraft=(()=>{
       m.release_item_id===null?'':source.release_requirements.items.some(i=>i.id===m.release_item_id)?m.release_item_id:'NEW']));
     drawMaps();
     el('correction-references').textContent=refs.size+' earlier photo reference(s) selected.';
+    for(const node of document.querySelectorAll('[data-correction-photo-id]'))
+      node.checked=refs.has(node.dataset.correctionPhotoId);
     el('correction-details').hidden=false;
     baseline=fingerprint();preview=null;uncertain=false;buttons();
     status(d?'Saved server correction draft loaded.':'Set up this correction, then Save. No dispatch has happened.');
