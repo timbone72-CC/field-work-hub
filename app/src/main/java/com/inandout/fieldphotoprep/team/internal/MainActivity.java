@@ -492,7 +492,10 @@ public final class MainActivity extends Activity {
         String dueDate = workOrder.dueDate.isEmpty() ? "Not set" : workOrder.dueDate;
 
         card.addView(text(address, 18, true));
-        card.addView(text(woNumber, 14, true));
+        card.addView(text(workOrder.currentRunSequence > 1
+                ? "Follow-up — client " + woNumber : woNumber, 14, true));
+        if (workOrder.currentRunSequence > 1 && !workOrder.reopenReason.isEmpty())
+            card.addView(text("Follow-up reason: " + workOrder.reopenReason, 14, false));
         card.addView(text("Work type: " + workType, 14, false));
         card.addView(text("Due: " + dueDate, 14, false));
         String status =
@@ -504,6 +507,10 @@ public final class MainActivity extends Activity {
                                         ? "Started — waiting to sync"
                                         : displayStatus(workOrder.fieldStatus);
         card.addView(text("Status: " + status, 14, false));
+        if (workOrder.acknowledgmentReceivedAt.isEmpty() && workOrder.acceptPending)
+            card.addView(text("Accepted — pending sync", 14, true));
+        else if (!workOrder.acknowledgmentReceivedAt.isEmpty())
+            card.addView(text("Accepted — confirmed by office", 14, true));
         try { card.addView(text(PhotoRequirements.parse(workOrder.requirementSnapshotJson).summary(), 14, false)); }
         catch (Exception e) { card.addView(text(e.getMessage(),14,true)); }
         Button photos = new Button(this); photos.setText("Photos");
@@ -527,6 +534,18 @@ public final class MainActivity extends Activity {
         } else if (currentSession != null
                 && "CONTRACTOR".equals(currentSession.role)
                 && BuildConfig.FIELD_SYNC_ENABLED) {
+            if (workOrder.acknowledgmentReceivedAt.isEmpty()
+                    && !workOrder.acceptPending
+                    && !"CANCELLED".equals(workOrder.fieldStatus)
+                    && !workOrder.assignmentInstanceId.isEmpty()) {
+                Button accept = new Button(this);
+                accept.setText("Accept");
+                accept.setOnClickListener(v -> {
+                    accept.setEnabled(false);
+                    queueFieldAction(workOrder, "ACK");
+                });
+                card.addView(accept);
+            }
             boolean start =
                     "ASSIGNED".equals(workOrder.fieldStatus) && workOrder.pendingKind.isEmpty();
             boolean finish =
