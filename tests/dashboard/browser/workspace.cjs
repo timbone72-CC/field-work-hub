@@ -338,10 +338,17 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     const choices=await page.locator('#edit-photo-requirements').getByLabel('Photo template').locator('option').allTextContents();
     assert.match(choices[1],/Company inspection.*default/);
     assert.ok(choices.every(t=>!t.includes('Foreign company')));
-    await Promise.all([
-      page.waitForEvent('dialog').then(dialog => dialog.accept()),
-      page.locator('#edit-photo-requirements').getByLabel('Photo template').selectOption(uuid(9972))
-    ]);
+    const templateChoice=page.locator('#edit-photo-requirements').getByLabel('Photo template');
+    assert.equal(await templateChoice.isEnabled(),true,'Authorized unstarted work must allow template copy');
+    assert.notEqual(await page.locator('#edit-instructions').inputValue(),'Company-specific instructions');
+    let confirmationCount=0;
+    const acceptInstructionReplacement=dialog=>{
+      confirmationCount++;void dialog.accept();
+    };
+    page.on('dialog',acceptInstructionReplacement);
+    try { await templateChoice.selectOption(uuid(9972)); }
+    finally { page.off('dialog',acceptInstructionReplacement); }
+    assert.equal(confirmationCount,1,'Existing instructions require an explicit confirmation');
     assert.equal(await page.locator('#edit-instructions').inputValue(),'Company-specific instructions');
     const editReq=await page.evaluate(()=>editPhotos.snapshot());
     assert.notEqual(editReq.revision,uuid(9978),'Copy must have a fresh draft revision');
