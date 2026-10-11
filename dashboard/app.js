@@ -448,7 +448,7 @@ function renderWorkOrders(rows, organizationId) {
     tr.insertCell().textContent = userLabel(userById.get(row.assigned_user_id));
     tr.insertCell().textContent = row.due_date;
     const status = tr.insertCell();
-    const field = document.createElement('div'); field.textContent = row.field_status.replaceAll('_', ' ');
+    const field = document.createElement('div'); field.textContent = JobOperationalFacts.project(row).label;
     const receipt = document.createElement('small'); receipt.textContent = row.assignment_received_at ? 'Assignment received' : 'Not yet received';
     status.append(field, receipt);
     if (row.pending_assignee_user_id) {
