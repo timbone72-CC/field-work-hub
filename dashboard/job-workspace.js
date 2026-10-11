@@ -75,7 +75,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports.JobAddressCo
 const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
-  let returnFocusId = null;
+  let returnFocusId = null, addressLookupEpoch=0, addressRows=[], addressTotal=null, addressOffset=0;
   const el = id => document.getElementById(id);
   const JOB_VIEW_STORAGE_KEY = () => `fwh.jobView.${account}`;
   function ensureAccount(user) {
@@ -114,7 +114,7 @@ const JobWorkspace = (() => {
   function reset() {
     PrivateReview.reset(); ClientRelease.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
-    returnFocusId = null;
+    returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
   }
   function request() { return { ...state, revision }; }
@@ -174,8 +174,11 @@ const JobWorkspace = (() => {
   function addressContext() {
     const list=el('job-address-work-orders');
     list.replaceChildren();
-    const matches=JobAddressContext.siblings(workOrderRows,selectedRow);
-    el('job-address-context').hidden=matches.length<2;
+    const matches=JobAddressContext.siblings(addressRows,selectedRow);
+    el('job-address-context').hidden=!selectedRow;
+    el('job-address-status').textContent=addressTotal===null ? 'Load this address to see matching jobs.' : `${addressTotal} exact-address jobs (showing ${matches.length} on this page)`;
+    el('job-address-next').disabled=addressTotal===null || addressOffset+50>=addressTotal;
+    el('job-address-previous').disabled=addressOffset===0;
     for (const item of matches) {
       const button=document.createElement('button');
       button.type='button'; button.className='secondary';
@@ -187,6 +190,20 @@ const JobWorkspace = (() => {
       list.append(button);
     }
   }
+  async function loadAddressContext(offset=0) {
+    if (!selectedRow || !accessToken) return;
+    const row=selectedRow, epoch=++addressLookupEpoch;
+    el('job-address-status').textContent='Loading exact-address work orders…';
+    try {
+      const result=await fetchAddressWorkOrders(row,offset);
+      if (epoch!==addressLookupEpoch || !accessToken || selectedRow?.id!==row.id) return;
+      addressRows=result.rows; addressTotal=result.total; addressOffset=offset;
+      addressContext();
+    } catch (error) {
+      if (epoch===addressLookupEpoch && selectedRow?.id===row.id)
+        el('job-address-status').textContent=error.message;
+    }
+  }
   function navigation() {
     const index = workOrderRows.findIndex(row => row.id === selectedRow?.id);
     el('job-previous').disabled = index <= 0;
@@ -196,6 +213,7 @@ const JobWorkspace = (() => {
   }
   function opened(row) {
     selectedRow = row; needsReload = false; pending = null; baseline = fingerprint();
+    addressLookupEpoch++; addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
     el('edit-heading').textContent = row.wo_number;
     el('job-address').textContent = row.property_address;
@@ -226,6 +244,7 @@ const JobWorkspace = (() => {
   function closed() {
     PrivateReview.reset(); ClientRelease.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
+    addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
     if (editSection.open) editSection.close();
     const id=returnFocusId;
@@ -254,6 +273,9 @@ const JobWorkspace = (() => {
   }
   function init() {
     PrivateReview.init(); ClientRelease.init();
+    el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
+    el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));
+    el('job-address-previous').addEventListener('click',()=>loadAddressContext(Math.max(0,addressOffset-50)));
     el('job-filters').addEventListener('submit', event => { event.preventDefault(); change(0); });
     el('job-clear-filters').addEventListener('click', () => {
       if (adminWritesPending || saveEditButton.disabled) return;
