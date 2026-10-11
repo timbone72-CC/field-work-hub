@@ -78,6 +78,14 @@ begin
           and work_order_id=k.work_order_id;
       -- Existing strict verification and no-fallback rule; no guess from ZIP.
       k.destination_id:=d.id;
+      -- Draft previews do not yet have the approval trigger's frozen address.
+      -- Compute the same canonical key, then the trigger independently freezes
+      -- that identical current WO address at the approval transaction.
+      k.folder_address_snapshot:=btrim(w.property_address);
+      if char_length(k.folder_address_snapshot) not between 3 and 320 then
+        raise exception 'Address snapshot unavailable' using errcode='22023';end if;
+      k.folder_address_key:=encode(sha256(convert_to(
+        lower(regexp_replace(btrim(w.property_address),'[[:space:]]+',' ','g')),'UTF8')),'hex');
       manifest:=manifest||jsonb_build_object(
         'geographic_path',private.phase_5_expected_geographic_path(k,geo));
     elsif selected_layout->>'layout'='STATE_CITY_ADDRESS' then
