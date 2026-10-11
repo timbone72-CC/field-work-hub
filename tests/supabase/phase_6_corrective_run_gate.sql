@@ -71,7 +71,7 @@ begin
  or (select client_company_id from public.work_orders where id=wo)<>old_company
  or (select wo_number from public.work_orders where id=wo)<>old_number
  or (select release_requirement_snapshot from public.work_orders where id=wo)
-    is distinct from old_snapshot
+    is distinct from (select requirement_snapshot from public.work_order_runs where id=oldrun)
  or (select field_status from public.work_order_runs where id=oldrun)<>'FIELD_COMPLETE'
  or (select count(*) from public.field_actions where work_order_id=wo and run_id=oldrun
    and action_kind='COMPLETE')<>1
