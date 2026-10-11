@@ -3,7 +3,7 @@
 // must be implemented before any provider mutation can be enabled.
 import {DriveUncertain} from './drive-client.mjs';
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID=/^[A-Za-z0-9_-]{10,160}$/;
 const SHA=/^[0-9a-f]{64}$/;
 function deny(){throw new DriveUncertain('FOLDER_IDENTITY_OR_LEASE_UNCERTAIN');}
