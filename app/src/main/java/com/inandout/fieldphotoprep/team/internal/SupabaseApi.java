@@ -91,6 +91,7 @@ final class SupabaseApi
         String acknowledgmentReceivedAt = "";
         String acknowledgedAt = "";
         String reopenReason = "";
+        boolean acceptPending = false;
 
         WorkOrder(
                 String id,
