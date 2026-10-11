@@ -6,7 +6,7 @@ declare org uuid:='00000000-0000-0000-0000-000000000001';
  office uuid:='00000000-0000-0000-0000-000000000010';
  contractor uuid:='00000000-0000-0000-0000-000000000011';
  company uuid:=gen_random_uuid(); wo uuid; oldrun uuid; newrun uuid;
- oldinstance uuid; jobtime timestamptz; policyrev uuid; runrev uuid;
+ oldinstance uuid; cancelled_run uuid; jobtime timestamptz; policyrev uuid; runrev uuid;
  config jsonb; map jsonb:='[]'::jsonb; state jsonb; saved jsonb; preview jsonb;
  dispatched jsonb; repeat jsonb; draftrev uuid; previewhash text;
  adminjwt text; workerjwt text; action uuid:=gen_random_uuid(); denied boolean;
@@ -120,6 +120,53 @@ begin
  if has_table_privilege('authenticated','private.admin_correction_drafts','UPDATE')
   or has_function_privilege('anon','public.admin_dispatch_correction_draft(uuid,uuid,uuid,text)','EXECUTE')
  then raise exception 'Broad correction draft authority exposed';end if;
+ -- An untouched corrective run can be deliberately cancelled while retaining
+ -- the original Finish and OPEN obligation. Replacing it creates a separate
+ -- Run 3 and explicit SUPERSEDED -> OPEN audit linkage, never a hidden undo.
+ perform set_config('request.jwt.claims',adminjwt,true);
+ execute 'set local role authenticated';
+ state:=public.admin_followup_management_state(wo);
+ if state->>'status'<>'ASSIGNED' or state->>'can_cancel'<>'true'
+    or state->>'run_id'<>newrun::text
+ then raise exception 'Untouched follow-up management state wrong';end if;
+ select updated_at into jobtime from public.work_orders where id=wo;
+ action:=gen_random_uuid();
+ dispatched:=public.admin_cancel_untouched_followup(action,wo,newrun,jobtime,
+   'Office cancels untouched corrective visit');
+ repeat:=public.admin_cancel_untouched_followup(action,wo,newrun,jobtime,
+   'Office cancels untouched corrective visit');
+ if repeat is distinct from dispatched or dispatched->>'status'<>'CANCELLED'
+   or (public.admin_followup_management_state(wo)->>'can_replace')<>'true'
+ then raise exception 'Cancellation CAS/replay or replacement eligibility failed';end if;
+ cancelled_run:=newrun;
+ denied:=false;
+ begin perform public.admin_cancel_untouched_followup(gen_random_uuid(),wo,
+   cancelled_run,jobtime,'Stale second cancel');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Repeat cancellation unexpectedly succeeded';end if;
+ select updated_at into jobtime from public.work_orders where id=wo;
+ action:=gen_random_uuid();
+ dispatched:=public.admin_replace_cancelled_followup(
+   action,wo,cancelled_run,jobtime,'Explicit replacement visit',
+   contractor,current_date,'Return to finish correction');
+ repeat:=public.admin_replace_cancelled_followup(
+   action,wo,cancelled_run,jobtime,'Explicit replacement visit',
+   contractor,current_date,'Return to finish correction');
+ newrun:=(dispatched->>'run_id')::uuid;
+ if repeat is distinct from dispatched or newrun=cancelled_run
+   or dispatched->>'run_sequence'<>'3'
+ then raise exception 'Explicit cancelled follow-up replacement/replay failed';end if;
+ execute 'reset role';
+ if (select field_status from public.work_order_runs where id=cancelled_run)<>'CANCELLED'
+  or (select field_status from public.work_order_runs where id=oldrun)<>'FIELD_COMPLETE'
+  or (select count(*) from private.correction_obligations o
+    where o.replacement_run_id=cancelled_run and o.status='SUPERSEDED'
+      and o.superseded_by=(select id from private.correction_obligations
+        where replacement_run_id=newrun and status='OPEN'))<>1
+  or (select count(*) from public.work_order_assignments
+      where run_id=newrun and assignment_ended_at is null)<>1
+ then raise exception 'Replacement overwrote cancelled run/old Finish or obligation';end if;
+ execute 'set local role authenticated';
  -- The original follow-up remains OPEN until a verified package delivery
  -- or explicit reviewed supersession. A second field Finish must not
  -- silently erase the earlier correction's new-photo obligations.
@@ -149,7 +196,7 @@ begin
  exception when serialization_failure then denied:=true;end;
  if not denied then raise exception 'Unresolved prior correction superseded without review';end if;
  execute 'reset role';
- if (select count(*) from public.work_order_runs where work_order_id=wo)<>2
+ if (select count(*) from public.work_order_runs where work_order_id=wo)<>3
  then raise exception 'Blocked supersession created extra run';end if;
  raise notice 'Phase 6C controlled server draft, preview and exact Dispatch PASS';
 end;$gate$;
