@@ -96,14 +96,14 @@ begin
   then raise exception 'Original named release goal cannot be relaxed' using errcode='22023';end if;
  end loop;
  if exists(select 1 from jsonb_array_elements(p_mapping) m
-   where jsonb_typeof(m)<>'object'
-     or (select count(*) from jsonb_object_keys(m))<>2
-     or not (m ? 'capture_item_id' and m ? 'release_item_id')
-     or jsonb_typeof(m->'capture_item_id')<>'string'
-     or jsonb_typeof(m->'release_item_id') not in ('string','null'))
+   where jsonb_typeof(m.value)<>'object'
+     or (select count(*) from jsonb_object_keys(m.value))<>2
+     or not (m.value ? 'capture_item_id' and m.value ? 'release_item_id')
+     or jsonb_typeof(m.value->'capture_item_id')<>'string'
+     or jsonb_typeof(m.value->'release_item_id') not in ('string','null'))
  then raise exception 'Invalid explicit correction item mapping' using errcode='22023';end if;
  if exists(select 1 from jsonb_array_elements(p_mapping) m
-    group by m->>'capture_item_id' having count(*)<>1)
+    group by m.value->>'capture_item_id' having count(*)<>1)
  then raise exception 'Duplicate capture item mapping' using errcode='22023';end if;
  for item in select value from jsonb_array_elements(p_capture->'items') loop
   select m.value into pair from jsonb_array_elements(p_mapping) m
