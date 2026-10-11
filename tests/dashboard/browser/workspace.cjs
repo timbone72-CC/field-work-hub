@@ -16,6 +16,18 @@ let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), 
 const templateRows=[];
 const optionalTemplate=()=>({schema:1,revision:uuid(9978),total:{enabled:false,minimum:0},items:[]});
 let templateSaves=[];
+const correctiveOriginalRun=uuid(9961),correctiveNewRun=uuid(9962);
+const correctionDraftRev=uuid(9963),correctionHash='c'.repeat(64);
+let correctionDraft=null,correctionPreviewCount=0,correctionDispatchCount=0;
+let correctionRequest=null;
+const correctionBase=()=>({
+  work_order_id:uuid(51),client_wo_number:'DEMO-0051',client_company_id:uuid(9981),
+  work_type:'Property inspection',origin_run_id:correctiveOriginalRun,
+  expected_wo_updated_at:'2026-10-11T20:00:00Z',kind:'INTERNAL_CORRECTION',
+  current_assignee:contractor,current_due_date:'2026-10-15',
+  release_requirements:{schema:1,revision:uuid(9965),
+    total:{enabled:false,minimum:0},items:[]}
+});
 const rows = Array.from({ length: 1000 }, (_, i) => ({ id: uuid(i + 1), organization_id: organization,
   assigned_user_id: contractor, pending_assignee_user_id: null, reassignment_requested_at: null,
   assignment_received_at: null, wo_number: `DEMO-${String(i + 1).padStart(4, '0')}`,
@@ -50,6 +62,52 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           description:payload.p_description,instructions:payload.p_instructions,
           requirements:payload.p_requirements,active:payload.p_active,is_default:payload.p_is_default};
         templateRows.push(saved);return reply(saved);
+      }
+      if (url.pathname.endsWith('/admin_correction_state')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        if (rows[50].field_status!=='FIELD_COMPLETE')return reply({message:'Not complete'},409);
+        return reply({...correctionBase(),draft:correctionDraft});
+      }
+      if (url.pathname.endsWith('/admin_save_correction_draft')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        assert.equal(p.p_expected_run,correctiveOriginalRun);
+        assert.equal(p.p_expected_wo_updated_at,'2026-10-11T20:00:00Z');
+        assert.equal(p.p_expected_revision,correctionDraft?.revision||null);
+        assert.equal(p.p_assigned_user,contractor);
+        assert.deepEqual(p.p_reference_photos,[reviewPhoto]);
+        assert.equal(p.p_item_mapping.length,1);
+        assert.equal(p.p_item_mapping[0].release_item_id,p.p_item_mapping[0].capture_item_id);
+        assert.equal(p.p_release_requirements.items.length,1);
+        correctionDraft={id:uuid(9964),revision:correctionDraftRev,status:'DRAFT',
+          origin_run_id:p.p_expected_run,expected_wo_updated_at:p.p_expected_wo_updated_at,
+          kind:'INTERNAL_CORRECTION',reason:p.p_reason,reference_photos:p.p_reference_photos,
+          assigned_user_id:p.p_assigned_user,due_date:p.p_due_date,
+          instructions:p.p_instructions,capture_requirements:p.p_capture_requirements,
+          item_mapping:p.p_item_mapping,release_requirements:p.p_release_requirements};
+        return reply({draft_id:correctionDraft.id,revision:correctionDraftRev,status:'DRAFT'});
+      }
+      if (url.pathname.endsWith('/admin_preview_correction_draft')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        assert.equal(p.p_revision,correctionDraftRev);
+        correctionPreviewCount++;
+        const d=correctionDraft;
+        return reply({draft_revision:d.revision,preview_sha256:correctionHash,
+          summary:{work_order_id:uuid(51),wo_number:'DEMO-0051',company_id:uuid(9981),
+            origin_run_id:d.origin_run_id,kind:d.kind,reason:d.reason,due_date:d.due_date,
+            assigned_user_id:d.assigned_user_id,instructions:d.instructions,
+            capture_requirements:d.capture_requirements,release_requirements:d.release_requirements,
+            reference_photos:d.reference_photos,item_mapping:d.item_mapping}});
+      }
+      if (url.pathname.endsWith('/admin_dispatch_correction_draft')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        assert.equal(p.p_revision,correctionDraftRev);
+        assert.equal(p.p_preview_sha256,correctionHash);
+        assert.equal(correctionPreviewCount,1);
+        correctionDispatchCount++;correctionRequest=p;
+        const row=rows[50];row.field_status='ASSIGNED';row.current_run_id=correctiveNewRun;
+        row.run={requirement_snapshot:correctionDraft.capture_requirements};
+        return reply({work_order_id:row.id,run_id:correctiveNewRun,
+          run_sequence:2,assignment_instance_id:uuid(9969),kind:'INTERNAL_CORRECTION',status:'ASSIGNED'});
       }
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
       if (url.pathname.endsWith('/admin_client_choices')) {
@@ -369,6 +427,48 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
     await page.locator('#cancel-edit').click();
     await page.locator('#job-discard').click();
+    // Phase 6C: the existing Photos section, not a parallel dashboard,
+    // hosts one saved, revisioned correction request. Preview does not dispatch.
+    rows[50].field_status='FIELD_COMPLETE';
+    rows[50].client_company_id=uuid(9981);
+    rows[50].current_run_id=correctiveOriginalRun;
+    rows[50].run={requirement_snapshot:optionalTemplate()};
+    await page.locator('.job-link').first().click();
+    await wait(page,()=>document.querySelector('dialog').open);
+    await page.locator('[data-job-tab="photos"]').click();
+    await wait(page,()=>!document.getElementById('correction-details').hidden);
+    await page.locator('#correction-details > summary').click();
+    await page.locator('#correction-reason').fill('Replace exterior evidence');
+    await page.locator('#correction-assignee').selectOption(contractor);
+    await page.locator('#correction-due').fill('2026-10-22');
+    await page.locator('#correction-instructions').fill('Reinspect the front');
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===1);
+    await page.locator('.private-review-photo').getByLabel('Reference in follow-up').check();
+    await page.locator('#correction-photo-requirements').getByText('Add photo item',{exact:true}).click();
+    await page.locator('#correction-photo-requirements').getByLabel('Photo item').fill('Corrected front');
+    await page.locator('#correction-photo-requirements').getByLabel('Photo item').dispatchEvent('change');
+    await page.locator('#correction-item-mapping select').selectOption('NEW');
+    assert.equal(await page.locator('#correction-preview').isDisabled(),true);
+    await page.locator('#correction-save').click();
+    await wait(page,()=>document.getElementById('correction-status').textContent.includes('Draft saved'));
+    assert.equal(correctionPreviewCount,0);
+    assert.equal(correctionDispatchCount,0);
+    await page.locator('#correction-preview').click();
+    await wait(page,()=>!document.getElementById('correction-summary').hidden);
+    assert.match(await page.locator('#correction-summary').innerText(),/DEMO-0051/);
+    assert.match(await page.locator('#correction-summary').innerText(),/New visit photos/);
+    assert.equal(correctionPreviewCount,1);
+    assert.equal(correctionDispatchCount,0);
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
+      page.locator('#correction-dispatch').click()
+    ]);
+    await wait(page,()=>correctionDispatchCount===1);
+    await wait(page,()=>rows[50].current_run_id===correctiveNewRun);
+    assert.equal(correctionRequest.p_revision,correctionDraftRev);
+    assert.equal(rows[50].wo_number,'DEMO-0051');
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
+    await page.locator('#cancel-edit').click();
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');
