@@ -21,6 +21,9 @@ function rig({oauthFail=false,wrongAccount=false,noWrite=false}={}){
  const ledger={
    claim:async()=>{events.push('claim');return claim;},
    heartbeat:async()=>{events.push('heartbeat');},
+   readParent:async()=>{events.push('readParent');return {exists:false,kind:'ADDRESS'};},
+   reserveParent:async(_pkg,_worker,_gen,kind,id,parent)=>{
+     events.push('reserveParent');return {kind,remote_folder_id:id,parent_remote_id:parent,state:'RESERVED'};},
    reserve:async()=>{events.push('reserve');}
  };
  const fetcher=async(url,opts)=>{
@@ -34,8 +37,7 @@ function rig({oauthFail=false,wrongAccount=false,noWrite=false}={}){
     id:rootId,mimeType:'application/vnd.google-apps.folder',
     driveId,trashed:false,capabilities:{canAddChildren:!noWrite}});
    if(u.pathname==='/drive/v3/files/generateIds')return Response.json({
-    ids:['generated_'+'a'.repeat(20),'generated_'+'b'.repeat(20),
-      'generated_'+'c'.repeat(20)]});
+    ids:['generated_'+'a'.repeat(20)]});
    throw Error('Unexpected network call '+u.pathname);
  };
  return {events,tokenProvider,ledger,fetcher};
@@ -55,13 +57,15 @@ test('wrong Workspace identity or unwritable destination never allocates or uplo
   assert.equal(r.events.includes('reserve'),false);
  }
 });
-test('valid OAuth identity reserves all IDs and never creates or uploads files',async()=>{
+test('valid OAuth reserves ADDRESS parent only until real folder verification',async()=>{
  const r=rig();
  const data=await prepareTrustedDelivery({...args,...r});
  assert.deepEqual(data,{claimed:true,package_id:uuid(3),generation:1,
-  reserved_count:3,ready_for_provider_reconciliation:true,provider_writes_performed:false});
+  reserved_count:1,next_parent_kind:'ADDRESS',
+  ready_for_provider_reconciliation:true,provider_writes_performed:false});
  assert.deepEqual(r.events,['oauth','claim','/drive/v3/about','/drive/v3/files/'+rootId,
-  'heartbeat','/drive/v3/files/generateIds','reserve','heartbeat','reserve',
-  'heartbeat','reserve']);
+  'heartbeat','readParent','heartbeat','/drive/v3/files/generateIds',
+  'heartbeat','reserveParent']);
+ assert.equal(r.events.includes('reserve'),false);
  assert.equal(JSON.stringify(data).includes('private-token'),false);
 });
