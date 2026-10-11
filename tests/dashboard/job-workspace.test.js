@@ -129,6 +129,7 @@ test('Phase 6A address links use existing unsaved-change navigation and current-
  assert.match(workspace,/JobAddressContext\.siblings\(workOrderRows,selectedRow\)/);
  assert.match(workspace,/button\.addEventListener\('click',\(\)=>choose\(item\.id\)\)/);
  assert.match(workspace,/list\.replaceChildren\(\)/);
- assert.doesNotMatch(workspace,/function addressContext\(\)[\s\S]*?function navigation\(\)/g,
-  /fetch\(/);
+ const addressContext=workspace.split('function addressContext() {')[1]?.split('function navigation() {')[0];
+ assert.ok(addressContext);
+ assert.doesNotMatch(addressContext,/fetch\\(/);
 });
