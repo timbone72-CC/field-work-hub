@@ -43,7 +43,7 @@ export async function continueTrustedDeliveryFile({
   expectedEmail, expectedDriveId, projectUrl, serviceRoleJwt, fetcher=fetch,
   vault
 }={}){
-  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   if(!UUID.test(workerId??'')||!UUID.test(packageId??'')||!UUID.test(planId??'')
     ||!Number.isSafeInteger(generation)||generation<1
     ||typeof tokenProvider!=='function'||typeof ledger?.forLease!=='function'
