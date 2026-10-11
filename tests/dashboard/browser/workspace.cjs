@@ -281,12 +281,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // work type, instructions, or photo minimums. Replacing a draft is explicit.
     await page.locator('.job-link').first().click();
     await wait(page, () => document.querySelector('dialog').open);
-    page.once('dialog', dialog => dialog.dismiss());
-    await page.locator('#prepare-custom-work').click();
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog => dialog.dismiss()),
+      page.locator('#prepare-custom-work').click()
+    ]);
     assert.equal(await page.locator('#work-type').inputValue(),rows[50].work_type,
       'Cancelled replacement must preserve the existing repeat draft');
-    page.once('dialog', dialog => dialog.accept());
-    await page.locator('#prepare-custom-work').click();
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog => dialog.accept()),
+      page.locator('#prepare-custom-work').click()
+    ]);
     await wait(page, () => document.querySelector('#create-status').textContent.includes('New custom work-order draft'));
     assert.equal(await page.locator('#property-address').inputValue(),rows[50].property_address);
     assert.equal(await page.locator('#work-type').inputValue(),'');
