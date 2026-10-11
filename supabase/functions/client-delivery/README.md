@@ -14,6 +14,7 @@
 | Backend | `drive-client.mjs` | OAuth identity, exact writable client destination, generated file IDs, resumable status/chunk, exact independent Drive SHA-256 GET | Live Google GET/PUT |
 | Backend | `worker-runtime.mjs` + `worker-core.mjs` | Existing protected preflight reserves immutable identities; new **internal-only** `continueTrustedDeliveryFile` checks refreshed Workspace account and exact authorized package folder, reads the current fenced server plan, and composes the same `upload-one.mjs` + private-source reader (not exposed by Edge) | Real provider/Storage bytes, live authorization and deployed file-worker invocation |
 | Backend | `upload-one.mjs` | One 256-KiB protected chunk per call; encrypted session saved before bytes; independent offset/GET verification | Hosted protected source-byte implementation |
+| Backend | `folder-one.mjs` | Source-only one-attempt package folder reconciliation: preallocated Drive ID, lease, one-shot journal interface, trusted WO parent and exact GET | Missing durable WO/address folder maps and service RPCs; real Google creation untested |
 | Backend | `private-source.mjs` | Revalidates current lease-bound private catalog projection both before and after each strict 256 KiB Storage GET/206 range; exact object, SHA/size-bound JSON manifest and fixed origin | Live Storage Range/206 behavior and deployed provider credentials |
 | Backend | `service-ledger.mjs` | Fixed Supabase service-only RPC allowlist; fail-closed ambiguous results | End-to-end production worker authorization |
 | Backend | `handler.mjs` + `index.ts` | Dedicated worker-secret-only **preallocation** route; default OFF regardless of valid caller; no CORS; errors redacted | Authorized deployed worker, real uploads, scheduler, released customer destination |
@@ -43,3 +44,9 @@ The trusted SQL source projection now names each selected JPEG `field-photo-<per
 - All package SQL/Edge sources are candidate-only: production Team migrations and actual Drive writes are not implied by CI PASS.
 
 **Testing:** `tests/supabase/phase_5_private_review_gate.sql` and `tests/functions/client-delivery-*.test.mjs` are disposable, non-network tests in the existing database/dashboard CI. CI success is not a live-photo, phone or Workspace-provider PASS.
+
+### One-shot package folder recovery (source only)
+
+The new `folder-one.mjs` accepts only a trusted server-frozen package folder below a verified WORK_ORDER folder. It enforces immutable package UUID, preallocated ID/parent/name, manifest binding, current lease and expected client Shared Drive. Its ledger interface requires an atomic server `beginFolderCreate` transition to ATTEMPTED **before** the first external POST. On any ambiguous POST or restarted attempt, it can only GET/verify the original ID; no replacement ID or blind second create is allowed. An independent authenticated Drive GET checks exact name, ID, parent, MIME and appProperties before a durable confirmation.
+
+**Important:** The server's `getFolderPlan`, `beginFolderCreate`, `confirmFolder` and durable root/address/WO folder maps are **not yet implemented**. This helper is not exposed by the disabled Edge worker or invoked by the current `worker-runtime.mjs`. The existing direct-root folder preallocation cannot be used to bypass the hierarchy. The tests are synthetic, not evidence of real Google folder creation or deletion.
