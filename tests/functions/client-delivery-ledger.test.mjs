@@ -82,6 +82,32 @@ test('scoped address and WO folder lookups retain server-only current-lease argu
  assert.equal(present.p_remote_id,'generated-folder-0001');
  assert.equal(present.p_parent_id,'root-folder-0001');
 });
+test('package folder uses current fenced lease for one-shot get/begin/confirm',async()=>{
+ const pkg=uuid(1),worker=uuid(2),plan=uuid(3),generation=7;
+ const {ledger,calls}=mock(()=>Response.json({state:'PREALLOCATED'}));
+ const scoped=ledger.forLease(pkg,worker,generation);
+ await scoped.getFolderPlan(plan);
+ await scoped.beginFolderCreate(plan);
+ await scoped.confirmFolder({package_id:pkg,plan_id:plan},worker,generation,{
+   id:'folder_immutable_12345',parent:'wo_immutable_123456',
+   name:'package-'+pkg,mime:'application/vnd.google-apps.folder',
+   drive_id:'client_drive_001',trashed:false,
+   appProperties:{fwh_package:pkg,fwh_manifest:'a'.repeat(64)},
+   sha256:null,size:null
+ });
+ assert.deepEqual(calls.map(x=>new URL(x.url).pathname.split('/').pop()),[
+   'service_get_delivery_folder_plan','service_begin_delivery_folder_create',
+   'service_confirm_delivery_folder']);
+ for(const call of calls){
+   const body=JSON.parse(call.options.body);
+   assert.equal(body.p_package,pkg);
+   assert.equal(body.p_worker,worker);
+   assert.equal(body.p_generation,generation);
+   assert.equal(body.p_plan,plan);
+   assert.equal(call.options.headers.Authorization,'Bearer '+token);
+ }
+ assert.equal(JSON.parse(calls[2].options.body).p_proof.drive_id,'client_drive_001');
+});
 test('unauthorized and ambiguous backend failures never reveal service secrets or claim delivery',async()=>{
  for(const status of [401,403,503]){
   const {ledger}=mock(()=>Response.json({secret:'not to show'}, {status}));
