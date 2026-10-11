@@ -58,6 +58,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports.JobOperation
 const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
+  let returnFocusId = null;
   const el = id => document.getElementById(id);
   const JOB_VIEW_STORAGE_KEY = () => `fwh.jobView.${account}`;
   function ensureAccount(user) {
@@ -96,7 +97,8 @@ const JobWorkspace = (() => {
   function reset() {
     PrivateReview.reset(); ClientRelease.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
-    state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address' };
+    returnFocusId = null;
+    state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
   }
   function request() { return { ...state, revision }; }
   function accept(page) {
@@ -134,6 +136,7 @@ const JobWorkspace = (() => {
     pending = action; el('job-unsaved').hidden = false; el('job-stay').focus();
   }
   async function choose(id) {
+    if (!selectedRow) returnFocusId=id;
     guard(() => load(id));
   }
   async function load(id) {
@@ -191,6 +194,13 @@ const JobWorkspace = (() => {
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     el('job-unsaved').hidden = true;
     if (editSection.open) editSection.close();
+    const id=returnFocusId;
+    returnFocusId=null;
+    if (id) {
+      const button=[...document.querySelectorAll('[data-job-open-id]')].find(node=>node.dataset.jobOpenId===id);
+      if (button && button.isConnected) button.focus();
+      else el('job-search').focus();
+    }
   }
   function saved() { baseline = fingerprint(); needsReload = true; el('job-reload').hidden = false; }
   async function reconcileSaved(id) {
