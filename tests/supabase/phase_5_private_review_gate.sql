@@ -56,6 +56,7 @@ declare
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
   address_map uuid; wo_map uuid; address_name text; wo_name text; address_proof jsonb; wo_proof jsonb;
+  folder_plan uuid; folder_proof jsonb; folder_plan_projection jsonb;
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
   trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
@@ -319,6 +320,38 @@ begin
     pkg_id,delivery_worker,delivery_gen,'FOLDER',folder_id,'DISPOSABLE-ONLY'));
   perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
     'FOLDER',null,folder_id,wo_folder_id);
+  select id into folder_plan from private.client_delivery_file_plans
+     where package_id=pkg_id and kind='FOLDER' and photo_id is null;
+  folder_plan_projection:=public.service_get_delivery_folder_plan(
+     pkg_id,delivery_worker,delivery_gen,folder_plan);
+  if folder_plan_projection->>'plan_id'<>folder_plan::text
+     or folder_plan_projection->>'parent_id'<>wo_folder_id
+     or folder_plan_projection->>'parent_kind'<>'WORK_ORDER'
+     or folder_plan_projection->>'name'<>'package-'||pkg_id::text
+     or folder_plan_projection->>'state'<>'PREALLOCATED' then
+     raise exception 'Untrusted package folder plan projection';end if;
+  folder_proof:=jsonb_build_object('id',folder_id,'parent',wo_folder_id,
+     'name','package-'||pkg_id::text,
+     'mime','application/vnd.google-apps.folder','trashed',false,
+     'drive_id','client-drive-fixture','sha256',null,'size',null,
+     'appProperties',jsonb_build_object('fwh_package',pkg_id::text,
+       'fwh_manifest',pkg_preview->>'manifest_sha256'));
+  perform pg_temp.expect_photo_review_error('42501',format(
+     'select public.service_confirm_delivery_folder(%L,%L,%s,%L,%L::jsonb)',
+     pkg_id,delivery_worker,delivery_gen,folder_plan,folder_proof::text));
+  if public.service_begin_delivery_folder_create(
+       pkg_id,delivery_worker,delivery_gen,folder_plan)->>'state'<>'MAY_CREATE' then
+       raise exception 'First package create journal not durable';end if;
+  if public.service_begin_delivery_folder_create(
+       pkg_id,delivery_worker,delivery_gen,folder_plan)->>'state'<>'VERIFY_EXISTING' then
+       raise exception 'Repeated package create offered duplicate remote POST';end if;
+  if public.service_get_delivery_folder_plan(
+       pkg_id,delivery_worker,delivery_gen,folder_plan)->>'state'<>'ATTEMPTED' then
+       raise exception 'Previously attempted package folder not persisted';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+     'select public.service_confirm_delivery_folder(%L,%L,%s,%L,%L::jsonb)',
+     pkg_id,delivery_worker,delivery_gen,folder_plan,
+     (folder_proof||jsonb_build_object('drive_id','foreign-drive'))::text));
   perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
     'PHOTO',photo,photo_file_id,folder_id);
   perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
@@ -383,6 +416,17 @@ begin
   perform public.service_confirm_delivery_file(pkg_id,delivery_worker,delivery_gen,
     'MANIFEST',null,manifest_file_id,folder_id,'application/json',
     pkg_preview->>'manifest_sha256',frozen_size);
+  -- File metadata alone cannot complete delivery without the original
+  -- journaled package-folder attempt + independent exact Drive GET.
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_finish_delivery(%L,%L,%s)',
+    pkg_id,delivery_worker,delivery_gen));
+  if public.service_confirm_delivery_folder(pkg_id,delivery_worker,delivery_gen,
+     folder_plan,folder_proof)->>'state'<>'VERIFIED' then
+    raise exception 'Exact package folder receipt did not persist';end if;
+  if public.service_confirm_delivery_folder(pkg_id,delivery_worker,delivery_gen,
+     folder_plan,folder_proof)->>'replayed'<>'true' then
+    raise exception 'Same package folder receipt not idempotent';end if;
   delivery_done:=public.service_finish_delivery(pkg_id,delivery_worker,delivery_gen);
   if delivery_done->>'status'<>'DELIVERED'
     or (select count(*) from private.client_delivery_final_receipts where package_id=pkg_id)<>1
