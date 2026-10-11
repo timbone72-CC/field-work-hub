@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase;
 
 @Database(
         entities = {CachedWorkOrder.class, FieldAction.class, ProtectedPhoto.class, PhotoTransfer.class},
-        version = 4,
+        version = 5,
         exportSchema = true)
 abstract class TeamDatabase extends RoomDatabase {
     static final androidx.room.migration.Migration MIGRATION_1_2 =
@@ -62,6 +62,13 @@ abstract class TeamDatabase extends RoomDatabase {
                     db.execSQL("CREATE INDEX IF NOT EXISTS index_photo_transfers_finishActionId ON photo_transfers(finishActionId)");
                 }
             };
+    static final androidx.room.migration.Migration MIGRATION_4_5 =
+            new androidx.room.migration.Migration(4, 5) {
+                @Override public void migrate(androidx.sqlite.db.SupportSQLiteDatabase db) {
+                    db.execSQL("ALTER TABLE cached_work_orders ADD COLUMN acknowledgment_received_at TEXT NOT NULL DEFAULT ''");
+                    db.execSQL("ALTER TABLE cached_work_orders ADD COLUMN reopen_reason TEXT NOT NULL DEFAULT ''");
+                }
+            };
     private static volatile TeamDatabase instance;
 
     abstract CachedWorkOrderDao cachedWorkOrderDao();
@@ -80,7 +87,7 @@ abstract class TeamDatabase extends RoomDatabase {
                                         context.getApplicationContext(),
                                         TeamDatabase.class,
                                         "field-photo-prep-team.db")
-                                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                                 .build();
                 instance = current;
             }
