@@ -88,6 +88,9 @@ final class SupabaseApi
         String conflictReason = "";
         String pendingKind = "";
         String requirementSnapshotJson = "{}";
+        String acknowledgmentReceivedAt = "";
+        String acknowledgedAt = "";
+        String reopenReason = "";
 
         WorkOrder(
                 String id,
@@ -222,6 +225,9 @@ final class SupabaseApi
                             nullableString(row, "field_completed_at"),
                             nullableString(row, "updated_at"));
             workOrder.assignmentInstanceId = nullableString(row, "assignment_instance_id");
+            workOrder.acknowledgmentReceivedAt = nullableString(row, "acknowledgment_received_at");
+            workOrder.acknowledgedAt = nullableString(row, "acknowledged_at");
+            workOrder.reopenReason = nullableString(row, "reopen_reason");
             workOrder.requirementSnapshotJson = row.has("requirement_snapshot") ? row.getJSONObject("requirement_snapshot").toString() : "{}";
             workOrders.add(workOrder);
         }
@@ -246,6 +252,16 @@ final class SupabaseApi
 
     @Override
     public FieldActionResult submit(String accessToken, FieldAction action) throws Exception {
+        if ("ACK".equals(action.kind)) {
+            JSONObject ack = new JSONObject();
+            ack.put("p_action_id", action.actionId);
+            ack.put("p_work_order_id", action.workOrderId);
+            ack.put("p_run_id", action.runId);
+            ack.put("p_assignment_instance_id", action.assignmentInstanceId);
+            ack.put("p_event_time", action.eventTime);
+            return new FieldActionResult(action,
+                    postRpc(accessToken, "acknowledge_assignment_acceptance", ack));
+        }
         JSONObject request = new JSONObject();
         request.put("p_action_id", action.actionId);
         request.put("p_work_order_id", action.workOrderId);
