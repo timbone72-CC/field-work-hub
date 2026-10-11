@@ -125,11 +125,31 @@ test('Phase 6A address links use existing unsaved-change navigation and current-
  const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
  const workspace=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
  assert.match(html,/id="job-address-work-orders"/);
- assert.match(html,/on the current page/);
- assert.match(workspace,/JobAddressContext\.siblings\(workOrderRows,selectedRow\)/);
+ assert.match(html,/loaded in pages of 50/);
+ assert.match(workspace,/JobAddressContext\.siblings\(addressRows,selectedRow\)/);
  assert.match(workspace,/button\.addEventListener\('click',\(\)=>choose\(item\.id\)\)/);
  assert.match(workspace,/list\.replaceChildren\(\)/);
  const addressContext=workspace.split('function addressContext() {')[1]?.split('function navigation() {')[0];
  assert.ok(addressContext);
  assert.equal(addressContext.includes('fetch('),false);
+});
+
+test('Phase 6A exact-address server lookup stays bounded, scoped and race fenced',()=>{
+ const appText=fs.readFileSync(require.resolve('../../dashboard/app.js'),'utf8');
+ const work=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
+ const fn=appText.split('async function fetchAddressWorkOrders(')[1]?.split('async function fetchWorkOrder(')[0];
+ assert.ok(fn);
+ for(const required of ["organization_id:'eq.'+row.organization_id","client_company_id:'eq.'+row.client_company_id",
+   "property_address:'eq.'+address","limit:'50'","offset:String(offset)","Prefer:'count=exact'",
+   "verifyAdminRls(rows,row.organization_id)","item.client_company_id!==row.client_company_id",
+   "item.property_address!==row.property_address"])
+   assert.ok(fn.includes(required),required);
+ const loader=work.split('async function loadAddressContext(')[1]?.split('function navigation()')[0];
+ assert.ok(loader);
+ assert.match(loader,/epoch!==addressLookupEpoch/);
+ assert.match(loader,/selectedRow\?\.id!==row\.id/);
+ assert.match(work,/addressLookupEpoch\+\+/);
+ assert.match(html,/id="job-address-next"/);
+ assert.match(html,/id="job-address-previous"/);
 });
