@@ -548,4 +548,60 @@ begin
   raise notice 'Geographic approved-manifest company/destination/key gate PASS';
 end;
 $geo_manifest_gate$;
+-- Client layout configuration is scoped, revisioned, idempotent and never
+-- permits a contractor or foreign company to change a destination.
+do $folder_layout$
+declare
+ d private.client_delivery_destinations%rowtype;
+ owner_id uuid; contractor_id uuid; action uuid:=gen_random_uuid();
+ first jsonb; again jsonb; latest jsonb; destinations jsonb; failed boolean;
+begin
+ select * into d from private.client_delivery_destinations
+  where verified and active limit 1;
+ select m.user_id into owner_id from private.admin_team_memberships m
+  where m.organization_id=d.organization_id and m.active limit 1;
+ select a.user_id into contractor_id from private.account_work_access a
+  where a.organization_id=d.organization_id and a.work_role='CONTRACTOR' limit 1;
+ if d.id is null or owner_id is null or contractor_id is null then
+  raise exception 'Missing disposable layout authority fixture';end if;
+ update private.account_work_access set active=true,suspension_authority=null,
+  disabled_at=null where user_id=owner_id;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,
+  'session_id',owner_id,'app_metadata',jsonb_build_object(
+    'role','ADMIN','organization_id',d.organization_id))::text,true);
+ execute 'set local role authenticated';
+ destinations:=public.admin_list_client_folder_destinations();
+ if not exists(select 1 from jsonb_array_elements(destinations->'destinations') e
+     where e->>'destination_id'=d.id::text)
+ then raise exception 'Authorized client folder destination hidden';end if;
+ first:=public.admin_set_client_folder_layout(action,d.id,null,'ADDRESS_WORK_ORDER');
+ again:=public.admin_set_client_folder_layout(action,d.id,null,'ADDRESS_WORK_ORDER');
+ if first->>'layout'<>'ADDRESS_WORK_ORDER' or again->>'replayed'<>'true'
+  or first->>'revision'<>again->>'revision'
+ then raise exception 'Folder config replay or revision changed';end if;
+ perform pg_temp.expect_photo_review_error('40001',format(
+   'select public.admin_set_client_folder_layout(%L,%L,null,%L)',
+   gen_random_uuid(),d.id,'STATE_COUNTY_CITY_ADDRESS'));
+ latest:=public.admin_set_client_folder_layout(gen_random_uuid(),d.id,
+  (first->>'revision')::uuid,'STATE_COUNTY_CITY_ADDRESS');
+ if latest->>'revision'=first->>'revision'
+  or (public.admin_get_client_folder_layout(d.id))->>'layout'<>'STATE_COUNTY_CITY_ADDRESS'
+ then raise exception 'Revisioned Admin layout preference not saved';end if;
+ execute 'reset role';
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor_id,
+  'session_id',contractor_id,'app_metadata',jsonb_build_object(
+    'role','CONTRACTOR','organization_id',d.organization_id))::text,true);
+ execute 'set local role authenticated';
+ perform pg_temp.expect_photo_review_error('42501',format(
+  'select public.admin_set_client_folder_layout(%L,%L,%L,%L)',
+  gen_random_uuid(),d.id,latest->>'revision','ADDRESS_WORK_ORDER'));
+ perform pg_temp.expect_photo_review_error('42501',format(
+  'select public.admin_get_client_folder_layout(%L)',d.id));
+ execute 'reset role';
+ if has_table_privilege('authenticated','private.client_delivery_folder_layouts','update')
+  or has_table_privilege('authenticated','private.client_delivery_folder_layout_actions','select')
+ then raise exception 'Direct client layout table access became available';end if;
+ raise notice 'Admin layout scope, revision, replay, contractor denial PASS';
+end;
+$folder_layout$;
 rollback;
