@@ -36,7 +36,7 @@ const JobOperationalFacts = {
       case 'ASSIGNED':
         if (!row.assigned_user_id) return {label:'Needs assignment',next:'Assign',panel:'assignment'};
         return row.assignment_received_at
-          ? {label:'Assignment delivered',next:'View acknowledgment',panel:'assignment'}
+          ? {label:'Assignment downloaded — human Accept not established',next:'View assignment',panel:'assignment'}
           : {label:'Awaiting delivery receipt',next:'View assignment',panel:'assignment'};
       case 'IN_PROGRESS': return {label:'In progress',next:'Open details',panel:'details'};
       case 'FIELD_COMPLETE': return {label:'Field complete — review and delivery status not loaded',
