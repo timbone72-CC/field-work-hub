@@ -108,4 +108,42 @@ begin
  raise notice 'Phase 6B same-WO correction and isolated new-run PASS';
 end;
 $gate$;
+-- Explicit UUID release-goal mapping: never infer by labels or let follow-up
+-- capture requirements relax the original client's required photo coverage.
+do $mapping$
+declare
+ item uuid:=gen_random_uuid(); other uuid:=gen_random_uuid(); prior jsonb;
+ capture jsonb; map jsonb; fail boolean;
+begin
+ prior:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+   'total',jsonb_build_object('enabled',true,'minimum',2),
+   'items',jsonb_build_array(jsonb_build_object('id',item,
+    'label','Front','enabled',true,'minimum',2,'instruction','',
+    'stage','BEFORE','framing','WIDE','order',0)));
+ capture:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+   'total',jsonb_build_object('enabled',true,'minimum',1),
+   'items',jsonb_build_array(jsonb_build_object('id',item,
+    'label','Front','enabled',true,'minimum',1,'instruction','',
+    'stage','AFTER','framing','WIDE','order',0)));
+ map:=jsonb_build_array(jsonb_build_object('capture_item_id',item,
+    'release_item_id',item));
+ perform private.validate_correction_mapping(capture,prior,prior,map);
+ fail:=false;
+ begin perform private.validate_correction_mapping(capture,prior,
+    jsonb_set(prior,'{total,minimum}','1'::jsonb),map);
+ exception when invalid_parameter_value then fail:=true;end;
+ if not fail then raise exception 'Original client release total was relaxed';end if;
+ fail:=false;
+ begin perform private.validate_correction_mapping(capture,prior,prior,
+   jsonb_build_array(jsonb_build_object('capture_item_id',item,
+    'release_item_id',other)));
+ exception when invalid_parameter_value then fail:=true;end;
+ if not fail then raise exception 'Unknown text/UUID release mapping accepted';end if;
+ fail:=false;
+ begin perform private.validate_correction_mapping(capture,prior,prior,
+   map||map);
+ exception when invalid_parameter_value then fail:=true;end;
+ if not fail then raise exception 'Duplicate mapping accepted';end if;
+ raise notice 'Phase 6 explicit release UUID mapping and non-relaxable baseline PASS';
+end;$mapping$;
 rollback;
