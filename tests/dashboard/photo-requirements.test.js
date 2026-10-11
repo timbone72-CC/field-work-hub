@@ -32,15 +32,15 @@ test('Phase 6B suggestions include only active matching work-type templates, def
   {id:'x',name:'Other',active:true,work_type:'Grass Cut',is_default:true},
   {id:'h',name:'Archived',active:false,work_type:'Inspection',is_default:false}
  ];
- assert.deepEqual(PhotoRules.suggestions(entries,'INSPECTION').map(t=>t.id),['a','z']);
- assert.deepEqual(PhotoRules.suggestions(entries,''),[]);
+ assert.deepEqual(rules.suggestions(entries,'INSPECTION').map(t=>t.id),['a','z']);
+ assert.deepEqual(rules.suggestions(entries,''),[]);
 });
 test('Phase 6B prior requirements are cloned with fresh revision, never mutating original',()=>{
- const original=PhotoRules.empty();
+ const original=rules.empty();
  const before=structuredClone(original);
- const newer=PhotoRules.copyPriorSnapshot(original);
+ const newer=rules.copyPriorSnapshot(original);
  assert.notEqual(newer.revision,original.revision);
  assert.deepEqual(original,before);
  assert.deepEqual(newer.items,original.items);
- assert.throws(()=>PhotoRules.copyPriorSnapshot({}),/requirements|total|supported/i);
+ assert.throws(()=>rules.copyPriorSnapshot({}),/requirements|total|supported/i);
 });
