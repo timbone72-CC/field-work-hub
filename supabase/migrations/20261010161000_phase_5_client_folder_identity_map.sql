@@ -244,7 +244,11 @@ begin
       using errcode='42501';end if;
   return jsonb_build_object('exists',true,'map_id',existing.id,'kind',existing.kind,
     'remote_folder_id',existing.remote_folder_id,'parent_remote_id',existing.parent_remote_id,
-    'remote_name',existing.remote_name,'state',existing.state);
+    'remote_name',existing.remote_name,'state',existing.state,
+    'appProperties',jsonb_build_object('fwh_org',existing.organization_id::text,
+      'fwh_company',existing.company_id::text,
+      'fwh_destination',existing.destination_id::text,
+      'fwh_kind',existing.kind,'fwh_key',existing.folder_key));
 end;
 $read$;
 create function public.service_read_delivery_parent(
