@@ -17,8 +17,20 @@ function fixedObject({id,parent,name,mime,appProperties}) {
   if(typeof name!=='string'||name.length<1||name.length>160||name.includes('/')||/[\\\x00-\x1f]/.test(name))
     throw new DriveUncertain('INVALID_REMOTE_NAME');
   if(!MIME.has(mime))throw new DriveUncertain('MIME_NOT_ALLOWED');
-  if(!appProperties||typeof appProperties!=='object'||Array.isArray(appProperties)
-    ||!ID.test(appProperties.fwh_package??'')||!HASH.test(appProperties.fwh_manifest??''))
+  if(!appProperties||typeof appProperties!=='object'||Array.isArray(appProperties))
+    throw new DriveUncertain('EXACT_APP_PROPERTIES_REQUIRED');
+  const keys=Object.keys(appProperties).sort().join(',');
+  const packageKeys=['fwh_package','fwh_manifest'].sort().join(',');
+  const parentKeys=['fwh_org','fwh_company','fwh_destination','fwh_kind','fwh_key'].sort().join(',');
+  const packageIdentity=keys===packageKeys
+    && ID.test(appProperties.fwh_package??'') && HASH.test(appProperties.fwh_manifest??'');
+  const parentIdentity=mime==='application/vnd.google-apps.folder' && keys===parentKeys
+    && /^[0-9a-f-]{36}$/i.test(appProperties.fwh_org??'')
+    && /^[0-9a-f-]{36}$/i.test(appProperties.fwh_company??'')
+    && /^[0-9a-f-]{36}$/i.test(appProperties.fwh_destination??'')
+    && ['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER'].includes(appProperties.fwh_kind)
+    && /^(?:[a-f0-9]{64}|[0-9a-f-]{36})$/i.test(appProperties.fwh_key??'');
+  if(!packageIdentity&&!parentIdentity)
     throw new DriveUncertain('EXACT_APP_PROPERTIES_REQUIRED');
   return {id,name,mimeType:mime,parents:[parent],appProperties};
 }
