@@ -116,6 +116,37 @@ begin
  if has_table_privilege('authenticated','private.admin_correction_drafts','UPDATE')
   or has_function_privilege('anon','public.admin_dispatch_correction_draft(uuid,uuid,uuid,text)','EXECUTE')
  then raise exception 'Broad correction draft authority exposed';end if;
+ -- The original follow-up remains OPEN until a verified package delivery
+ -- or explicit reviewed supersession. A second field Finish must not
+ -- silently erase the earlier correction's new-photo obligations.
+ select id into oldinstance from public.work_order_assignments
+   where run_id=newrun and assignment_ended_at is null;
+ select (requirement_snapshot->>'revision')::uuid into runrev
+   from public.work_order_runs where id=newrun;
+ perform set_config('request.jwt.claims',workerjwt,true);
+ execute 'set local role authenticated';
+ if public.accept_field_action_v4(gen_random_uuid(),wo,newrun,oldinstance,
+   'START',start_time,runrev,null,'')->>'outcome'<>'APPLIED'
+ then raise exception 'Follow-up Start fixture failed';end if;
+ finish_id:=gen_random_uuid();
+ if public.register_photo_finish_set(finish_id,wo,newrun,oldinstance,runrev,
+   '[]'::jsonb,digest,'[]')->>'outcome'<>'APPLIED'
+ then raise exception 'Follow-up Finish-set fixture failed';end if;
+ if public.accept_field_action_v4(gen_random_uuid(),wo,newrun,oldinstance,
+   'COMPLETE',finish_time,runrev,finish_id,digest)->>'outcome'<>'APPLIED'
+ then raise exception 'Follow-up Finish fixture failed';end if;
+ execute 'reset role';
+ perform set_config('request.jwt.claims',adminjwt,true);execute 'set local role authenticated';
+ select updated_at into jobtime from public.work_orders where id=wo;
+ denied:=false;
+ begin perform public.admin_create_followup(gen_random_uuid(),wo,newrun,jobtime,
+   'INTERNAL_CORRECTION','Silently replace unfinished correction',array[]::uuid[],
+   contractor,current_date,'Wrong replacement',config,map,config);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Unresolved prior correction superseded without review';end if;
+ execute 'reset role';
+ if (select count(*) from public.work_order_runs where work_order_id=wo)<>2
+ then raise exception 'Blocked supersession created extra run';end if;
  raise notice 'Phase 6C controlled server draft, preview and exact Dispatch PASS';
 end;$gate$;
 rollback;
