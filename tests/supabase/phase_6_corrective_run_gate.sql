@@ -76,6 +76,9 @@ begin
  or (select count(*) from public.field_actions where work_order_id=wo and run_id=oldrun
    and action_kind='COMPLETE')<>1
  or (select count(*) from private.correction_obligations where work_order_id=wo)<>1
+ or (select release_requirements from private.correction_obligations
+       where replacement_run_id=newrun) is distinct from
+      (select release_requirement_snapshot from public.work_orders where id=wo)
  or (select count(*) from public.work_order_assignments where id=newinstance
    and assignment_received_at is null and acknowledgment_received_at is null)<>1
  then raise exception 'Correction identity/history/new fresh assignment mismatch';end if;
