@@ -124,6 +124,22 @@ test('first package folder create requires journal begin, then independent GET',
  const a=r.events.indexOf('begin'),p=r.events.indexOf('POST'),v=r.events.indexOf('confirm');
  assert.ok(a>=0&&p>a&&v>p);
 });
+test('racing recorded folder attempt verifies original ID without repeating POST',async()=>{
+ const r=folderRig('PREALLOCATED');
+ const original=r.input.ledger.forLease;
+ r.input.ledger.forLease=(...args)=>{
+  const scoped=original(...args);
+  return {...scoped,beginFolderCreate:async()=>{
+   r.events.push('begin');
+   return {state:'VERIFY_EXISTING',plan_id:uuid(9),file_id:folderId,parent_id:woId};
+  }};
+ };
+ const result=await continueTrustedPackageFolder(r.input);
+ assert.equal(result.state,'FOLDER_VERIFIED');
+ assert.equal(r.events.includes('begin'),true);
+ assert.equal(r.events.includes('POST'),false);
+ assert.equal(r.events.includes('confirm'),true);
+});
 test('wrong current OAuth identity refuses folder write before lease continuation',async()=>{
  const r=folderRig();
  r.input.expectedEmail='different@example.invalid';
