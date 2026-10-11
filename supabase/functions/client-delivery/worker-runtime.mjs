@@ -5,6 +5,7 @@ import {createDriveClient,DriveUncertain} from './drive-client.mjs';
 import {reserveProviderIdentities} from './worker-core.mjs';
 import {createPrivateSourceChunkReader} from './private-source.mjs';
 import {transferOnePreparedChunk} from './upload-one.mjs';
+import {reconcileOnePreallocatedPackageFolder} from './folder-one.mjs';
 export async function prepareTrustedDelivery({
   tokenProvider,ledger,workerId,expectedEmail,expectedDriveId,
   fetcher=fetch
@@ -81,5 +82,43 @@ export async function continueTrustedDeliveryFile({
   await scoped.heartbeat(packageId,workerId,generation);
   return transferOnePreparedChunk({
     plan,workerId,generation,drive,ledger:scoped,vault,readProtectedChunk
+  });
+}
+
+/**
+ * Source-only continuation for the immutable PACKAGE folder. The current
+ * lease and independently fetched folder plan are mandatory; a caller may
+ * not supply a folder ID, name, parent, or mutable appProperties.
+ * This is NOT wired to the public Edge entrypoint or a scheduler.
+ */
+export async function continueTrustedPackageFolder({
+  tokenProvider,ledger,workerId,generation,packageId,planId,
+  expectedEmail,expectedDriveId,fetcher=fetch
+}={}){
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(!UUID.test(workerId??'')||!UUID.test(packageId??'')||!UUID.test(planId??'')
+    ||!Number.isSafeInteger(generation)||generation<1
+    ||typeof tokenProvider!=='function'||typeof ledger?.forLease!=='function'
+    ||typeof expectedEmail!=='string'||!expectedEmail
+    ||typeof expectedDriveId!=='string'||!expectedDriveId
+    ||typeof fetcher!=='function')
+    throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+  let auth;
+  try{auth=await tokenProvider();}
+  catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+  if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+    ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+    throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+  const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+  const account=await drive.verifyProviderIdentity(expectedEmail);
+  if(account.account.toLowerCase()!==expectedEmail.toLowerCase())
+    throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
+  const scoped=ledger.forLease(packageId,workerId,generation);
+  await scoped.heartbeat(packageId,workerId,generation);
+  const plan=await scoped.getFolderPlan(planId);
+  if(!plan||plan.package_id!==packageId||plan.plan_id!==planId)
+    throw new DriveUncertain('EXACT_PREALLOCATED_FOLDER_REQUIRED');
+  return reconcileOnePreallocatedPackageFolder({
+    plan,workerId,generation,drive,ledger:scoped,expectedDriveId
   });
 }
