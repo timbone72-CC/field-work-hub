@@ -45,8 +45,22 @@ const saveEditButton = document.getElementById('save-edit');
 const cancelEditButton = document.getElementById('cancel-edit');
 const editStatus = document.getElementById('edit-status');
 
-const createPhotos = new PhotoRequirementEditor(document.getElementById('create-photo-requirements'), () => workTypeInput.value);
-const editPhotos = new PhotoRequirementEditor(document.getElementById('edit-photo-requirements'), () => editWorkTypeInput.value);
+// Template application requests only editable work instructions; it cannot
+// mutate client binding, assigned contractor or any frozen field/run identity.
+function applyTemplateInstructions(input, template) {
+  const next=String(template.instructions||'');
+  if (input.value.trim() && input.value!==next && !window.confirm(
+    'Replace the current work instructions with this template’s instructions?')) return false;
+  input.value=next;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  return true;
+}
+const createPhotos = new PhotoRequirementEditor(
+  document.getElementById('create-photo-requirements'),() => workTypeInput.value,
+  template => applyTemplateInstructions(instructionsInput,template));
+const editPhotos = new PhotoRequirementEditor(
+  document.getElementById('edit-photo-requirements'),() => editWorkTypeInput.value,
+  template => applyTemplateInstructions(editInstructionsInput,template));
 // Phase 6B: copy a server-read prior WO into a NEW, unsent draft only.
 // Never reuse the old client WO number, assignment, due date, photo evidence,
 // package or finished work identity; the user must explicitly create the WO.
@@ -251,8 +265,7 @@ signOutButton.addEventListener('click', () => {
   currentUser = null;
   assignableUsers = [];
   workOrderRows = [];
-  createPhotos.templates = []; editPhotos.templates = [];
-  createPhotos.load(null); editPhotos.load(null);
+  createPhotos.clearAccount(); editPhotos.clearAccount();
   fillWorkTypes();
   workOrders.replaceChildren();
   rlsResult.textContent = '';
@@ -557,6 +570,8 @@ function openEditor(workOrderId, selectedRow = null) {
   editPropertyAddressInput.value = row.property_address;
   editWorkTypeInput.value = row.work_type;
   editPhotos.load(row.run?.requirement_snapshot || {}, row.field_status !== "ASSIGNED");
+  // Only the server-authorized WO company may scope template suggestions.
+  editPhotos.setCompany(row.client_company_id || null);
   fillWorkTypes();
   editInstructionsInput.value = row.instructions || '';
   editDueDateInput.value = row.due_date;
@@ -587,6 +602,8 @@ function closeEditor(force = false) {
   JobWorkspace.closed();
   editForm.reset();
   editWorkOrderIdInput.value = '';
+  editPhotos.setCompany(null);
+  editPhotos.load(null);
   editAssigneeSelect.replaceChildren(new Option('Choose Team user', ''));
   editAssigneeSelect.disabled = true;
   editReassignNote.textContent = '';

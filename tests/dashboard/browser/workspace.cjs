@@ -13,6 +13,9 @@ let reviewedDecision = 'PENDING', reviewedRevision = null;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
+const templateRows=[];
+const optionalTemplate=()=>({schema:1,revision:uuid(9978),total:{enabled:false,minimum:0},items:[]});
+let templateSaves=[];
 const rows = Array.from({ length: 1000 }, (_, i) => ({ id: uuid(i + 1), organization_id: organization,
   assigned_user_id: contractor, pending_assignee_user_id: null, reassignment_requested_at: null,
   assignment_received_at: null, wo_number: `DEMO-${String(i + 1).padStart(4, '0')}`,
@@ -39,7 +42,15 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       const reply = (body, status = 200, headers = {}) => route.fulfill({ status, headers: { 'Content-Type': 'application/json', 'Access-Control-Expose-Headers': 'Content-Range', ...headers }, body: JSON.stringify(body) });
       if (url.pathname === '/auth/v1/token') return reply({ access_token: 'disposable-test-access', refresh_token: 'disposable-test-refresh', expires_in: 3600 });
       if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
-      if (url.pathname === '/rest/v1/photo_templates') return reply([]);
+      if (url.pathname === '/rest/v1/photo_templates') return reply(templateRows);
+      if (url.pathname.endsWith('/admin_save_company_photo_template')) {
+        const payload=req.postDataJSON();templateSaves.push(payload);
+        const saved={id:payload.p_id,company_id:payload.p_company_id,revision:uuid(9977),
+          name:payload.p_name,work_type:payload.p_work_type,
+          description:payload.p_description,instructions:payload.p_instructions,
+          requirements:payload.p_requirements,active:payload.p_active,is_default:payload.p_is_default};
+        templateRows.push(saved);return reply(saved);
+      }
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
       if (url.pathname.endsWith('/admin_client_choices')) {
         const p=req.postDataJSON();
@@ -301,6 +312,47 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#wo-number-mode-auto').isChecked(),true);
     assert.equal(await page.locator('#create-photo-requirements .photo-item').count(),0);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    // Company-scoped templates appear only on a server-authorized company WO.
+    templateRows.push(
+      {id:uuid(9970),company_id:null,name:'Organization inspection',active:true,
+        work_type:'Property inspection',is_default:true,revision:uuid(9971),
+        description:'Org metadata',instructions:'General company instructions',requirements:optionalTemplate()},
+      {id:uuid(9972),company_id:uuid(9981),name:'Company inspection',active:true,
+        work_type:'Property inspection',is_default:true,revision:uuid(9973),
+        description:'Company metadata',instructions:'Company-specific instructions',requirements:optionalTemplate()},
+      {id:uuid(9974),company_id:uuid(9975),name:'Foreign company inspection',active:true,
+        work_type:'Property inspection',is_default:true,revision:uuid(9976),
+        description:'Unavailable',instructions:'Never copy',requirements:optionalTemplate()}
+    );
+    await page.evaluate(async()=>{await Promise.all([createPhotos.reloadTemplates(),editPhotos.reloadTemplates()]);fillWorkTypes();});
+    assert.equal(await page.locator('#create-photo-requirements').getByLabel('Photo template').locator('option').count(),2,
+      'An unassigned Create draft has only organization-wide templates');
+    rows[50].client_company_id=uuid(9981);
+    await page.locator('.job-link').first().click();
+    await wait(page, () => document.querySelector('dialog').open);
+    assert.equal(await page.locator('#edit-photo-requirements').getByLabel('Photo template').locator('option').count(),3,
+      'Selected job has one company template, org fallback, and Custom');
+    const choices=await page.locator('#edit-photo-requirements').getByLabel('Photo template').locator('option').allTextContents();
+    assert.match(choices[1],/Company inspection.*default/);
+    assert.ok(choices.every(t=>!t.includes('Foreign company')));
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog => dialog.accept()),
+      page.locator('#edit-photo-requirements').getByLabel('Photo template').selectOption(uuid(9972))
+    ]);
+    assert.equal(await page.locator('#edit-instructions').inputValue(),'Company-specific instructions');
+    const editReq=await page.evaluate(()=>editPhotos.snapshot());
+    assert.notEqual(editReq.revision,uuid(9978),'Copy must have a fresh draft revision');
+    assert.equal(templateRows[1].requirements.revision,uuid(9978),'Saved template snapshot not modified');
+    await page.locator('#edit-photo-requirements').getByText('Save or manage templates').click();
+    await page.locator('#edit-photo-requirements').getByLabel('Template name').fill('Company inspection copy');
+    await page.locator('#edit-photo-requirements').getByLabel('Template description').fill('Editable description');
+    await page.locator('#edit-photo-requirements').getByText('Save as new template', {exact:true}).click();
+    await wait(page, () => templateSaves.length>0);
+    assert.equal(templateSaves.at(-1).p_company_id,uuid(9981));
+    assert.equal(templateSaves.at(-1).p_description,'Editable description');
+    assert.equal(templateSaves.at(-1).p_expected_revision,null);
+    assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    await page.locator('#cancel-edit').click();
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');

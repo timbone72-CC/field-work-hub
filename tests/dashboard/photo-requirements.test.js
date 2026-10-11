@@ -47,3 +47,29 @@ test('Phase 6B prior requirements are cloned with fresh revision, never mutating
  assert.deepEqual(legacy.items,[]);
  assert.throws(()=>rules.copyPriorSnapshot({schema:2}),/requirements|total|supported/i);
 });
+
+test('Phase 6B company templates are excluded for unrelated/unassigned work, defaults resolve company first',()=>{
+ const a='00000000-0000-4000-8000-000000000099';
+ const b='00000000-0000-4000-8000-000000000100';
+ const list=[
+  {id:'org',company_id:null,name:'Organization default',active:true,work_type:'Mowing',is_default:true},
+  {id:'b',company_id:b,name:'Other company',active:true,work_type:'mowing',is_default:true},
+  {id:'a',company_id:a,name:'Local default',active:true,work_type:'mowing',is_default:true},
+  {id:'alt',company_id:a,name:'Local alternative',active:true,work_type:'MOWING ',is_default:false},
+  {id:'arch',company_id:a,name:'Archived',active:false,work_type:'Mowing',is_default:true}
+ ];
+ assert.deepEqual(rules.suggestions(list,'mOWING',a).map(x=>x.id),['a','org','alt']);
+ assert.deepEqual(rules.suggestions(list,'Mowing',b).map(x=>x.id),['b','org']);
+ assert.deepEqual(rules.suggestions(list,'Mowing',null).map(x=>x.id),['org']);
+ assert.deepEqual(rules.suggestions(list,'Missing',a),[]);
+});
+test('Phase 6B company template saving retains the existing editor and server-owned mutation',()=>{
+ const content=require('node:fs').readFileSync(require.resolve('../../dashboard/photo-requirements.js'),'utf8');
+ assert.match(content,/admin_save_company_photo_template/);
+ assert.match(content,/p_company_id:company/);
+ assert.match(content,/p_expected_revision:/);
+ assert.match(content,/this\.companyId/);
+ assert.match(content,/token!==accessToken/);
+ assert.match(content,/Use Save as new template to change company availability/);
+ assert.doesNotMatch(content,/innerHTML/);
+});
