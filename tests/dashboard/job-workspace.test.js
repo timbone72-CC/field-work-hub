@@ -131,5 +131,5 @@ test('Phase 6A address links use existing unsaved-change navigation and current-
  assert.match(workspace,/list\.replaceChildren\(\)/);
  const addressContext=workspace.split('function addressContext() {')[1]?.split('function navigation() {')[0];
  assert.ok(addressContext);
- assert.doesNotMatch(addressContext,/fetch\\(/);
+ assert.equal(addressContext.includes('fetch('),false);
 });
