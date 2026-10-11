@@ -135,6 +135,22 @@ test('Drive adapter also rejects correct-name folders in a foreign Shared Drive'
    name:plan.name,expectedDriveId:driveId,sha256:null,size:null,
    appProperties:plan.appProperties}),e=>e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
 });
+test('independent Drive GET retains all folder identity details for server confirmation',async()=>{
+ const drive=createDriveClient({accessToken:'server-test-token-for-client',
+   fetcher:async(raw,opts)=>{
+     assert.equal(new URL(raw).pathname,'/drive/v3/files/'+id);
+     assert.equal(opts.redirect,'error');
+     return Response.json({id,name:plan.name,mimeType:plan.mime,
+       parents:[parent],trashed:false,appProperties:plan.appProperties,
+       driveId});
+   }});
+ const result=await drive.verifyFile({id,parent,mime:plan.mime,
+   name:plan.name,expectedDriveId:driveId,
+   sha256:null,size:null,appProperties:plan.appProperties});
+ assert.deepEqual(result,{id,parent,name:plan.name,mime:plan.mime,
+   drive_id:driveId,trashed:false,appProperties:plan.appProperties,
+   sha256:null,size:null});
+});
 test('real Drive adapter verifies exact name, parent and appProperties after creation',async()=>{
  const events=[];
  const drive=createDriveClient({accessToken:'server-test-token-for-client',
