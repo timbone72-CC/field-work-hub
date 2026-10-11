@@ -4,7 +4,8 @@ import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file','service_read_delivery_parent',
- 'service_reserve_delivery_parent','service_begin_delivery_parent_create',
+ 'service_reserve_delivery_parent','service_read_geographic_parent',
+ 'service_reserve_geographic_parent','service_begin_delivery_parent_create',
  'service_confirm_delivery_parent','service_get_delivery_folder_plan',
  'service_begin_delivery_folder_create','service_confirm_delivery_folder',
  'service_read_upload_session',
@@ -48,9 +49,11 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_photo:photo,p_file_id:id,p_parent_id:parent}),
     // Exact company/destination mapping lookup precedes generateIds. The
     // server freezes both original IDs and authoritative parent IDs.
-    readParent:(pkg,worker,gen,kind)=>rpc('service_read_delivery_parent',
+    readParent:(pkg,worker,gen,kind)=>rpc(
+      ['STATE','COUNTY','CITY'].includes(kind)?'service_read_geographic_parent':'service_read_delivery_parent',
       {p_package:pkg,p_worker:worker,p_generation:gen,p_kind:kind}),
-    reserveParent:(pkg,worker,gen,kind,id,parent)=>rpc('service_reserve_delivery_parent',
+    reserveParent:(pkg,worker,gen,kind,id,parent)=>rpc(
+      ['STATE','COUNTY','CITY'].includes(kind)?'service_reserve_geographic_parent':'service_reserve_delivery_parent',
       {p_package:pkg,p_worker:worker,p_generation:gen,p_kind:kind,
         p_remote_id:id,p_parent_id:parent}),
     beginParentCreate:(pkg,worker,gen,map)=>rpc('service_begin_delivery_parent_create',
