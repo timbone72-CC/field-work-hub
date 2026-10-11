@@ -55,6 +55,23 @@ const JobOperationalFacts = {
 };
 if (typeof module !== 'undefined' && module.exports) module.exports.JobOperationalFacts = JobOperationalFacts;
 
+// Exact address grouping is only navigation within an already-authorized page.
+// It never joins different companies, guesses unit equivalence, or expands RLS.
+const JobAddressContext = {
+  siblings(rows, selected) {
+    if (!Array.isArray(rows) || !selected?.organization_id || !selected?.client_company_id
+      || typeof selected.property_address!=='string') return [];
+    const address=selected.property_address.trim().replace(/\\s+/g,' ').toLowerCase();
+    if (!address) return [];
+    return rows.filter(row=>row?.organization_id===selected.organization_id
+      && row.client_company_id===selected.client_company_id
+      && typeof row.property_address==='string'
+      && row.property_address.trim().replace(/\\s+/g,' ').toLowerCase()===address
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id||''));
+  }
+};
+if (typeof module !== 'undefined' && module.exports) module.exports.JobAddressContext=JobAddressContext;
+
 const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
@@ -154,11 +171,28 @@ const JobWorkspace = (() => {
       if (ownSelection === selection && accessToken) el('job-list-status').textContent = error.message;
     }
   }
+  function addressContext() {
+    const list=el('job-address-work-orders');
+    list.replaceChildren();
+    const matches=JobAddressContext.siblings(workOrderRows,selectedRow);
+    el('job-address-context').hidden=matches.length<2;
+    for (const item of matches) {
+      const button=document.createElement('button');
+      button.type='button'; button.className='secondary';
+      button.textContent=String(item.wo_number||'Work order');
+      button.setAttribute('aria-label',`Open work order ${item.wo_number}`);
+      button.setAttribute('aria-current',String(item.id===selectedRow.id));
+      button.disabled=item.id===selectedRow.id;
+      button.addEventListener('click',()=>choose(item.id));
+      list.append(button);
+    }
+  }
   function navigation() {
     const index = workOrderRows.findIndex(row => row.id === selectedRow?.id);
     el('job-previous').disabled = index <= 0;
     el('job-next').disabled = index < 0 || index >= workOrderRows.length - 1;
     el('job-context').textContent = selectedRow && index < 0 ? 'This job is outside the current page or filter. Your workspace remains open.' : '';
+    addressContext();
   }
   function opened(row) {
     selectedRow = row; needsReload = false; pending = null; baseline = fingerprint();
