@@ -78,7 +78,10 @@ async function refreshAdminViewAutomatically() {
     workOrderRows = rows;
     assignableUsers = users;
 
-    if (typeof JobWorkspace !== 'undefined') JobWorkspace.refreshed(rows);
+    if (typeof JobWorkspace !== 'undefined') {
+      JobWorkspace.populateContractors(users);
+      JobWorkspace.refreshed(rows);
+    }
     if (changed) {
       if (usersChanged) preserveAdminAssigneeSelection(assigneeSelect, users);
       assigneeSelect.disabled = users.length === 0;
