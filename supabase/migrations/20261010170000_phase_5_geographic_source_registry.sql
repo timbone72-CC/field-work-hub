@@ -29,8 +29,7 @@ create table private.client_delivery_geography (
     and char_length(btrim(city_name)) between 2 and 100),
   check (state_name=btrim(state_name) and county_name=btrim(county_name)
     and city_name=btrim(city_name)),
-  check (char_length(btrim(verification_source)) between 3 and 200),
-  check (verified_at <= clock_timestamp())
+  check (char_length(btrim(verification_source)) between 3 and 200)
 );
 -- Never permit direct browser/Contractor writes. An authorized revisioned
 -- verification RPC must be built and tested before any records are created.
