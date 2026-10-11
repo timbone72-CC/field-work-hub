@@ -10,12 +10,13 @@ const claim={claimed:true,package_id:uuid(10),destination_id:uuid(11),generation
   destination_root:root,review_policy_revision:uuid(12),selected_photos:[],
   folder_layout:'STATE_COUNTY_CITY_ADDRESS',
   geographic_path:{state:'oklahoma',county:'beckham',city:'elk city'}}};
-function rig({states={},unsupported=false,foreign=false}={}){
+function rig({states={},unsupported=false,foreign=false,cityUnderState=false}={}){
  const calls=[],ids=Object.fromEntries(kinds.map((k,i)=>[k,'folder_'+i+'_'+'x'.repeat(22)]));
  const map=new Map();let previous=root;
  for(const kind of kinds){
    if(states[kind])map.set(kind,{exists:true,kind,remote_folder_id:ids[kind],
-     parent_remote_id:foreign&&kind==='CITY'?'foreign_'+'q'.repeat(24):previous,
+     parent_remote_id:foreign&&kind==='CITY'?'foreign_'+'q'.repeat(24)
+       :cityUnderState&&kind==='CITY'?ids.STATE:previous,
      state:states[kind]});
    previous=ids[kind];
  }
@@ -99,7 +100,7 @@ test('State-City layout reserves STATE then CITY then ADDRESS then WORK_ORDER, n
  assert.ok(!r.calls.some(c=>c.includes('COUNTY')));
 });
 test('State-City path continues to geographic leaves under verified city',async()=>{
- const r=rig({states:{STATE:'VERIFIED',CITY:'VERIFIED'}});
+ const r=rig({states:{STATE:'VERIFIED',CITY:'VERIFIED'},cityUnderState:true});
  r.ledger.claim=async()=>({...claim,manifest:{...claim.manifest,folder_layout:'STATE_CITY_ADDRESS'}});
  const out=await run(r);
  assert.equal(out.next_parent_kind,'ADDRESS');
