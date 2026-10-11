@@ -596,6 +596,11 @@ begin
   where a.organization_id=d.organization_id and a.work_role='CONTRACTOR' limit 1;
  if d.id is null or owner_id is null or contractor_id is null then
   raise exception 'Missing disposable layout authority fixture';end if;
+ select * into previous_pkg from private.client_packages
+  where destination_id=d.id and status='DELIVERED' limit 1;
+ if previous_pkg.id is null or previous_pkg.approved_manifest is null then
+   raise exception 'Disposable approved delivery snapshot missing';end if;
+ frozen_projection:=previous_pkg.approved_manifest;
  update private.account_work_access set active=true,suspension_authority=null,
   disabled_at=null where user_id=owner_id;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,
@@ -631,16 +636,10 @@ begin
   'select public.admin_get_client_folder_layout(%L)',d.id));
  execute 'reset role';
  -- A later Admin choice must not retroactively rewrite an approved package.
- select * into previous_pkg from private.client_packages
-  where destination_id=d.id and status='DELIVERED' limit 1;
- if previous_pkg.id is null then
-   raise exception 'Disposable delivered package fixture missing';end if;
- frozen_projection:=private.client_package_manifest(previous_pkg.id);
- if frozen_projection->>'folder_layout' is distinct from
-      previous_pkg.approved_manifest->>'folder_layout'
-    or frozen_projection->'geographic_path' is distinct from
-      previous_pkg.approved_manifest->'geographic_path'
-    or frozen_projection->>'destination_id' is distinct from d.id::text then
+ if (select approved_manifest from private.client_packages
+       where id=previous_pkg.id) is distinct from frozen_projection
+   or (select destination_id from private.client_packages
+       where id=previous_pkg.id) is distinct from d.id then
    raise exception 'Admin layout change rewrote previously approved delivery';
  end if;
  if has_table_privilege('authenticated','private.client_delivery_folder_layouts','update')
