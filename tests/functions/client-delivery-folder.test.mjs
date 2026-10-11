@@ -56,7 +56,7 @@ function rig({original=plan,changed=null,postFailure=false,verifyFailure=false,
    verifyFile:async spec=>{
      calls.push('verify-file');
      assert.deepEqual(spec,{id,parent,name:plan.name,mime:plan.mime,
-       sha256:null,size:null,appProperties:plan.appProperties});
+       expectedDriveId:driveId,sha256:null,size:null,appProperties:plan.appProperties});
      if(verifyFailure)throw new DriveUncertain('PROVIDER_IDENTITY_UNCERTAIN');
      return {id,parent,name:plan.name,mime:plan.mime,sha256:null,size:null};
    }
@@ -122,6 +122,19 @@ test('wrong hierarchy parent, package identity, or changed server plan is denied
  await assert.rejects(()=>altered.run(),e=>e.code==='FOLDER_IDENTITY_OR_LEASE_UNCERTAIN');
  assert.equal(altered.calls.includes('create'),false);
 });
+test('Drive adapter also rejects correct-name folders in a foreign Shared Drive',async()=>{
+ const drive=createDriveClient({accessToken:'server-test-token-for-client',
+   fetcher:async (raw,opts)=>{
+     assert.equal(new URL(raw).pathname,'/drive/v3/files/'+id);
+     assert.equal(opts.redirect,'error');
+     return Response.json({id,name:plan.name,mimeType:plan.mime,
+       parents:[parent],trashed:false,appProperties:plan.appProperties,
+       driveId:'foreign_client_drive'});
+   }});
+ await assert.rejects(()=>drive.verifyFile({id,parent,mime:plan.mime,
+   name:plan.name,expectedDriveId:driveId,sha256:null,size:null,
+   appProperties:plan.appProperties}),e=>e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
+});
 test('real Drive adapter verifies exact name, parent and appProperties after creation',async()=>{
  const events=[];
  const drive=createDriveClient({accessToken:'server-test-token-for-client',
@@ -137,7 +150,7 @@ test('real Drive adapter verifies exact name, parent and appProperties after cre
      throw Error('unexpected network endpoint');
    }});
  await assert.rejects(()=>drive.verifyFile({id,parent,mime:plan.mime,
-   name:plan.name,sha256:null,size:null,appProperties:plan.appProperties}),
+   name:plan.name,expectedDriveId:driveId,sha256:null,size:null,appProperties:plan.appProperties}),
    e=>e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
  assert.equal(events.length,1);
 });
