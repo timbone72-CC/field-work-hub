@@ -865,7 +865,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // An authenticated non-owner has no visible owner controls; only the
     // server-recognized synthetic owner can render and use the shared console.
     syntheticOwner=true;
-    await page.locator('#sign-out').click();
+    // The immediately preceding race check already signed this account out.
     await login();
     await page.locator('#owner-office-console').waitFor({state:'attached'});
     await page.locator('#owner-office-console > summary').click();
