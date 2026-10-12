@@ -23,6 +23,7 @@ public final class PhotoRecoveryActivity extends Activity {
     private ArrayList<String> pending;
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private boolean busy;
+    private boolean exporting;
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -62,12 +63,17 @@ public final class PhotoRecoveryActivity extends Activity {
             try {
                 List<ProtectedPhoto> page=runtime.sessions.local(generation,owner,
                     ()->runtime.dao.recoveryPhotos(owner.userId,owner.organizationId,26,offset));
+                Map<String,String> labels=new HashMap<>();
+                for(ProtectedPhoto p:page) {
+                    CachedWorkOrder work=runtime.dao.find(owner.userId,owner.organizationId,p.workOrderId,p.runId);
+                    labels.put(p.id,work==null?"Retained photo":work.woNumber+" — "+work.propertyAddress);
+                }
                 runOnUiThread(()->{
                     if (!current() || isFinishing() || isDestroyed()) return;
                     setBusy(false); previous.setEnabled(offset>0); next.setEnabled(page.size()>25);
                     for(ProtectedPhoto p:page.subList(0,Math.min(25,page.size()))) {
                         CheckBox row=new CheckBox(this);
-                        row.setText("Photo "+p.id+"\nWO "+p.workOrderId+"\n"+p.capturedAt
+                        row.setText(labels.get(p.id)+"\n"+p.capturedAt+" · Photo "+p.id.substring(0,8)
                                 + ("PROBLEM".equals(p.state)?"\nOriginal may need recovery; copied as stored.":""));
                         row.setOnCheckedChangeListener((button,checked)->{
                             if(checked)selected.add(p.id);else selected.remove(p.id);
@@ -75,7 +81,7 @@ public final class PhotoRecoveryActivity extends Activity {
                         }); rows.addView(row);
                     }
                     if(page.isEmpty())status.setText("No retained originals on this page. Cloud recovery is separate; unsynchronized photos can only be recovered from their original phone.");
-                    if(pending!=null)setBusy(true);
+                    if(pending!=null||exporting)setBusy(true);
                 });
             } catch(Exception e) { runOnUiThread(()->{if(current()){setBusy(false);status.setText("Unable to list originals. Photos remain protected.");}}); }
         });
@@ -93,7 +99,7 @@ public final class PhotoRecoveryActivity extends Activity {
         if(request!=CREATE_ARCHIVE)return;
         if(pending==null || !current()){pending=null;setBusy(false);return;}
         if(result!=RESULT_OK || data==null || data.getData()==null){pending=null;setBusy(false);status.setText("Export cancelled. Originals remain protected.");return;}
-        Uri target=data.getData(); ArrayList<String> ids=pending;pending=null;cancelled.set(false);
+        Uri target=data.getData(); ArrayList<String> ids=pending;pending=null;cancelled.set(false);exporting=true;setBusy(true);
         cancel.setVisibility(android.view.View.VISIBLE);status.setText("Copying originals… Keep this screen open.");
         runtime.photos.io.execute(()->{
             boolean success=false;
@@ -114,7 +120,7 @@ public final class PhotoRecoveryActivity extends Activity {
             final boolean complete=success;
             runOnUiThread(()->{
                 if(!current()||isFinishing()||isDestroyed())return;
-                setBusy(false);cancel.setVisibility(android.view.View.GONE);
+                exporting=false;setBusy(false);cancel.setVisibility(android.view.View.GONE);
                 status.setText(complete?"Export saved. Originals remain on this phone."
                         :"Export incomplete. The selected file may be partial; discard it and retry. Originals remain protected.");
             });
