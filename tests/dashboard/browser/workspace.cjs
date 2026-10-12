@@ -12,7 +12,7 @@ let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, 
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
-let ownerEnrolled=false,ownerEnrollWrites=[];
+let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
@@ -112,7 +112,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           user_id:uuid(9214),account_email:'supervisor@example.invalid',tier:ownerTier,grant_active:true,grant_revision:ownerTierRevision,
           work_active:true,team_count:ownerScope.length
         }, ...(ownerEnrolled ? [{user_id:uuid(9231),account_email:'new-supervisor@example.invalid',
-          tier:1,grant_active:true,grant_revision:uuid(9234),work_active:false,team_count:1}] : [])]);
+          tier:1,grant_active:ownerEnrolledGrantActive,grant_revision:ownerEnrolledGrantRevision,work_active:false,team_count:1}] : [])]);
         if (url.pathname.endsWith('owner_office_people_list')) return reply([
           {user_id:admin,account_email:'admin@example.invalid',work_role:'ADMIN',
             work_active:true,access_revision:uuid(9221)},
@@ -128,6 +128,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         }]);
         if (url.pathname.endsWith('owner_supervisor_team_scope_list')) return reply(ownerScope.map(team_id=>({team_id})));
         ownerWrites.push({name:url.pathname.split('/').at(-1),...p});
+        if (url.pathname.endsWith('owner_set_supervisor_grant_state')) {
+          ownerGrantWrites.push(p);
+          assert.equal(p.p_user,uuid(9231));
+          assert.equal(p.p_expected_grant_revision,ownerEnrolledGrantRevision);
+          assert.equal(p.p_expected_access_revision,uuid(9232));
+          assert.notEqual(p.p_active,ownerEnrolledGrantActive);
+          ownerEnrolledGrantActive=p.p_active;
+          ownerEnrolledGrantRevision=uuid(ownerEnrolledGrantActive?9236:9235);
+          return reply(ownerEnrolledGrantRevision);
+        }
         if (url.pathname.endsWith('owner_enroll_supervisor_with_seat')) {
           ownerEnrollWrites.push(p);
           assert.equal(p.p_user,uuid(9231));
