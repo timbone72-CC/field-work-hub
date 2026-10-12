@@ -15,6 +15,7 @@ let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
+let staffingCandidateCalls=0;
 let staffWorkNote='Read-only <script>not executable</script>';
 let staffWorkRevision='d'.repeat(32);
 let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
@@ -246,6 +247,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           return reply({action_id:p.p_action,work_order_id:p.p_work_order,
             team_id:uuid(9213),due_date:staffWorkDue,instructions:staffWorkNote,
             updated_at:'2026-10-12T12:11:00Z',work_revision:staffWorkRevision,status:'SAVED'});
+      }
+      if (url.pathname.endsWith('/office_supervisor_assignment_candidates')) {
+        const p=req.postDataJSON();
+        staffingCandidateCalls++;
+        assert.equal(p.p_org,organization);
+        assert.equal(p.p_work_order,uuid(9304));
+        assert.equal(p.p_limit,25);assert.equal(p.p_after,null);
+        assert.equal(p.p_expected_scope_fingerprint,'a'.repeat(32));
+        if(!staffingGranted) return reply({message:'Access revoked'},403);
+        return reply({organization_id:organization,work_order_id:uuid(9304),
+          team_id:uuid(9213),scope_fingerprint:'a'.repeat(32),
+          field_status:'ASSIGNED',requires_current_contractor_consent:false,
+          candidate_contractors:[
+            {user_id:uuid(9315),label:'Eligible Contractor <script>inert</script>'}
+          ],next_after:null});
       }
       if (url.pathname.endsWith('/office_supervisor_work_detail')) {
           const p=req.postDataJSON();
@@ -1388,6 +1404,17 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.match(assignmentDetail,/Contractor accepted\s+Not confirmed/);
     assert.equal(await page.locator('#staffing-work-detail script').count(),0,
       'Server-provided assignee labels must remain inert DOM text');
+    // Current eligible contractors are a deliberate, exact-WO-only read.
+    assert.equal(staffingCandidateCalls,0,'Selecting a job cannot prefetch the roster');
+    await page.locator('#supervisor-candidates button').first().click();
+    await wait(page,()=>document.querySelector('#supervisor-candidates-status')?.textContent
+      .includes('eligible team contractor'));
+    assert.equal(staffingCandidateCalls,1);
+    assert.match(await page.locator('#supervisor-candidates-list').innerText(),
+      /Eligible Contractor <script>inert<\/script>/);
+    assert.equal(await page.locator('#supervisor-candidates-list script').count(),0);
+    assert.match(await page.locator('#supervisor-candidates').innerText(),
+      /does not assign or transfer anyone/);
     // Supervisor uses the same scoped verified gallery and decision engine as Admin.
     await page.locator('#supervisor-photo-review button').first().click();
     await page.locator('#supervisor-photo-rows .private-review-photo').first().waitFor();
