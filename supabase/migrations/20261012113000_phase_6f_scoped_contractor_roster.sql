@@ -66,6 +66,25 @@ begin
      is distinct from row(p_org,p_user,auth.uid(),p_team,p_expected_revision,
         btrim(p_reason),p_environment)
    then raise exception 'Roster action UUID reused with changed inputs' using errcode='22023';end if;
+   -- A replay returns the original immutable receipt, not renewed staffing
+   -- authority. Do not disclose even that scoped receipt to a manager whose
+   -- work entitlement, team grant or Owner capability was later removed.
+   if prior.action_kind='PLACE' then
+     if not (private.has_team_capability(p_org,p_team,'PLACE_UNASSIGNED_CONTRACTOR')
+       or (private.is_current_platform_owner(p_environment)
+         and exists(select 1 from private.org_office_allowances o
+           where o.organization_id=p_org))) then
+       raise exception 'Current placement authority required for roster replay'
+         using errcode='42501';
+     end if;
+   elsif not ((private.has_team_capability(p_org,prior.old_team_id,'TRANSFER_CONTRACTOR')
+       and private.has_team_capability(p_org,p_team,'TRANSFER_CONTRACTOR'))
+     or (private.is_current_platform_owner(p_environment)
+       and exists(select 1 from private.org_office_allowances o
+         where o.organization_id=p_org))) then
+     raise exception 'Current transfer authority required for roster replay'
+       using errcode='42501';
+   end if;
    return jsonb_build_object('action_id',p_action,'user_id',p_user,
      'old_team_id',prior.old_team_id,'new_team_id',prior.new_team_id,
      'revision',prior.result_revision,'action_kind',prior.action_kind);
