@@ -118,10 +118,10 @@ begin
    or (select active from public.admin_teams where id=cancel_team)
    or exists(select 1 from private.supervisor_team_scopes
      where organization_id=org and user_id=tier2 and team_id=cancel_team)
-   or (select state from private.office_seat_reservations
-     where action_id=cancel_action)<>'RELEASED'
-   or not exists(select 1 from private.created_admin_team_invitation_actions
-     where action_id=cancel_action and team_id=cancel_team) then
+   or (select seat.state from private.office_seat_reservations seat
+     where seat.action_id=cancel_action)<>'RELEASED'
+   or not exists(select 1 from private.created_admin_team_invitation_actions created
+     where created.action_id=cancel_action and created.team_id=cancel_team) then
    raise exception 'Cancelled pending team was not safely retired';end if;
  denied:=false;
  begin
