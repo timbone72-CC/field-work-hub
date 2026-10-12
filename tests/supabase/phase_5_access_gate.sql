@@ -185,6 +185,9 @@ begin
  if private.has_team_capability(org,team_b,'WORK') then raise exception 'Removed team scope remained accessible';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
 
+ -- Scoped removal must produce a committed recovery header before losing visibility.
+ if not exists(select 1 from private.photo_recovery_grants g where g.organization_id=org and g.user_id=supervisors[1] and g.state='READY' and g.removed_team_ids=array[team_b]) then raise exception 'Removed team lacked historical photo recovery cutoff';end if;
+
  -- Phase 6F existing-organization allowance guard. Never creates seats/accounts.
  insert into private.org_office_allowances(organization_id,admin_limit,supervisor_limit)
  values(org,2,3);
