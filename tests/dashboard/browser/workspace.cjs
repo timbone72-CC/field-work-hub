@@ -11,6 +11,7 @@ const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
+let largeReview=false,maxPhotoPage=0;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
@@ -222,6 +223,25 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       if (url.pathname.endsWith('/admin_review_photo_page')) {
         const p=req.postDataJSON(); assert.equal(p.p_wo,uuid(51));
         assert.ok([25,50].includes(p.p_limit));
+        if(largeReview){
+          const all=Array.from({length:500},(_,i)=>({
+            photo_id:uuid(10000+i),transfer_version:reviewVersion,
+            run_id:reviewRun,run_sequence:1,requirement_item_id:null,
+            requirement_label:'Extra',stage:'NONE',
+            captured_at:'2026-10-01T12:00:00Z',
+            verified_at:'2026-10-01T12:02:00Z',decision:'PENDING',
+            decision_revision:null,reason:null}));
+          let list=all.filter(photo=>(!p.p_after_photo||photo.photo_id>p.p_after_photo)
+            &&(!p.p_run||p.p_run===reviewRun)
+            &&(!p.p_item&&!p.p_extra||p.p_extra)
+            &&(!p.p_stage||p.p_stage==='NONE')
+            &&(!p.p_decision||p.p_decision==='PENDING'));
+          const pageRows=list.slice(0,p.p_limit);
+          maxPhotoPage=Math.max(maxPhotoPage,pageRows.length);
+          return reply({work_order_id:uuid(51),photos:pageRows,
+            next_sequence:list.length>p.p_limit?1:null,
+            next_photo:list.length>p.p_limit?pageRows.at(-1).photo_id:null});
+        }
         assert.equal(p.p_after_photo,null);assert.equal(p.p_after_sequence,null);
         const visible=(!p.p_decision||p.p_decision===reviewedDecision)
           &&(!p.p_item||p.p_item===null)
@@ -624,6 +644,20 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(replaceCount,1);
     assert.equal(rows[50].wo_number,'DEMO-0051','Replacement retains original client number');
     assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
+    // 500 private photos must stay server-paged. Never materialize all 500 in
+    // the browser, even with latest-run, item, stage and decision filters.
+    largeReview=true;
+    await page.locator('[data-job-tab="photos"]').click();
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===25);
+    assert.equal(await page.locator('#private-review-more').isVisible(),true);
+    await page.locator('#private-review-more').click();
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===50);
+    assert.equal(maxPhotoPage,25);
+    await page.locator('#private-review-stage').selectOption('AFTER');
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===0);
+    await page.locator('#private-review-stage').selectOption('');
+    await wait(page,()=>document.querySelectorAll('.private-review-photo').length===25);
+    largeReview=false;
     await page.locator('#cancel-edit').click();
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
