@@ -147,6 +147,40 @@ begin
     or result->'work_order'->'assignment'->>'download_received_at' is null
     or result->'work_order'->'assignment'->>'human_accepted_at' is not null
   then raise exception 'Supervisor assignment conflated receipt with human Accept: %',result;end if;
+  -- Exact selected-WO eligible assignees are the only Tier 1 candidate list.
+  -- No broad organizational roster, suspended person or stale-scope leak.
+  result:=public.office_supervisor_assignment_candidates(org,wo_a2,original_scope,25,null);
+  if result->>'work_order_id'<>wo_a2::text or result->>'team_id'<>team_a::text
+    or result->>'field_status'<>'ASSIGNED'
+    or result->>'requires_current_contractor_consent'<>'false'
+    or jsonb_array_length(result->'candidate_contractors')<>1
+    or result->'candidate_contractors'->0->>'user_id'<>assigned_contractor::text
+    or result->'candidate_contractors'->0->>'label'<>'assignment-demo@example.invalid'
+    or result->>'next_after' is not null
+  then raise exception 'Scope-filtered eligible assignee candidate list incorrect: %',result;end if;
+  denied:=false;
+  begin perform public.office_supervisor_assignment_candidates(org,wo_b,original_scope,25,null);
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Wrong-team assignee candidates exposed';end if;
+  denied:=false;
+  begin perform public.office_supervisor_assignment_candidates(foreign_org,wo_foreign,original_scope,25,null);
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Cross-organization assignee candidates exposed';end if;
+  denied:=false;
+  begin perform public.office_supervisor_assignment_candidates(org,wo_a2,original_scope,500,null);
+  exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Unbounded contractor candidate request succeeded';end if;
+  update private.account_work_access set active=false where user_id=assigned_contractor;
+  result:=public.office_supervisor_assignment_candidates(org,wo_a2,original_scope,25,null);
+  if jsonb_array_length(result->'candidate_contractors')<>0
+  then raise exception 'Disabled contractor remains assignable';end if;
+  update private.account_work_access set active=true where user_id=assigned_contractor;
+  -- Current field state changes whether the human's consent is mandatory.
+  update public.work_orders set field_status='IN_PROGRESS' where id=wo_a2;
+  result:=public.office_supervisor_assignment_candidates(org,wo_a2,original_scope,25,null);
+  if result->>'requires_current_contractor_consent'<>'true'
+  then raise exception 'In-progress assignment omitted Contractor consent';end if;
+  update public.work_orders set field_status='ASSIGNED' where id=wo_a2;
   denied:=false;
   begin perform public.office_supervisor_work_detail(org,wo_b,original_scope);
     exception when insufficient_privilege then denied:=true; end;
