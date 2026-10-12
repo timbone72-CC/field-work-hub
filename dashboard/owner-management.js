@@ -263,6 +263,12 @@ function ownerPeopleUI(people) {
     button.type = 'button';
     button.className = person.work_active ? 'secondary' : '';
     button.textContent = person.work_active ? 'Review disable' : 'Review restore';
+    // An owner signed in via the existing Admin workspace must not lock that
+    // very session out before the separate owner-only login is implemented.
+    if (person.user_id === currentUser?.id && person.work_active) {
+      button.disabled = true;
+      button.title = 'Use a separate verified owner session to change this account.';
+    }
     button.addEventListener('click', () => void ownerReviewAccess(person, !person.work_active));
     row.append(label, button);
     root.append(row);
