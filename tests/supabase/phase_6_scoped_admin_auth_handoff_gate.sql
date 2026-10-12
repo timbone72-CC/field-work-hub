@@ -132,6 +132,48 @@ begin
    perform public.release_scoped_admin_invitation(action,org,'TEST');
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'BOUND invitation seat could be released';end if;
+ -- The BOUND identity cannot be activated before verified email/session.
+ denied:=false;
+ perform set_config('request.jwt.claims',
+   jsonb_build_object('sub',fake_auth,'session_id',fake_auth)::text,true);
+ begin perform public.complete_scoped_admin_invitation_activation();
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Unverified invited account activated';end if;
+ insert into auth.sessions(id,user_id) values(fake_auth,fake_auth);
+ update auth.users set email_confirmed_at=now() where id=fake_auth;
+ response:=public.complete_scoped_admin_invitation_activation();
+ if response->>'status'<>'ACCEPTED'
+   or (select team_id from private.admin_team_memberships
+        where user_id=fake_auth and active)<>team
+   or (select work_role from private.account_work_access
+        where user_id=fake_auth)<>'ADMIN'
+   or (select state from private.office_seat_reservations
+        where action_id=action)<>'CONSUMED'
+   or (select state from private.scoped_admin_invitation_reservations
+        where action_id=action)<>'CONSUMED' then
+    raise exception 'Verified Admin activation failed atomic scope/seat commit';
+ end if;
+ response:=public.complete_scoped_admin_invitation_activation();
+ if response->>'status'<>'ALREADY_ACTIVATED' or
+    (select count(*) from private.admin_team_memberships
+     where user_id=fake_auth)<>1 then
+    raise exception 'Replayed activation duplicated team or account';
+ end if;
+ update private.account_work_access set active=false,disabled_at=now(),
+   suspension_authority='MANAGER',suspension_reason='Synthetic disable'
+ where user_id=fake_auth;
+ response:=public.complete_scoped_admin_invitation_activation();
+ if response->>'status'<>'WORK_DISABLED'
+   or (select active from private.account_work_access
+     where user_id=fake_auth) then
+    raise exception 'Replayed activation restored revoked work access';
+ end if;
+ perform set_config('request.jwt.claims',
+   jsonb_build_object('sub',creator,'session_id',creator)::text,true);
+ denied:=false;
+ begin perform public.release_scoped_admin_invitation(action,org,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Consumed invitation could be cancelled';end if;
  if has_function_privilege('authenticated',
      'public.team_finalize_scoped_admin_issue(uuid,uuid,uuid,text)','execute')
    or has_table_privilege('service_role',
