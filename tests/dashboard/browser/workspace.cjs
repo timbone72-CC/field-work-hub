@@ -1022,7 +1022,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#owner-enrollment button[type=submit]').click();
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Choose at least one exact active team'));
     assert.equal(ownerEnrollWrites.length,0,'Incomplete team selection did not create an enrollment');
-    await page.locator('#owner-enrollment-teams input').check();
+    await page.locator('#owner-enrollment-teams').getByRole('checkbox',{name:'West test team'}).check();
     page.once('dialog', dialog=>dialog.accept());
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/owner_enroll_supervisor_with_seat')),
