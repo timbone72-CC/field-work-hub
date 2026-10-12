@@ -11,6 +11,7 @@ declare
  enroll_user uuid:=gen_random_uuid(); enroll_action uuid:=gen_random_uuid(); enroll_res uuid; enroll_revision uuid; enroll_access_rev uuid;
  enroll_user2 uuid:=gen_random_uuid(); combined_action uuid:=gen_random_uuid(); combined_rev uuid;
  roster_worker uuid:=gen_random_uuid(); roster_action uuid:=gen_random_uuid(); roster_rev uuid; roster_result jsonb; busy_wo uuid;
+ unmanaged_team uuid:=gen_random_uuid();
  grant_state_action uuid:=gen_random_uuid(); grant_state_revision uuid;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
@@ -602,6 +603,9 @@ begin
  -- Phase 6F: staff placement and idle transfers are separate from job handoff.
  -- Earlier tier-change tests promoted this actor; restore Tier 1 for denial proof.
  update private.supervisor_grants set tier=1 where organization_id=org and user_id=supervisors[1];
+ insert into public.admin_teams(id,organization_id,name) values(unmanaged_team,org,'UNMANAGED TEST TEAM');
+ insert into private.supervisor_team_scopes(organization_id,user_id,team_id)
+ values(org,supervisors[2],unmanaged_team);
  insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
  values(roster_worker,'roster-test@example.invalid',now(),
    jsonb_build_object('organization_id',org,'role','CONTRACTOR'));
@@ -633,6 +637,12 @@ begin
      null,'Tier 2 foreign supervised team','TEST');
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Tier 2 placed Contractor outside team scope';end if;
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(roster_action,org,roster_worker,unmanaged_team,
+     null,'Tier 2 cannot place under absent Admin','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Tier 2 placed Contractor into unmanaged team';end if;
  roster_result:=public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_a,
    null,'Tier 2 reviewed unassigned placement','TEST');
  roster_rev:=(roster_result->>'revision')::uuid;
