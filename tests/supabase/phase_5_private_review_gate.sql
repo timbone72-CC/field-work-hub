@@ -816,7 +816,9 @@ declare
  admin_id uuid; worker uuid; org uuid; wo uuid; oldrun uuid; newrun uuid; instance uuid;
  cfg jsonb; revision uuid; action uuid:=gen_random_uuid(); result jsonb; next_pkg jsonb;
  selected jsonb; oldrev timestamptz; claims_admin text; claims_worker text;
- set_id uuid:=gen_random_uuid(); digest text:=encode(sha256(convert_to('[]','UTF8')),'hex');
+ set_id uuid:=gen_random_uuid(); digest text;
+ new_photo uuid:=gen_random_uuid(); photo_set jsonb;
+ transfer private.photo_transfers%rowtype; new_object uuid:=gen_random_uuid();
  old_decision_revision uuid; old_transfer_version uuid;
 begin
  select * into old_pkg from private.client_packages
@@ -834,7 +836,7 @@ begin
   then raise exception 'History fixture changed';end if;
  orig_manifest:=old_pkg.approved_manifest;
  cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
-  'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
+  'total',jsonb_build_object('enabled',true,'minimum',1),'items','[]'::jsonb);
  claims_admin:=jsonb_build_object('sub',admin_id,'session_id',admin_id,
   'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
  claims_worker:=jsonb_build_object('sub',worker,'session_id',worker,
@@ -862,17 +864,40 @@ begin
   from public.work_order_runs where id=newrun;
  perform set_config('request.jwt.claims',claims_worker,true);execute 'set local role authenticated';
  result:=public.accept_field_action_v4(gen_random_uuid(),wo,newrun,instance,
-  'START',to_char(now()-interval '1 minute','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+  'START',to_char(now()-interval '2 minutes','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
   revision,null,'');
  if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up Start failed: %',result;end if;
+ photo_set:=jsonb_build_array(jsonb_build_object('id',new_photo,'item_id',null,
+   'captured_at',to_char(now()-interval '1 minute','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
+ digest:=encode(sha256(convert_to(photo_set::text,'UTF8')),'hex');
  result:=public.register_photo_finish_set(set_id,wo,newrun,instance,revision,
-  '[]'::jsonb,digest,'[]');
- if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up empty photo set failed: %',result;end if;
+  photo_set,digest,photo_set::text);
+ if result->>'outcome'<>'APPLIED' then raise exception 'Corrective photo Finish set failed: %',result;end if;
  result:=public.accept_field_action_v4(gen_random_uuid(),wo,newrun,instance,
   'COMPLETE',to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
   revision,set_id,digest);
  if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up Finish failed: %',result;end if;
+ result:=public.begin_photo_transfer(gen_random_uuid(),new_photo,repeat('b',64),250000);
+ if result->>'state' is distinct from 'WAITING' and result->>'state' is distinct from 'RESERVED'
+    and result->>'state' is distinct from 'UPLOADING'
+ then null;end if; -- accept exact transfer owner response; ledger is verified below
+ execute 'reset role';
+ select * into transfer from private.photo_transfers where photo_id=new_photo;
+ if transfer.photo_id is null or transfer.run_id<>newrun then
+   raise exception 'Replacement photo not bound to its original corrective run';end if;
+ insert into storage.objects(id,bucket_id,name,owner_id,version)
+  values(new_object,transfer.bucket,transfer.object_key,worker::text,'REVIEW-TEST-CORRECTIVE');
+ insert into private.photo_transfer_receipts(action_id,photo_id,transfer_version,
+    owner_user_id,owner_session_id,object_id,object_version,bucket,object_key,observed_sha256,observed_size)
+ values(gen_random_uuid(),new_photo,transfer.version,worker,worker,new_object,
+    'REVIEW-TEST-CORRECTIVE',transfer.bucket,transfer.object_key,repeat('b',64),250000);
+ update private.photo_transfers set state='RECEIVED' where photo_id=new_photo;
  perform set_config('request.jwt.claims',claims_admin,true);
+ execute 'set local role authenticated';
+ result:=public.admin_review_photo(gen_random_uuid(),wo,new_photo,transfer.version,
+    null,'APPROVED','');
+ if result->>'decision'<>'APPROVED' then raise exception 'New corrective photo review not accepted';end if;
+
  next_pkg:=public.admin_save_package_draft(gen_random_uuid(),wo,null,
   'Complete corrected return submission',array[old_photo]);
  execute 'reset role';
@@ -888,10 +913,20 @@ begin
  perform public.admin_review_photo(gen_random_uuid(),wo,old_photo,
     old_transfer_version,old_decision_revision,'APPROVED','');
  execute 'reset role';
+ -- Approved original evidence cannot satisfy the separate new-run minimum.
+ perform pg_temp.expect_photo_review_error('22023',format(
+    'select private.client_package_manifest(%L)',next_pkg->>'id'));
+ perform set_config('request.jwt.claims',claims_admin,true);
+ execute 'set local role authenticated';
+ next_pkg:=public.admin_save_package_draft(gen_random_uuid(),wo,
+    (next_pkg->>'revision')::uuid,'Full corrected package',array[old_photo,new_photo]);
+ execute 'reset role';
  selected:=private.client_package_manifest((next_pkg->>'id')::uuid);
  if selected->>'current_run_id'<>newrun::text
    or selected->'selected_photos'->0->>'photo_id'<>old_photo::text
    or selected->'selected_photos'->0->>'run_id'<>oldrun::text
+   or selected->'selected_photos'->1->>'run_id'<>newrun::text
+   or selected->'selected_photos'->1->>'photo_id'<>new_photo::text
    or jsonb_array_length(selected->'correction_obligations')<>1
    or (select count(*) from private.client_packages where work_order_id=wo and status='DELIVERED')<>1
  then raise exception 'Cross-run retained original evidence/coverage failed: %',selected;end if;
