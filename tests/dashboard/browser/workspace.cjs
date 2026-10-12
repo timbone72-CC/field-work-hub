@@ -948,7 +948,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.waitForResponse(response=>response.url().includes('/set_reviewed_account_work_access')),
       page.locator('#owner-access-review-panel button').click()
     ]);
-    await wait(page,()=>document.querySelector('#owner-office-people')?.textContent.includes('work disabled'));
+    await wait(page,()=>Array.from(document.querySelectorAll('#owner-office-people .row')).some(row=>row.textContent.includes('supervisor@example.invalid') && row.textContent.includes('work disabled')));
     assert.equal(ownerPersonActive,false);
     await page.locator('#owner-office-people .row').filter({hasText:'supervisor@example.invalid'})
       .getByRole('button',{name:'Review restore'}).click();
@@ -958,7 +958,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.waitForResponse(response=>response.url().includes('/set_reviewed_account_work_access')),
       page.locator('#owner-access-review-panel button').click()
     ]);
-    await wait(page,()=>document.querySelector('#owner-office-people')?.textContent.includes('work enabled'));
+    await wait(page,()=>Array.from(document.querySelectorAll('#owner-office-people .row')).some(row=>row.textContent.includes('supervisor@example.invalid') && row.textContent.includes('work enabled')));
     assert.equal(ownerPersonActive,true);
     assert.equal(ownerAccessWrites.length,2);
     await page.locator('#sign-out').click();
