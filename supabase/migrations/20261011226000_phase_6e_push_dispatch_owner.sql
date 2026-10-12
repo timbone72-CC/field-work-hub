@@ -41,7 +41,7 @@ declare w public.work_orders%rowtype; run public.work_order_runs%rowtype;
  package_row record; is_ready boolean;
 begin
  if p_org is null or p_wo is null or
-   (auth.role() is distinct from 'service_role' and not private.can_work_order(p_wo))
+   ((auth.jwt()->>'role') is distinct from 'service_role' and not private.can_work_order(p_wo))
  then raise exception 'Current scoped alert work required' using errcode='42501';end if;
  select * into w from public.work_orders where id=p_wo and organization_id=p_org;
  if w.id is null then raise exception 'Work outside alert organization' using errcode='42501';end if;
@@ -148,7 +148,7 @@ returns jsonb language plpgsql security definer set search_path=''
 set lock_timeout='5s' as $prepare$
 declare w record; next_cursor uuid; processed int:=0; produced int:=0;
 begin
- if auth.role() is distinct from 'service_role' or p_limit not between 1 and 50
+ if (auth.jwt()->>'role') is distinct from 'service_role' or p_limit not between 1 and 50
  then raise exception 'Trusted bounded evaluator required' using errcode='42501';end if;
  for w in select x.id,x.organization_id from public.work_orders x
    where p_after is null or x.id>p_after order by x.id limit p_limit
@@ -214,7 +214,7 @@ declare job private.admin_notification_outbox%rowtype;
  settings private.admin_alert_settings%rowtype; rec private.admin_alert_receipts%rowtype;
  local_time time; quiet boolean; pushready boolean;
 begin
- if auth.role() is distinct from 'service_role' or p_worker is null
+ if (auth.jwt()->>'role') is distinct from 'service_role' or p_worker is null
  then raise exception 'Trusted worker required' using errcode='42501';end if;
  for job in select * from private.admin_notification_outbox o
   where o.state in ('QUEUED','FAILED')
@@ -278,7 +278,7 @@ create function private.service_finish_admin_push(
 set lock_timeout='5s' as $finish$
 declare job private.admin_notification_outbox%rowtype;result text;
 begin
- if auth.role() is distinct from 'service_role'
+ if (auth.jwt()->>'role') is distinct from 'service_role'
    or p_job is null or p_worker is null
    or p_http_status not between 100 and 599
  then raise exception 'Trusted provider result required' using errcode='42501';end if;
