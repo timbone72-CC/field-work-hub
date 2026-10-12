@@ -8,7 +8,7 @@ declare
   t1 uuid:=gen_random_uuid(); t2 uuid:=gen_random_uuid(); t3 uuid:=gen_random_uuid();
   wo_a uuid; wo_a2 uuid; wo_b uuid; wo_foreign uuid;
   actor uuid; role_name text; result jsonb; cursor_text text; denied boolean;
-  count_rows integer; tier integer;
+  count_rows integer; tier integer; original_scope text;
 begin
   insert into public.organizations(id,name) values
     (org,'Supervisor work gate'),(foreign_org,'Other organization');
@@ -61,6 +61,8 @@ begin
     count_rows:=jsonb_array_length(result->'work_orders');
     if (result->>'organization_id')<>org::text
       or (result->>'caller_tier')::integer<>tier
+      or (result->>'scope_fingerprint') is null
+      or (result->>'scope_fingerprint') !~ '^[0-9a-f]{32}$'
       or count_rows<>(case when tier=3 then 3 else 2 end)
       or result::text like '%WO-FOREIGN%'
       or (tier<3 and result::text like '%WO-B%') then
@@ -72,13 +74,29 @@ begin
     jsonb_build_object('sub',t1,'session_id',t1)::text,true);
   result:=public.office_supervisor_work_page(org,null,1);
   cursor_text:=result->>'next_after';
+  original_scope:=result->>'scope_fingerprint';
   if cursor_text is null or jsonb_array_length(result->'work_orders')<>1 then
     raise exception 'Bounded work cursor missing';
   end if;
   result:=public.office_supervisor_work_page(org,cursor_text::uuid,1);
   if jsonb_array_length(result->'work_orders')<>1
-    or (result->>'next_after') is not null then
-    raise exception 'Stable work cursor did not terminate correctly';
+    or (result->>'next_after') is not null
+    or result->>'scope_fingerprint' is distinct from original_scope then
+    raise exception 'Stable work cursor or unchanged scope did not terminate correctly';
+  end if;
+  -- A team-scope edit between pages changes the opaque browser binding.
+  insert into private.supervisor_team_scopes(organization_id,user_id,team_id)
+    values(org,t1,team_b);
+  result:=public.office_supervisor_work_page(org,null,25);
+  if result->>'scope_fingerprint' is not distinct from original_scope
+    or jsonb_array_length(result->'work_orders')<>3 then
+    raise exception 'Expanded Supervisor team scope kept stale paging identity';
+  end if;
+  delete from private.supervisor_team_scopes where user_id=t1 and team_id=team_b;
+  result:=public.office_supervisor_work_page(org,null,25);
+  if result->>'scope_fingerprint' is distinct from original_scope
+    or jsonb_array_length(result->'work_orders')<>2 then
+    raise exception 'Exact team scope did not recover after rollback';
   end if;
   foreach actor in array array[admin_user,owner_user] loop
     perform set_config('request.jwt.claims',
