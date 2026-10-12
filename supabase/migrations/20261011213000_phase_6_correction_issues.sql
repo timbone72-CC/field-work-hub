@@ -193,3 +193,50 @@ begin
  where id=d.id;
  return result;
 end;$dispatch$;
+
+
+-- The Admin form must never leave the general correction and its grouped
+-- photo/goal issues partially saved. This one RPC transaction composes the
+-- same original CAS and issue validator without adding a parallel owner.
+create function private.admin_save_correction_draft_with_issues(
+ p_wo uuid,p_expected_run uuid,p_expected_wo_updated_at timestamptz,
+ p_expected_revision uuid,p_reason text,p_reference_photos uuid[],
+ p_assigned_user uuid,p_due_date date,p_instructions text,
+ p_capture_requirements jsonb,p_item_mapping jsonb,p_release_requirements jsonb,
+ p_issues jsonb
+) returns jsonb language plpgsql security definer set search_path=''
+set lock_timeout='5s' as $combined$
+declare saved jsonb; issues_result jsonb;
+begin
+ saved:=private.admin_save_correction_draft(
+   p_wo,p_expected_run,p_expected_wo_updated_at,p_expected_revision,
+   p_reason,p_reference_photos,p_assigned_user,p_due_date,p_instructions,
+   p_capture_requirements,p_item_mapping,p_release_requirements);
+ issues_result:=private.admin_save_correction_issues(
+   p_wo,(saved->>'revision')::uuid,p_issues);
+ return jsonb_build_object('draft_id',saved->>'draft_id',
+   'revision',issues_result->>'revision','status','DRAFT',
+   'issues',p_issues,'origin_run_id',p_expected_run);
+end;$combined$;
+create function public.admin_save_correction_draft_with_issues(
+ p_wo uuid,p_expected_run uuid,p_expected_wo_updated_at timestamptz,
+ p_expected_revision uuid,p_reason text,p_reference_photos uuid[],
+ p_assigned_user uuid,p_due_date date,p_instructions text,
+ p_capture_requirements jsonb,p_item_mapping jsonb,p_release_requirements jsonb,
+ p_issues jsonb
+) returns jsonb language sql security invoker set search_path='' as $$
+ select private.admin_save_correction_draft_with_issues(
+  p_wo,p_expected_run,p_expected_wo_updated_at,p_expected_revision,
+  p_reason,p_reference_photos,p_assigned_user,p_due_date,p_instructions,
+  p_capture_requirements,p_item_mapping,p_release_requirements,p_issues)
+$$;
+revoke all on function private.admin_save_correction_draft_with_issues(
+ uuid,uuid,timestamptz,uuid,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb,jsonb),
+ public.admin_save_correction_draft_with_issues(
+ uuid,uuid,timestamptz,uuid,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb,jsonb)
+ from public,anon,authenticated,service_role;
+grant execute on function private.admin_save_correction_draft_with_issues(
+ uuid,uuid,timestamptz,uuid,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb,jsonb),
+ public.admin_save_correction_draft_with_issues(
+ uuid,uuid,timestamptz,uuid,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb,jsonb)
+ to authenticated,service_role;
