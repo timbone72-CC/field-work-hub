@@ -48,6 +48,7 @@ do $gate$
 declare
   org uuid:=gen_random_uuid(); team uuid:=gen_random_uuid(); admin_id uuid:=gen_random_uuid();
   other_admin uuid:=gen_random_uuid(); contractor uuid:=gen_random_uuid();
+  supervisor uuid:=gen_random_uuid();
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
@@ -72,6 +73,18 @@ begin
     insert into private.account_work_access(organization_id,user_id,work_role,active)
       values(org,actor,case when actor=contractor then 'CONTRACTOR' else 'ADMIN' end,true);
   end loop;
+  insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data) values(
+    supervisor,'review-supervisor@example.invalid',now(),
+    jsonb_build_object('organization_id',org,'role','SUPERVISOR'));
+  insert into auth.sessions(id,user_id) values(supervisor,supervisor);
+  insert into private.account_work_access(organization_id,user_id,work_role,active)
+    values(org,supervisor,'SUPERVISOR',true);
+  insert into private.supervisor_grants(organization_id,user_id,tier,active,granted_by,reason)
+    values(org,supervisor,1,true,admin_id,'Disposable scoped review');
+  insert into private.supervisor_team_scopes(organization_id,user_id,team_id)
+    values(org,supervisor,team);
+  insert into private.org_work_settings(organization_id,supervisor_work_ready)
+    values(org,true);
   insert into private.admin_team_memberships(organization_id,team_id,user_id,active) values(org,team,admin_id,true);
   insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values(org,team,contractor,true);
   photo:=pg_temp.review_fixture_photo(admin_id,org,team,contractor);
@@ -137,6 +150,44 @@ begin
   response:=public.admin_review_photo(action,wo,photo,t.version,null,'APPROVED','');
   replay:=public.admin_review_photo(action,wo,photo,t.version,null,'APPROVED','');
   if response<>replay or response->>'decision'<>'APPROVED' then raise exception 'Review replay changed evidence';end if;
+
+  -- Supervisor review reuses the same verified private photo gallery and
+  -- exact revision/action owner. Tier 1 is WORK-scoped, not an Admin role.
+  execute 'reset role';
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisor,
+    'session_id',supervisor)::text,true);
+  execute 'set local role authenticated';
+  gallery:=public.admin_review_photo_page(wo,25,null,null,null,null,false,null,null);
+  if gallery->>'work_order_id'<>wo::text
+    or jsonb_array_length(gallery->'photos')<>1
+    or gallery->'photos'->0->>'photo_id'<>photo::text
+    or gallery->'photos'->0->>'decision'<>'APPROVED'
+  then raise exception 'Tier 1 Supervisor could not see exact verified team review';end if;
+  response:=public.admin_review_photo(gen_random_uuid(),wo,photo,t.version,
+    (replay->>'decision_revision')::uuid,'APPROVED','');
+  if response->>'decision'<>'APPROVED'
+  then raise exception 'Supervisor review did not use shared engine';end if;
+  execute 'reset role';
+  target:=private.admin_private_photo_target_for_session(photo,t.version,supervisor,supervisor);
+  if target->>'photo_id'<>photo::text
+  then raise exception 'Current scoped Supervisor image-read target denied';end if;
+  delete from private.supervisor_team_scopes where user_id=supervisor and team_id=team;
+  execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_review_photo_page(%L,25,null,null,null,null,false,null,null)',wo));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_review_photo(%L,%L,%L,%L,%L,%L,%L)',
+    gen_random_uuid(),wo,photo,t.version,response->>'decision_revision','APPROVED',''));
+  execute 'reset role';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select private.admin_private_photo_target_for_session(%L,%L,%L,%L)',
+    photo,t.version,supervisor,supervisor));
+  insert into private.supervisor_team_scopes(organization_id,user_id,team_id)
+    values(org,supervisor,team);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,
+    'session_id',admin_id,'app_metadata',jsonb_build_object(
+    'role','ADMIN','organization_id',org))::text,true);
+  execute 'set local role authenticated';
 
   -- Controlled-only provider declaration; NO real Drive, real photos or live Send.
   execute 'reset role';
