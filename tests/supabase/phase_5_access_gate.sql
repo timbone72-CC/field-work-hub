@@ -10,6 +10,7 @@ declare
  action text; expected boolean; result boolean; denied boolean; tier integer; n integer; capacity jsonb;
  enroll_user uuid:=gen_random_uuid(); enroll_action uuid:=gen_random_uuid(); enroll_res uuid; enroll_revision uuid; enroll_access_rev uuid;
  enroll_user2 uuid:=gen_random_uuid(); combined_action uuid:=gen_random_uuid(); combined_rev uuid;
+ grant_state_action uuid:=gen_random_uuid(); grant_state_revision uuid;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
 begin
@@ -484,6 +485,49 @@ begin
      enroll_access_rev,1::smallint,array[team_a],'Second enrollment','TEST');
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Consumed reservation used twice';end if;
+
+ -- A grant cannot be removed behind active work; reviewed disable/cutoff must run first.
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_grant_state(gen_random_uuid(),org,supervisors[1],
+     (select g.revision from private.supervisor_grants g where g.user_id=supervisors[1]),
+     (select a.revision from private.account_work_access a where a.user_id=supervisors[1]),
+     false,'Unreviewed active work revoke','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Owner revoked active Supervisor without recovery review';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_grant_state(grant_state_action,org,enroll_user,
+     enroll_revision,enroll_access_rev,false,'Unauthorized Admin revoke','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin changed Supervisor grant active state';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ grant_state_revision:=public.owner_set_supervisor_grant_state(grant_state_action,org,enroll_user,
+   enroll_revision,enroll_access_rev,false,'Reviewed grant removal','TEST');
+ if grant_state_revision<>public.owner_set_supervisor_grant_state(grant_state_action,org,enroll_user,
+   enroll_revision,enroll_access_rev,false,'Reviewed grant removal','TEST')
+   or (select g.active from private.supervisor_grants g where g.user_id=enroll_user)
+   or (select a.active from private.account_work_access a where a.user_id=enroll_user)
+   or (select count(*) from private.supervisor_team_scopes s where s.user_id=enroll_user)<>1 then
+   raise exception 'Grant removal lost idempotency, historical scope or work gate';end if;
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_grant_state(gen_random_uuid(),org,enroll_user,
+     enroll_revision,enroll_access_rev,true,'Stale grant revision','TEST');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Stale grant state revision accepted';end if;
+ grant_state_revision:=public.owner_set_supervisor_grant_state(gen_random_uuid(),org,enroll_user,
+   grant_state_revision,enroll_access_rev,true,'Reviewed grant restoration','TEST');
+ if not (select g.active from private.supervisor_grants g where g.user_id=enroll_user)
+   or (select a.active from private.account_work_access a where a.user_id=enroll_user) then
+   raise exception 'Grant restoration improperly activated or failed to activate grant';end if;
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_grant_state(grant_state_action,org,enroll_user,
+     enroll_revision,enroll_access_rev,true,'Changed revoke replay','TEST');
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Grant state action replay changed its payload';end if;
 
  -- UI composition never leaves a reserved seat after a failed enrollment.
  denied:=false;
