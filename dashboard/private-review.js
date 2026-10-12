@@ -153,7 +153,11 @@ const PrivateReview = (() => {
           if (active(gen,wo,token)) status(error.message || 'Private photo preview unavailable.', true);
         } finally { if (active(gen,wo,token)) show.disabled = false; }
       }, false);
-      controls.append(show, approval, rejection);
+      const addIssue=actionButton('Add correction issue',()=>{
+        const reason=explanation.value.trim()||item.reason||'';
+        if(!CorrectionDraft.addIssue(item,reason))explanation.focus();
+      },false);
+      controls.append(show, approval, rejection, addIssue);
       const reference=document.createElement('label');reference.className='check';
       const refChoice=document.createElement('input');refChoice.type='checkbox';
       refChoice.dataset.correctionPhotoId=item.photo_id;
