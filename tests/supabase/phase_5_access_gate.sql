@@ -324,6 +324,12 @@ begin
  actor:=public.owner_set_office_allowances(org,actor,4,5,
    'Restore configured allowance for release gate','TEST');
 
+ -- Reservation changes must appear in the same owner capacity projection.
+ capacity:=public.owner_office_capacity_status(org,'TEST');
+ if (capacity->>'admin_reserved')::integer<>1
+    or (capacity->>'admin_available')::integer<>1 then
+   raise exception 'Owner capacity omitted pending office reservation';end if;
+
  -- Phase 6F explicit seat cancellation preserves reservation identity and limits.
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
  denied:=false;
