@@ -14,6 +14,7 @@ let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
 let ownerEnrollFailOnce=true;
+let ownerRosterTeam=null,ownerRosterRevision=null,ownerRosterWrites=[],ownerRosterBusyOnce=true;
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
@@ -122,13 +123,34 @@ const wait = async (page, condition) => page.waitForFunction(condition);
             access_revision:ownerAccessRevision,identity_ready:true},
           {user_id:uuid(9231),account_email:'new-supervisor@example.invalid',
             work_role:'SUPERVISOR',work_active:false,
-            access_revision:uuid(9232),identity_ready:true}
+            access_revision:uuid(9232),identity_ready:true},
+          {user_id:uuid(9241),account_email:'contractor-roster@example.invalid',
+            work_role:'CONTRACTOR',work_active:true,identity_ready:true,
+            access_revision:uuid(9242),roster_team_id:ownerRosterTeam,
+            roster_revision:ownerRosterRevision}
         ]);
         if (url.pathname.endsWith('owner_office_team_list')) return reply([{
           team_id:uuid(9213),team_name:'West test team',active:true,revision:uuid(9215),admin_count:1
+        },{
+          team_id:uuid(9216),team_name:'East test team',active:true,revision:uuid(9219),admin_count:1
         }]);
         if (url.pathname.endsWith('owner_supervisor_team_scope_list')) return reply(ownerScope.map(team_id=>({team_id})));
         ownerWrites.push({name:url.pathname.split('/').at(-1),...p});
+        if (url.pathname.endsWith('manage_idle_contractor_roster')) {
+          ownerRosterWrites.push(p);
+          assert.equal(p.p_user,uuid(9241));
+          assert.equal(p.p_expected_revision,ownerRosterRevision);
+          if (ownerRosterTeam === uuid(9213) && ownerRosterBusyOnce) {
+            ownerRosterBusyOnce=false;
+            return reply({message:'Contractor has open assignments; separate handoff required'},409);
+          }
+          const previous = ownerRosterTeam;
+          ownerRosterTeam=p.p_team;
+          ownerRosterRevision=uuid(previous?9244:9243);
+          return reply({action_id:p.p_action,user_id:p.p_user,old_team_id:previous,
+            new_team_id:ownerRosterTeam,revision:ownerRosterRevision,
+            action_kind:previous?'TRANSFER':'PLACE'});
+        }
         if (url.pathname.endsWith('owner_set_supervisor_grant_state')) {
           ownerGrantWrites.push(p);
           assert.equal(p.p_user,uuid(9231));
@@ -1037,6 +1059,37 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved.'));
     assert.equal(ownerEnrolledGrantActive,true);
     assert.equal(ownerGrantWrites.length,2);
+    const rosterRow=page.locator('#owner-contractor-roster .row')
+      .filter({hasText:'contractor-roster@example.invalid'});
+    await rosterRow.locator('select').selectOption(uuid(9213));
+    page.once('dialog',dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/manage_idle_contractor_roster')),
+      rosterRow.getByRole('button',{name:'Place unassigned'}).click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-contractor-roster')
+      ?.textContent.includes('West test team'));
+    assert.equal(ownerRosterTeam,uuid(9213));
+    await rosterRow.locator('select').selectOption(uuid(9216));
+    page.once('dialog',dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/manage_idle_contractor_roster')),
+      rosterRow.getByRole('button',{name:'Review idle transfer'}).click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-office-status')
+      ?.textContent.includes('Contractor has open assignments'));
+    assert.equal(ownerRosterTeam,uuid(9213),'Busy transfer must not mutate roster');
+    page.once('dialog',dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/manage_idle_contractor_roster')),
+      rosterRow.getByRole('button',{name:'Review idle transfer'}).click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-contractor-roster')
+      ?.textContent.includes('East test team'));
+    assert.equal(ownerRosterTeam,uuid(9216));
+    assert.equal(ownerRosterWrites.length,3);
+    assert.equal(ownerRosterWrites[1].p_action,ownerRosterWrites[2].p_action,
+      'Ambiguous roster response must keep the action UUID');
     assert.equal(await page.locator('#owner-enrollment-user').locator('option').count(),1,
       'Already enrolled Supervisor cannot be offered for a second enrollment');
     await page.screenshot({path:path.join(output,'phase6f-owner-desktop.png'),fullPage:true});
