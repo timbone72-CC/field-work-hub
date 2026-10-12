@@ -11,6 +11,7 @@ const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
+let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
@@ -74,6 +75,28 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await context.route('https://**/*', async route => {
       const req = route.request(), url = new URL(req.url()); requests.push(url.pathname + url.search);
       const reply = (body, status = 200, headers = {}) => route.fulfill({ status, headers: { 'Content-Type': 'application/json', 'Access-Control-Expose-Headers': 'Content-Range', ...headers }, body: JSON.stringify(body) });
+      if (url.pathname.endsWith('/review_account_work_access')) {
+        const p=req.postDataJSON();assert.equal(p.p_target,uuid(9214));
+        return reply({organization_id:organization,target_user_id:uuid(9214),
+          target_role:'SUPERVISOR',active:ownerPersonActive,requested_active:p.p_active,
+          access_revision:ownerAccessRevision,review_fingerprint:'a'.repeat(64),
+          affected_jobs:2,in_progress_jobs:1,field_complete_jobs:0,
+          teams:[{team_id:uuid(9213),name:'West test team',affected_jobs:2,
+            manager_count:1,manager_user_ids:[admin]}],total_teams:1,next_team:null,
+          continuity_required:!p.p_active});
+      }
+      if (url.pathname.endsWith('/set_reviewed_account_work_access')) {
+        const p=req.postDataJSON();ownerAccessWrites.push(p);
+        assert.equal(p.p_expected_revision,ownerAccessRevision);
+        assert.equal(p.p_review_fingerprint,'a'.repeat(64));
+        if (!p.p_active) assert.deepEqual(p.p_continuity,[{
+          team_id:uuid(9213),decision:'KEEP_MANAGER',manager_user_id:admin
+        }]);
+        else assert.deepEqual(p.p_continuity,[]);
+        ownerPersonActive=p.p_active;ownerAccessRevision=uuid(9225);
+        return reply([{action_id:p.p_action,target_user_id:p.p_target,active:p.p_active,
+          revision:ownerAccessRevision,recovery_grant_id:p.p_active?null:p.p_action}]);
+      }
       if (url.pathname.startsWith('/rest/v1/rpc/owner_')) {
         if (!syntheticOwner) return reply({message:'Verified Product Owner required'},403);
         const p=req.postDataJSON();
@@ -88,6 +111,13 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           user_id:uuid(9214),account_email:'supervisor@example.invalid',tier:ownerTier,grant_active:true,grant_revision:ownerTierRevision,
           work_active:true,team_count:ownerScope.length
         }]);
+        if (url.pathname.endsWith('owner_office_people_list')) return reply([
+          {user_id:admin,account_email:'admin@example.invalid',work_role:'ADMIN',
+            work_active:true,access_revision:uuid(9221)},
+          {user_id:uuid(9214),account_email:'supervisor@example.invalid',
+            work_role:'SUPERVISOR',work_active:ownerPersonActive,
+            access_revision:ownerAccessRevision}
+        ]);
         if (url.pathname.endsWith('owner_office_team_list')) return reply([{
           team_id:uuid(9213),team_name:'West test team',active:true,revision:uuid(9215),admin_count:1
         }]);
