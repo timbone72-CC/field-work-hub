@@ -232,6 +232,43 @@ begin
     or (select oa.supervisor_limit from private.org_office_allowances oa where oa.organization_id=org)<>5 then
    raise exception 'Owner allowance values incorrect';
  end if;
+
+ -- Phase 6F owner-only office seat reservation, immutable action and per-role cap.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_reserve_office_seat(gen_random_uuid(),org,'ADMIN','Admin denial','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Admin reserved an office seat';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[3],'session_id',supervisors[3])::text,true);
+ denied:=false;
+ begin
+   perform public.owner_reserve_office_seat(gen_random_uuid(),org,'SUPERVISOR','Supervisor denial','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Supervisor reserved an office seat';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_reserve_office_seat(gen_random_uuid(),other_org,'ADMIN','Unconfigured organization','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Unconfigured organization obtained a seat';end if;
+ sid:=gen_random_uuid();
+ if public.owner_reserve_office_seat(sid,org,'ADMIN','Reserved owner seat','TEST')<>sid
+    or public.owner_reserve_office_seat(sid,org,'ADMIN','Reserved owner seat','TEST')<>sid then
+   raise exception 'Exact seat reservation replay failed';
+ end if;
+ denied:=false;
+ begin
+   perform public.owner_reserve_office_seat(sid,org,'SUPERVISOR','Changed reservation role','TEST');
+ exception when invalid_parameter_value then denied:=true;
+ end;
+ if not denied then raise exception 'Reservation action changed role';end if;
+ if (select count(*) from private.office_seat_reservations where organization_id=org and state='RESERVED')<>1 then
+   raise exception 'Idempotent replay consumed extra office seat';
+ end if;
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
 
