@@ -126,6 +126,7 @@ function staffingCard() {
       }
     });
   }
+  card.querySelector('#staffing-handoff-form').addEventListener('submit', event => event.preventDefault());
   card.querySelector('#staffing-handoff-preview').addEventListener('click', () => void staffingPreviewHandoff());
   card.querySelector('#staffing-handoff-confirm').addEventListener('click', () => void staffingConfirmHandoff());
   card.querySelector('#staffing-invite-form').addEventListener('submit', event => {
@@ -561,6 +562,9 @@ async function staffingPreviewHandoff() {
     });
     const review=await response.json().catch(()=>({}));
     if (!staffingStillCurrent(check)) return;
+    if (JSON.stringify(staffingHandoffInputs())!==JSON.stringify(req)) {
+      throw new Error('Handoff selection changed while reviewing; review the current fields again.');
+    }
     if (!response.ok) throw new Error(review.message||'Handoff review is not authorized.');
     if (review.organization_id!==check.org||review.work_order_id!==req.p_work_order
       ||review.old_team_id!==row.team_id||review.new_team_id!==req.p_destination
