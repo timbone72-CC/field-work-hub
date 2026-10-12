@@ -9,6 +9,8 @@ create function private.admin_save_correction_issues(
 set lock_timeout='5s' as $issues$
 declare b jsonb; w public.work_orders%rowtype; d private.admin_correction_drafts%rowtype;
  issue jsonb; pid uuid; iid uuid;
+ requested_total integer:=0; capture_total integer:=0;
+ mapped_min integer:=0;
 begin
  if p_expected_revision is null or p_issues is null or jsonb_typeof(p_issues)<>'array'
     or jsonb_array_length(p_issues)>50
@@ -54,7 +56,30 @@ begin
       where v.value->>'id'=iid::text)
    then raise exception 'Issue references unknown original release goal'
      using errcode='42501';end if;
+   requested_total:=requested_total+(issue->>'requested_count')::integer;
+   if iid is not null then
+     select coalesce(sum((capture.value->>'minimum')::integer),0)
+       into mapped_min
+     from jsonb_array_elements(d.item_mapping) mapping
+     join lateral jsonb_array_elements(d.capture_requirements->'items') capture(value)
+       on capture.value->>'id'=mapping.value->>'capture_item_id'
+     where mapping.value->>'release_item_id'=iid::text
+       and (capture.value->>'enabled')::boolean;
+     if mapped_min<(issue->>'requested_count')::int then
+       raise exception 'Requested named correction count exceeds new mapped capture goal'
+         using errcode='22023';end if;
+   end if;
  end loop;
+ select greatest(
+   case when (d.capture_requirements->'total'->>'enabled')::boolean
+     then (d.capture_requirements->'total'->>'minimum')::int else 0 end,
+   coalesce((select sum((x.value->>'minimum')::int)
+       from jsonb_array_elements(d.capture_requirements->'items') x
+       where (x.value->>'enabled')::boolean),0)
+ ) into capture_total;
+ if requested_total>capture_total then
+   raise exception 'Requested correction issue photos exceed new-run required captures'
+      using errcode='22023';end if;
  if exists(select 1 from jsonb_array_elements(p_issues) v
    group by v.value->>'photo_id',v.value->>'item_id' having count(*)>1)
  then raise exception 'Duplicate affected photo/goal issue' using errcode='22023';end if;
