@@ -131,7 +131,7 @@ const NotificationCenter=(()=>{
       const actions=document.createElement('div');actions.className='workspace-navigation';
       const open=document.createElement('button');open.type='button';
       open.className='secondary';open.textContent='Open work order';
-      open.addEventListener('click',()=>JobWorkspace.openFromAlert?.(item.work_order_id));
+      open.addEventListener('click',()=>JobWorkspace.choose(item.work_order_id));
       const acknowledge=document.createElement('button');acknowledge.type='button';
       acknowledge.className='secondary';acknowledge.textContent='Acknowledge';
       acknowledge.disabled=!!item.acknowledged;
