@@ -565,7 +565,7 @@ begin
   perform pg_temp.expect_photo_review_error('42501',format(
     'update private.photo_review_actions set decision=%L where action_id=%L','APPROVED',action));
   execute 'reset role';
-  if response->>'decision'<>'REJECTED' or (select count(*) from private.photo_review_actions where photo_id=photo)<>2
+  if response->>'decision'<>'REJECTED' or (select count(*) from private.photo_review_actions where photo_id=photo)<>3
     or (select reason from private.photo_review_decisions where photo_id=photo)<>'Missing side' then
     raise exception 'Review revision, reason or immutable audit was lost';end if;
   target:=public.admin_private_photo_target_for_session(photo,t.version,admin_id,admin_id);
