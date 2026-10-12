@@ -65,6 +65,8 @@ jobs:
           node --check dashboard/session.js
           node --check dashboard/contractors.js
           node --check dashboard/contractor-invite.js
+          node --check dashboard/admin-invite.js
+          node --check supabase/functions/admin-invite-contractor/scoped-admin-invite.mjs
       - name: Test automatic Admin updates and session races
         run: node --test tests/dashboard/*.test.js
       - name: Verify trusted private photo bytes and failure handling
