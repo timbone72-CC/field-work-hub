@@ -140,3 +140,27 @@ begin
 end;$$;
 revoke all on function public.owner_supervisor_team_scope_list(uuid,uuid,text) from public,anon;
 grant execute on function public.owner_supervisor_team_scope_list(uuid,uuid,text) to authenticated,service_role;
+
+-- Bounded personnel identifiers for Product Owner-reviewed work-access decisions.
+-- Work/private photo authority is not conveyed by these labels.
+create function public.owner_office_people_list(
+ p_org uuid,p_environment text,p_after uuid default null,p_limit integer default 50)
+returns table(user_id uuid,account_email text,work_role text,work_active boolean,
+ access_revision uuid)
+language plpgsql security definer set search_path='' as $$
+begin
+ if p_org is null or p_limit is null or p_limit not between 1 and 50
+   or p_environment not in ('TEST','PRODUCTION')
+   or not private.is_current_platform_owner(p_environment)
+   or not exists(select 1 from private.org_office_allowances s where s.organization_id=p_org)
+ then raise exception 'Verified Product Owner required' using errcode='42501';end if;
+ return query
+   select a.user_id,u.email::text,a.work_role,
+     (a.active and a.disabled_at is null),a.revision
+   from private.account_work_access a
+   join auth.users u on u.id=a.user_id
+   where a.organization_id=p_org and (p_after is null or a.user_id>p_after)
+   order by a.user_id limit p_limit;
+end;$$;
+revoke all on function public.owner_office_people_list(uuid,text,uuid,integer) from public,anon;
+grant execute on function public.owner_office_people_list(uuid,text,uuid,integer) to authenticated,service_role;
