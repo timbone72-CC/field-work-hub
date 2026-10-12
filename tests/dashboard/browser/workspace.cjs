@@ -105,7 +105,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         if (rows[50].field_status!=='FIELD_COMPLETE')return reply({message:'Not complete'},409);
         return reply({...correctionBase(),draft:correctionDraft});
       }
-      if (url.pathname.endsWith('/admin_save_correction_draft')) {
+      if (url.pathname.endsWith('/admin_save_correction_draft_with_issues')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
         assert.equal(p.p_expected_run,correctiveOriginalRun);
         assert.equal(p.p_expected_wo_updated_at,'2026-10-11T20:00:00Z');
@@ -115,13 +115,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         assert.equal(p.p_item_mapping.length,1);
         assert.equal(p.p_item_mapping[0].release_item_id,p.p_item_mapping[0].capture_item_id);
         assert.equal(p.p_release_requirements.items.length,1);
+        assert.equal(p.p_issues.length,1);
+        assert.equal(p.p_issues[0].photo_id,reviewPhoto);
+        assert.equal(p.p_issues[0].reason,'Blurry exterior');
+        assert.equal(p.p_issues[0].requested_count,1);
+        correctionIssues=structuredClone(p.p_issues);
+        correctionDraftRev=uuid(9966);
         correctionDraft={id:uuid(9964),revision:correctionDraftRev,status:'DRAFT',
           origin_run_id:p.p_expected_run,expected_wo_updated_at:p.p_expected_wo_updated_at,
           kind:'INTERNAL_CORRECTION',reason:p.p_reason,reference_photos:p.p_reference_photos,
           assigned_user_id:p.p_assigned_user,due_date:p.p_due_date,
           instructions:p.p_instructions,capture_requirements:p.p_capture_requirements,
-          item_mapping:p.p_item_mapping,release_requirements:p.p_release_requirements};
-        return reply({draft_id:correctionDraft.id,revision:correctionDraftRev,status:'DRAFT'});
+          item_mapping:p.p_item_mapping,release_requirements:p.p_release_requirements,
+          issues:structuredClone(correctionIssues)};
+        return reply({draft_id:correctionDraft.id,revision:correctionDraftRev,status:'DRAFT',
+          issues:correctionIssues});
       }
       if (url.pathname.endsWith('/admin_save_correction_issues')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
