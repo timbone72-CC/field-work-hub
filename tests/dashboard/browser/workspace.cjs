@@ -659,6 +659,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
     assert.equal(await page.locator('#notification-settings input[type=checkbox]:checked').count(),9);
     assert.match(await page.locator('#notification-list').innerText(),/Awaiting contractor Accept/);
+    // Wait for the completed settings + issue read, not just the first
+    // rendered preference row. CI may still be processing the final read.
+    await wait(page,()=>document.querySelector('#notification-status')?.textContent
+      .startsWith('Loaded current server facts.'));
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/admin_set_notification_preferences')
         && response.request().method()==='POST'),
@@ -1035,7 +1039,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.ok(preferences.length > 0);
     for (const [, value] of preferences) assert.deepEqual(Object.keys(JSON.parse(value)).sort(), ['size', 'sort', 'status']);
     let releaseDetail; delayDetail = new Promise(resolve => { releaseDetail = resolve; });
-    await page.locator('.job-link').first().click(); await page.locator('#sign-out').click(); releaseDetail(); await page.waitForTimeout(100);
+    // A modal workspace intentionally blocks pointer access to the header.
+    // Simulate an independent session termination while a detail read is
+    // pending; this is a stale-response isolation test, not a clickability test.
+    await page.locator('.job-link').first().click();
+    await page.evaluate(() => document.querySelector('#sign-out').click());
+    releaseDetail(); await page.waitForTimeout(100);
     assert.equal(await page.locator('dialog').evaluate(el => el.open), false);
     assert.equal(await page.locator('#edit-work-order-id').inputValue(), '');
     // An authenticated non-owner has no visible owner controls; only the
