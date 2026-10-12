@@ -90,6 +90,54 @@ begin
  if not private.is_current_platform_owner('TEST') or private.is_current_platform_owner('PRODUCTION') then
    raise exception 'Owner environment boundary failed';end if;
  if private.can_work_order(wo) or private.has_team_capability(org,team_a,'WORK') then raise exception 'Owner bypassed work scope';end if;
+
+ -- Phase 6F owner-only existing Supervisor tier update, with scoped denial.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_change_supervisor_tier(org,supervisors[1],
+     (select revision from private.supervisor_grants where organization_id=org and user_id=supervisors[1]),
+     3::smallint,'Unauthorized admin promotion','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Admin could change Supervisor tier';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[3],'session_id',supervisors[3])::text,true);
+ denied:=false;
+ begin
+   perform public.owner_change_supervisor_tier(org,supervisors[1],
+     (select revision from private.supervisor_grants where organization_id=org and user_id=supervisors[1]),
+     3::smallint,'Unauthorized supervisor promotion','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Supervisor could change peer tier';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_change_supervisor_tier(other_org,supervisors[1],gen_random_uuid(),
+     3::smallint,'Cross organization promotion','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Owner could create a grant in another organization';end if;
+ -- Promote within the same organization; only this grant tier changes.
+ select revision into sid from private.supervisor_grants where organization_id=org and user_id=supervisors[1];
+ actor:=public.owner_change_supervisor_tier(org,supervisors[1],sid,2::smallint,'Reviewed owner tier change','TEST');
+ if actor=sid or (select tier from private.supervisor_grants
+                   where organization_id=org and user_id=supervisors[1])<>2 then
+   raise exception 'Owner tier change did not commit expected revision';
+ end if;
+ denied:=false;
+ begin
+   perform public.owner_change_supervisor_tier(org,supervisors[1],sid,
+     3::smallint,'Stale update','TEST');
+ exception when serialization_failure then denied:=true;
+ end;
+ if not denied then raise exception 'Stale tier revision accepted';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[1],'session_id',supervisors[1])::text,true);
+ if private.has_team_capability(org,team_b,'WORK') or
+    private.has_team_capability(other_org,other_team,'WORK') then
+   raise exception 'Tier change silently widened team or tenant scope';
+ end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
 
