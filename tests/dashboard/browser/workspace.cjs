@@ -938,6 +938,29 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     ]);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Work scope changed'));
     assert.deepEqual(ownerScope,[],'Rejected change cannot mutate Supervisor scope');
+    // Reviewed disablement must explicitly identify an existing team manager.
+    await page.locator('#owner-office-people .row').filter({hasText:'supervisor@example.invalid'})
+      .getByRole('button',{name:'Review disable'}).click();
+    await wait(page,()=>document.querySelector('#owner-access-review-panel')?.textContent.includes('West test team'));
+    await page.locator('#owner-access-review-panel select').selectOption(admin);
+    page.once('dialog', dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/set_reviewed_account_work_access')),
+      page.locator('#owner-access-review-panel button').click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-office-people')?.textContent.includes('work disabled'));
+    assert.equal(ownerPersonActive,false);
+    await page.locator('#owner-office-people .row').filter({hasText:'supervisor@example.invalid'})
+      .getByRole('button',{name:'Review restore'}).click();
+    await wait(page,()=>document.querySelector('#owner-access-review-panel')?.textContent.includes('Restore work'));
+    page.once('dialog', dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/set_reviewed_account_work_access')),
+      page.locator('#owner-access-review-panel button').click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-office-people')?.textContent.includes('work enabled'));
+    assert.equal(ownerPersonActive,true);
+    assert.equal(ownerAccessWrites.length,2);
     await page.locator('#sign-out').click();
     assert.equal(await page.locator('#owner-office-console').count(),0,'Owner data must clear on signout');
     assert.equal(errors.length, 0, errors.join('\n'));
