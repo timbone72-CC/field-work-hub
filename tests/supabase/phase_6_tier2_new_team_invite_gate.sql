@@ -132,6 +132,10 @@ begin
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Retired team was resurrected';end if;
 
+ if result is distinct from public.release_scoped_admin_invitation(
+   cancel_action,org,'TEST') then
+   raise exception 'Cancel replay lost its final receipt';end if;
+
  result:=public.create_admin_team_and_reserve_invitation(
    action_id,org,new_team,'New managed team',
    'newstaff@example.invalid','New Staff',quota_revision,
