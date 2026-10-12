@@ -223,6 +223,24 @@
               <label>Instructions for the new visit <textarea id="correction-instructions" rows="3" maxlength="4000"></textarea></label>
               <p class="muted">Optionally mark verified earlier photos as references in the list above. References do not satisfy new-visit photo minimums.</p>
               <p id="correction-references" class="muted"></p>
+              <details id="correction-issues">
+                <summary>Issues requiring correction (photo or required item)</summary>
+                <p class="muted">Record each affected photo or original release goal, its reason, and how many new photos are needed. The issues are saved with the same protected correction draft and included in its exact preview.</p>
+                <label>Verified earlier photo UUID (optional)
+                  <input id="correction-issue-photo" type="text" maxlength="36" placeholder="Select a verified photo above, or enter its UUID">
+                </label>
+                <label>Original release requirement (optional)
+                  <select id="correction-issue-item"><option value="">No named original requirement</option></select>
+                </label>
+                <label>What needs correction
+                  <textarea id="correction-issue-reason" rows="2" maxlength="1000"></textarea>
+                </label>
+                <label>Requested new photos
+                  <input id="correction-issue-count" type="number" min="1" max="1000" step="1" value="1">
+                </label>
+                <button id="correction-issue-add" type="button" class="secondary">Add issue to correction draft</button>
+                <div id="correction-issue-list" aria-label="Grouped correction issues"></div>
+              </details>
               <div id="correction-photo-requirements"></div>
               <div id="correction-item-mapping" aria-label="New photo to client release-goal mappings"></div>
               <p class="muted">Map every new photo category explicitly to an existing client requirement, Extra, or a new client requirement. Original required photo minimums cannot be lowered.</p>
