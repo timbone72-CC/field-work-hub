@@ -113,7 +113,7 @@ const JobWorkspace = (() => {
   function detailsDirty() { return baseline !== null && fingerprint() !== baseline; }
   function dirty() { return detailsDirty() || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
   function reset() {
-    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
@@ -226,14 +226,14 @@ const JobWorkspace = (() => {
     el('job-receipt').textContent = row.assignment_received_at
       ? `Assignment received ${formatTimestamp(row.assignment_received_at)}` : 'Assignment not yet received';
     el('job-reload').hidden = true;
-    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     tab('details');
     if (!editSection.open) editSection.showModal();
     navigation();
   }
   function tab(name) {
     document.querySelectorAll('[data-job-panel]').forEach(panel => { panel.hidden = panel.dataset.jobPanel !== name; });
-    saveEditButton.hidden = name === 'photos' || name === 'delivery';
+    saveEditButton.hidden = name === 'photos' || name === 'delivery' || name === 'history';
     if (name === 'photos' && selectedRow?.id) {
       PrivateReview.open(selectedRow.id,selectedRow.current_run_id);
       ClientRelease.open(selectedRow.id,name);
@@ -241,12 +241,13 @@ const JobWorkspace = (() => {
       FollowupManagement.open(selectedRow.id, selectedRow.field_status);
     }
     if (name === 'delivery' && selectedRow?.id) ClientRelease.open(selectedRow.id, name);
+    if (name === 'history' && selectedRow?.id) ReleaseHistory.open(selectedRow.id);
     document.querySelectorAll('[data-job-tab]').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.jobTab === name));
     });
   }
   function closed() {
-    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset();
+    PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
@@ -276,7 +277,7 @@ const JobWorkspace = (() => {
     }
   }
   function init() {
-    CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init();
+    CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init(); ReleaseHistory.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
     el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));
     el('job-address-previous').addEventListener('click',()=>loadAddressContext(Math.max(0,addressOffset-50)));
