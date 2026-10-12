@@ -9,6 +9,9 @@ const output = process.env.FWH_BROWSER_OUTPUT || '/tmp/fwh-browser-evidence';
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
+let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212);
+let ownerScope=[uuid(9213)],ownerWrites=[];
+
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
 let largeReview=false,maxPhotoPage=0;
@@ -71,6 +74,39 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await context.route('https://**/*', async route => {
       const req = route.request(), url = new URL(req.url()); requests.push(url.pathname + url.search);
       const reply = (body, status = 200, headers = {}) => route.fulfill({ status, headers: { 'Content-Type': 'application/json', 'Access-Control-Expose-Headers': 'Content-Range', ...headers }, body: JSON.stringify(body) });
+      if (url.pathname.startsWith('/rest/v1/rpc/owner_')) {
+        if (!syntheticOwner) return reply({message:'Verified Product Owner required'},403);
+        const p=req.postDataJSON();
+        assert.equal(p.p_environment,'TEST');
+        assert.equal(p.p_org,organization);
+        if (url.pathname.endsWith('owner_office_capacity_status')) return reply({
+          organization_id:organization,revision:ownerQuotaRevision,
+          admin_limit:4,admin_active:2,admin_reserved:1,admin_available:1,
+          supervisor_limit:4,supervisor_active:1,supervisor_reserved:0,supervisor_available:3
+        });
+        if (url.pathname.endsWith('owner_supervisor_grant_list')) return reply([{
+          user_id:uuid(9214),tier:ownerTier,grant_active:true,grant_revision:ownerTierRevision,
+          work_active:true,team_count:ownerScope.length
+        }]);
+        if (url.pathname.endsWith('owner_office_team_list')) return reply([{
+          team_id:uuid(9213),team_name:'West test team',active:true,revision:uuid(9215),admin_count:1
+        }]);
+        if (url.pathname.endsWith('owner_supervisor_team_scope_list')) return reply(ownerScope.map(team_id=>({team_id})));
+        ownerWrites.push({name:url.pathname.split('/').at(-1),...p});
+        if (url.pathname.endsWith('owner_change_supervisor_tier')) {
+          assert.equal(p.p_expected_revision,ownerTierRevision);
+          ownerTier=p.p_tier;ownerTierRevision=uuid(9217);return reply(ownerTierRevision);
+        }
+        if (url.pathname.endsWith('owner_set_supervisor_team_scope')) {
+          assert.equal(p.p_expected_revision,ownerTierRevision);
+          ownerScope=p.p_allowed?[p.p_team]:[];ownerTierRevision=uuid(9218);return reply(ownerTierRevision);
+        }
+        if (url.pathname.endsWith('owner_set_office_allowances')) {
+          assert.equal(p.p_expected_revision,ownerQuotaRevision);
+          assert.equal(p.p_admin_limit,5);ownerQuotaRevision=uuid(9219);return reply(ownerQuotaRevision);
+        }
+        throw Error('Unexpected owner request');
+      }
       if (url.pathname === '/auth/v1/token') return reply({ access_token: 'disposable-test-access', refresh_token: 'disposable-test-refresh', expires_in: 3600 });
       if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
       if (url.pathname === '/rest/v1/photo_templates') return reply(templateRows);
