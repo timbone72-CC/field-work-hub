@@ -389,12 +389,20 @@ async function ownerEnrollExisting() {
     }
     const actionId = ownerEnrollmentPending?.actionId || crypto.randomUUID();
     ownerEnrollmentPending = { actionId, fingerprint, user };
-    await ownerChange(current => ownerRpc('owner_enroll_supervisor_with_seat', {
-      p_action: actionId, p_org: current.organization, p_user: user,
-      p_expected_access_revision: person.access_revision,
-      p_tier: tier, p_team_ids: teamIds, p_reason: reason,
-      p_environment: OWNER_CONSOLE_ENVIRONMENT
-    }), async () => {
+    await ownerChange(async current => {
+      try {
+        return await ownerRpc('owner_enroll_supervisor_with_seat', {
+          p_action: actionId, p_org: current.organization, p_user: user,
+          p_expected_access_revision: person.access_revision,
+          p_tier: tier, p_team_ids: teamIds, p_reason: reason,
+          p_environment: OWNER_CONSOLE_ENVIRONMENT
+        });
+      } catch(error) {
+        if (error.status >= 400 && error.status < 500
+          && ![408,429].includes(error.status)) ownerEnrollmentPending=null;
+        throw error;
+      }
+    }, async () => {
       await loadOwnerConsole(true);
       if (!ownerConsoleData?.grants.some(grant => grant.user_id === user))
         throw Error('Enrollment response needs reconciliation. Refresh and retry the SAME request.');
@@ -462,11 +470,21 @@ async function ownerMoveRoster(person, destination) {
       : 'Place this unassigned Contractor with the selected team? A verified Contractor seat is required.')) return;
     const actionId = ownerRosterPending?.actionId || crypto.randomUUID();
     ownerRosterPending = {actionId,fingerprint,user:person.user_id,destination};
-    await ownerChange(current => ownerRpc('manage_idle_contractor_roster',{
-      p_action:actionId,p_org:current.organization,p_user:person.user_id,p_team:destination,
-      p_expected_revision:person.roster_revision || null,p_reason:reason,
-      p_environment:OWNER_CONSOLE_ENVIRONMENT
-    }),async () => {
+    await ownerChange(async current => {
+      try {
+        return await ownerRpc('manage_idle_contractor_roster',{
+          p_action:actionId,p_org:current.organization,p_user:person.user_id,p_team:destination,
+          p_expected_revision:person.roster_revision || null,p_reason:reason,
+          p_environment:OWNER_CONSOLE_ENVIRONMENT
+        });
+      } catch(error) {
+        // A transaction-level 4xx is a confirmed rejection. Only uncertain
+        // network/5xx outcomes retain the immutable action for exact retry.
+        if (error.status >= 400 && error.status < 500
+          && ![408,429].includes(error.status)) ownerRosterPending=null;
+        throw error;
+      }
+    },async () => {
       await loadOwnerConsole(true);
       const current = ownerConsoleData?.people.find(p=>p.user_id === person.user_id);
       if (!current || current.roster_team_id !== destination)
