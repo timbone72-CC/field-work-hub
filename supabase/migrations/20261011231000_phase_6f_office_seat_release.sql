@@ -72,7 +72,7 @@ grant execute on function public.owner_office_capacity_status(uuid,text) to auth
 -- Paginated owner-only Supervisor grant metadata; never photo or customer work.
 create function public.owner_supervisor_grant_list(
   p_org uuid,p_environment text,p_after uuid default null,p_limit integer default 25
-) returns table(user_id uuid,tier smallint,grant_active boolean,grant_revision uuid,
+) returns table(user_id uuid,account_email text,tier smallint,grant_active boolean,grant_revision uuid,
    work_active boolean,team_count bigint)
 language plpgsql security definer set search_path='' as $$
 begin
@@ -81,13 +81,14 @@ begin
    or not private.is_current_platform_owner(p_environment)
    or not exists(select 1 from private.org_office_allowances a where a.organization_id=p_org)
  then raise exception 'Verified office owner required' using errcode='42501';end if;
- return query select g.user_id,g.tier,g.active,g.revision,
+ return query select g.user_id,u.email::text,g.tier,g.active,g.revision,
    (a.active and a.disabled_at is null),(
     select count(*) from private.supervisor_team_scopes s
     where s.organization_id=g.organization_id and s.user_id=g.user_id)
  from private.supervisor_grants g
  join private.account_work_access a
    on a.organization_id=g.organization_id and a.user_id=g.user_id
+ join auth.users u on u.id=g.user_id
  where g.organization_id=p_org and (p_after is null or g.user_id>p_after)
  order by g.user_id limit p_limit;
 end;$$;
