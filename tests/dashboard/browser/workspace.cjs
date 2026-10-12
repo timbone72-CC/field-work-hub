@@ -447,16 +447,28 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
     assert.equal(await page.locator('#notification-settings input[type=checkbox]:checked').count(),9);
     assert.match(await page.locator('#notification-list').innerText(),/Awaiting contractor Accept/);
-    await page.locator('.notification-preference').filter({hasText:'Awaiting contractor Accept'})
-      .getByRole('button',{name:'Save Awaiting contractor Accept'}).click();
-    await wait(page,()=>alertWrites.length===1);
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/admin_set_notification_preferences')
+        && response.request().method()==='POST'),
+      page.locator('.notification-preference').filter({hasText:'Awaiting contractor Accept'})
+        .getByRole('button',{name:'Save Awaiting contractor Accept'}).click()
+    ]);
     assert.equal(alertWrites[0].p_dashboard,true);
     assert.equal(alertWrites[0].p_phone,false);
     assert.equal(alertWrites[0].p_computer,false);
-    await page.locator('#notification-list').getByRole('button',{name:'Snooze 4 hours'}).click();
-    await wait(page,()=>alertReceipt?.mode==='SNOOZE');
-    await page.locator('#notification-list').getByRole('button',{name:'Acknowledge'}).click();
-    await wait(page,()=>alertReceipt?.mode==='ACKNOWLEDGE');
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/admin_alert_receipt_action')
+        && response.request().method()==='POST'),
+      page.locator('#notification-list').getByRole('button',{name:'Snooze 4 hours'}).click()
+    ]);
+    assert.equal(alertReceipt?.mode,'SNOOZE');
+    await wait(page,()=>document.querySelector('#notification-list')?.textContent.includes('Snoozed until'));
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/admin_alert_receipt_action')
+        && response.request().method()==='POST'),
+      page.locator('#notification-list').getByRole('button',{name:'Acknowledge'}).click()
+    ]);
+    assert.equal(alertReceipt?.mode,'ACKNOWLEDGE');
     assert.match(await page.locator('#notification-list').innerText(),/Acknowledged/);
     await page.locator('#notification-center > summary').click();
     assert.match(await page.locator('#job-page-info').innerText(), /1–25 of 1000/);
