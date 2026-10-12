@@ -60,8 +60,11 @@ begin
    (receipt->>'revision')::uuid,'ACKNOWLEDGE',null);
  if receipt->>'acknowledged'<>'true'
  then raise exception 'Read receipt not confirmed';end if;
- if (select resolved_at from private.admin_alert_issues where id=issue_id) is not null
- then raise exception 'Acknowledgment falsely resolved live assignment issue';end if;
+ feed:=public.admin_alert_list(25,null,null);
+ if not exists(select 1 from jsonb_array_elements(feed->'alerts') a
+   where a.value->>'id'=issue_id::text
+     and a.value->>'current'='true' and a.value->>'acknowledged'='true')
+ then raise exception 'Acknowledgment falsely resolved active server work problem';end if;
  denied:=false;
  begin perform public.admin_set_notification_preferences(gen_random_uuid(),
    'ASSIGNMENT_NEEDS_ACCEPT',null,false,true,true,1440,null,null,null);
@@ -77,11 +80,12 @@ begin
    'PHONE','http://fcm.googleapis.com/fcm/send/xyz',repeat('A',65),repeat('B',22),null);
  exception when invalid_parameter_value then denied:=true;end;
  if not denied then raise exception 'Insecure endpoint enrollment allowed';end if;
- -- No provider enrollment/worker is activated by reading settings.
+ -- A normal office session has no direct subscription or raw endpoint
+ -- table permission; verifying table emptiness occurs after RESET ROLE.
+ execute 'reset role';
  if exists(select 1 from private.admin_push_subscriptions where user_id=office)
    or exists(select 1 from private.admin_notification_outbox where user_id=office)
  then raise exception 'Dashboard automatically enrolled or queued push';end if;
- execute 'reset role';
  perform set_config('request.jwt.claims',jsonb_build_object(
   'sub',worker,'session_id',worker,'app_metadata',jsonb_build_object(
      'role','CONTRACTOR','organization_id',org))::text,true);
