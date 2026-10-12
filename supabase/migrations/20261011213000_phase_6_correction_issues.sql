@@ -48,7 +48,12 @@ begin
        join private.photo_transfers t on t.photo_id=p.id and t.run_id=p.run_id
        join private.photo_transfer_receipts r on r.photo_id=t.photo_id
          and r.transfer_version=t.version
+       join storage.objects ob on ob.id=r.object_id and ob.version=r.object_version
+         and ob.bucket_id=r.bucket and ob.name=r.object_key
+         and ob.owner_id=r.owner_user_id::text
+         and ob.archived_at is null and not coalesce(ob.is_delete_marker,false)
      where p.id=pid and p.work_order_id=p_wo and t.state='RECEIVED')
+       or (pid is not null and not private.photo_has_accepted_finish(pid))
    then raise exception 'Issue references unavailable or cross-work-order photo'
      using errcode='42501';end if;
    if iid is not null and not exists(
