@@ -47,6 +47,7 @@ jobs:
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_scoped_admin_invitation_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_scoped_admin_auth_handoff_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_staffing_scope_snapshot_gate.sql
+          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_contractor_roster_snapshot_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_tier2_new_team_invite_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_bootstrap_gate.sql
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_5_recovery_gate.sql
