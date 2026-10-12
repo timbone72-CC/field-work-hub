@@ -609,6 +609,14 @@ begin
  insert into private.account_work_access(organization_id,user_id,work_role,active)
  values(org,roster_worker,'CONTRACTOR',true);
  update public.organizations set contractor_seat_limit=8 where id=org;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[2],
+   'session_id',supervisors[2])::text,true);
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,team_a,
+     null,'Reject absent environment',null);
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'NULL environment bypassed roster authorization';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[1],
    'session_id',supervisors[1])::text,true);
  denied:=false;
