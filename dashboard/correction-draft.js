@@ -184,23 +184,18 @@ const CorrectionDraft=(()=>{
       PhotoRules.validate(body.p_capture_requirements);
       PhotoRules.validate(body.p_release_requirements);
       busy=true;buttons();status('Saving correction draft…');
-      const result=await rpc('admin_save_correction_draft',body,token);
-      if(!valid(gen,id,token))return false;
-      if(!UUID.test(result.revision)||result.status!=='DRAFT')
-        throw Error('Server did not confirm a new draft revision.');
       const savedIssues=structuredClone(issues);
-      // Issues live on the same protected server draft; changing them rotates
-      // its revision and invalidates every earlier preview/Dispatch hash.
-      const issueResult=await rpc('admin_save_correction_issues',{
-        p_wo:id,p_expected_revision:result.revision,p_issues:savedIssues},token);
+      const result=await rpc('admin_save_correction_draft_with_issues',{
+        ...body,p_issues:savedIssues},token);
       if(!valid(gen,id,token))return false;
-      if(!UUID.test(issueResult.revision))
-        throw Error('Issue revisions were not acknowledged.');
+      if(!UUID.test(result.revision)||result.status!=='DRAFT'
+         ||JSON.stringify(result.issues)!==JSON.stringify(savedIssues))
+        throw Error('Atomic correction and issue save did not confirm an exact revision.');
       const updated=await rpc('admin_correction_state',{p_wo:id},token);
       if(!valid(gen,id,token))return false;
-      if(updated.draft?.revision!==issueResult.revision
+      if(updated.draft?.revision!==result.revision
           ||JSON.stringify(updated.draft?.issues)!==JSON.stringify(savedIssues))
-        throw Error('Saved issues changed during verification. Reload.');
+        throw Error('Saved correction issues changed during verification. Reload.');
       fill(updated);status('Draft saved. Review exact summary before Dispatch.');
       return true;
     }catch(err){if(valid(gen,id,token)){preview=null;status('Draft not confirmed: '+err.message,true);}return false;}
