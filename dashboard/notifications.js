@@ -162,6 +162,10 @@ const NotificationCenter=(()=>{
          !Array.isArray(nextSettings.types)||nextSettings.types.length!==9)
         throw Error('Settings scope mismatch.');
       settings=nextSettings;
+      // A prior offline Sign Out may have persisted only a non-secret device
+      // revoke marker. The SAME authenticated owner reconciles it here.
+      await PushDevice.reconcilePending().catch(()=>{});
+      if(!current(n,token))return;
       const list=await rpc('admin_alert_list',{
         p_limit:25,p_after_created:null,p_after_issue:null},token);
       if(!current(n,token))return;
@@ -176,6 +180,8 @@ const NotificationCenter=(()=>{
         :'Phone and computer push is not configured or verified. Settings remain Off; no push notifications are being sent.';
       el('notification-push-enable').disabled=
         !settings.push_ready||!PushDevice.supported();
+      el('notification-push-disable').disabled=
+        !Array.isArray(settings.devices)||settings.devices.every(device=>!device.enabled);
       if(!PushDevice.supported())
         el('notification-push-status').textContent+=
           ' This browser/device is not in the supported Chrome/Edge enrollment set.';
