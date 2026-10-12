@@ -144,7 +144,8 @@ begin
     where id=w.id returning * into w;
  response:=jsonb_build_object('action_id',p_action,'work_order_id',w.id,
     'team_id',w.responsible_team_id,'due_date',w.due_date,
-    'instructions',w.instructions,'updated_at',w.updated_at,'status','SAVED');
+    'instructions',w.instructions,'updated_at',w.updated_at,
+    'work_revision',md5(to_jsonb(w)::text),'status','SAVED');
  insert into private.supervisor_work_note_actions(
     action_id,organization_id,work_order_id,actor_id,team_id,
     expected_scope_fingerprint,expected_updated_at,expected_work_revision,
