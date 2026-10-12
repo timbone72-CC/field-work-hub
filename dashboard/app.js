@@ -261,6 +261,7 @@ editForm.addEventListener('submit', async (event) => {
 cancelEditButton.addEventListener('click', closeEditor);
 
 signOutButton.addEventListener('click', () => {
+  NotificationCenter.reset();
   accessToken = null;
   currentUser = null;
   assignableUsers = [];
@@ -496,6 +497,7 @@ function renderSignedIn(rows, users, organizationId) {
   renderAssignableUsers(users);
   JobWorkspace.populateContractors(users);
   renderWorkOrders(rows, organizationId);
+  if(document.getElementById('notification-center').open) NotificationCenter.load();
   Promise.all([createPhotos.reloadTemplates(), editPhotos.reloadTemplates()]).then(fillWorkTypes).catch(e => setCreateStatus(e.message, true));
 }
 
