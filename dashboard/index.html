@@ -131,6 +131,7 @@
             <button type="button" data-job-tab="requirements" aria-pressed="false" aria-controls="job-requirements">Photo requirements</button>
             <button type="button" data-job-tab="photos" aria-pressed="false" aria-controls="job-photos">Photos</button>
             <button type="button" data-job-tab="delivery" aria-pressed="false" aria-controls="job-delivery">Delivery</button>
+            <button type="button" data-job-tab="history" aria-pressed="false" aria-controls="job-history">History</button>
           </nav>
         </header>
         <div id="job-unsaved" class="unsaved-choice" hidden role="region" aria-label="Unsaved changes">
@@ -313,6 +314,14 @@
             </div>
             <p id="release-status" class="status" role="status" aria-live="polite"></p>
           </section>
+          <section id="job-history" data-job-panel="history" hidden aria-label="Work order and client delivery history">
+            <p class="muted">Past runs and confirmed client packages remain separate from today's assignment. Delivered packages use their frozen receipts, not a fresh delivery calculation.</p>
+            <button id="job-history-refresh" type="button" class="secondary">Refresh history</button>
+            <p id="job-history-status" class="status" role="status" aria-live="polite"></p>
+            <div id="job-history-runs"></div>
+            <div id="job-history-corrections"></div>
+            <div id="job-history-packages"></div>
+          </section>
           <div class="row gap edit-actions">
             <button id="save-edit" type="submit">Save Changes</button>
             <button id="cancel-edit" class="secondary" type="button">Close Job</button>
@@ -348,6 +357,7 @@
   <script src="followup-management.js?v=phase6c-20261011" defer></script>
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
   <script src="client-release.js?v=phase5d-20261010" defer></script>
+  <script src="release-history.js?v=phase6d-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
   <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
   <script src="app.js?v=job-workspace-20261007-1" defer></script>
