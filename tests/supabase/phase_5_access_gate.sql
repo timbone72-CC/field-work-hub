@@ -350,6 +350,10 @@ begin
    raise exception 'Release was not idempotent';end if;
  if (select state from private.office_seat_reservations where action_id=sid)<>'RELEASED' then
    raise exception 'Seat remains reserved';end if;
+ capacity:=public.owner_office_capacity_status(org,'TEST');
+ if (capacity->>'admin_reserved')::integer<>0
+    or (capacity->>'admin_available')::integer<>2 then
+   raise exception 'Released reservation was still counted in owner capacity';end if;
  denied:=false;
  begin
    perform public.owner_reserve_office_seat(sid,org,'ADMIN','Reserved owner seat','TEST');
