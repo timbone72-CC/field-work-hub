@@ -269,6 +269,22 @@ begin
    or capacity ? 'photo_id' or capacity ? 'work_order_id' then
    raise exception 'Owner capacity status is inaccurate or leaks job context: %',capacity;end if;
 
+ -- Product Owner may inspect only bounded Supervisor entitlement metadata.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin perform public.owner_supervisor_grant_list(org,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin read Owner Supervisor grants';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ select count(*) into n from public.owner_supervisor_grant_list(org,'TEST');
+ if n<>3 then raise exception 'Owner grant list leaked or missed metadata';end if;
+ select count(*) into n from public.owner_supervisor_grant_list(org,'TEST',null,1);
+ if n<>1 then raise exception 'Owner grant list exceeded page limit';end if;
+ denied:=false;
+ begin perform public.owner_supervisor_grant_list(other_org,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Owner listed unconfigured organization';end if;
+
  -- Phase 6F owner-only office seat reservation, immutable action and per-role cap.
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
  denied:=false;
