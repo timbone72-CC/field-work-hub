@@ -149,8 +149,18 @@ loginForm.addEventListener('submit', async (event) => {
     currentUser = await fetchCurrentUser();
     const metadata = currentUser.app_metadata || {};
 
-    if (metadata.role !== 'ADMIN' || !metadata.organization_id) {
-      throw new Error('This account is not authorized as a Team Admin.');
+    if (!metadata.organization_id || !['ADMIN', 'SUPERVISOR'].includes(metadata.role)) {
+      throw new Error('This account is not authorized for Field Work Hub office access.');
+    }
+    if (metadata.role === 'SUPERVISOR') {
+      // The narrow staffing RPC, not Auth metadata, proves current Tier 2/3
+      // authority. No legacy Admin work or photo call runs for this role.
+      await showScopedStaffingPortal(metadata.organization_id);
+      if (pendingAdminSession) {
+        storeAdminSession(pendingAdminSession);
+        pendingAdminSession = null;
+      }
+      return;
     }
 
     const [rows, users] = await Promise.all([
