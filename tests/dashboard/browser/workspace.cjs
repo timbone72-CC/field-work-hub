@@ -13,6 +13,7 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
+let recoveryMode=false, recoveryPhotoRequests=0;
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
 let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=true;
@@ -396,6 +397,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply({status:'BOUND',action_id:p.action_id,
           setup_url:'https://auth.example.invalid/one-time-setup'});
       }
+      if (url.pathname === '/rest/v1/rpc/photo_recovery_page') {
+        if (!recoveryMode) return reply({message:'Recovery unavailable'},403);
+        const p=req.postDataJSON(); assert.equal(p.p_limit,25);
+        assert.equal(p.p_after_photo,null);
+        return reply({photos:[{photo_id:reviewPhoto,transfer_version:reviewVersion,
+          run_id:reviewRun,work_order_id:uuid(51),captured_at:'2026-10-01T12:00:00Z',
+          verified_at:'2026-10-01T12:02:00Z',prepared_size:128}],next_photo:null});
+      }
+      if (url.pathname === '/functions/v1/recovery-private-photo') {
+        assert.equal(recoveryMode,true); recoveryPhotoRequests++;
+        const p=req.postDataJSON();
+        assert.deepEqual(p,{photo_id:reviewPhoto,transfer_version:reviewVersion});
+        return reply({photo_id:reviewPhoto,transfer_version:reviewVersion,expires_in:120,
+          url:`https://vyocaujuwrivoqynvitm.supabase.co/storage/v1/object/sign/fwh-review-private/${organization}/${uuid(51)}/${reviewRun}/${reviewPhoto}.jpg?token=disposable-preview`});
+      }
       if (url.pathname === '/auth/v1/token') return reply({ access_token: 'disposable-test-access', refresh_token: 'disposable-test-refresh', expires_in: 3600 });
       if (url.pathname === '/auth/v1/user') return reply({
         id: syntheticRole === 'SUPERVISOR' ? uuid(9301) : admin,
@@ -767,6 +783,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply([{ work_order_id: row.id, wo_number: row.wo_number, pending_assignee_user_id: null }]);
       }
       if (url.pathname === '/rest/v1/work_orders') {
+        if (recoveryMode) return reply({message:'Office work access disabled'},403);
         const id = url.searchParams.get('id');
         if (id) {
           if (delayDetail) { const pending = delayDetail; delayDetail = null; await pending; }
@@ -1636,6 +1653,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 4,
       'Four explicit Admin/Supervisor inspections open four short-lived private images; no gallery prefetch');
     assert.equal(requests.some(url => url.includes('work_order_photos')), false, 'List selection does not fetch all photos');
-    console.log('PASS: bounded 1,000-job paging, 50 same-address results, UUID navigation, Save/Stay/Discard and requirements edits, failed save/read recovery, stale refresh, account/sign-out isolation, desktop/mobile workspace. No live backend traffic.');
+    // A current Auth identity with revoked work must not become a dashboard user.
+    // Its exact grant page is read only after denial, and private images are on demand.
+    syntheticRole='ADMIN';recoveryMode=true;recoveryPhotoRequests=0;
+    await page.locator('#email').fill('admin@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#recovery-card:visible').waitFor();
+    assert.equal(await page.locator('#results-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(recoveryPhotoRequests,0,'List cannot silently issue private image links');
+    await page.locator('#recovery-card button').filter({hasText:reviewPhoto.slice(0,8)}).click();
+    await wait(page,()=>!document.querySelector('#recovery-card img').hidden);
+    assert.equal(recoveryPhotoRequests,1);
+    await page.locator('#recovery-card button').filter({hasText:'Download selected JPEG'}).click();
+    await wait(page,()=>document.querySelector('#recovery-card .status')
+      ?.textContent.includes('offered for download'));
+    assert.equal(recoveryPhotoRequests,2,'Download must renew exact short-lived authorization');
+    await page.locator('#recovery-card button').filter({hasText:'Sign Out'}).click();
+    assert.equal(await page.locator('#recovery-card:visible').count(),0);
+    assert.equal(await page.locator('#login-card:visible').count(),1);
+    assert.equal(errors.length,0,errors.join('\\n'));
+    console.log('PASS: bounded job workspace and exact on-demand signed-in recovery after denied work. No live backend traffic.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
