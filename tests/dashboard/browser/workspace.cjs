@@ -13,7 +13,7 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
-let staffingAttempts=[];
+let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
@@ -230,9 +230,38 @@ const wait = async (page, condition) => page.waitForFunction(condition);
            property_address:'Example work address',wo_number:'TEST-WO-1',field_status:'ASSIGNED',
            due_date:'2026-10-20'};
          return reply({organization_id:organization,caller_tier:staffingWorkTier,
-           work_orders:p.p_after?[]:[sample],next_after:null});
+           work_orders:p.p_after?[]:staffingWorkTier===3
+             ? [sample,{...sample,work_order_id:uuid(9305),wo_number:'TEST-ACTIVE',field_status:'IN_PROGRESS'}]
+             : [sample],next_after:null});
        }
-       if (url.pathname.endsWith('/office_contractor_roster_snapshot')) {
+       if (url.pathname.endsWith('/preview_work_order_team_handoff')) {
+        const p=req.postDataJSON();
+        assert.equal(p.p_destination,uuid(9222));
+        assert.equal(p.p_environment,'TEST');
+        const eligible=p.p_work_order===uuid(9304);
+        return reply({organization_id:organization,work_order_id:p.p_work_order,
+          old_team_id:uuid(9213),old_team_name:'West test team',
+          new_team_id:uuid(9222),new_team_name:'East test team',
+          eligible,block_reason:eligible?null:'Protected active work requires consent',
+          review_fingerprint:'d'.repeat(32)});
+      }
+      if (url.pathname.endsWith('/handoff_work_order_team')) {
+        const p=req.postDataJSON();
+        assert.equal(p.p_work_order,uuid(9304));
+        assert.equal(p.p_destination,uuid(9222));
+        assert.equal(p.p_expected_fingerprint,'d'.repeat(32));
+        assert.equal(p.p_reason,'Reviewed test handoff');
+        assert.equal(p.p_environment,'TEST');
+        assert.match(p.p_action,/^[a-f0-9-]{36}$/);
+        staffHandoffAttempts.push(p);
+        if (staffHandoffFailOnce) {
+          staffHandoffFailOnce=false;
+          return reply({message:'Outcome uncertain; reconcile exact action'},503);
+        }
+        return reply({status:'HANDED_OFF',action_id:p.p_action,
+          work_order_id:p.p_work_order,new_team_id:p.p_destination});
+      }
+      if (url.pathname.endsWith('/office_contractor_roster_snapshot')) {
         const p=req.postDataJSON();
         assert.equal(p.p_org,organization);
         assert.equal(p.p_environment,'TEST');
@@ -251,7 +280,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         if (!staffingGranted) return reply({message:'Tier 2/3 staffing grant unavailable'},403);
         return reply({organization_id:organization,allowance_revision:uuid(9212),
           admin_limit:5,admin_active:2,admin_reserved:1,admin_available:2,
-          teams:[{team_id:uuid(9213),name:'West test team'}],next_after:null});
+          teams:staffingWorkTier===3
+            ? [{team_id:uuid(9213),name:'West test team'},
+               {team_id:uuid(9222),name:'East test team'}]
+            : [{team_id:uuid(9213),name:'West test team'}],next_after:null});
       }
       if (url.pathname === '/functions/v1/admin-invite-contractor' &&
           syntheticRole === 'SUPERVISOR') {
@@ -1339,6 +1371,42 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       .includes('Current Supervisor authorization could not be reverified'));
     assert.equal(await page.locator('#staffing-card:visible').count(),0);
     assert.equal(await page.locator('#staffing-work-rows tr').count(),0);
+    // Tier 3 alone receives the reviewed no-evidence work-order handoff.
+    staffingWorkTier=3;staffingGranted=true;
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-handoff-area:visible').waitFor();
+    assert.equal(await page.locator('#staffing-work-rows tr').count(),2);
+    await page.locator('#staffing-handoff-wo').selectOption(uuid(9305));
+    await page.locator('#staffing-handoff-team').selectOption(uuid(9222));
+    await page.locator('#staffing-handoff-reason').fill('Reviewed test handoff');
+    await page.locator('#staffing-handoff-preview').click();
+    await wait(page,()=>document.querySelector('#staffing-handoff-status')?.textContent
+      .includes('Protected active work requires consent'));
+    assert.equal(await page.locator('#staffing-handoff-review:visible').count(),0);
+    assert.equal(staffHandoffAttempts.length,0,'In-progress work must not issue handoff');
+    await page.locator('#staffing-handoff-wo').selectOption(uuid(9304));
+    await page.locator('#staffing-handoff-preview').click();
+    await page.locator('#staffing-handoff-review:not(.hidden)').waitFor();
+    await page.locator('#staffing-handoff-confirm').click();
+    await wait(page,()=>document.querySelector('#staffing-handoff-status')?.textContent
+      .includes('Outcome uncertain'));
+    assert.equal(staffHandoffAttempts.length,1);
+    await page.locator('#staffing-handoff-reason').fill('Changed request');
+    assert.equal(await page.locator('#staffing-handoff-review:visible').count(),0);
+    await page.locator('#staffing-handoff-reason').fill('Reviewed test handoff');
+    await page.locator('#staffing-handoff-review:not(.hidden)').waitFor();
+    await page.locator('#staffing-handoff-confirm').click();
+    await wait(page,()=>document.querySelector('#staffing-handoff-status')?.textContent
+      .includes('Server confirmed audited handoff'));
+    assert.equal(staffHandoffAttempts.length,2);
+    assert.equal(staffHandoffAttempts[0].p_action,staffHandoffAttempts[1].p_action,
+      'Ambiguous handoff must reuse exact action');
+    assert.equal(await page.locator('#staffing-handoff-preview').isDisabled(),true);
+    await page.locator('#staffing-sign-out').click();
+    assert.equal(await page.locator('#staffing-work-rows tr').count(),0);
+    assert.equal(await page.locator('#staffing-handoff-area:visible').count(),0);
     assert.equal(errors.length, 0, errors.join('\n'));
     assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 3,
       'Three explicit inspections open three short-lived private images; no gallery prefetch');
