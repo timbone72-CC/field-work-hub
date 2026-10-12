@@ -1575,8 +1575,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#staffing-work-rows tr').count(),0);
     assert.equal(await page.locator('#staffing-handoff-area:visible').count(),0);
     assert.equal(errors.length, 0, errors.join('\n'));
-    assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 3,
-      'Three explicit inspections open three short-lived private images; no gallery prefetch');
+    assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 4,
+      'Four explicit Admin/Supervisor inspections open four short-lived private images; no gallery prefetch');
     assert.equal(requests.some(url => url.includes('work_order_photos')), false, 'List selection does not fetch all photos');
     console.log('PASS: bounded 1,000-job paging, 50 same-address results, UUID navigation, Save/Stay/Discard and requirements edits, failed save/read recovery, stale refresh, account/sign-out isolation, desktop/mobile workspace. No live backend traffic.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
