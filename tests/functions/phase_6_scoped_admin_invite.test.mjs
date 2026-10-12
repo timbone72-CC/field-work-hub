@@ -14,14 +14,14 @@ const user = {
   app_metadata: { role: 'ADMIN', organization_id: org },
   user_metadata: { scoped_admin_invitation_id: id }
 };
-function harness({ claimInstruction = 'CREATE_ONCE', claimStatus = 'ISSUING',
+function harness({ seatStatus = 'RESERVED', claimInstruction = 'CREATE_ONCE', claimStatus = 'ISSUING',
   authUser = user, generateError = null, listing = [], bindError = null } = {}) {
   const events = [];
   let beginCount = 0;
   const callerClient = { async rpc(name, params) {
     events.push(['caller', name, params]);
     if (name === 'reserve_scoped_admin_invitation') {
-      return { data: { status: 'RESERVED' } };
+      return { data: { status: seatStatus } };
     }
     if (name === 'begin_scoped_admin_invitation_issue') {
       return { data: {
@@ -79,6 +79,28 @@ test('fresh verified request binds exact Auth UUID before returning the single s
   assert.equal(events[2][1].options.data.scoped_admin_invitation_id, id);
   assert.equal(events[4][2].app_metadata.role, 'ADMIN');
   assert.equal(events[5][2].p_auth_user, userId);
+});
+
+test('identical in-flight action is allowed to reconcile without another Auth create', async () => {
+  const { events, args } = harness({
+    seatStatus: 'ISSUING',
+    claimInstruction: 'RECONCILE',
+    claimStatus: 'ISSUING',
+    listing: [user]
+  });
+  const result = await handleScopedAdminInvite(args);
+  assert.equal(result.status, 409);
+  assert.equal(result.body.status, 'BOUND');
+  assert.equal(events.some(e => e[0] === 'generateLink'), false);
+});
+
+test('released or consumed actions never enter Auth reconciliation', async () => {
+  for (const seatStatus of ['RELEASED', 'CONSUMED']) {
+    const { events, args } = harness({ seatStatus });
+    const result = await handleScopedAdminInvite(args);
+    assert.equal(result.status, 409);
+    assert.equal(events.length, 1);
+  }
 });
 
 test('recorded binding never generates another setup link', async () => {
