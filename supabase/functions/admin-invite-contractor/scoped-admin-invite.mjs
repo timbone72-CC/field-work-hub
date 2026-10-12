@@ -33,7 +33,7 @@ export async function handleScopedAdminInvite({
       p_name: displayName, p_expected_allowance_revision: expectedRevision,
       p_reason: reason, p_environment: environment
     });
-  if (seatError || seat?.status !== 'RESERVED') {
+  if (seatError || !['RESERVED', 'ISSUING', 'BOUND', 'PROBLEM'].includes(seat?.status)) {
     return fail(409, 'The Admin seat or team is no longer available. Refresh and review the request.');
   }
   const { data: claim, error: claimError } = await callerClient.rpc(
