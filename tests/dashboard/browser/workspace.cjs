@@ -100,7 +100,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply([{action_id:p.p_action,target_user_id:p.p_target,active:p.p_active,
           revision:ownerAccessRevision,recovery_grant_id:p.p_active?null:p.p_action}]);
       }
-      if (url.pathname.startsWith('/rest/v1/rpc/owner_')) {
+      if (url.pathname.startsWith('/rest/v1/rpc/owner_') || url.pathname.endsWith('/rest/v1/rpc/manage_idle_contractor_roster')) {
         if (!syntheticOwner) return reply({message:'Verified Product Owner required'},403);
         const p=req.postDataJSON();
         assert.equal(p.p_environment,'TEST');
