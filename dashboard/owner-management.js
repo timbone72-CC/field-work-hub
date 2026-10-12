@@ -4,6 +4,7 @@ const OWNER_CONSOLE_ENVIRONMENT = 'TEST';
 let ownerConsoleGeneration = 0;
 let ownerConsoleData = null;
 let ownerConsoleBusy = false;
+let ownerReviewGeneration = 0;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -13,6 +14,7 @@ renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizati
 };
 signOutButton.addEventListener('click', () => {
   ownerConsoleGeneration++;
+  ownerReviewGeneration++;
   ownerConsoleData = null;
   ownerConsoleBusy = false;
   document.getElementById('owner-office-console')?.remove();
@@ -313,6 +315,7 @@ async function ownerReadAccessReview(person, requestedActive, organization) {
 async function ownerReviewAccess(person, requestedActive) {
   if (!ownerConsoleData || ownerConsoleBusy) return;
   const check = ownerIdentity();
+  const reviewGeneration = ++ownerReviewGeneration;
   const region = document.getElementById('owner-access-review-panel');
   if (!region) return;
   region.classList.remove('hidden'); region.replaceChildren();
@@ -320,7 +323,7 @@ async function ownerReviewAccess(person, requestedActive) {
   try {
     const data = ownerConsoleData;
     const review = await ownerReadAccessReview(person, requestedActive, data.organization);
-    if (!ownerStillCurrent(check)) return;
+    if (!ownerStillCurrent(check) || reviewGeneration !== ownerReviewGeneration) return;
     const heading = document.createElement('p');
     heading.textContent = `${requestedActive ? 'Restore' : 'Disable'} work for
       ${person.account_email || person.user_id}: ${review.affected_jobs} current jobs,
@@ -384,7 +387,7 @@ async function ownerReviewAccess(person, requestedActive) {
     region.append(confirm);
     ownerStatus('Review the listed team continuity before confirming. Nothing has been changed.');
   } catch (error) {
-    if (ownerStillCurrent(check)) {
+    if (ownerStillCurrent(check) && reviewGeneration === ownerReviewGeneration) {
       region.replaceChildren();
       ownerStatus(error.message || 'Unable to review this account.', true);
     }
@@ -394,7 +397,10 @@ async function ownerReviewAccess(person, requestedActive) {
 async function loadOwnerConsole(force = false) {
   const check = ownerIdentity();
   if (!check.user || !check.organization) return;
-  if (force) document.getElementById('owner-supervisor-team-panel')?.classList.add('hidden');
+  if (force) {
+    ownerReviewGeneration++;
+    document.getElementById('owner-supervisor-team-panel')?.classList.add('hidden');
+  }
   try {
     // Every response is server-checked; metadata alone never makes someone owner.
     const capacity = await ownerRpc('owner_office_capacity_status', {
