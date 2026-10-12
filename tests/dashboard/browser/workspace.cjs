@@ -877,7 +877,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.waitForResponse(response=>response.url().includes('/owner_set_office_allowances')),
       page.locator('#owner-office-limit-save').click()
     ]);
-    await wait(page,()=>document.querySelector('#owner-admin-limit')?.value==='5');
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved. Server permissions'));
+    assert.equal(await page.locator('#owner-admin-limit').inputValue(),'5');
     assert.equal(ownerWrites.some(x=>x.name==='owner_set_office_allowances'),true);
     await page.locator('#owner-supervisor-list select').selectOption('1');
     await Promise.all([
