@@ -129,11 +129,11 @@ function ownerSupervisorUI(grants) {
     const row = document.createElement('div');
     row.className = 'row gap';
     const description = document.createElement('span');
-    description.textContent = `${grant.user_id} · Tier ${grant.tier} ·
+    description.textContent = `${grant.account_email || grant.user_id} · Tier ${grant.tier} ·
       ${grant.grant_active && grant.work_active ? 'active' : 'inactive'} ·
       ${grant.team_count} explicit team(s)`;
     const tier = document.createElement('select');
-    tier.setAttribute('aria-label', `New Supervisor tier for ${grant.user_id}`);
+    tier.setAttribute('aria-label', `New Supervisor tier for ${grant.account_email || grant.user_id}`);
     for (let t = 1; t <= 3; t++) {
       const option = new Option(`Tier ${t}`, String(t), false, grant.tier === t);
       tier.add(option);
@@ -215,7 +215,7 @@ async function ownerTeamPanel(grant) {
     if (!ownerStillCurrent(check)) return;
     const current = new Set(assigned.map(item => item.team_id));
     const heading = document.createElement('p');
-    heading.textContent = `Team scope for ${grant.user_id} (Tier ${grant.tier})`;
+    heading.textContent = `Team scope for ${grant.account_email || grant.user_id} (Tier ${grant.tier})`;
     panel.append(heading);
     for (const team of data.teams.filter(team => team.active || current.has(team.team_id))) {
       const button = document.createElement('button');
