@@ -942,6 +942,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#owner-office-people .row').filter({hasText:'supervisor@example.invalid'})
       .getByRole('button',{name:'Review disable'}).click();
     await wait(page,()=>document.querySelector('#owner-access-review-panel')?.textContent.includes('West test team'));
+    await page.locator('#owner-access-review-panel button').click();
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Choose a responsible manager'));
+    assert.equal(ownerAccessWrites.length,0,'No manager choice must block reviewed disable');
     await page.locator('#owner-access-review-panel select').selectOption(admin);
     page.once('dialog', dialog=>dialog.accept());
     await Promise.all([
