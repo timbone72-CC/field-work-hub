@@ -780,8 +780,7 @@ function staffingRenderHandoff() {
   card.querySelector('#staffing-handoff-preview').disabled=
     staffingHandoffBusy || staffingHandoffNeedsRefresh || Boolean(staffingHandoffPending);
   card.querySelector('#staffing-handoff-confirm').disabled=
-    staffingHandoffBusy || staffingHandoffNeedsRefresh || !staffingHandoffPreview
-    || Boolean(staffingHandoffPending && !staffingHandoffPreview);
+    staffingHandoffBusy || staffingHandoffNeedsRefresh || (!staffingHandoffPreview && !staffingHandoffPending);
 }
 async function staffingPreviewHandoff() {
   const check=staffingIdentity(), card=staffingCard(), req=staffingHandoffInputs();
