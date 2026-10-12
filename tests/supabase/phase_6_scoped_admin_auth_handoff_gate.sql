@@ -51,6 +51,11 @@ begin
  response:=public.begin_scoped_admin_invitation_issue(action,org,'TEST');
  if response->>'instruction'<>'RECONCILE' or response->>'status'<>'ISSUING' then
    raise exception 'Second invocation could blindly re-create Auth identity';end if;
+ response:=public.reserve_scoped_admin_invitation(
+   action,org,team,'handoff@example.invalid','New Admin',
+   quota_rev,'Reviewed scoped staff invitation','TEST');
+ if response->>'status'<>'ISSUING' then
+   raise exception 'Original in-flight reservation cannot be inspected safely';end if;
  denied:=false;
  begin
    perform public.release_scoped_admin_invitation(action,org,'TEST');
