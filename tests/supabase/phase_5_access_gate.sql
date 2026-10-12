@@ -121,8 +121,8 @@ begin
  -- Promote within the same organization; only this grant tier changes.
  select revision into sid from private.supervisor_grants where organization_id=org and user_id=supervisors[1];
  actor:=public.owner_change_supervisor_tier(org,supervisors[1],sid,2::smallint,'Reviewed owner tier change','TEST');
- if actor=sid or (select tier from private.supervisor_grants
-                   where organization_id=org and user_id=supervisors[1])<>2 then
+ if actor=sid or (select sg.tier from private.supervisor_grants sg
+                   where sg.organization_id=org and sg.user_id=supervisors[1])<>2 then
    raise exception 'Owner tier change did not commit expected revision';
  end if;
  denied:=false;
