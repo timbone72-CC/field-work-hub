@@ -964,6 +964,15 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>Array.from(document.querySelectorAll('#owner-office-people .row')).some(row=>row.textContent.includes('supervisor@example.invalid') && row.textContent.includes('work enabled')));
     assert.equal(ownerPersonActive,true);
     assert.equal(ownerAccessWrites.length,2);
+    await page.screenshot({path:path.join(output,'phase6f-owner-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await wait(page,()=>document.querySelector('#owner-office-console')?.clientWidth>0);
+    assert.equal(await page.evaluate(()=>{
+      const panel=document.getElementById('owner-office-console');
+      return panel.scrollWidth <= panel.clientWidth+2;
+    }),true,'Owner controls must not overflow on a narrow Android viewport');
+    await page.screenshot({path:path.join(output,'phase6f-owner-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     await page.locator('#sign-out').click();
     assert.equal(await page.locator('#owner-office-console').count(),0,'Owner data must clear on signout');
     assert.equal(errors.length, 0, errors.join('\n'));
