@@ -90,6 +90,18 @@ async function restoreAdminSession() {
     setLoginStatus('', false);
   } catch (error) {
     if (epoch !== adminSessionEpoch) return;
+    if (error?.status === 403 && accessToken && currentUser?.id) {
+      try {
+        await RecoveryGallery.show();
+        if (epoch === adminSessionEpoch) {
+          setLoginStatus('', false);
+          return; // Valid Auth and exact server-restricted photo recovery; no work access.
+        }
+      } catch {
+        // Server must reauthorize every requested recovery object.
+      }
+    }
+    RecoveryGallery.reset();
     clearAdminSession();
     pendingAdminSession = null;
     accessToken = null;
