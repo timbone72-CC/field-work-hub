@@ -190,6 +190,7 @@ async function staffingReadWorkPage(org, after = null) {
     'Current Supervisor work access denied.'));
   const value = await response.json();
   if (value?.organization_id !== org || ![1,2,3].includes(Number(value.caller_tier))
+    || !/^[a-f0-9]{32}$/.test(value.scope_fingerprint || '')
     || !Array.isArray(value.work_orders) || value.work_orders.length > 25
     || (value.next_after && !value.work_orders.length)
     || (after && value.work_orders.some(row => row.work_order_id <= after))) {
@@ -202,7 +203,7 @@ async function staffingReadWorkPage(org, after = null) {
     seen.add(row.work_order_id);
   }
   return { tier: Number(value.caller_tier), rows: value.work_orders,
-    nextAfter: value.next_after || null };
+    scopeFingerprint: value.scope_fingerprint, nextAfter: value.next_after || null };
 }
 function staffingRenderWork() {
   const card = staffingCard(), work = staffingWork;
@@ -237,13 +238,13 @@ async function staffingLoadMore() {
   try {
     const page = await staffingReadWorkPage(check.org, current.nextAfter);
     if (!staffingStillCurrent(check)) return;
-    if (page.tier !== current.tier
+    if (page.tier !== current.tier || page.scopeFingerprint !== current.scopeFingerprint
       || page.rows.some(row => current.rows.some(old => old.work_order_id === row.work_order_id))
       || (page.nextAfter && page.nextAfter === current.nextAfter)) {
       throw new Error('Supervisor scope changed; refresh before viewing more jobs.');
     }
-    staffingWork = { tier: current.tier, rows: [...current.rows, ...page.rows],
-      nextAfter: page.nextAfter };
+    staffingWork = { tier: current.tier, scopeFingerprint: current.scopeFingerprint,
+      rows: [...current.rows, ...page.rows], nextAfter: page.nextAfter };
   } catch (error) {
     if (staffingStillCurrent(check)) {
       staffingWork = null;
