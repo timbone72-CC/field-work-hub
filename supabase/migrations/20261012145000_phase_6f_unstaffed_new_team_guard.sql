@@ -73,3 +73,53 @@ revoke all on function private.retire_cancelled_created_admin_team()
 create trigger scoped_admin_new_team_cancel_retirement
   after update of state on private.scoped_admin_invitation_reservations
   for each row execute function private.retire_cancelled_created_admin_team();
+
+-- A retired team's original creator may safely read its already-final
+-- cancellation receipt under a verified session. No authorization to create,
+-- re-enable or expose that inactive team's scope is implied by this replay.
+create or replace function public.release_scoped_admin_invitation(
+  p_action uuid,p_org uuid,p_environment text
+) returns jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $release$
+declare prior private.scoped_admin_invitation_reservations%rowtype;
+begin
+  if p_action is null or p_org is null
+    or p_environment is null or p_environment not in ('TEST','PRODUCTION')
+    or not private.current_identity_valid() then
+    raise exception 'Verified invitation cancellation required' using errcode='42501';
+  end if;
+  perform private.lock_account_lifecycle();
+  select * into prior from private.scoped_admin_invitation_reservations
+    where action_id=p_action and organization_id=p_org for update;
+  if not found or prior.environment is distinct from p_environment then
+    raise exception 'Exact invitation cancellation unavailable' using errcode='42501';
+  end if;
+  if prior.state='RELEASED' then
+    if prior.actor_id is distinct from auth.uid()
+      and not private.is_current_platform_owner(p_environment) then
+      raise exception 'Cancelled invitation receipt unavailable' using errcode='42501';
+    end if;
+    return jsonb_build_object('action_id',p_action,'status','RELEASED');
+  end if;
+  if not private.may_reserve_admin_for_team(
+    p_org,prior.team_id,p_environment) then
+    raise exception 'Current invitation cancellation authority denied'
+      using errcode='42501';
+  end if;
+  if prior.state<>'RESERVED' then
+    raise exception 'Started invitation requires exact Auth reconciliation'
+      using errcode='42501';
+  end if;
+  update private.scoped_admin_invitation_reservations
+    set state='RELEASED',released_at=clock_timestamp()
+    where action_id=p_action and state='RESERVED';
+  update private.office_seat_reservations
+    set state='RELEASED'
+    where action_id=p_action and organization_id=p_org
+      and requested_role='ADMIN' and state='RESERVED';
+  if not found then
+    raise exception 'Linked office reservation changed' using errcode='40001';
+  end if;
+  return jsonb_build_object('action_id',p_action,'status','RELEASED');
+end;
+$release$;
