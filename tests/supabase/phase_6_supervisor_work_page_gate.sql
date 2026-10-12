@@ -75,6 +75,29 @@ begin
   result:=public.office_supervisor_work_page(org,null,1);
   cursor_text:=result->>'next_after';
   original_scope:=result->>'scope_fingerprint';
+  result:=public.office_supervisor_work_detail(org,wo_a,original_scope);
+  if result->>'organization_id'<>org::text
+    or result->>'caller_tier'<>'1'
+    or result->>'scope_fingerprint'<>original_scope
+    or result->'work_order'->>'work_order_id'<>wo_a::text
+    or result->'work_order'->>'team_id'<>team_a::text
+    or result->'work_order'->>'wo_number'<>'WO-A'
+    or result->'work_order' ? 'assigned_user_id'
+    or result->'work_order' ? 'photos' then
+    raise exception 'Selected detail crossed exact read-only scope: %',result;
+  end if;
+  denied:=false;
+  begin perform public.office_supervisor_work_detail(org,wo_b,original_scope);
+    exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Unscoped team B detail leaked'; end if;
+  denied:=false;
+  begin perform public.office_supervisor_work_detail(org,wo_foreign,original_scope);
+    exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Foreign WO detail leaked'; end if;
+  denied:=false;
+  begin perform public.office_supervisor_work_detail(org,wo_a,'bad fingerprint');
+    exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Invalid detail fingerprint accepted'; end if;
   if cursor_text is null or jsonb_array_length(result->'work_orders')<>1 then
     raise exception 'Bounded work cursor missing';
   end if;
@@ -88,6 +111,14 @@ begin
   insert into private.supervisor_team_scopes(organization_id,user_id,team_id)
     values(org,t1,team_b);
   result:=public.office_supervisor_work_page(org,null,25);
+  denied:=false;
+  begin perform public.office_supervisor_work_detail(org,wo_a,original_scope);
+    exception when serialization_failure then denied:=true; end;
+  if not denied then raise exception 'Changed scope accepted old detail fingerprint'; end if;
+  if (public.office_supervisor_work_detail(org,wo_b,result->>'scope_fingerprint')
+      ->'work_order'->>'team_id')<>team_b::text then
+    raise exception 'Newly authorized team detail remained unavailable';
+  end if;
   if result->>'scope_fingerprint' is not distinct from original_scope
     or jsonb_array_length(result->'work_orders')<>3 then
     raise exception 'Expanded Supervisor team scope kept stale paging identity';
@@ -105,6 +136,10 @@ begin
     begin perform public.office_supervisor_work_page(org,null,25);
       exception when insufficient_privilege then denied:=true; end;
     if not denied then raise exception 'Admin/Owner read Supervisor work projection';end if;
+    denied:=false;
+    begin perform public.office_supervisor_work_detail(org,wo_a,original_scope);
+      exception when insufficient_privilege then denied:=true; end;
+    if not denied then raise exception 'Admin/Owner opened Supervisor detail';end if;
   end loop;
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',t2,'session_id',t2)::text,true);
@@ -125,6 +160,10 @@ begin
   begin perform public.office_supervisor_work_page(org,null,25);
     exception when insufficient_privilege then denied:=true; end;
   if not denied then raise exception 'Disabled Supervisor still read work';end if;
+  denied:=false;
+  begin perform public.office_supervisor_work_detail(org,wo_a,original_scope);
+    exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Disabled Supervisor still opened detail';end if;
   -- Auth session validity, not a retained role claim, controls access.
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',t1,'session_id',gen_random_uuid())::text,true);
