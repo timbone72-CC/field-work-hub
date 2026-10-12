@@ -283,6 +283,77 @@ async function ownerUpdateTeam(grant, team, allowed) {
   } catch (error) { ownerStatus(error.message, true); }
 }
 
+function ownerEnrollmentUI(people, grants, teams) {
+  const select = document.getElementById('owner-enrollment-user');
+  const box = document.getElementById('owner-enrollment-teams');
+  const form = document.getElementById('owner-enrollment-form');
+  const status = document.getElementById('owner-enrollment-status');
+  if (!select || !box || !form) return;
+  const granted = new Set(grants.map(grant => grant.user_id));
+  const candidates = people.filter(person =>
+    person.work_role === 'SUPERVISOR' && !person.work_active
+    && person.identity_ready === true && !granted.has(person.user_id)
+    && person.user_id !== currentUser?.id);
+  select.replaceChildren(new Option('Select an already verified Supervisor', ''));
+  for (const person of candidates) {
+    select.add(new Option(person.account_email || person.user_id, person.user_id));
+  }
+  box.replaceChildren();
+  for (const team of teams.filter(team => team.active)) {
+    const label = document.createElement('label');
+    const check = document.createElement('input');
+    check.type = 'checkbox'; check.value = team.team_id;
+    check.name = 'owner-enrollment-team';
+    label.append(check, document.createTextNode(' ' + team.team_name));
+    box.append(label);
+  }
+  const available = Number(ownerConsoleData?.capacity?.supervisor_available || 0);
+  form.querySelector('button[type="submit"]').disabled =
+    !candidates.length || available < 1;
+  if (status) status.textContent = !candidates.length
+    ? 'No eligible verified, inactive Supervisor account is available. New-user invitations are not enabled.'
+    : available < 1 ? 'No Supervisor seat is available. Review office seat limits.'
+    : 'Enrollment does not start work access or send a setup email.';
+}
+async function ownerEnrollExisting() {
+  try {
+    const data = ownerConsoleData;
+    if (!data) throw Error('Refresh and verify Product Owner access first.');
+    const user = document.getElementById('owner-enrollment-user')?.value;
+    const tier = Number(document.getElementById('owner-enrollment-tier')?.value);
+    const person = data.people.find(p => p.user_id === user);
+    if (!person || person.identity_ready !== true || person.work_role !== 'SUPERVISOR'
+      || person.work_active || data.grants.some(g => g.user_id === user)
+      || person.user_id === currentUser?.id) {
+      throw Error('Choose an eligible existing verified Supervisor account.');
+    }
+    if (![1,2,3].includes(tier)) throw Error('Choose a valid Supervisor tier.');
+    const teamIds = tier === 3 ? [] :
+      Array.from(document.querySelectorAll('#owner-enrollment-teams input:checked'))
+        .map(input => input.value);
+    const permitted = new Set(data.teams.filter(t => t.active).map(t => t.team_id));
+    if ((tier < 3 && !teamIds.length) || teamIds.some(id => !permitted.has(id))
+      || new Set(teamIds).size !== teamIds.length) {
+      throw Error('Choose at least one exact active team for Tier 1 or Tier 2.');
+    }
+    if (Number(data.capacity.supervisor_available) < 1) {
+      throw Error('No Supervisor seat is available.');
+    }
+    const reason = ownerReason();
+    if (!window.confirm('Enroll this existing verified account with the selected tier and teams? ' +
+      'A Supervisor seat will be reserved and consumed in one server action. Work access stays OFF.')) return;
+    const actionId = crypto.randomUUID();
+    await ownerChange(current => ownerRpc('owner_enroll_supervisor_with_seat', {
+      p_action: actionId, p_org: current.organization, p_user: user,
+      p_expected_access_revision: person.access_revision,
+      p_tier: tier, p_team_ids: teamIds, p_reason: reason,
+      p_environment: OWNER_CONSOLE_ENVIRONMENT
+    }), async () => loadOwnerConsole(true));
+  } catch (error) {
+    ownerStatus(error.message || 'Enrollment failed. Review the current account status.', true);
+  }
+}
+
 function ownerPeopleUI(people) {
   const root = document.getElementById('owner-office-people');
   if (!root) return;
