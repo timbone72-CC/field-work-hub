@@ -1354,7 +1354,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     const assignmentDetail = await page.locator('#staffing-work-detail-fields').innerText();
     assert.match(assignmentDetail,/Demo contractor <script>unsafe<\/script>/);
     assert.match(assignmentDetail,/Phone download received/);
-    assert.match(assignmentDetail,/Contractor accepted\\s+Not confirmed/);
+    assert.match(assignmentDetail,/Contractor accepted\s+Not confirmed/);
     assert.equal(await page.locator('#staffing-work-detail script').count(),0,
       'Server-provided assignee labels must remain inert DOM text');
     // Tier 2 may make an authorized due-date and additive-instruction edit;
