@@ -14,6 +14,9 @@ let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
+let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
+let staffWorkNote='Read-only <script>not executable</script>';
+let staffWorkRevision='d'.repeat(32);
 let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
@@ -222,6 +225,26 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         }
         throw Error('Unexpected owner request');
       }
+      if (url.pathname.endsWith('/office_supervisor_correct_work_schedule')) {
+          const p=req.postDataJSON();
+          staffWorkEdits.push(p);
+          assert.equal(p.p_org,organization);
+          assert.equal(p.p_work_order,uuid(9304));
+          assert.equal(p.p_expected_scope_fingerprint,'a'.repeat(32));
+          assert.equal(p.p_expected_updated_at,'2026-10-12T12:10:00Z');
+          assert.equal(p.p_expected_work_revision,'d'.repeat(32));
+          if (!staffingGranted) return reply({message:'Access denied'},403);
+          if (staffWorkEditFailOnce) {
+            staffWorkEditFailOnce=false;
+            return reply({message:'Temporary server outcome uncertain'},503);
+          }
+          staffWorkDue=p.p_due_date;
+          staffWorkNote+='\n'+p.p_append_note;
+          staffWorkRevision='e'.repeat(32);
+          return reply({action_id:p.p_action,work_order_id:p.p_work_order,
+            team_id:uuid(9213),due_date:staffWorkDue,instructions:staffWorkNote,
+            updated_at:'2026-10-12T12:11:00Z',work_revision:staffWorkRevision,status:'SAVED'});
+      }
       if (url.pathname.endsWith('/office_supervisor_work_detail')) {
           const p=req.postDataJSON();
           assert.equal(p.p_org,organization);
@@ -233,8 +256,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
             work_order:{work_order_id:p.p_work_order,team_id:uuid(9213),
               team_name:'West test team',wo_number:'TEST-WO-1',
               property_address:'Example work address',work_type:'Inspection',
-              instructions:'Read-only <script>not executable</script>',
-              due_date:'2026-10-20',field_status:'ASSIGNED',created_at:'2026-10-12T12:00:00Z'}});
+              instructions:staffWorkNote,
+              due_date:staffWorkDue,field_status:'ASSIGNED',created_at:'2026-10-12T12:00:00Z',
+              updated_at:'2026-10-12T12:10:00Z',work_revision:staffWorkRevision}});
         }
         if (url.pathname.endsWith('/office_supervisor_work_page')) {
          const p=req.postDataJSON();
@@ -243,7 +267,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
          if (!staffingGranted) return reply({message:'Supervisor work access denied'},403);
          const sample={work_order_id:uuid(9304),team_id:uuid(9213),team_name:'West test team',
            property_address:'Example work address',wo_number:'TEST-WO-1',field_status:'ASSIGNED',
-           due_date:'2026-10-20'};
+           due_date:staffWorkDue};
          return reply({organization_id:organization,caller_tier:staffingWorkTier,
            scope_fingerprint:staffingScopeShift?'b'.repeat(32):'a'.repeat(32),
            work_orders:p.p_after?(staffingPagingRace?[{...sample,work_order_id:uuid(9306)}]:[]):staffingWorkTier===3
@@ -1323,6 +1347,28 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'Work instructions must remain inert text');
     assert.equal(await page.locator('#edit-work-order-section:visible').count(),0,
       'Supervisor selected detail cannot expose Admin editing');
+    // Tier 2 may make an authorized due-date and additive-instruction edit;
+    // uncertain network outcomes must reuse the exact action ID and inputs.
+    await page.locator('#staffing-work-edit-form:visible').waitFor();
+    await page.locator('#staffing-work-edit-due').fill('2026-10-21');
+    await page.locator('#staffing-work-edit-note').fill('Supervisor check note');
+    await page.locator('#staffing-work-edit-reason').fill('Correction from team review');
+    await page.locator('#staffing-work-edit-submit').click();
+    await wait(page,()=>document.querySelector('#staffing-work-detail-status')?.textContent
+      .includes('Temporary server outcome uncertain'));
+    assert.equal(staffWorkEdits.length,1);
+    await page.locator('#staffing-work-edit-note').fill('Changed unsafe retry');
+    await page.locator('#staffing-work-edit-submit').click();
+    assert.equal(staffWorkEdits.length,1,'Changed retry must never mutate current work');
+    await page.locator('#staffing-work-edit-note').fill('Supervisor check note');
+    await page.locator('#staffing-work-edit-submit').click();
+    await wait(page,()=>document.querySelector('#staffing-work-detail-status')?.textContent
+      .includes('Server saved the correction'));
+    assert.equal(staffWorkEdits.length,2);
+    assert.equal(staffWorkEdits[0].p_action,staffWorkEdits[1].p_action);
+    assert.equal(await page.locator('#staffing-work-edit-due').inputValue(),'2026-10-21');
+    assert.match(await page.locator('#staffing-work-detail-fields').innerText(),/Supervisor check note/);
+    assert.equal(await page.locator('#staffing-work-detail script').count(),0);
     await page.locator('#staffing-work-detail-close').click();
     assert.equal(await page.locator('#staffing-work-detail:visible').count(),0);
     await page.locator('#staffing-roster-person').selectOption(uuid(9315));
