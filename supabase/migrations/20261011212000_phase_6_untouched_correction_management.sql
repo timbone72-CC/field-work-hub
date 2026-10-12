@@ -42,8 +42,11 @@ begin
  then raise exception 'Follow-up is not untouched; preserve field/photos and resolve protected conflict'
     using errcode='40001';end if;
 end;$guard$;
-revoke all on function private.untouched_followup_guard(uuid,uuid) from public,anon,authenticated;
-grant execute on function private.untouched_followup_guard(uuid,uuid) to authenticated,service_role;
+-- Internal SECURITY DEFINER helper must never expose work existence or
+-- protected phone evidence by direct authenticated invocation.
+revoke all on function private.untouched_followup_guard(uuid,uuid)
+  from public,anon,authenticated,service_role;
+grant execute on function private.untouched_followup_guard(uuid,uuid) to service_role;
 
 create function private.admin_followup_management_state(p_wo uuid)
 returns jsonb language plpgsql stable security definer set search_path='' as $state$
