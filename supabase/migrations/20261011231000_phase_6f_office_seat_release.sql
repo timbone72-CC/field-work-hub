@@ -146,7 +146,7 @@ grant execute on function public.owner_supervisor_team_scope_list(uuid,uuid,text
 create function public.owner_office_people_list(
  p_org uuid,p_environment text,p_after uuid default null,p_limit integer default 50)
 returns table(user_id uuid,account_email text,work_role text,work_active boolean,
- access_revision uuid)
+ access_revision uuid,identity_ready boolean)
 language plpgsql security definer set search_path='' as $$
 begin
  if p_org is null or p_limit is null or p_limit not between 1 and 50
@@ -156,7 +156,8 @@ begin
  then raise exception 'Verified Product Owner required' using errcode='42501';end if;
  return query
    select a.user_id,u.email::text,a.work_role,
-     (a.active and a.disabled_at is null),a.revision
+     (a.active and a.disabled_at is null),a.revision,
+     private.account_identity_ready(a.organization_id,a.user_id,a.work_role)
    from private.account_work_access a
    join auth.users u on u.id=a.user_id
    where a.organization_id=p_org and (p_after is null or a.user_id>p_after)
