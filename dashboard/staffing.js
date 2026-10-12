@@ -327,6 +327,89 @@ async function staffingOpenWorkDetail(workOrderId) {
     }
   }
 }
+async function staffingSaveWorkCorrection() {
+  const check = staffingIdentity(), work = staffingWork, detail = staffingWorkDetail;
+  if (!staffingStillCurrent(check) || !work || !detail || staffingWorkEditBusy) return;
+  const section = staffingCard().querySelector('#staffing-work-detail');
+  const due = section.querySelector('#staffing-work-edit-due').value;
+  const note = section.querySelector('#staffing-work-edit-note').value.trim();
+  const reason = section.querySelector('#staffing-work-edit-reason').value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || !reason || reason.length > 1000
+    || note.length > 1000 || (due === detail.due_date && !note)) {
+    section.querySelector('#staffing-work-detail-status').textContent =
+      'Enter a changed due date or additional instructions, plus a reason.';
+    return;
+  }
+  const request = {
+    p_org: check.org, p_work_order: detail.work_order_id,
+    p_expected_scope_fingerprint: work.scopeFingerprint,
+    p_expected_updated_at: detail.updated_at,
+    p_expected_work_revision: detail.work_revision,
+    p_due_date: due, p_append_note: note, p_reason: reason
+  };
+  if (staffingWorkEditPending &&
+    JSON.stringify(staffingWorkEditPending.request) !== JSON.stringify(request)) {
+    section.querySelector('#staffing-work-detail-status').textContent =
+      'A correction outcome is uncertain. Restore its exact original inputs to retry.';
+    return;
+  }
+  staffingWorkEditPending ||= { action: crypto.randomUUID(), request };
+  const action = staffingWorkEditPending.action;
+  const generation = staffingDetailGeneration;
+  staffingWorkEditBusy = true;
+  section.querySelector('#staffing-work-edit-submit').disabled = true;
+  section.querySelector('#staffing-work-detail-status').textContent =
+    'Saving current authorized correction…';
+  try {
+    const response = await adminFetch(SUPABASE_URL +
+      '/rest/v1/rpc/office_supervisor_correct_work_schedule', {
+      method: 'POST', headers: authHeaders(true),
+      body: JSON.stringify({ p_action: action, ...request })
+    });
+    if (!staffingStillCurrent(check) || generation !== staffingDetailGeneration) return;
+    if (!response.ok) {
+      if ([401,403,409].includes(response.status)) {
+        signOutButton.click();
+        setLoginStatus('Supervisor job authorization or revision changed. Sign in and reload.', true);
+        return;
+      }
+      if (response.status >= 500) throw new Error('Server correction outcome uncertain.');
+      const message = await readableError(response, 'Correction rejected.');
+      staffingWorkEditPending = null;
+      throw new Error(message);
+    }
+    const saved = await response.json();
+    if (!staffingStillCurrent(check) || generation !== staffingDetailGeneration) return;
+    if (saved?.action_id !== action || saved.work_order_id !== detail.work_order_id
+      || saved.team_id !== detail.team_id || saved.due_date !== request.p_due_date
+      || saved.status !== 'SAVED' || !saved.updated_at || !saved.work_revision
+      || staffingWork?.scopeFingerprint !== request.p_expected_scope_fingerprint) {
+      signOutButton.click();
+      setLoginStatus('Supervisor correction receipt did not match the authorized request.', true);
+      return;
+    }
+    staffingWorkEditPending = null;
+    staffingWorkDetail = { ...detail, due_date: saved.due_date,
+      instructions: saved.instructions, updated_at: saved.updated_at,
+      work_revision: saved.work_revision };
+    const row = staffingWork.rows.find(r => r.work_order_id === detail.work_order_id);
+    if (row) row.due_date = saved.due_date;
+    staffingRenderWork();
+    staffingRenderDetail();
+    section.querySelector('#staffing-work-detail-status').textContent =
+      'Server saved the correction, actor and reason.';
+  } catch (error) {
+    if (staffingStillCurrent(check) && generation === staffingDetailGeneration) {
+      section.querySelector('#staffing-work-detail-status').textContent =
+        error.message + (staffingWorkEditPending ? ' Retry with the same inputs.' : '');
+    }
+  } finally {
+    staffingWorkEditBusy = false;
+    if (staffingStillCurrent(check) && generation === staffingDetailGeneration) {
+      section.querySelector('#staffing-work-edit-submit').disabled = false;
+    }
+  }
+}
 function staffingRenderWork() {
   const card = staffingCard(), work = staffingWork;
   const rows = card.querySelector('#staffing-work-rows');
