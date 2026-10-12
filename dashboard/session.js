@@ -69,8 +69,14 @@ async function restoreAdminSession() {
 
     if (epoch !== adminSessionEpoch) return;
     const metadata = currentUser.app_metadata || {};
-    if (metadata.role !== 'ADMIN' || !metadata.organization_id) {
-      throw new Error('Stored session is not authorized as a Team Admin.');
+    if (!metadata.organization_id || !['ADMIN', 'SUPERVISOR'].includes(metadata.role)) {
+      throw new Error('Stored session is not authorized for office access.');
+    }
+    if (metadata.role === 'SUPERVISOR') {
+      await showScopedStaffingPortal(metadata.organization_id);
+      if (epoch !== adminSessionEpoch) return;
+      setLoginStatus('', false);
+      return;
     }
 
     const [rows, users] = await Promise.all([
@@ -195,8 +201,9 @@ async function ensureFreshAdminSession() {
       if (epoch !== adminSessionEpoch || !accessToken) throw new Error('The Admin session changed.');
       const user = refreshed.user;
       const metadata = user && user.app_metadata;
-      if (!metadata || metadata.role !== 'ADMIN' || !metadata.organization_id
+      if (!metadata || !['ADMIN', 'SUPERVISOR'].includes(metadata.role) || !metadata.organization_id
           || (previousUser && (user.id !== previousUser.id
+            || metadata.role !== previousUser.app_metadata.role
             || metadata.organization_id !== previousUser.app_metadata.organization_id))) {
         expireAdminSession();
         throw new Error('This session is no longer authorized as a Team Admin.');
