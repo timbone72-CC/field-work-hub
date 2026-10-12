@@ -35,6 +35,25 @@
       </div>
 
       <div id="rls-result" class="check" role="status" aria-live="polite"></div>
+      <details id="notification-center" class="admin-action">
+        <summary>Alerts and notification settings</summary>
+        <p class="muted">Job problems remain visible regardless of alert switches. Dashboard alerts are enabled by default. Phone and computer notifications are optional and require separate enrollment.</p>
+        <div class="workspace-navigation">
+          <button id="notification-refresh" type="button" class="secondary">Refresh current alerts</button>
+          <span id="notification-count" role="status" class="muted">Alerts not loaded</span>
+        </div>
+        <p id="notification-status" role="status" aria-live="polite" class="status"></p>
+        <div id="notification-list" aria-label="Verified current job alerts"></div>
+        <p class="muted">Due dates use your organization's configured time zone, not the phone's current clock.</p>
+        <div class="form-grid">
+          <label>Organization due-date time zone
+            <input id="notification-org-timezone" type="text" maxlength="80" value="America/Chicago" placeholder="America/Chicago">
+          </label>
+          <button id="notification-timezone-save" type="button" class="secondary">Save organization time zone</button>
+        </div>
+        <p id="notification-push-status" class="muted">Push is not configured. No phone/computer enrollment has occurred.</p>
+        <div id="notification-settings" aria-label="Independent alert preferences"></div>
+      </details>
 
       <details class="admin-action" id="create-wo-details" aria-labelledby="create-heading">
         <summary id="create-heading">Create &amp; Assign Work Order</summary>
@@ -358,6 +377,7 @@
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
   <script src="client-release.js?v=phase5d-20261010" defer></script>
   <script src="release-history.js?v=phase6d-20261011" defer></script>
+  <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
   <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
   <script src="app.js?v=job-workspace-20261007-1" defer></script>
