@@ -12,6 +12,8 @@ declare
  enroll_user2 uuid:=gen_random_uuid(); combined_action uuid:=gen_random_uuid(); combined_rev uuid;
  roster_worker uuid:=gen_random_uuid(); roster_action uuid:=gen_random_uuid(); roster_rev uuid; roster_result jsonb; busy_wo uuid;
  unmanaged_team uuid:=gen_random_uuid();
+ handoff_wo uuid; handoff_action uuid:=gen_random_uuid(); handoff_review jsonb;
+ handoff_fp text; handoff_receipt jsonb;
  grant_state_action uuid:=gen_random_uuid(); grant_state_revision uuid;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
@@ -741,6 +743,107 @@ begin
  if not denied then raise exception 'Busy Contractor transferred without job handoff';end if;
  if (select w.responsible_team_id from public.work_orders w where w.id=busy_wo)<>team_b then
    raise exception 'Roster operation changed existing work-order ownership';end if;
+
+ -- Phase 6F: only genuinely undispatched/empty WOs may change teams
+ -- through the reviewed, audited transaction. Started and photo-bearing
+ -- assignments require the separate consent + exact-recovery workflow.
+ insert into public.work_orders(
+   organization_id,responsible_team_id,wo_number,property_address,work_type,due_date)
+ values(org,team_a,'HANDOFF-'||gen_random_uuid(),'TEST EMPTY','TEST',current_date)
+ returning id into handoff_wo;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,
+   'session_id',admin_id)::text,true);
+ denied:=false;
+ begin perform public.preview_work_order_team_handoff(handoff_wo,team_b,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin previewed a Tier 3 handoff';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[2],
+   'session_id',supervisors[2])::text,true);
+ denied:=false;
+ begin perform public.preview_work_order_team_handoff(handoff_wo,team_b,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Tier 2 previewed a Tier 3 handoff';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,
+   'session_id',owner_id)::text,true);
+ denied:=false;
+ begin perform public.preview_work_order_team_handoff(handoff_wo,team_b,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Owner platform grant exposed work handoff';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[3],
+   'session_id',supervisors[3])::text,true);
+ denied:=false;
+ begin perform public.preview_work_order_team_handoff(handoff_wo,other_team,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Cross-organization handoff preview succeeded';end if;
+ handoff_review:=public.preview_work_order_team_handoff(handoff_wo,team_b,'TEST');
+ handoff_fp:=handoff_review->>'review_fingerprint';
+ if (handoff_review->>'eligible')::boolean is not true or length(handoff_fp)<>32
+ then raise exception 'Empty WO handoff not eligible';end if;
+ -- Even a valid Tier 3 cannot move an assigned/active work order.
+ if (public.preview_work_order_team_handoff(busy_wo,team_a,'TEST')->>'eligible')::boolean is true
+ then raise exception 'Busy Contractor WO became handoff-eligible';end if;
+ denied:=false;
+ begin perform public.handoff_work_order_team(gen_random_uuid(),busy_wo,team_a,
+   '00000000000000000000000000000000','Do not take active work','TEST');
+ exception when serialization_failure or insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Active WO handoff accepted';end if;
+ -- The original team-binding guard rejects unaudited direct updates.
+ denied:=false;
+ begin update public.work_orders set responsible_team_id=team_b
+   where id=handoff_wo;
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Unaudited work-order handoff accepted';end if;
+ update public.work_orders set instructions='Edited after preview' where id=handoff_wo;
+ denied:=false;
+ begin perform public.handoff_work_order_team(handoff_action,handoff_wo,team_b,
+    handoff_fp,'Reviewed idle job handoff','TEST');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Stale handoff preview accepted';end if;
+ handoff_review:=public.preview_work_order_team_handoff(handoff_wo,team_b,'TEST');
+ handoff_fp:=handoff_review->>'review_fingerprint';
+ handoff_receipt:=public.handoff_work_order_team(handoff_action,handoff_wo,team_b,
+    handoff_fp,'Reviewed idle job handoff','TEST');
+ if handoff_receipt->>'status'<>'HANDED_OFF'
+   or (select responsible_team_id from public.work_orders where id=handoff_wo)<>team_b
+ then raise exception 'Reviewed work-order handoff did not commit exact new team';end if;
+ if handoff_receipt is distinct from public.handoff_work_order_team(
+      handoff_action,handoff_wo,team_b,handoff_fp,'Reviewed idle job handoff','TEST') then
+   raise exception 'Reviewed handoff replay changed its immutable result';end if;
+ denied:=false;
+ begin perform public.handoff_work_order_team(
+   handoff_action,handoff_wo,team_a,handoff_fp,'Changed target replay','TEST');
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Handoff UUID reused with changed inputs';end if;
+ update private.supervisor_grants set active=false
+   where organization_id=org and user_id=supervisors[3];
+ denied:=false;
+ begin perform public.handoff_work_order_team(
+   handoff_action,handoff_wo,team_b,handoff_fp,'Reviewed idle job handoff','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Revoked manager read historical handoff';end if;
+ update private.supervisor_grants set active=true
+   where organization_id=org and user_id=supervisors[3];
+ if handoff_receipt is distinct from public.handoff_work_order_team(
+     handoff_action,handoff_wo,team_b,handoff_fp,'Reviewed idle job handoff','TEST')
+ then raise exception 'Restored manager cannot reconcile handoff action';end if;
+ if (select count(*) from private.work_order_team_handoff_actions
+   where work_order_id=handoff_wo)<>1 then
+   raise exception 'Duplicate audited WO handoff';end if;
+ denied:=false;
+ begin update private.work_order_team_handoff_actions
+   set reason='Tamper' where action_id=handoff_action;
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Handoff audit mutation accepted';end if;
+ execute 'set local role authenticated';
+ denied:=false;
+ begin update public.work_orders set responsible_team_id=team_a
+   where id=handoff_wo;
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Direct authenticated WO rebind accepted';end if;
+ if has_table_privilege('authenticated','private.work_order_team_handoff_actions','select')
+   or has_table_privilege('authenticated','private.work_order_team_handoff_actions','insert') then
+   raise exception 'Private handoff audit accessible to clients';end if;
+ execute 'reset role';
 
  -- Roster movement cannot move existing WO/photo/run authority.
  update private.contractor_team_memberships set team_id=team_b where user_id=contractor;
