@@ -592,6 +592,25 @@ begin
     'requested_count',1));
   issue_draft:=public.admin_save_correction_issues(wo,
      (issue_draft->>'revision')::uuid,issue_payload);
+  -- An Admin's combined Edit+Issues uses a single database transaction.
+  -- A bad issue must roll back even the initial general-draft mutation.
+  denied:=false;
+  begin
+    perform public.admin_save_correction_draft_with_issues(
+      wo,pending_oldrun,pending_oldrev,(issue_draft->>'revision')::uuid,
+      'SHOULD NOT PERSIST',array[photo],contractor,current_date,
+      'Retake the reviewed photo',pending_capture,'[]'::jsonb,pending_capture,
+      jsonb_build_array(jsonb_build_object('photo_id',gen_random_uuid(),
+        'item_id',null,'reason','Foreign photo','requested_count',1)));
+  exception when insufficient_privilege then denied:=true;end;
+  if not denied or (public.admin_correction_state(wo)->'draft'->>'reason')<>
+      'Correct reviewed photo'
+  then raise exception 'Partial correction draft survived failed issue validator';end if;
+  issue_draft:=public.admin_save_correction_draft_with_issues(
+    wo,pending_oldrun,pending_oldrev,(issue_draft->>'revision')::uuid,
+    'Correct reviewed photo',array[photo],contractor,current_date,
+    'Retake the reviewed photo',pending_capture,'[]'::jsonb,pending_capture,
+    issue_payload);
   issue_preview:=public.admin_preview_correction_draft(wo,
      (issue_draft->>'revision')::uuid);
   if jsonb_array_length(issue_preview->'summary'->'issues')<>1
