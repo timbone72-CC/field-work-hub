@@ -505,7 +505,7 @@ begin
  if combined_rev<>public.owner_enroll_supervisor_with_seat(combined_action,org,enroll_user2,
    enroll_access_rev,3::smallint,'{}'::uuid[],'Atomic owner enrollment','TEST')
    or (select state from private.office_seat_reservations where action_id=combined_action)<>'CONSUMED'
-   or (select tier from private.supervisor_grants where user_id=enroll_user2)<>3
+   or (select sg.tier from private.supervisor_grants sg where sg.user_id=enroll_user2)<>3
    or (select active from private.account_work_access where user_id=enroll_user2)
    or (select count(*) from private.supervisor_enrollment_actions where action_id=combined_action)<>1 then
    raise exception 'Atomic enrollment failed replay, quota or work gate';end if;
