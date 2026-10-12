@@ -5,6 +5,7 @@ let ownerConsoleGeneration = 0;
 let ownerConsoleData = null;
 let ownerConsoleBusy = false;
 let ownerReviewGeneration = 0;
+let ownerEnrollmentPending = null;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -17,6 +18,7 @@ signOutButton.addEventListener('click', () => {
   ownerReviewGeneration++;
   ownerConsoleData = null;
   ownerConsoleBusy = false;
+  ownerEnrollmentPending = null;
   document.getElementById('owner-office-console')?.remove();
 });
 
@@ -318,6 +320,7 @@ function ownerEnrollmentUI(people, grants, teams) {
   const status = document.getElementById('owner-enrollment-status');
   if (!select || !box || !form) return;
   const granted = new Set(grants.map(grant => grant.user_id));
+  if (ownerEnrollmentPending && granted.has(ownerEnrollmentPending.user)) ownerEnrollmentPending = null;
   const candidates = people.filter(person =>
     person.work_role === 'SUPERVISOR' && !person.work_active
     && person.identity_ready === true && !granted.has(person.user_id)
@@ -370,13 +373,26 @@ async function ownerEnrollExisting() {
     const reason = ownerReason();
     if (!window.confirm('Enroll this existing verified account with the selected tier and teams? ' +
       'A Supervisor seat will be reserved and consumed in one server action. Work access stays OFF.')) return;
-    const actionId = crypto.randomUUID();
+    const fingerprint = JSON.stringify({
+      organization: data.organization, user, tier,
+      teams: [...teamIds].sort(), reason, revision: person.access_revision
+    });
+    if (ownerEnrollmentPending && ownerEnrollmentPending.fingerprint !== fingerprint) {
+      throw Error('An earlier enrollment outcome may be uncertain. Refresh and reconcile it before changing the request.');
+    }
+    const actionId = ownerEnrollmentPending?.actionId || crypto.randomUUID();
+    ownerEnrollmentPending = { actionId, fingerprint, user };
     await ownerChange(current => ownerRpc('owner_enroll_supervisor_with_seat', {
       p_action: actionId, p_org: current.organization, p_user: user,
       p_expected_access_revision: person.access_revision,
       p_tier: tier, p_team_ids: teamIds, p_reason: reason,
       p_environment: OWNER_CONSOLE_ENVIRONMENT
-    }), async () => loadOwnerConsole(true));
+    }), async () => {
+      await loadOwnerConsole(true);
+      if (!ownerConsoleData?.grants.some(grant => grant.user_id === user))
+        throw Error('Enrollment response needs reconciliation. Refresh and retry the SAME request.');
+      ownerEnrollmentPending = null;
+    });
   } catch (error) {
     ownerStatus(error.message || 'Enrollment failed. Review the current account status.', true);
   }
