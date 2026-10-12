@@ -138,6 +138,52 @@ begin
    raise exception 'Tier change silently widened team or tenant scope';
  end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+
+ -- Phase 6F exact team scope: only owner may add, no implicit other-org access.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_team_scope(org,supervisors[1],team_b,true,
+     (select sg.revision from private.supervisor_grants sg where sg.organization_id=org and sg.user_id=supervisors[1]),
+     'Unauthorized scope change','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Admin added Supervisor team scope';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[2],'session_id',supervisors[2])::text,true);
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_team_scope(org,supervisors[1],team_b,true,
+     (select sg.revision from private.supervisor_grants sg where sg.organization_id=org and sg.user_id=supervisors[1]),
+     'Supervisor attempted scope change','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Supervisor granted peer team scope';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ select sg.revision into sid from private.supervisor_grants sg
+   where sg.organization_id=org and sg.user_id=supervisors[1];
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_team_scope(org,supervisors[1],other_team,true,sid,'Foreign team','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Cross-organization scope created';end if;
+ actor:=public.owner_set_supervisor_team_scope(org,supervisors[1],team_b,true,sid,'Reviewed same-org team scope','TEST');
+ if actor=sid then raise exception 'Scope revision failed to advance';end if;
+ denied:=false;
+ begin
+   perform public.owner_set_supervisor_team_scope(org,supervisors[1],team_b,false,sid,'Stale removal','TEST');
+ exception when serialization_failure then denied:=true;
+ end;
+ if not denied then raise exception 'Stale scope removal accepted';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[1],'session_id',supervisors[1])::text,true);
+ if not private.has_team_capability(org,team_b,'WORK') or private.has_team_capability(other_org,other_team,'WORK') then
+   raise exception 'Scope expansion did not honor exact team boundary';
+ end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ actor:=public.owner_set_supervisor_team_scope(org,supervisors[1],team_b,false,actor,'Reviewed team scope removal','TEST');
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[1],'session_id',supervisors[1])::text,true);
+ if private.has_team_capability(org,team_b,'WORK') then raise exception 'Removed team scope remained accessible';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
 
