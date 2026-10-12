@@ -216,8 +216,11 @@ async function staffingReadWorkPage(org, after = null) {
     method: 'POST', headers: authHeaders(true),
     body: JSON.stringify({ p_org: org, p_after: after, p_limit: 25 })
   });
-  if (!response.ok) throw new Error(await readableError(response,
-    'Current Supervisor work access denied.'));
+  if (!response.ok) {
+    const error = new Error(await readableError(response, 'Current Supervisor work access denied.'));
+    error.status = response.status;
+    throw error;
+  }
   const value = await response.json();
   if (value?.organization_id !== org || ![1,2,3].includes(Number(value.caller_tier))
     || !/^[a-f0-9]{32}$/.test(value.scope_fingerprint || '')
