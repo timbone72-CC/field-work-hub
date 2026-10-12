@@ -235,7 +235,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           assert.equal(p.p_work_order,uuid(9304));
           assert.equal(p.p_expected_scope_fingerprint,'a'.repeat(32));
           assert.equal(p.p_expected_updated_at,'2026-10-12T12:10:00Z');
-          assert.equal(p.p_expected_work_revision,'d'.repeat(32));
+          assert.equal(p.p_expected_work_revision,staffWorkRevision);
           if (!staffingGranted) return reply({message:'Access denied'},403);
           if (staffWorkEditFailOnce) {
             staffWorkEditFailOnce=false;
