@@ -12,6 +12,8 @@ let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, 
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
+let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true;
+let staffingAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
 let ownerEnrollFailOnce=true;
@@ -196,6 +198,34 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         }
         throw Error('Unexpected owner request');
       }
+      if (url.pathname.endsWith('/office_staffing_scope_snapshot')) {
+        const p=req.postDataJSON();
+        assert.equal(p.p_org,organization);
+        assert.equal(p.p_environment,'TEST');
+        assert.equal(p.p_limit,50);
+        if (!staffingGranted) return reply({message:'Tier 2/3 staffing grant unavailable'},403);
+        return reply({organization_id:organization,allowance_revision:uuid(9212),
+          admin_limit:5,admin_active:2,admin_reserved:1,admin_available:2,
+          teams:[{team_id:uuid(9213),name:'West test team'}],next_after:null});
+      }
+      if (url.pathname === '/functions/v1/admin-invite-contractor' &&
+          syntheticRole === 'SUPERVISOR') {
+        const p=req.postDataJSON();
+        assert.equal(p.operation,'invite_admin_new_team');
+        assert.equal(p.expected_allowance_revision,uuid(9212));
+        assert.equal(p.team_name,'North test team');
+        assert.equal(p.display_name,'New Staff Admin');
+        assert.equal(p.email,'staff-admin@example.invalid');
+        assert.equal(p.reason,'Approved new team test');
+        assert.match(p.action_id,/^[a-f0-9-]{36}$/);
+        staffingAttempts.push(p);
+        if (staffInviteFailOnce) {
+          staffInviteFailOnce=false;
+          return reply({status:'RECONCILE',error:'Auth outcome uncertain'},503);
+        }
+        return reply({status:'BOUND',action_id:p.action_id,team_id:p.team_id,
+          setup_url:'https://auth.example.invalid/scoped-staff-setup'});
+      }
       if (url.pathname === '/functions/v1/admin-invite-contractor') {
         const p=req.postDataJSON();
         assert.equal(p.operation,'invite_admin');
@@ -214,7 +244,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           setup_url:'https://auth.example.invalid/one-time-setup'});
       }
       if (url.pathname === '/auth/v1/token') return reply({ access_token: 'disposable-test-access', refresh_token: 'disposable-test-refresh', expires_in: 3600 });
-      if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
+      if (url.pathname === '/auth/v1/user') return reply({
+        id: syntheticRole === 'SUPERVISOR' ? uuid(9301) : admin,
+        email: syntheticRole === 'SUPERVISOR' ? 'supervisor@example.invalid' : 'admin@example.invalid',
+        app_metadata: { role: syntheticRole, organization_id: organization }
+      });
       if (url.pathname === '/rest/v1/photo_templates') return reply(templateRows);
       if (url.pathname.endsWith('/admin_save_company_photo_template')) {
         const payload=req.postDataJSON();templateSaves.push(payload);
@@ -1157,6 +1191,56 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.setViewportSize({width:1280,height:900});
     await page.locator('#sign-out').click();
     assert.equal(await page.locator('#owner-office-console').count(),0,'Owner data must clear on signout');
+    // Source-only Supervisor staffing: denied lower-tier RPC fails closed,
+    // and the scoped invite reconciles the exact unchanged action once.
+    syntheticRole='SUPERVISOR'; staffingGranted=false;
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await wait(page,()=>document.querySelector('#login-status')?.textContent
+      .includes('Tier 2/3 staffing grant unavailable'));
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(await page.locator('#results-card:visible').count(),0);
+    staffingGranted=true;
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-card:visible').waitFor();
+    assert.equal(await page.locator('#results-card:visible').count(),0,
+      'Supervisor staffing must not expose Admin job/photo controls.');
+    assert.equal(await page.locator('#owner-office-console').count(),0);
+    assert.match(await page.locator('#staffing-capacity').innerText(),/2 available of 5/);
+    assert.equal(await page.locator('#staffing-team option').count(),2);
+    await page.locator('#staffing-team-name').fill('North test team');
+    await page.locator('#staffing-name').fill('New Staff Admin');
+    await page.locator('#staffing-email').fill('staff-admin@example.invalid');
+    await page.locator('#staffing-reason').fill('Approved new team test');
+    await page.locator('#staffing-submit').click();
+    await wait(page,()=>document.querySelector('#staffing-status')?.textContent
+      .includes('Auth outcome uncertain'));
+    assert.equal(await page.locator('#staffing-link-result:visible').count(),0,
+      'Uncertain Auth outcome cannot expose an unbound setup URL.');
+    await page.locator('#staffing-team-name').fill('Changed team');
+    await page.locator('#staffing-submit').click();
+    assert.equal(staffingAttempts.length,1,
+      'Editing an unresolved invitation cannot create another action.');
+    await page.locator('#staffing-team-name').fill('North test team');
+    await page.locator('#staffing-submit').click();
+    await wait(page,()=>document.querySelector('#staffing-link-result:not(.hidden)'));
+    assert.equal(staffingAttempts.length,2);
+    assert.equal(staffingAttempts[0].action_id,staffingAttempts[1].action_id);
+    assert.equal(staffingAttempts[0].team_id,staffingAttempts[1].team_id);
+    assert.equal(await page.locator('#staffing-link').inputValue(),
+      'https://auth.example.invalid/scoped-staff-setup');
+    assert.equal(await page.locator('#staffing-submit').isDisabled(),true,
+      'Successful link requires a fresh seat revision before another request.');
+    await page.locator('#staffing-sign-out').click();
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-link').inputValue(),'',
+      'Supervisor setup link must clear on sign-out.');
+    assert.equal(await page.locator('#results-card:visible').count(),0);
+    assert.equal(await page.evaluate(()=>sessionStorage.length),0,
+      'Sign out must clear the existing single tab session.');
+
     assert.equal(errors.length, 0, errors.join('\n'));
     assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 3,
       'Three explicit inspections open three short-lived private images; no gallery prefetch');
