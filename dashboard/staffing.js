@@ -6,6 +6,10 @@ let staffingPending = null;
 let staffingBusy = false;
 let staffingNeedsRefresh = false;
 let staffingGeneration = 0;
+let staffingRoster = null;
+let staffingRosterPending = null;
+let staffingRosterBusy = false;
+let staffingRosterNeedsRefresh = false;
 
 function staffingIdentity() {
   return { epoch: adminSessionEpoch, generation: staffingGeneration,
@@ -51,6 +55,18 @@ function staffingCard() {
       <label>Reason for staffing change<input id="staffing-reason" maxlength="1000" required></label>
       <button id="staffing-submit" type="submit">Request one-time setup link</button>
     </form>
+    <section id="staffing-roster-area" class="subsection">
+      <h3>Contractor placement</h3>
+      <p class="muted">Tier 2 may place an available unassigned Contractor into a supervised team.
+        Tier 3 may also move an idle Contractor between teams. Active work requires a separate reviewed handoff.</p>
+      <p id="staffing-roster-status" role="status" aria-live="polite"></p>
+      <form id="staffing-roster-form" autocomplete="off">
+        <label>Eligible Contractor<select id="staffing-roster-person" required></select></label>
+        <label>Destination team<select id="staffing-roster-team" required></select></label>
+        <label>Reason<input id="staffing-roster-reason" maxlength="1000" required></label>
+        <button id="staffing-roster-submit" type="submit">Confirm Contractor placement</button>
+      </form>
+    </section>
     <div id="staffing-link-result" class="hidden">
       <label>Verified one-time Admin setup link<input id="staffing-link" readonly></label>
       <button type="button" id="staffing-copy" class="secondary">Copy Setup Link</button>
@@ -65,6 +81,10 @@ function staffingCard() {
   card.querySelector('#staffing-invite-form').addEventListener('submit', event => {
     event.preventDefault(); void staffingInvite();
   });
+  card.querySelector('#staffing-roster-form').addEventListener('submit', event => {
+    event.preventDefault(); void staffingPlaceContractor();
+  });
+  card.querySelector('#staffing-roster-person').addEventListener('change', staffingRenderRoster);
   card.querySelector('#staffing-copy').addEventListener('click', async () => {
     const link = card.querySelector('#staffing-link').value;
     if (!link || !staffingSnapshot) return;
@@ -113,23 +133,35 @@ async function showScopedStaffingPortal(organizationId) {
     throw new Error('Verified Supervisor account required.');
   }
   const check = staffingIdentity();
-  const snapshot = await staffingReadSnapshot(organizationId);
+  const [snapshot, roster] = await Promise.all([
+    staffingReadSnapshot(organizationId), staffingReadRoster(organizationId)
+  ]);
   if (!staffingStillCurrent(check)) throw new Error('The Supervisor session changed.');
   staffingSnapshot = snapshot;
+  staffingRoster = roster;
   const card = staffingCard();
   loginCard.classList.add('hidden');
   resultsCard.classList.add('hidden');
   card.classList.remove('hidden');
   card.querySelector('#staffing-account').textContent = currentUser.email || 'Supervisor account';
   staffingRender();
+  staffingRenderRoster();
 }
 async function staffingRefresh() {
   const check = staffingIdentity();
   if (!staffingStillCurrent(check)) throw new Error('Sign in as an authorized Supervisor.');
-  const result = await staffingReadSnapshot(check.org);
+  if (staffingRosterPending) {
+    throw new Error('Reconcile the exact pending Contractor action before refreshing staffing.');
+  }
+  const [result, roster] = await Promise.all([
+    staffingReadSnapshot(check.org), staffingReadRoster(check.org)
+  ]);
   if (!staffingStillCurrent(check)) return;
   staffingSnapshot = result;
+  staffingRoster = roster;
+  staffingRosterNeedsRefresh = false;
   staffingRender();
+  staffingRenderRoster();
   staffingMessage('Current seat allowance and exact team permissions verified.');
 }
 function staffingRender() {
@@ -201,10 +233,133 @@ async function staffingInvite() {
       card.querySelector('#staffing-submit').disabled = staffingNeedsRefresh;
   }
 }
+
+function staffingRosterMessage(message, error = false) {
+  const node = document.getElementById('staffing-roster-status');
+  if (node) { node.textContent = message; node.classList.toggle('error',error); }
+}
+async function staffingReadRoster(org) {
+  let after = null, first = null;
+  const people = [], seen = new Set();
+  for (let page = 0; page < 20; page++) {
+    const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/office_contractor_roster_snapshot`,{
+      method:'POST',headers:authHeaders(true),
+      body:JSON.stringify({p_org:org,p_environment:STAFFING_ENVIRONMENT,p_after:after,p_limit:50})
+    });
+    if (!response.ok) throw new Error(await readableError(response,'Scoped Contractor roster denied.'));
+    const value = await response.json();
+    if (value?.organization_id !== org || ![2,3].includes(Number(value.caller_tier))
+      || !Array.isArray(value.contractors) || value.contractors.length>50
+      || (first && value.caller_tier!==first.caller_tier)) {
+      throw new Error('Contractor roster scope changed during refresh.');
+    }
+    first ||= value;
+    for (const person of value.contractors) {
+      if (!person.user_id || seen.has(person.user_id)
+        || (after && person.user_id<=after)
+        || (Number(value.caller_tier)===2 && person.team_id
+          && !staffingSnapshot?.teams?.some(t=>t.team_id===person.team_id)
+          && !first.teams?.some(t=>t.team_id===person.team_id))) {
+        throw new Error('Contractor roster did not satisfy exact paging or team scope.');
+      }
+      seen.add(person.user_id);
+      people.push(person);
+    }
+    if (!value.next_after) return {tier:Number(first.caller_tier),people};
+    if (!value.contractors.length || value.next_after===after) break;
+    after=value.next_after;
+  }
+  throw new Error('Contractor roster exceeds the supported page window.');
+}
+function staffingRenderRoster() {
+  const card=staffingCard(), roster=staffingRoster, staff=staffingSnapshot;
+  const personSelect=card.querySelector('#staffing-roster-person');
+  const teamSelect=card.querySelector('#staffing-roster-team');
+  const previousPerson=personSelect.value, previousTeam=teamSelect.value;
+  personSelect.replaceChildren(new Option('Choose an eligible Contractor',''));
+  if (roster && staff) {
+    for (const person of roster.people) {
+      // Busy Contractors are displayed as unavailable, never offered for a
+      // roster-only move. The transaction rechecks this under database locks.
+      const mayMove=person.idle && (roster.tier===3 || !person.team_id);
+      const label=`${person.email || person.user_id} · ${person.team_id
+        ? (staff.teams.find(t=>t.team_id===person.team_id)?.name || 'Assigned team')
+        : 'Unassigned'}${person.idle?'':' · Open work'}`;
+      const option=new Option(label,person.user_id);
+      option.disabled=!mayMove;
+      personSelect.add(option);
+    }
+  }
+  if ([...personSelect.options].some(x=>x.value===previousPerson && !x.disabled))
+    personSelect.value=previousPerson;
+  const chosen=roster?.people.find(x=>x.user_id===personSelect.value);
+  teamSelect.replaceChildren(new Option('Choose authorized destination',''));
+  for (const team of staff?.teams||[]) {
+    const option=new Option(team.name,team.team_id);
+    option.disabled=chosen?.team_id===team.team_id;
+    teamSelect.add(option);
+  }
+  if ([...teamSelect.options].some(x=>x.value===previousTeam && !x.disabled))
+    teamSelect.value=previousTeam;
+  const submit=card.querySelector('#staffing-roster-submit');
+  submit.disabled=staffingRosterBusy || staffingRosterNeedsRefresh
+    || !chosen || !chosen.idle || (roster.tier===2 && Boolean(chosen.team_id))
+    || !staff?.teams?.some(t=>t.team_id===teamSelect.value && t.team_id!==chosen.team_id);
+}
+async function staffingPlaceContractor() {
+  const check=staffingIdentity(), card=staffingCard(), roster=staffingRoster;
+  if (!staffingStillCurrent(check) || staffingRosterBusy || staffingRosterNeedsRefresh || !roster) return;
+  const userId=card.querySelector('#staffing-roster-person').value;
+  const teamId=card.querySelector('#staffing-roster-team').value;
+  const reason=card.querySelector('#staffing-roster-reason').value.trim();
+  const chosen=roster.people.find(p=>p.user_id===userId);
+  if (!chosen || !chosen.idle || (roster.tier===2 && chosen.team_id)
+    || !staffingSnapshot?.teams.some(t=>t.team_id===teamId)
+    || chosen.team_id===teamId || !reason || reason.length>1000) {
+    staffingRosterMessage('Select an idle, eligible Contractor and a different authorized team.',true);
+    return;
+  }
+  const request={p_org:check.org,p_user:userId,p_team:teamId,
+    p_expected_revision:chosen.revision||null,p_reason:reason,p_environment:STAFFING_ENVIRONMENT};
+  if (staffingRosterPending && JSON.stringify(staffingRosterPending.request)!==JSON.stringify(request)) {
+    staffingRosterMessage('The original move is unresolved. Restore its exact Contractor, team and reason before retrying.',true);
+    return;
+  }
+  staffingRosterPending ||= {action:crypto.randomUUID(),request};
+  staffingRosterBusy=true;
+  card.querySelector('#staffing-roster-submit').disabled=true;
+  staffingRosterMessage('Confirming exact Contractor roster action…');
+  try {
+    const response=await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/manage_idle_contractor_roster`,{
+      method:'POST',headers:authHeaders(true),
+      body:JSON.stringify({...request,p_action:staffingRosterPending.action})
+    });
+    const outcome=await response.json().catch(()=>({}));
+    if (!staffingStillCurrent(check)) return;
+    if (!response.ok || outcome.action_id!==staffingRosterPending.action
+      || outcome.user_id!==userId || outcome.new_team_id!==teamId
+      || !outcome.revision) throw new Error(
+        outcome.message||'Move outcome needs reconciliation under the same action.');
+    staffingRosterPending=null;
+    staffingRosterNeedsRefresh=true;
+    staffingRosterMessage('Server confirmed the roster change. Refresh staffing before another action.');
+  } catch (error) {
+    if (staffingStillCurrent(check)) staffingRosterMessage(
+      `${error.message} Original action retained for safe retry; active jobs have not been handed off.`,true);
+  } finally {
+    staffingRosterBusy=false;
+    if (staffingStillCurrent(check)) staffingRenderRoster();
+  }
+}
+
 function staffingSignedOut() {
   staffingGeneration++;
   staffingSnapshot = null;
   staffingPending = null;
+  staffingRoster = null;
+  staffingRosterPending = null;
+  staffingRosterBusy = false;
+  staffingRosterNeedsRefresh = false;
   staffingBusy = false;
   staffingNeedsRefresh = false;
   const card = document.getElementById('staffing-card');
@@ -213,6 +368,10 @@ function staffingSignedOut() {
     card.querySelector('#staffing-link').value = '';
     card.querySelector('#staffing-link-result').classList.add('hidden');
     card.querySelector('#staffing-invite-form').reset();
+    card.querySelector('#staffing-roster-form').reset();
+    card.querySelector('#staffing-roster-person').replaceChildren();
+    card.querySelector('#staffing-roster-team').replaceChildren();
+    staffingRosterMessage('');
   }
 }
 signOutButton.addEventListener('click', staffingSignedOut);
