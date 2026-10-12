@@ -278,6 +278,9 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
  select count(*) into n from public.owner_supervisor_grant_list(org,'TEST');
  if n<>3 then raise exception 'Owner grant list leaked or missed metadata';end if;
+ if (select account_email from public.owner_supervisor_grant_list(org,'TEST') limit 1)
+    is distinct from 'fixture@example.invalid' then
+   raise exception 'Owner grant list omitted verified identity label';end if;
  select count(*) into n from public.owner_supervisor_grant_list(org,'TEST',null,1);
  if n<>1 then raise exception 'Owner grant list exceeded page limit';end if;
  denied:=false;
