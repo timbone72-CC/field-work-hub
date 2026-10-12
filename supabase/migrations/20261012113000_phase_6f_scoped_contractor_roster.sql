@@ -51,7 +51,7 @@ declare
  result jsonb;
 begin
  if p_action is null or p_org is null or p_user is null or p_team is null
-  or p_environment not in ('TEST','PRODUCTION')
+  or p_environment is null or p_environment not in ('TEST','PRODUCTION')
   or p_reason is null or char_length(btrim(p_reason)) not between 1 and 1000
  then raise exception 'Explicit roster move inputs required' using errcode='22023';end if;
  if not private.current_identity_valid() or auth.uid()=p_user then
