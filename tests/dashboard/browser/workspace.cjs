@@ -10,7 +10,7 @@ const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
-let ownerScope=[uuid(9213)],ownerWrites=[];
+let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
@@ -98,6 +98,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           ownerTier=p.p_tier;ownerTierRevision=uuid(9217);return reply(ownerTierRevision);
         }
         if (url.pathname.endsWith('owner_set_supervisor_team_scope')) {
+          if (ownerRejectNext) {ownerRejectNext=false;return reply({message:'Work scope changed; reload before saving'},409);}
           assert.equal(p.p_expected_revision,ownerTierRevision);
           ownerScope=p.p_allowed?[p.p_team]:[];ownerTierRevision=uuid(9218);return reply(ownerTierRevision);
         }
@@ -897,6 +898,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved'));
     assert.deepEqual(ownerScope,[]);
     assert.equal(ownerWrites.every(x=>x.p_reason==='Synthetic office access review'),true);
+    // A fresh server-side revision denial cannot become a phantom successful grant.
+    await page.locator('#owner-supervisor-list button').filter({hasText:'Manage teams'}).click();
+    await wait(page,()=>document.querySelector('#owner-supervisor-team-panel')?.textContent.includes('West test team'));
+    ownerRejectNext=true;
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_team_scope')),
+      page.locator('#owner-supervisor-team-panel button').click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Work scope changed'));
+    assert.deepEqual(ownerScope,[],'Rejected change cannot mutate Supervisor scope');
     await page.locator('#sign-out').click();
     assert.equal(await page.locator('#owner-office-console').count(),0,'Owner data must clear on signout');
     assert.equal(errors.length, 0, errors.join('\n'));
