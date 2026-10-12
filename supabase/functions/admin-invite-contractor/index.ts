@@ -99,7 +99,7 @@ Deno.serve(async (req: Request) => {
     ? body.operation.trim().toLowerCase()
     : 'invite';
 
-  if (operation === 'invite_admin') {
+  if (operation === 'invite_admin' || operation === 'invite_admin_new_team') {
     // Explicitly disabled unless this exact Team environment has been
     // provider-reviewed; ordinary Contractor invitations remain unchanged.
     if (Deno.env.get('TEAM_ADMIN_INVITE_ENABLED') !== 'true') {
@@ -112,6 +112,7 @@ Deno.serve(async (req: Request) => {
       organizationId: String(callerOrganizationId),
       environment: Deno.env.get('TEAM_ADMIN_INVITE_ENVIRONMENT') ?? '',
       redirectUrl: Deno.env.get('TEAM_ADMIN_INVITE_REDIRECT_URL') ?? '',
+      newTeam: operation === 'invite_admin_new_team',
     });
     return jsonResponse(result.status, result.body);
   }
