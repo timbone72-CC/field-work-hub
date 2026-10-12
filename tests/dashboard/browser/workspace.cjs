@@ -59,6 +59,15 @@ const wait = async (page, condition) => page.waitForFunction(condition);
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await context.addInitScript(()=>{
+      window.__permissionRequestCount=0;
+      if(window.Notification?.requestPermission){
+        const original=window.Notification.requestPermission.bind(window.Notification);
+        window.Notification.requestPermission=(...args)=>{
+          window.__permissionRequestCount++;return original(...args);
+        };
+      }
+    });
     await context.route('https://**/*', async route => {
       const req = route.request(), url = new URL(req.url()); requests.push(url.pathname + url.search);
       const reply = (body, status = 200, headers = {}) => route.fulfill({ status, headers: { 'Content-Type': 'application/json', 'Access-Control-Expose-Headers': 'Content-Range', ...headers }, body: JSON.stringify(body) });
@@ -431,8 +440,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       await page.evaluate(() => stopAdminAutoRefresh());
     }
     await login();
-    assert.equal(await page.evaluate(()=>Notification.permission),'default',
-      'Opening the dashboard must not request OS notification permission.');
+    assert.equal(await page.evaluate(()=>window.__permissionRequestCount),0,
+      'Opening the dashboard must not prompt for OS notification permission.');
     await page.locator('#notification-center > summary').click();
     await wait(page,()=>document.querySelectorAll('.notification-preference').length===9);
     assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
