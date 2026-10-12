@@ -9,6 +9,7 @@ let ownerEnrollmentPending = null;
 let ownerRosterPending = null;
 let ownerInvitePending = null;
 let ownerInviteBusy = false;
+let ownerInviteNeedsRefresh = false;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -25,6 +26,7 @@ signOutButton.addEventListener('click', () => {
   ownerRosterPending = null;
   ownerInvitePending = null;
   ownerInviteBusy = false;
+  ownerInviteNeedsRefresh = false;
   document.getElementById('owner-office-console')?.remove();
 });
 
@@ -683,6 +685,7 @@ function ownerInviteStatus(message, error = false) {
 }
 
 function ownerInviteUI(capacity, teams) {
+  ownerInviteNeedsRefresh = false;
   const select = document.getElementById('owner-admin-invite-team');
   const button = document.getElementById('owner-admin-invite-submit');
   if (!select || !button) return;
@@ -692,7 +695,7 @@ function ownerInviteUI(capacity, teams) {
     select.add(new Option(team.team_name, team.team_id));
   }
   select.value = [...select.options].some(o => o.value === previous) ? previous : '';
-  button.disabled = ownerInviteBusy || Number(capacity.admin_available) < 1;
+  button.disabled = ownerInviteBusy || ownerInviteNeedsRefresh || Number(capacity.admin_available) < 1;
   if (Number(capacity.admin_available) < 1 && !ownerInvitePending) {
     ownerInviteStatus('No Admin seat is available; only the Product Owner can raise the allowance.');
   }
@@ -747,11 +750,13 @@ async function ownerCreateAdminInvitation() {
     if (link) link.value = result.setup_url;
     document.getElementById('owner-admin-invite-link-result')?.classList.remove('hidden');
     ownerInvitePending = null;
-    ownerInviteStatus('The verified setup link is ready to copy securely.');
+    ownerInviteNeedsRefresh = true;
+    ownerInviteStatus('Setup link ready. Refresh office access before requesting another seat.');
     document.getElementById('owner-admin-invite-name').value = '';
     document.getElementById('owner-admin-invite-email').value = '';
     document.getElementById('owner-admin-invite-reason').value = '';
-    void loadOwnerConsole(true);
+    // Avoid racing unrelated office controls with an implicit console reload.
+    // The server still checks every capacity revision and current team grant.
   } catch (error) {
     if (ownerStillCurrent(check)) {
       ownerInviteStatus(
@@ -762,7 +767,7 @@ async function ownerCreateAdminInvitation() {
     ownerInviteBusy = false;
     if (ownerStillCurrent(check)) {
       const button = document.getElementById('owner-admin-invite-submit');
-      if (button) button.disabled = false;
+      if (button) button.disabled = ownerInviteNeedsRefresh;
     }
   }
 }
