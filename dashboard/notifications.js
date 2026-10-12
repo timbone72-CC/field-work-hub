@@ -174,6 +174,11 @@ const NotificationCenter=(()=>{
       el('notification-push-status').textContent=settings.push_ready
         ?'This device must be explicitly enrolled before receiving push. Browser/OS permission does not guarantee delivery.'
         :'Phone and computer push is not configured or verified. Settings remain Off; no push notifications are being sent.';
+      el('notification-push-enable').disabled=
+        !settings.push_ready||!PushDevice.supported();
+      if(!PushDevice.supported())
+        el('notification-push-status').textContent+=
+          ' This browser/device is not in the supported Chrome/Edge enrollment set.';
       renderSettings();renderAlerts();
       status('Loaded current server facts. Unobserved offline phone state is not interpreted as an error.');
     }catch(error){if(current(n,token))status('Notification status unavailable: '+error.message);}
@@ -196,6 +201,23 @@ const NotificationCenter=(()=>{
       if(el('notification-center').open&&accessToken)load();
     });
     el('notification-refresh').addEventListener('click',load);
+    el('notification-push-enable').addEventListener('click',async()=>{
+      if(busy||!settings?.push_ready||!PushDevice.supported())return;
+      const klass=el('notification-device-class').value;
+      busy=true;status('Requesting permission for this exact browser/device…');
+      try{
+        await PushDevice.enroll(klass,settings);
+        status('Device enrolled with the server. Push service acceptance and actual OS display still require real tests.');
+        await load();
+      }catch(error){status('Push enrollment not confirmed: '+error.message);}
+      finally{busy=false;}
+    });
+    el('notification-push-disable').addEventListener('click',async()=>{
+      if(busy)return;busy=true;
+      try{await PushDevice.disable();status('Local push disabled. Server revocation attempted; reload to verify device state.');await load();}
+      catch(error){status('Local push unsubscribed. Server revocation unconfirmed; device will need reconciliation. '+error.message);}
+      finally{busy=false;}
+    });
     el('notification-timezone-save').addEventListener('click',()=>{
       if(!settings)return;
       const timezone=el('notification-org-timezone').value.trim();
