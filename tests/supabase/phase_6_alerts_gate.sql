@@ -190,8 +190,8 @@ begin
  -- Worker can verify only its own assignment projection; no direct
  -- work_order_assignments table access is granted.
  if exists(select 1 from public.field_assignments() a
-    where a.value->>'id'=wo::text
-      and a.value->>'acknowledgment_received_at' is not null)
+    where a->>'id'=wo::text
+      and a->>'acknowledgment_received_at' is not null)
  then raise exception 'Push send invented contractor human Accept';end if;
  execute 'reset role';
  if has_function_privilege('authenticated','public.service_claim_admin_push(uuid)','EXECUTE')
