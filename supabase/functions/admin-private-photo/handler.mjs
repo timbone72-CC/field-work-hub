@@ -28,7 +28,11 @@ async function readBoundedJson(response, limit) {
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export function createPrivatePhotoViewer({ url, anonKey, serviceKey, fetcher = fetch }) {
+export function createPrivatePhotoViewer({ url, anonKey, serviceKey, fetcher = fetch,
+  targetRpc = 'admin_private_photo_target_for_session' }) {
+  if (!['admin_private_photo_target_for_session',
+    'photo_recovery_target_for_session'].includes(targetRpc))
+    throw new Error('Unapproved private photo authorization owner');
   if (!anonKey || !serviceKey) throw new Error('Private photo viewer credentials unavailable');
   const base = new URL(url);
   if (base.protocol !== 'https:' || !/^[a-z0-9-]+\.supabase\.co$/.test(base.hostname)
@@ -60,7 +64,7 @@ export function createPrivatePhotoViewer({ url, anonKey, serviceKey, fetcher = f
       catch { fail(401, 'SIGN_IN_REQUIRED'); }
       if (!UUID.test(user.id || '') || user.id !== claims.sub
         || !UUID.test(claims.session_id || '') || user.is_anonymous) fail(401, 'SIGN_IN_REQUIRED');
-      const targetResponse = await call('/rest/v1/rpc/admin_private_photo_target_for_session', {
+      const targetResponse = await call('/rest/v1/rpc/' + targetRpc, {
         method: 'POST', headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_photo: photo, p_transfer_version: version, p_actor: user.id,
           p_session: claims.session_id })
