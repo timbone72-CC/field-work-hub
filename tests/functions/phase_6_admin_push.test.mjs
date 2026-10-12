@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createAdminPushHandler,allowedWebPushEndpoint}
  from '../../supabase/functions/admin-web-push/handler.mjs';
-const uuid=n=>\`00000000-0000-4000-8000-\${String(n).padStart(12,'0')}\`;
+const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const secret='synthetic-only-fwh-admin-push-secret-32-plus';
 const worker=uuid(1),issue=uuid(2),job=uuid(3),device=uuid(4);
 const request=({key=secret,operation='tick',method='POST'}={})=>new Request(
