@@ -13,7 +13,7 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
-let staffingPagingRace=false, staffingScopeShift=false;
+let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
@@ -222,7 +222,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         }
         throw Error('Unexpected owner request');
       }
-      if (url.pathname.endsWith('/office_supervisor_work_page')) {
+      if (url.pathname.endsWith('/office_supervisor_work_detail')) {
+          const p=req.postDataJSON();
+          assert.equal(p.p_org,organization);
+          assert.equal(p.p_expected_scope_fingerprint,staffingScopeShift?'b'.repeat(32):'a'.repeat(32));
+          if (!staffingGranted || staffingDetailDenied) return reply({message:'Supervisor detail denied'},403);
+          if (![uuid(9304),uuid(9305)].includes(p.p_work_order)) return reply({message:'Unknown job'},403);
+          return reply({organization_id:organization,caller_tier:staffingWorkTier,
+            scope_fingerprint:staffingScopeShift?'b'.repeat(32):'a'.repeat(32),
+            work_order:{work_order_id:p.p_work_order,team_id:uuid(9213),
+              team_name:'West test team',wo_number:'TEST-WO-1',
+              property_address:'Example work address',work_type:'Inspection',
+              instructions:'Read-only <script>not executable</script>',
+              due_date:'2026-10-20',field_status:'ASSIGNED',created_at:'2026-10-12T12:00:00Z'}});
+        }
+        if (url.pathname.endsWith('/office_supervisor_work_page')) {
          const p=req.postDataJSON();
          assert.equal(p.p_org,organization);
          assert.equal(p.p_limit,25);
@@ -1301,6 +1315,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#staffing-roster-person option').count(),2);
      assert.match(await page.locator('#staffing-work-status').innerText(),/Tier 2 · 1 authorized jobs/);
      assert.equal(await page.locator('#staffing-work-rows tr').count(),1);
+    await page.locator('#staffing-work-rows .staffing-view-detail').first().click();
+    await wait(page,()=>document.querySelector('#staffing-work-detail-status')?.textContent
+      .includes('Current team authorization confirmed'));
+    assert.match(await page.locator('#staffing-work-detail').innerText(),/Read-only <script>not executable<\/script>/);
+    assert.equal(await page.locator('#staffing-work-detail script').count(),0,
+      'Work instructions must remain inert text');
+    assert.equal(await page.locator('#edit-work-order-section:visible').count(),0,
+      'Supervisor selected detail cannot expose Admin editing');
+    await page.locator('#staffing-work-detail-close').click();
+    assert.equal(await page.locator('#staffing-work-detail:visible').count(),0);
     await page.locator('#staffing-roster-person').selectOption(uuid(9315));
     await page.locator('#staffing-roster-team').selectOption(uuid(9213));
     await page.locator('#staffing-roster-reason').fill('Supervisor reviewed idle placement');
@@ -1366,6 +1390,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#staffing-roster-area:visible').count(),0);
     assert.equal(await page.locator('#results-card:visible').count(),0);
     assert.equal(await page.locator('#staffing-work-rows tr').count(),1);
+    await page.locator('#staffing-work-rows .staffing-view-detail').first().click();
+    await wait(page,()=>document.querySelector('#staffing-work-detail-status')?.textContent
+      .includes('Current team authorization confirmed'));
+    assert.match(await page.locator('#staffing-work-detail').innerText(),/Instructions/);
+    await page.locator('#staffing-work-detail-close').click();
+    assert.equal(await page.locator('#staffing-work-detail:visible').count(),0);
     // A failed current-scope refresh clears previously presented job labels.
     staffingGranted=false;
     await page.locator('#staffing-refresh').click();
@@ -1388,6 +1418,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#staffing-work-rows tr').count(),0,
       'Changed server scope must discard every prior work row');
     staffingScopeShift=false; staffingPagingRace=false;
+    // A denied detail refuses stale cached work, then requires a fresh identity.
+    staffingDetailDenied=true;staffingWorkTier=1;
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-card:visible').waitFor();
+    await page.locator('#staffing-work-rows .staffing-view-detail').first().click();
+    await wait(page,()=>document.querySelector('#login-status')?.textContent
+      .includes('Supervisor work scope needs a fresh sign-in'));
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-work-detail:visible').count(),0);
+    staffingDetailDenied=false;
     // Tier 3 alone receives the reviewed no-evidence work-order handoff.
     staffingWorkTier=3;staffingGranted=true;
     await page.locator('#email').fill('supervisor@example.invalid');
