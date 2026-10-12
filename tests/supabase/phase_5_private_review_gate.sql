@@ -819,7 +819,7 @@ declare
  set_id uuid:=gen_random_uuid(); digest text;
  new_photo uuid:=gen_random_uuid(); photo_set jsonb;
  transfer private.photo_transfers%rowtype; new_object uuid:=gen_random_uuid();
- old_decision_revision uuid; old_transfer_version uuid;
+ old_decision_revision uuid; old_transfer_version uuid; history jsonb;
 begin
  select * into old_pkg from private.client_packages
   where status='DELIVERED' and approved_manifest is not null limit 1;
@@ -938,6 +938,23 @@ begin
  if (select status from private.correction_obligations
      where replacement_run_id=newrun)<>'OPEN' then
    raise exception 'Private photo receipt or draft silently satisfied correction';end if;
- raise notice 'Phase 6B/6D original delivered photo retained, follow-up new run and cross-run draft PASS';
+ perform set_config('request.jwt.claims',claims_admin,true);
+ execute 'set local role authenticated';
+ history:=public.admin_release_history(wo,25);
+ if history->>'work_order_id'<>wo::text
+    or jsonb_array_length(history->'runs')<>2
+    or jsonb_array_length(history->'packages')<>2
+    or history->'packages'->1->>'status'<>'DELIVERED'
+    or history->'packages'->1->>'receipt_confirmed_at' is null
+    or history->'packages'->1->>'frozen_wo_number'<>orig_manifest->>'client_wo_number'
+    or history->'runs'->0->>'run_id'<>newrun::text
+ then raise exception 'Past delivery/Finish history was recalculated or disappeared: %',history;end if;
+ execute 'reset role';
+ perform set_config('request.jwt.claims',claims_worker,true);
+ execute 'set local role authenticated';
+ perform pg_temp.expect_photo_review_error('42501',format(
+   'select public.admin_release_history(%L,25)',wo));
+ execute 'reset role';
+ raise notice 'Phase 6D original/new photo minima, prior confirmed delivery and bounded history PASS';
 end;$phase6_multi_run$;
 rollback;
