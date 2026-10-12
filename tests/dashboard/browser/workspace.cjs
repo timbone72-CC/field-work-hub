@@ -262,7 +262,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
               assignment:{assignee_id:uuid(9315),assignee_label:'Demo contractor <script>unsafe</script>',
                 download_received_at:'2026-10-12T12:04:00Z',human_accepted_at:null,
                 pending_assignee_id:null,pending_assignee_label:null,
-                reassignment_requested_at:null}});
+                reassignment_requested_at:null}}});
         }
         if (url.pathname.endsWith('/office_supervisor_work_page')) {
          const p=req.postDataJSON();
