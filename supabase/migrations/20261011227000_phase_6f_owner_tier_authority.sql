@@ -9,6 +9,9 @@ declare
   existing private.supervisor_grants%rowtype;
   access_role text;
   next_revision uuid;
+  access_revision uuid;
+  removed_teams uuid[];
+  cutoff_action uuid;
 begin
   if p_org is null or p_user is null or p_expected_revision is null
      or p_tier is null or p_tier not between 1 and 3
@@ -38,6 +41,32 @@ begin
     raise exception 'Stale Supervisor grant revision' using errcode='40001';
   end if;
   if existing.tier=p_tier then return existing.revision; end if;
+  -- Tier 3 sees the whole organization. Before a 3 -> 1/2 downgrade,
+  -- freeze exactly the active teams no longer granted in the target tier.
+  -- No team/photo recovery is invented for a disabled or not-yet-enabled account.
+  if existing.tier=3 and p_tier<3 and existing.active then
+    select a.revision into access_revision from private.account_work_access a
+      where a.organization_id=p_org and a.user_id=p_user and a.active
+        and a.disabled_at is null and a.suspension_authority is null;
+    if access_revision is not null and exists(
+      select 1 from private.org_work_settings w
+      where w.organization_id=p_org and w.supervisor_work_ready
+    ) then
+      select coalesce(array_agg(t.id order by t.id),'{}'::uuid[]) into removed_teams
+        from public.admin_teams t
+        where t.organization_id=p_org and t.active
+          and not exists(
+            select 1 from private.supervisor_team_scopes sc
+            where sc.organization_id=p_org and sc.user_id=p_user and sc.team_id=t.id
+          );
+      if cardinality(removed_teams)>0 then
+        cutoff_action:=gen_random_uuid();
+        perform private.freeze_photo_recovery_scope(
+          cutoff_action,p_org,p_user,access_revision,removed_teams,btrim(p_reason));
+        perform private.complete_photo_recovery_grant(cutoff_action);
+      end if;
+    end if;
+  end if;
   next_revision:=gen_random_uuid();
   update private.supervisor_grants
     set tier=p_tier,revision=next_revision,granted_by=auth.uid(),reason=btrim(p_reason)
