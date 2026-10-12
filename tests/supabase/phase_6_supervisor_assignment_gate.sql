@@ -49,7 +49,8 @@ begin
 
   -- Candidate losing current team eligibility before consent must block commit.
   update private.contractor_team_memberships set active=false where user_id=newc and team_id=team;
-  perform set_config('request.jwt.claims',jsonb_build_object('sub',oldc,'session_id',oldc)::text,true);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',oldc,'session_id',oldc,'app_metadata',
+    jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
   denied:=false; begin perform public.respond_reassignment(wo,true);
     exception when insufficient_privilege then denied:=true; end;
   if not denied or (select assigned_user_id from public.work_orders where id=wo)<>oldc
@@ -65,7 +66,8 @@ begin
   update public.work_orders set field_status='IN_PROGRESS',assigned_user_id=newc,
     pending_assignee_user_id=oldc,reassignment_requested_at=now() where id=wo;
   update private.account_work_access set active=false where organization_id=org and user_id=newc;
-  perform set_config('request.jwt.claims',jsonb_build_object('sub',newc,'session_id',newc)::text,true);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',newc,'session_id',newc,'app_metadata',
+    jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
   denied:=false; begin perform public.respond_reassignment(wo,true);
     exception when insufficient_privilege then denied:=true; end;
   if not denied or (select assigned_user_id from public.work_orders where id=wo)<>newc
