@@ -261,7 +261,9 @@ begin
   return jsonb_build_object('job_id',job.id,'worker_id',p_worker,
     'generation',job.lease_generation,'issue_id',issue.id,
     'endpoint',sub.endpoint,'p256dh',sub.p256dh,'auth',sub.auth_secret,
-    'alert_id',issue.id,'device_id',sub.device_id,'device_class',sub.device_class);
+    'alert_id',issue.id,'device_id',sub.device_id,'device_class',sub.device_class,
+    'vapid_public_key',(select runtime.vapid_public_key from private.admin_push_runtime runtime
+       where runtime.organization_id=job.organization_id));
  end loop;
  return jsonb_build_object('claimed',false);
 end;$claim$;
