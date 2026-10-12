@@ -35,7 +35,7 @@ begin
   if public.office_supervisor_assign_work(action,org,wo,newc,scope,rev,'route change') is distinct from r
   then raise exception 'Exact assignment retry was not idempotent'; end if;
   denied:=false; begin perform public.office_supervisor_assign_work(action,org,wo,newc,scope,rev,'changed');
-    exception when invalid_parameter_value then denied:=true; end;
+    exception when serialization_failure then denied:=true; end;
   if not denied then raise exception 'Assignment action UUID accepted changed inputs'; end if;
 
   -- In progress: request only. Current Contractor must consent.
@@ -60,6 +60,16 @@ begin
     or (select pending_assignee_user_id from public.work_orders where id=wo) is not null
     or (select assignment_received_at from public.work_orders where id=wo) is not null
   then raise exception 'Eligible consent did not commit reassignment safely'; end if;
+  -- A Contractor's formerly valid JWT must not authorize consent once work
+  -- access is disabled, even with a real matching pending assignment.
+  update public.work_orders set field_status='IN_PROGRESS',assigned_user_id=newc,
+    pending_assignee_user_id=oldc,reassignment_requested_at=now() where id=wo;
+  update private.account_work_access set active=false where organization_id=org and user_id=newc;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',newc,'session_id',newc)::text,true);
+  denied:=false; begin perform public.respond_reassignment(wo,true);
+    exception when insufficient_privilege then denied:=true; end;
+  if not denied or (select assigned_user_id from public.work_orders where id=wo)<>newc
+  then raise exception 'Disabled Contractor consent bypassed current work authority'; end if;
 end;
 $gate$;
 rollback;
