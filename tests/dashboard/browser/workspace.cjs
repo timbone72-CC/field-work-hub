@@ -476,6 +476,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       await page.evaluate(() => stopAdminAutoRefresh());
     }
     await login();
+    assert.equal(await page.locator('#owner-office-console').count(),0,
+      'Ordinary Admin must not see owner-only office controls.');
     assert.equal(await page.evaluate(()=>window.__permissionRequestCount),0,
       'Opening the dashboard must not prompt for OS notification permission.');
     await page.locator('#notification-center > summary').click();
