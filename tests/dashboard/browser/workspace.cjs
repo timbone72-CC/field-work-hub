@@ -14,7 +14,7 @@ let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
 let ownerEnrollFailOnce=true;
-let ownerRosterTeam=null,ownerRosterRevision=null,ownerRosterWrites=[],ownerRosterBusyOnce=true;
+let ownerRosterTeam=null,ownerRosterRevision=null,ownerRosterWrites=[],ownerRosterBusyOnce=true,ownerRosterTransportOnce=true;
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
@@ -143,6 +143,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           if (ownerRosterTeam === uuid(9213) && ownerRosterBusyOnce) {
             ownerRosterBusyOnce=false;
             return reply({message:'Contractor has open assignments; separate handoff required'},409);
+          }
+          if (ownerRosterTeam === uuid(9213) && ownerRosterTransportOnce) {
+            ownerRosterTransportOnce=false;
+            return reply({message:'Gateway unavailable; reconcile exact roster action'},503);
           }
           const previous = ownerRosterTeam;
           ownerRosterTeam=p.p_team;
@@ -1067,8 +1071,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.waitForResponse(response=>response.url().includes('/manage_idle_contractor_roster')),
       rosterRow.getByRole('button',{name:'Place unassigned'}).click()
     ]);
-    await wait(page,()=>document.querySelector('#owner-contractor-roster')
-      ?.textContent.includes('West test team'));
+    await wait(page,()=>Array.from(document.querySelectorAll('#owner-contractor-roster .row span'))
+      .some(el=>el.textContent.includes('contractor-roster@example.invalid') && el.textContent.includes('West test team')));
     assert.equal(ownerRosterTeam,uuid(9213));
     await rosterRow.locator('select').selectOption(uuid(9216));
     page.once('dialog',dialog=>dialog.accept());
@@ -1084,12 +1088,22 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.waitForResponse(response=>response.url().includes('/manage_idle_contractor_roster')),
       rosterRow.getByRole('button',{name:'Review idle transfer'}).click()
     ]);
-    await wait(page,()=>document.querySelector('#owner-contractor-roster')
-      ?.textContent.includes('East test team'));
+    await wait(page,()=>document.querySelector('#owner-office-status')
+      ?.textContent.includes('Gateway unavailable'));
+    assert.equal(ownerRosterTeam,uuid(9213));
+    page.once('dialog',dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/manage_idle_contractor_roster')),
+      rosterRow.getByRole('button',{name:'Review idle transfer'}).click()
+    ]);
+    await wait(page,()=>Array.from(document.querySelectorAll('#owner-contractor-roster .row span'))
+      .some(el=>el.textContent.includes('contractor-roster@example.invalid') && el.textContent.includes('East test team')));
     assert.equal(ownerRosterTeam,uuid(9216));
-    assert.equal(ownerRosterWrites.length,3);
-    assert.equal(ownerRosterWrites[1].p_action,ownerRosterWrites[2].p_action,
-      'Ambiguous roster response must keep the action UUID');
+    assert.equal(ownerRosterWrites.length,4);
+    assert.notEqual(ownerRosterWrites[1].p_action,ownerRosterWrites[2].p_action,
+      'Confirmed transaction rejection must not be retried as an uncertain action');
+    assert.equal(ownerRosterWrites[2].p_action,ownerRosterWrites[3].p_action,
+      'Ambiguous transport outcome must retry with the exact action UUID');
     assert.equal(await page.locator('#owner-enrollment-user').locator('option').count(),1,
       'Already enrolled Supervisor cannot be offered for a second enrollment');
     await page.screenshot({path:path.join(output,'phase6f-owner-desktop.png'),fullPage:true});
