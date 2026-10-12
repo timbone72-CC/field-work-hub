@@ -5,7 +5,7 @@ declare
   org uuid:=gen_random_uuid(); team uuid:=gen_random_uuid();
   admin_id uuid:=gen_random_uuid(); other_id uuid:=gen_random_uuid();
   capturer uuid:=gen_random_uuid(); actor uuid;
-  wo uuid; run_id uuid; instance uuid; revision uuid;
+  wo uuid; v_run uuid; instance uuid; revision uuid;
   photo uuid:=gen_random_uuid(); later uuid:=gen_random_uuid();
   finish_set uuid:=gen_random_uuid(); grant_id uuid:=gen_random_uuid();
   object_id uuid:=gen_random_uuid(); transfer private.photo_transfers%rowtype;
@@ -33,22 +33,22 @@ begin
   select (j->>'work_order_id')::uuid into wo
     from public.admin_create_work_order_v4(false,'RECOVERY-VIEW','TEST','TEST','',
       current_date,capturer,config) j;
-  select current_run_id into run_id from public.work_orders where id=wo;
-  select id into instance from public.work_order_assignments where run_id=run_id and assignment_ended_at is null;
+  select current_run_id into v_run from public.work_orders where id=wo;
+  select id into instance from public.work_order_assignments where run_id=v_run and assignment_ended_at is null;
   select (requirement_snapshot->>'revision')::uuid into revision
-    from public.work_order_runs where id=run_id;
+    from public.work_order_runs where id=v_run;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',capturer,
     'session_id',capturer,'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
-  result:=public.accept_field_action_v4(gen_random_uuid(),wo,run_id,instance,'START',
+  result:=public.accept_field_action_v4(gen_random_uuid(),wo,v_run,instance,'START',
     to_char(now()-interval '2 minutes','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),revision,null,'');
   if result->>'outcome'<>'APPLIED' then raise exception 'Start fixture rejected';end if;
   manifest:=jsonb_build_array(jsonb_build_object('id',photo,'item_id',null,
     'captured_at',to_char(now()-interval '1 minute','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
   digest:=encode(sha256(convert_to(manifest::text,'UTF8')),'hex');
-  result:=public.register_photo_finish_set(finish_set,wo,run_id,instance,revision,
+  result:=public.register_photo_finish_set(finish_set,wo,v_run,instance,revision,
     manifest,digest,manifest::text);
   if result->>'outcome'<>'APPLIED' then raise exception 'Metadata fixture rejected';end if;
-  result:=public.accept_field_action_v4(gen_random_uuid(),wo,run_id,instance,'COMPLETE',
+  result:=public.accept_field_action_v4(gen_random_uuid(),wo,v_run,instance,'COMPLETE',
     to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),revision,finish_set,digest);
   if result->>'outcome'<>'APPLIED' then raise exception 'Finish fixture rejected';end if;
   execute 'set local role authenticated';
@@ -112,7 +112,7 @@ begin
     exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Wrong prepared version signed';end if;
   insert into public.photos(id,work_order_id,run_id,captured_by,captured_at)
-    values(later,wo,run_id,capturer,now());
+    values(later,wo,v_run,capturer,now());
   denied:=false;begin perform private.photo_recovery_target_for_session(
     later,transfer.version,admin_id,admin_id);
     exception when insufficient_privilege then denied:=true;end;
