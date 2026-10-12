@@ -15,7 +15,7 @@ let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
-let staffingCandidateCalls=0;
+let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=true;
 let staffWorkNote='Read-only <script>not executable</script>';
 let staffWorkRevision='d'.repeat(32);
 let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
@@ -260,8 +260,19 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           team_id:uuid(9213),scope_fingerprint:'a'.repeat(32),
           field_status:'ASSIGNED',requires_current_contractor_consent:false,
           candidate_contractors:[
-            {user_id:uuid(9315),label:'Eligible Contractor <script>inert</script>'}
+            {user_id:uuid(9315),label:'Eligible Contractor <script>inert</script>'},
+            {user_id:uuid(9316),label:'Second eligible contractor'}
           ],next_after:null});
+      }
+      if (url.pathname.endsWith('/office_supervisor_assign_work')) {
+        const p=req.postDataJSON();staffAssignmentWrites.push(p);
+        assert.equal(p.p_org,organization);assert.equal(p.p_work_order,uuid(9304));
+        assert.equal(p.p_assignee,uuid(9316));assert.equal(p.p_expected_scope_fingerprint,'a'.repeat(32));
+        assert.equal(p.p_expected_work_revision,staffWorkRevision);
+        if(staffAssignmentFailOnce){staffAssignmentFailOnce=false;return reply({message:'Temporary assignment outcome uncertain'},503);}
+        staffWorkRevision='f'.repeat(32);
+        return reply({status:'ASSIGNED',action_id:p.p_action,work_order_id:p.p_work_order,
+          assigned_user_id:p.p_assignee,pending_assignee_user_id:null,work_revision:staffWorkRevision});
       }
       if (url.pathname.endsWith('/office_supervisor_work_detail')) {
           const p=req.postDataJSON();
@@ -1413,8 +1424,23 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.match(await page.locator('#supervisor-candidates-list').innerText(),
       /Eligible Contractor <script>inert<\/script>/);
     assert.equal(await page.locator('#supervisor-candidates-list script').count(),0);
-    assert.match(await page.locator('#supervisor-candidates').innerText(),
-      /does not assign or transfer anyone/);
+    assert.match(await page.locator('#supervisor-candidates').innerText(),/Assignment is rechecked by the server/);
+    await page.locator('#supervisor-assignment-person').selectOption(uuid(9316));
+    await page.locator('#supervisor-assignment-reason').fill('Route coverage change');
+    await page.locator('#supervisor-assignment-form button').click();
+    await wait(page,()=>document.querySelector('#supervisor-candidates-status')?.textContent.includes('safe retry'));
+    assert.equal(staffAssignmentWrites.length,1);
+    await page.locator('#supervisor-assignment-reason').fill('Changed unsafe retry');
+    await page.locator('#supervisor-assignment-form button').click();
+    assert.equal(staffAssignmentWrites.length,1,'Changed unresolved assignment must not create another write');
+    await page.locator('#supervisor-assignment-reason').fill('Route coverage change');
+    await page.locator('#supervisor-assignment-form button').click();
+    await wait(page,()=>document.querySelector('#supervisor-candidates-status')?.textContent.includes('new assignment'));
+    assert.equal(staffAssignmentWrites.length,2);
+    assert.equal(staffAssignmentWrites[0].p_action,staffAssignmentWrites[1].p_action,
+      'Ambiguous assignment outcome must retry the exact action UUID');
+    assert.match(await page.locator('#staffing-work-detail-fields').innerText(),/Second eligible contractor/);
+    assert.match(await page.locator('#staffing-work-detail-fields').innerText(),/Contractor accepted\s+Not confirmed/);
     // Supervisor uses the same scoped verified gallery and decision engine as Admin.
     await page.locator('#supervisor-photo-review button').first().click();
     await page.locator('#supervisor-photo-rows .private-review-photo').first().waitFor();
