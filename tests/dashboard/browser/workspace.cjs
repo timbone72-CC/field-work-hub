@@ -11,6 +11,7 @@ const organization = uuid(9001), contractor = uuid(9002);
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
+let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
 let ownerEnrollFailOnce=true;
@@ -194,6 +195,23 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           assert.equal(p.p_admin_limit,5);ownerAdminLimit=p.p_admin_limit;ownerQuotaRevision=uuid(9219);return reply(ownerQuotaRevision);
         }
         throw Error('Unexpected owner request');
+      }
+      if (url.pathname === '/functions/v1/admin-invite-contractor') {
+        const p=req.postDataJSON();
+        assert.equal(p.operation,'invite_admin');
+        assert.equal(p.team_id,uuid(9213));
+        assert.equal(p.expected_allowance_revision,ownerQuotaRevision);
+        assert.equal(p.email,'new-admin@example.invalid');
+        assert.equal(p.display_name,'New Admin');
+        assert.equal(p.reason,'Owner reviewed new office staff');
+        assert.match(p.action_id,/^[a-f0-9-]{36}$/);
+        ownerAdminInviteAttempts.push(p);
+        if (ownerAdminInviteFailOnce) {
+          ownerAdminInviteFailOnce=false;
+          return reply({status:'RECONCILE',error:'Auth result uncertain; retain the exact action'},503);
+        }
+        return reply({status:'BOUND',action_id:p.action_id,
+          setup_url:'https://auth.example.invalid/one-time-setup'});
       }
       if (url.pathname === '/auth/v1/token') return reply({ access_token: 'disposable-test-access', refresh_token: 'disposable-test-refresh', expires_in: 3600 });
       if (url.pathname === '/auth/v1/user') return reply({ id: admin, email: 'admin@example.invalid', app_metadata: { role: 'ADMIN', organization_id: organization } });
@@ -968,6 +986,28 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved. Server permissions'));
     assert.equal(await page.locator('#owner-admin-limit').inputValue(),'5');
     assert.equal(ownerWrites.some(x=>x.name==='owner_set_office_allowances'),true);
+    // Fail-closed uncertain response retains exact action UUID on retry.
+    await page.locator('#owner-admin-invite-team').selectOption(uuid(9213));
+    await page.locator('#owner-admin-invite-name').fill('New Admin');
+    await page.locator('#owner-admin-invite-email').fill('new-admin@example.invalid');
+    await page.locator('#owner-admin-invite-reason').fill('Owner reviewed new office staff');
+    await Promise.all([
+      page.waitForResponse(response=>response.url().endsWith('/admin-invite-contractor')
+        && response.request().method()==='POST'),
+      page.locator('#owner-admin-invite-submit').click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-admin-invite-status')?.textContent.includes('Auth result uncertain'));
+    assert.equal(await page.locator('#owner-admin-invite-link-result').isVisible(),false);
+    await Promise.all([
+      page.waitForResponse(response=>response.url().endsWith('/admin-invite-contractor')
+        && response.request().method()==='POST'),
+      page.locator('#owner-admin-invite-submit').click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-admin-invite-link-result')?.classList.contains('hidden')===false);
+    assert.equal(await page.locator('#owner-admin-invite-link').inputValue(),
+      'https://auth.example.invalid/one-time-setup');
+    assert.equal(ownerAdminInviteAttempts.length,2);
+    assert.equal(ownerAdminInviteAttempts[0].action_id,ownerAdminInviteAttempts[1].action_id);
     await page.locator('#owner-supervisor-list select').selectOption('1');
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/owner_change_supervisor_tier')),
