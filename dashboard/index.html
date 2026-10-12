@@ -52,6 +52,16 @@
           <button id="notification-timezone-save" type="button" class="secondary">Save organization time zone</button>
         </div>
         <p id="notification-push-status" class="muted">Push is not configured. No phone/computer enrollment has occurred.</p>
+        <div class="workspace-navigation">
+          <label>Device type
+            <select id="notification-device-class">
+              <option value="COMPUTER">This computer</option>
+              <option value="PHONE">This Android phone</option>
+            </select>
+          </label>
+          <button id="notification-push-enable" type="button" disabled>Enable push on this device</button>
+          <button id="notification-push-disable" type="button" class="secondary">Disable this device</button>
+        </div>
         <div id="notification-settings" aria-label="Independent alert preferences"></div>
       </details>
 
@@ -377,6 +387,7 @@
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
   <script src="client-release.js?v=phase5d-20261010" defer></script>
   <script src="release-history.js?v=phase6d-20261011" defer></script>
+  <script src="push-device.js?v=phase6e-20261011" defer></script>
   <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
   <script src="job-workspace.js?v=job-workspace-20261007-1" defer></script>
