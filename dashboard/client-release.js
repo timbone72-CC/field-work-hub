@@ -3,7 +3,9 @@
 const ClientRelease = (() => {
   let wo = '', seq = 0, config = null, pkg = null, chosen = new Set(), photoFacts = [];
   let savedNotes = '', savedPhotoIds = [], busy = false, loaded = false, previewedHash = null, tooMany = false;
+  let paged=false, photoCursor=null, paging=false;
   const el = id => document.getElementById(id);
+  const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const status = (id, message) => { el(id).textContent = message; };
   const valid = (n, id, token) => n === seq && wo === id && token && token === accessToken
     && editWorkOrderIdInput.value === id;
@@ -18,6 +20,8 @@ const ClientRelease = (() => {
   function reset() {
     seq++; wo=''; config=null; pkg=null; chosen.clear(); photoFacts=[];
     busy=false; loaded=false; savedNotes=''; savedPhotoIds=[]; previewedHash=null; tooMany=false;
+    paged=false;photoCursor=null;paging=false;
+    el('release-photos-more').hidden=true;el('release-photo-count').textContent='No photos selected.';
     el('release-exact-preview').hidden=true; el('release-exact-preview').textContent='';
     for(const id of ['release-status','review-policy-status','release-coverage','release-target']) {
       const node=el(id);if(node)node.textContent='';
@@ -55,6 +59,7 @@ const ClientRelease = (() => {
       || !previewedHash || previewedHash!==pkg.manifest_sha256;
     // Backend returns can_send only for the exact currently approved manifest.
     el('release-send').disabled=!loaded||busy||!pkg||pkg.status!=='APPROVED'||pkg.can_send!==true||dirty();
+    el('release-photos-more').disabled=!loaded||busy||paging||!photoCursor;
   }
   async function load(id, tab='delivery') {
     if (!id || !accessToken) return;
@@ -77,14 +82,28 @@ const ClientRelease = (() => {
       if(!valid(n,id,token))return;
       if(response.work_order_id!==id||!Array.isArray(response.available_photos)) throw Error('Package scope mismatch');
       pkg=response.package||null;photoFacts=response.available_photos;tooMany=response.too_many_photos===true;
+      paged=response.paged_selection===true;photoCursor=null;
       chosen=new Set(pkg?.photos?.map(p=>p.photo_id)||[]);savedPhotoIds=[...chosen];
+      if(paged){
+        const page=await rpc('admin_package_photo_page',{
+          p_wo:id,p_limit:25,p_after_sequence:null,p_after_photo:null},token);
+        if(!valid(n,id,token))return;
+        if(page.work_order_id!==id||!Array.isArray(page.photos)||page.photos.length>25
+           ||page.photos.some(p=>!UUID.test(p.photo_id)||!UUID.test(p.run_id)
+             ||!Number.isInteger(p.run_sequence)))
+          throw Error('Invalid bounded package photo page.');
+        photoFacts=page.photos;
+        photoCursor=page.next_photo&&Number.isInteger(page.next_sequence)
+          ?{photo:page.next_photo,sequence:page.next_sequence}:null;
+      }
+      el('release-photos-more').hidden=!photoCursor;
       savedNotes=pkg?.notes||'';el('release-notes').value=savedNotes;
       renderPhotos();
       el('release-target').textContent=response.destination?.verified===true
         ? `Destination verified for ${response.destination.company_name} (company private configuration)`
         : 'No verified active destination. Package approval and Send remain blocked.';
-      el('release-coverage').textContent=(tooMany?'More than 200 photos: selection is blocked until paging is available. ':'')
-        +(response.coverage_message||'Select only privately received photos.');
+      el('release-coverage').textContent=(tooMany?'Photo selection is unavailable until paging is verified. ':'')
+        +(response.coverage_message||'Select eligible verified photos from original and corrective visits; all selected photos must pass exact package coverage.');
       status('release-status',pkg ? `Package ${pkg.status}; explicit Send is separate.`
         : 'No package saved. Choose your photos and save a draft.');
       loaded=true;buttons();
@@ -92,14 +111,25 @@ const ClientRelease = (() => {
   }
   function renderPhotos() {
     const list=el('release-photo-list');list.replaceChildren();
+    el('release-photo-count').textContent=chosen.size+' photos selected for client package'+
+      (paged?' · '+photoFacts.length+' verified photos loaded in bounded pages':'')+
+      (savedPhotoIds.length?' · '+savedPhotoIds.length+' previously saved':'');
     if(photoFacts.length===0) {list.textContent='No privately verified photos are available for this package.';return;}
     for(const p of photoFacts){
       const label=document.createElement('label');label.className='check';
       const cb=document.createElement('input');cb.type='checkbox';cb.checked=chosen.has(p.photo_id);
       cb.disabled=busy||(pkg&&pkg.status!=='DRAFT');
-      cb.addEventListener('change',()=>{if(cb.checked)chosen.add(p.photo_id);else chosen.delete(p.photo_id);buttons();});
+      cb.addEventListener('change',()=>{
+        if(cb.checked)chosen.add(p.photo_id);else chosen.delete(p.photo_id);
+        el('release-photo-count').textContent=chosen.size+' photos selected for client package'+
+          ' · '+photoFacts.length+' verified photos currently loaded.';
+        buttons();
+      });
       const text=document.createElement('span');
-      text.textContent=`Photo ${p.photo_id.slice(0,8)} · ${p.decision} · ${p.requirement_label||'Extra'}`;
+      text.textContent='Run '+(p.run_sequence||'current')+' · Photo '+p.photo_id.slice(0,8)+
+        ' · '+p.decision+' · '+(p.release_item_id?
+          'Release goal '+p.release_item_id.slice(0,8):'Extra')+
+        (p.run_sequence>1?' (corrective visit)':'');
       label.append(cb,text);list.append(label);
     }
   }
@@ -124,10 +154,35 @@ const ClientRelease = (() => {
     const result=await transact('admin_save_package_draft',
       {p_action:crypto.randomUUID(),p_wo:wo,p_expected_revision:pkg?.revision||null,
         p_notes:el('release-notes').value,
-        p_photo_ids:photoFacts.filter(p=>chosen.has(p.photo_id)).map(p=>p.photo_id)});
+        p_photo_ids:[...chosen]});
     return !!result;
   }
+  async function loadNextPhotos(){
+    if(!paged||!photoCursor||paging||busy||!loaded||!wo||!accessToken)return;
+    const n=seq,id=wo,token=accessToken,cursor=photoCursor;
+    paging=true;buttons();
+    try{
+      const page=await rpc('admin_package_photo_page',{
+        p_wo:id,p_limit:25,p_after_sequence:cursor.sequence,
+        p_after_photo:cursor.photo},token);
+      if(!valid(n,id,token))return;
+      if(page.work_order_id!==id||!Array.isArray(page.photos)||page.photos.length>25
+        ||page.photos.some(p=>!UUID.test(p.photo_id)||!UUID.test(p.run_id)
+             ||!Number.isInteger(p.run_sequence))
+        ||page.photos.some(p=>photoFacts.some(prev=>prev.photo_id===p.photo_id)))
+        throw Error('Paged selection changed; reload job.');
+      photoFacts=[...photoFacts,...page.photos];
+      photoCursor=page.next_photo&&Number.isInteger(page.next_sequence)
+        ?{photo:page.next_photo,sequence:page.next_sequence}:null;
+      el('release-photos-more').hidden=!photoCursor;renderPhotos();
+    }catch(err){if(valid(n,id,token)){
+      photoCursor=null;el('release-photos-more').hidden=true;
+      status('release-status','Photo paging changed. Reload before saving: '+err.message);
+      tooMany=true;
+    }}finally{if(valid(n,id,token)){paging=false;buttons();}}
+  }
   function init(){
+    el('release-photos-more').addEventListener('click',loadNextPhotos);
     el('review-policy-reason').addEventListener('input',buttons);
     el('review-required').addEventListener('change',buttons);
     el('review-policy-save').addEventListener('click',async()=>{
@@ -166,6 +221,8 @@ const ClientRelease = (() => {
           notes:m.client_notes,destination_root:m.destination_root,
           destination_provider:m.destination_provider,
           review_required:m.review_required,requirements:m.requirements,
+          release_requirement_revision:m.release_requirement_revision,
+          correction_obligations:m.correction_obligations,
           selected_photos:m.selected_photos,manifest_sha256:exact.manifest_sha256
         },null,2);
         el('release-exact-preview').hidden=false;
