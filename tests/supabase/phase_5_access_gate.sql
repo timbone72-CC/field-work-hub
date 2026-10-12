@@ -652,6 +652,17 @@ begin
    raise exception 'Roster transfer replay produced different result';end if;
  denied:=false;
  begin
+   update private.contractor_roster_actions set reason='Tampered audit'
+     where action_id=roster_action;
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Committed roster history was mutable';end if;
+ denied:=false;
+ begin
+   delete from private.contractor_roster_actions where action_id=roster_action;
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Committed roster action could be deleted';end if;
+ denied:=false;
+ begin
    perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,team_a,
      roster_rev,'Stale transfer','TEST');
  exception when serialization_failure then denied:=true;end;
