@@ -38,6 +38,7 @@ public final class MainActivity extends Activity {
     private EditText passwordInput;
     private Button signInButton;
     private Button signOutButton;
+    private Button recoverPhotosButton;
     private Button refreshAssignmentsButton;
     private ProgressBar progress;
     private TextView statusText;
@@ -162,6 +163,12 @@ public final class MainActivity extends Activity {
         signOutButton.setLayoutParams(matchWrap());
         root.addView(signOutButton);
 
+        recoverPhotosButton = new Button(this);
+        recoverPhotosButton.setText("Recover my photos");
+        recoverPhotosButton.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoRecoveryActivity.class)));
+        recoverPhotosButton.setLayoutParams(matchWrap());
+        root.addView(recoverPhotosButton);
+
         workOrdersHeading = text(getString(R.string.work_orders_heading), 20, true);
         workOrdersHeading.setPadding(0, dp(20), 0, dp(4));
         root.addView(workOrdersHeading);
@@ -271,10 +278,15 @@ public final class MainActivity extends Activity {
                                                 "Signed in successfully."));
                     } catch (Exception error) {
                         String message = safeMessage(error, "Sign-in failed.");
+                        SupabaseApi.AuthSession authenticated = runtime.sessions.load();
                         postIfCurrent(operation, sessionGeneration,
                                 () -> {
                                     passwordInput.setText("");
-                                    setLoading(false, message);
+                                    if (authenticated != null && runtime.sessions.matches(sessionGeneration,
+                                            authenticated.userId, authenticated.organizationId))
+                                        showSignedIn(authenticated, java.util.Collections.emptyList(), false,
+                                                message + " Protected originals can be recovered from this phone.");
+                                    else setLoading(false, message);
                                 });
                     }
                 });
@@ -292,6 +304,7 @@ public final class MainActivity extends Activity {
         passwordInput.setVisibility(View.GONE);
         signInButton.setVisibility(View.GONE);
         signOutButton.setVisibility(View.VISIBLE);
+        recoverPhotosButton.setVisibility(View.VISIBLE);
         refreshAssignmentsButton.setVisibility(View.VISIBLE);
         identityText.setVisibility(View.VISIBLE);
         workOrdersHeading.setVisibility(View.VISIBLE);
@@ -765,6 +778,7 @@ public final class MainActivity extends Activity {
         signInButton.setVisibility(View.VISIBLE);
         signInButton.setEnabled(true);
         signOutButton.setVisibility(View.GONE);
+        recoverPhotosButton.setVisibility(View.GONE);
         refreshAssignmentsButton.setVisibility(View.GONE);
         refreshAssignmentsButton.setEnabled(true);
         progress.setVisibility(View.GONE);

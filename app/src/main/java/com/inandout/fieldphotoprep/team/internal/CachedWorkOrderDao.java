@@ -244,6 +244,8 @@ abstract class CachedWorkOrderDao {
 
     @Query("SELECT * FROM protected_photos WHERE ownerId=:owner AND organizationId=:org AND workOrderId=:wo AND runId=:run ORDER BY id")
     abstract List<ProtectedPhoto> photos(String owner, String org, String wo, String run);
+    @Query("SELECT * FROM protected_photos WHERE ownerId=:owner AND organizationId=:org AND state IN ('WAITING','PROBLEM') ORDER BY id LIMIT :limit OFFSET :offset")
+    abstract List<ProtectedPhoto> recoveryPhotos(String owner, String org, int limit, int offset);
     @Query("SELECT * FROM protected_photos ORDER BY id") abstract List<ProtectedPhoto> allPhotos();
     @Query("SELECT * FROM protected_photos WHERE id=:id") abstract ProtectedPhoto photo(String id);
     @Query("SELECT * FROM photo_transfers WHERE photoId=:id") abstract PhotoTransfer transfer(String id);

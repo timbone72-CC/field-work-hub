@@ -12,6 +12,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FieldPhotoPrepTeam"
         android:usesCleartextTraffic="false">
+        <activity android:name=".PhotoRecoveryActivity" android:exported="false" />
         <activity android:name=".PhotoActivity" android:configChanges="orientation|screenSize" android:exported="false" android:screenOrientation="fullSensor" />
         <activity
             android:name=".MainActivity"

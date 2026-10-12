@@ -144,6 +144,25 @@ final class PhotoOwner {
         } catch(Exception e) {return false;}
     }
 
+    /** Same serial file owner as capture/cleanup. No recover, prepare or network call. */
+    void exportOriginals(SupabaseApi.AuthSession session, long generation,
+            List<String> selected, OutputStream destination) throws Exception {
+        if(selected==null || selected.isEmpty() || selected.size()>PhotoRecoveryArchive.MAX_PHOTOS
+                || new HashSet<>(selected).size()!=selected.size())
+            throw new IOException("Select 1 to 50 protected originals.");
+        List<ProtectedPhoto> photos=sessions.local(generation,session,()->{
+            List<ProtectedPhoto> result=new ArrayList<>();
+            for(String id:selected) {
+                ProtectedPhoto p=dao.photo(id);
+                if(p==null) throw new IOException("Selected original is unavailable.");
+                result.add(p);
+            }
+            return result;
+        });
+        PhotoRecoveryArchive.write(directory,session.userId,session.organizationId,photos,destination,
+                work -> sessions.local(generation,session,()->{work.run();return null;}));
+    }
+
     static final class PreparedIdentity {
         final String sha256; final long size;
         PreparedIdentity(String sha256,long size) { this.sha256=sha256;this.size=size; }
