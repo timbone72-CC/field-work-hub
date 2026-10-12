@@ -93,3 +93,28 @@ begin
 end;$$;
 revoke all on function public.owner_supervisor_grant_list(uuid,text,uuid,integer) from public,anon;
 grant execute on function public.owner_supervisor_grant_list(uuid,text,uuid,integer) to authenticated,service_role;
+
+-- Exact configured organization team choices for the Product Owner.
+-- No job data, assignment, customer address or photo access.
+create function public.owner_office_team_list(
+ p_org uuid,p_environment text,p_after uuid default null,p_limit integer default 25)
+returns table(team_id uuid,team_name text,active boolean,revision uuid,admin_count bigint)
+language plpgsql security definer set search_path='' as $$
+begin
+ if p_org is null or p_limit is null or p_limit not between 1 and 50
+  or p_environment not in ('TEST','PRODUCTION')
+  or not private.is_current_platform_owner(p_environment)
+  or not exists(select 1 from private.org_office_allowances a where a.organization_id=p_org)
+ then raise exception 'Verified office owner required' using errcode='42501';end if;
+ return query select t.id,t.name,t.active,t.revision,(
+   select count(*) from private.admin_team_memberships m
+   join private.account_work_access a on a.organization_id=m.organization_id
+     and a.user_id=m.user_id
+   where m.organization_id=t.organization_id and m.team_id=t.id and m.active
+     and a.work_role='ADMIN' and a.active and a.disabled_at is null)
+ from public.admin_teams t
+ where t.organization_id=p_org and (p_after is null or t.id>p_after)
+ order by t.id limit p_limit;
+end;$$;
+revoke all on function public.owner_office_team_list(uuid,text,uuid,integer) from public,anon;
+grant execute on function public.owner_office_team_list(uuid,text,uuid,integer) to authenticated,service_role;
