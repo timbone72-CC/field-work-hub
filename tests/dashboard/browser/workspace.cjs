@@ -85,7 +85,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           supervisor_limit:4,supervisor_active:1,supervisor_reserved:0,supervisor_available:3
         });
         if (url.pathname.endsWith('owner_supervisor_grant_list')) return reply([{
-          user_id:uuid(9214),tier:ownerTier,grant_active:true,grant_revision:ownerTierRevision,
+          user_id:uuid(9214),account_email:'supervisor@example.invalid',tier:ownerTier,grant_active:true,grant_revision:ownerTierRevision,
           work_active:true,team_count:ownerScope.length
         }]);
         if (url.pathname.endsWith('owner_office_team_list')) return reply([{
