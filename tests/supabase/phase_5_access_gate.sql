@@ -651,6 +651,24 @@ begin
    or (select a.active from private.account_work_access a where a.user_id=roster_worker) is not true
    or not private.is_assignable_contractor(roster_worker,org) then
    raise exception 'Tier 2 placement changed work entitlement or failed';end if;
+ if roster_result is distinct from public.manage_idle_contractor_roster(roster_action,org,
+     roster_worker,team_a,null,'Tier 2 reviewed unassigned placement','TEST') then
+   raise exception 'Authorized same-action placement replay changed receipt';end if;
+ -- A still-valid Auth session does not retain scoped staffing receipt access
+ -- when the Product Owner revokes the originating Supervisor's work grant.
+ update private.supervisor_grants set active=false
+   where organization_id=org and user_id=supervisors[2];
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_a,
+     null,'Tier 2 reviewed unassigned placement','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Revoked Tier 2 replay exposed roster history';end if;
+ update private.supervisor_grants set active=true
+   where organization_id=org and user_id=supervisors[2];
+ if roster_result is distinct from public.manage_idle_contractor_roster(roster_action,org,
+     roster_worker,team_a,null,'Tier 2 reviewed unassigned placement','TEST') then
+   raise exception 'Restored Tier 2 could not reconcile original placement';end if;
  denied:=false;
  begin
    perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,team_b,
@@ -669,6 +687,19 @@ begin
  if roster_result is distinct from public.manage_idle_contractor_roster(roster_action,org,
     roster_worker,team_b,roster_rev,'Tier 3 explicit idle transfer','TEST') then
    raise exception 'Roster transfer replay produced different result';end if;
+ update private.supervisor_grants set tier=2
+   where organization_id=org and user_id=supervisors[3];
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_b,
+     roster_rev,'Tier 3 explicit idle transfer','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Downgraded Tier 3 replay exposed transfer history';end if;
+ update private.supervisor_grants set tier=3
+   where organization_id=org and user_id=supervisors[3];
+ if roster_result is distinct from public.manage_idle_contractor_roster(roster_action,org,
+    roster_worker,team_b,roster_rev,'Tier 3 explicit idle transfer','TEST') then
+   raise exception 'Restored Tier 3 could not reconcile original transfer';end if;
  denied:=false;
  begin
    update private.contractor_roster_actions set reason='Tampered audit'
