@@ -132,6 +132,7 @@ begin
    'id',i.id,'type',i.alert_type,'work_order_id',i.work_order_id,
    'run_id',i.run_id,'first_at',i.first_at,'last_at',i.last_at,
    'version_key',i.version_key,
+   'receipt_revision',rec.revision,
    'acknowledged',coalesce(rec.acknowledged_at is not null and
       rec.version_key=i.version_key,false),
    'snoozed_until',case when rec.version_key=i.version_key
