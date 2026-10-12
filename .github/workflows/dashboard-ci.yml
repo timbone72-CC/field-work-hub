@@ -54,6 +54,10 @@ jobs:
         run: |
           node --check dashboard/photo-requirements.js
           node --check dashboard/job-workspace.js
+          node --check dashboard/notifications.js
+          node --check dashboard/push-device.js
+          node --check dashboard/push-sw.js
+          node --check supabase/functions/admin-web-push/handler.mjs
           node --check dashboard/private-review.js
           node --check dashboard/app.js
           node --check dashboard/auto-refresh.js
