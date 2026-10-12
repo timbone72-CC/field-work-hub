@@ -704,8 +704,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelectorAll('#release-photo-list input').length===50);
     await page.locator('#release-photo-list input').nth(25).check();
     assert.match(await page.locator('#release-photo-count').innerText(),/2 photos selected/);
-    await page.locator('#release-save').click();
-    await wait(page,()=>persistedPackagePhotoIds.length===2);
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/admin_save_package_draft')
+        && response.request().method()==='POST'),
+      page.locator('#release-save').click()
+    ]);
+    assert.equal(persistedPackagePhotoIds.length,2);
     assert.equal(packagePageCalls>=2,true);
     assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
     largePackage=false;
