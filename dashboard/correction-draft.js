@@ -1,7 +1,7 @@
 /* One Admin correction draft and server checked dispatch; not a second work or delivery owner. */
 const CorrectionDraft=(()=>{
   let wo='',generation=0,data=null,editor=null,baseline=null,refs=new Set(),maps=new Map();
-  let releaseRev='',preview=null,busy=false,uncertain=false;
+  let releaseRev='',preview=null,busy=false,uncertain=false,issues=[];
   const el=id=>document.getElementById(id);
   const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function valid(g,id,token){return g===generation&&wo===id&&!!token&&accessToken===token&&editWorkOrderIdInput.value===id;}
@@ -15,7 +15,8 @@ const CorrectionDraft=(()=>{
   function status(s,bad=false){el('correction-status').textContent=s;el('correction-status').classList.toggle('error',bad);}
   function reset(){
     generation++;wo='';data=null;baseline=null;refs=new Set();maps=new Map();
-    releaseRev='';preview=null;busy=false;uncertain=false;
+    releaseRev='';preview=null;busy=false;uncertain=false;issues=[];
+    if(el('correction-issue-list'))el('correction-issue-list').replaceChildren();
     el('correction-details').hidden=true;el('correction-details').open=false;
     el('correction-summary').hidden=true;el('correction-summary').textContent='';
     el('correction-references').textContent='';status('');
@@ -74,7 +75,49 @@ const CorrectionDraft=(()=>{
       p_capture_requirements:capture,p_item_mapping:itemMapping,p_release_requirements:release
     };
   }
-  function fingerprint(){return data?JSON.stringify(inputData()):'';}
+  function fingerprint(){return data?JSON.stringify([inputData(),issues]):'';}
+  function renderIssues(){
+    const host=el('correction-issue-list');host.replaceChildren();
+    for(const [i,issue] of issues.entries()){
+      const row=document.createElement('div');row.className='workspace-navigation';
+      const detail=document.createElement('span');detail.textContent=
+        (issue.photo_id?'Photo '+issue.photo_id.slice(0,8):'Release goal '+issue.item_id?.slice(0,8))+
+        ' · '+issue.requested_count+' new photo(s) · '+issue.reason;
+      const remove=document.createElement('button');remove.type='button';
+      remove.className='secondary';remove.textContent='Remove issue';
+      remove.addEventListener('click',()=>{issues.splice(i,1);renderIssues();invalidate();});
+      row.append(detail,remove);host.append(row);
+    }
+  }
+  function addIssue(item,reason){
+    if(!data||busy){status('Open an eligible correction draft before adding issues.',true);return false;}
+    if(!reason||!reason.trim()){status('Provide an explicit reason for the correction issue.',true);return false;}
+    const pid=item?.photo_id,original=item?.requirement_item_id;
+    if(!UUID.test(pid)||issues.some(i=>i.photo_id===pid)){
+      status('Select one verified photo per issue; duplicate photo issues cannot be saved.',true);return false;}
+    const iid=data.release_requirements.items.some(x=>x.id===original)?original:null;
+    if(issues.length>=50){status('Maximum 50 correction issues.',true);return false;}
+    issues.push({photo_id:pid,item_id:iid,reason:reason.trim().slice(0,1000),requested_count:1});
+    renderIssues();invalidate();el('correction-issues').open=true;
+    return true;
+  }
+  function addManualIssue(){
+    if(!data)return;
+    const pid=el('correction-issue-photo').value.trim()||null;
+    const iid=el('correction-issue-item').value||null;
+    const reason=el('correction-issue-reason').value.trim();
+    const count=Number(el('correction-issue-count').value);
+    if((pid&&!UUID.test(pid))||(iid&&!UUID.test(iid))||(!pid&&!iid)
+       ||!reason||reason.length>1000||!Number.isInteger(count)||count<1||count>1000
+       ||issues.length>=50||issues.some(i=>i.photo_id===pid&&i.item_id===iid)){
+      status('Issue needs a unique verified photo or release goal, reason, and 1–1000 requested photos.',true);
+      return;
+    }
+    issues.push({photo_id:pid,item_id:iid,reason,requested_count:count});
+    renderIssues();invalidate();
+    el('correction-issue-photo').value='';el('correction-issue-reason').value='';
+    el('correction-issue-count').value='1';
+  }
   function dirty(){return !!data&&baseline!==null&&fingerprint()!==baseline;}
   function buttons(){
     el('correction-save').disabled=busy||!data||uncertain;
@@ -84,6 +127,12 @@ const CorrectionDraft=(()=>{
   function fill(source){
     data=source;const d=source.draft?.status==='DRAFT'?source.draft:null;
     refs=new Set((d?.reference_photos||[]).filter(x=>UUID.test(x)));
+    issues=structuredClone(d?.issues||[]);
+    renderIssues();
+    const issueChoice=el('correction-issue-item');
+    issueChoice.replaceChildren(new Option('No named original requirement',''));
+    for(const item of source.release_requirements.items)
+      if(UUID.test(item.id))issueChoice.add(new Option(item.label,item.id));
     releaseRev=d?.release_requirements?.revision||crypto.randomUUID();
     el('correction-kind').textContent=source.kind==='CLIENT_RETURN'?
       'Client return: an earlier client package was delivered. A new corrected submission will be needed.':
@@ -139,10 +188,19 @@ const CorrectionDraft=(()=>{
       if(!valid(gen,id,token))return false;
       if(!UUID.test(result.revision)||result.status!=='DRAFT')
         throw Error('Server did not confirm a new draft revision.');
+      const savedIssues=structuredClone(issues);
+      // Issues live on the same protected server draft; changing them rotates
+      // its revision and invalidates every earlier preview/Dispatch hash.
+      const issueResult=await rpc('admin_save_correction_issues',{
+        p_wo:id,p_expected_revision:result.revision,p_issues:savedIssues},token);
+      if(!valid(gen,id,token))return false;
+      if(!UUID.test(issueResult.revision))
+        throw Error('Issue revisions were not acknowledged.');
       const updated=await rpc('admin_correction_state',{p_wo:id},token);
       if(!valid(gen,id,token))return false;
-      if(updated.draft?.revision!==result.revision)
-        throw Error('Saved draft changed during verification. Reload.');
+      if(updated.draft?.revision!==issueResult.revision
+          ||JSON.stringify(updated.draft?.issues)!==JSON.stringify(savedIssues))
+        throw Error('Saved issues changed during verification. Reload.');
       fill(updated);status('Draft saved. Review exact summary before Dispatch.');
       return true;
     }catch(err){if(valid(gen,id,token)){preview=null;status('Draft not confirmed: '+err.message,true);}return false;}
@@ -175,6 +233,9 @@ const CorrectionDraft=(()=>{
         'Reason: '+s.reason,'Instructions: '+(s.instructions||'(none)'),
         'New visit photos: '+PhotoRules.summary(s.capture_requirements),
         'Earlier verified photo references: '+s.reference_photos.length,
+        'Correction issues: '+(s.issues||[]).length,
+        ...(s.issues||[]).map(x=>'Issue: '+x.reason+' · '+x.requested_count+' new photos'+
+          (x.photo_id?' · photo '+x.photo_id.slice(0,8):'')),
         ...mapped.map(x=>'Release mapping: '+x),
         'Existing Finish, photo ownership and client delivery history are preserved.',
         'Dispatch creates a NEW run; it does NOT send client photos.'
@@ -215,10 +276,11 @@ const CorrectionDraft=(()=>{
     host.addEventListener('change',()=>queueMicrotask(drawMaps));
     for(const id of ['correction-reason','correction-assignee','correction-due','correction-instructions'])
       el(id).addEventListener('input',invalidate);
+    el('correction-issue-add').addEventListener('click',addManualIssue);
     el('correction-save').addEventListener('click',()=>save());
     el('correction-preview').addEventListener('click',()=>showPreview());
     el('correction-dispatch').addEventListener('click',()=>dispatch());
   }
-  return {init,reset,open,dirty,save,hasReference,reference};
+  return {init,reset,open,dirty,save,hasReference,reference,addIssue};
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=CorrectionDraft;
