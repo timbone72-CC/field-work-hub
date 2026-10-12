@@ -878,9 +878,8 @@ begin
   revision,set_id,digest);
  if result->>'outcome'<>'APPLIED' then raise exception 'Follow-up Finish failed: %',result;end if;
  result:=public.begin_photo_transfer(gen_random_uuid(),new_photo,repeat('b',64),250000);
- if result->>'state' is distinct from 'WAITING' and result->>'state' is distinct from 'RESERVED'
-    and result->>'state' is distinct from 'UPLOADING'
- then null;end if; -- accept exact transfer owner response; ledger is verified below
+ -- The authoritative private transfer row and exact verified object below,
+ -- not a loosely named client response state, establish the receipt fixture.
  execute 'reset role';
  select * into transfer from private.photo_transfers where photo_id=new_photo;
  if transfer.photo_id is null or transfer.run_id<>newrun then
