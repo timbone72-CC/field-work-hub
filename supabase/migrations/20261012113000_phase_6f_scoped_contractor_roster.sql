@@ -17,6 +17,18 @@ create table private.contractor_roster_actions (
  foreign key(organization_id,new_team_id) references public.admin_teams(organization_id,id) on delete restrict
 );
 create index contractor_roster_actor_idx on private.contractor_roster_actions(organization_id,user_id,created_at);
+create function private.protect_contractor_roster_action() returns trigger
+language plpgsql set search_path='' as $
+begin
+  raise exception 'Contractor roster action history is immutable' using errcode='42501';
+  return old;
+end;
+$;
+revoke all on function private.protect_contractor_roster_action() from public,anon,authenticated;
+create trigger contractor_roster_actions_immutable
+ before update or delete on private.contractor_roster_actions
+ for each row execute function private.protect_contractor_roster_action();
+
 alter table private.contractor_roster_actions enable row level security;
 revoke all on private.contractor_roster_actions from public,anon,authenticated,service_role;
 grant select,insert on private.contractor_roster_actions to service_role;
