@@ -980,6 +980,22 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>Array.from(document.querySelectorAll('#owner-office-people .row')).some(row=>row.textContent.includes('supervisor@example.invalid') && row.textContent.includes('work enabled')));
     assert.equal(ownerPersonActive,true);
     assert.equal(ownerAccessWrites.length,2);
+    await page.locator('#owner-enrollment > summary').click();
+    await page.locator('#owner-enrollment-user').selectOption(uuid(9231));
+    await page.locator('#owner-enrollment button[type=submit]').click();
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Choose at least one exact active team'));
+    assert.equal(ownerEnrollWrites.length,0,'Incomplete team selection did not create an enrollment');
+    await page.locator('#owner-enrollment-teams input').check();
+    page.once('dialog', dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/owner_enroll_supervisor_with_seat')),
+      page.locator('#owner-enrollment button[type=submit]').click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-supervisor-list')?.textContent.includes('new-supervisor@example.invalid'));
+    assert.equal(ownerEnrolled,true);
+    assert.equal(ownerEnrollWrites.length,1);
+    assert.equal(await page.locator('#owner-enrollment-user').locator('option').count(),1,
+      'Already enrolled Supervisor cannot be offered for a second enrollment');
     await page.screenshot({path:path.join(output,'phase6f-owner-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     await wait(page,()=>document.querySelector('#owner-office-console')?.clientWidth>0);
