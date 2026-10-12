@@ -3,27 +3,28 @@ begin;
 do $gate$
 declare
  org uuid:=gen_random_uuid(); a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid();
- outsider uuid:=gen_random_uuid(); sup uuid:=gen_random_uuid(); owner_id uuid:=gen_random_uuid();
+ outsider uuid:=gen_random_uuid(); contractor uuid:=gen_random_uuid(); sup uuid:=gen_random_uuid(); owner_id uuid:=gen_random_uuid();
  wo uuid; blocked_wo uuid; act uuid:=gen_random_uuid(); fp text; result jsonb; denied boolean;
  actor_id uuid;
 begin
  insert into public.organizations(id,name) values(org,'Handoff gate');
  insert into public.admin_teams(id,organization_id,name) values(a,org,'Source'),(b,org,'Target');
- foreach actor_id in array array[owner_id,sup,outsider] loop
+ foreach actor_id in array array[owner_id,sup,outsider,contractor] loop
   insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
    values(actor_id,actor_id::text||'@example.invalid',now(),
-   jsonb_build_object('organization_id',org,'role',case when actor_id=sup then 'SUPERVISOR' else 'ADMIN' end));
+   jsonb_build_object('organization_id',org,'role',case when actor_id=sup then 'SUPERVISOR' when actor_id=contractor then 'CONTRACTOR' else 'ADMIN' end));
   insert into auth.sessions(id,user_id) values(actor_id,actor_id);
  end loop;
  insert into private.account_work_access(organization_id,user_id,work_role,active)
-  values(org,sup,'SUPERVISOR',true),(org,outsider,'ADMIN',true);
+  values(org,sup,'SUPERVISOR',true),(org,outsider,'ADMIN',true),(org,contractor,'CONTRACTOR',true);
+ insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values(org,a,contractor,true);
  insert into private.org_work_settings(organization_id,supervisor_work_ready) values(org,true);
  insert into private.supervisor_grants(organization_id,user_id,tier,active,granted_by,reason)
   values(org,sup,3,true,owner_id,'test');
  insert into public.work_orders(organization_id,responsible_team_id,wo_number,property_address,work_type,due_date)
   values(org,a,'HANDOFF-A','Test','TEST',current_date) returning id into wo;
  insert into public.work_orders(organization_id,responsible_team_id,assigned_user_id,wo_number,property_address,work_type,due_date)
-  values(org,a,outsider,'HANDOFF-B','Test','TEST',current_date) returning id into blocked_wo;
+  values(org,a,contractor,'HANDOFF-B','Test','TEST',current_date) returning id into blocked_wo;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',sup,'session_id',sup,
   'app_metadata',jsonb_build_object('role','SUPERVISOR','organization_id',org))::text,true);
  result:=public.preview_work_order_team_handoff(wo,b,'TEST');
