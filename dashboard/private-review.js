@@ -289,11 +289,12 @@ const PrivateReview = (() => {
       ?.scrollIntoView({block:'nearest'});
     selectionStatus();
   }
-  function open(wo){
+  function open(wo,runId=null){
     if(!wo)return;
     if(current!==wo){
       reset();current=wo;
-      currentRun=workOrderRows.find(r=>r.id===wo)?.current_run_id||'';
+      currentRun=UUID.test(runId||'')?runId:
+        workOrderRows.find(r=>r.id===wo)?.current_run_id||'';
       populateCategories();
     }
     load(false);

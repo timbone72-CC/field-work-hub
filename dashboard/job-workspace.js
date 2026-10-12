@@ -235,7 +235,8 @@ const JobWorkspace = (() => {
     document.querySelectorAll('[data-job-panel]').forEach(panel => { panel.hidden = panel.dataset.jobPanel !== name; });
     saveEditButton.hidden = name === 'photos' || name === 'delivery';
     if (name === 'photos' && selectedRow?.id) {
-      PrivateReview.open(selectedRow.id); ClientRelease.open(selectedRow.id, name);
+      PrivateReview.open(selectedRow.id,selectedRow.current_run_id);
+      ClientRelease.open(selectedRow.id,name);
       CorrectionDraft.open(selectedRow.id, selectedRow.field_status);
       FollowupManagement.open(selectedRow.id, selectedRow.field_status);
     }

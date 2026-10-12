@@ -2,7 +2,7 @@
    cancellation/supersession. Never touch original photos or replay unknown writes. */
 const FollowupManagement=(()=>{
   let wo='',serial=0,facts=null,busy=false,uncertain=false;
-  const el=id=>document.getElementById(id), UUID=/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
+  const el=id=>document.getElementById(id), UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const can=(seq,id,token)=>seq===serial&&id===wo&&accessToken===token
     &&editWorkOrderIdInput.value===id;
   function reset(){
@@ -45,9 +45,8 @@ const FollowupManagement=(()=>{
       const remote=await rpc('admin_followup_management_state',{p_wo:id},token);
       if(!can(seq,id,token))return;
       if(remote.work_order_id!==id||!remote.available)return;
-      if(!['ASSIGNED','CANCELLED'].includes(remote.status)
-         ||remote.run_id!==workOrderRows.find(x=>x.id===id)?.current_run_id)
-        throw Error('Current run changed. Reload job.');
+      if(!['ASSIGNED','CANCELLED'].includes(remote.status)||!UUID.test(remote.run_id))
+        throw Error('Current run identity changed. Reload job.');
       facts=remote;
       el('followup-management').hidden=false;
       const cancel=remote.status==='ASSIGNED'&&remote.can_cancel;
@@ -76,7 +75,8 @@ const FollowupManagement=(()=>{
     }
   }
   async function action(kind){
-    if(!facts||busy||uncertain||JobWorkspace.dirty())return;
+    if(!facts||busy||uncertain)return;
+    if(JobWorkspace.dirty()){status('Save or discard other work order edits before changing this follow-up.',true);return;}
     const seq=serial,id=wo,token=accessToken,info=facts;
     const reason=el('followup-management-reason').value.trim();
     if(!reason){status('An office reason is required.',true);return;}
