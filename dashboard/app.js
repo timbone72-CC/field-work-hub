@@ -261,6 +261,7 @@ editForm.addEventListener('submit', async (event) => {
 cancelEditButton.addEventListener('click', closeEditor);
 
 signOutButton.addEventListener('click', () => {
+  PushDevice.signedOut();
   NotificationCenter.reset();
   accessToken = null;
   currentUser = null;
