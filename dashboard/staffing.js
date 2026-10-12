@@ -780,7 +780,8 @@ function staffingRenderHandoff() {
   card.querySelector('#staffing-handoff-preview').disabled=
     staffingHandoffBusy || staffingHandoffNeedsRefresh || Boolean(staffingHandoffPending);
   card.querySelector('#staffing-handoff-confirm').disabled=
-    staffingHandoffBusy || staffingHandoffNeedsRefresh || !staffingHandoffPreview;
+    staffingHandoffBusy || staffingHandoffNeedsRefresh || !staffingHandoffPreview
+    || Boolean(staffingHandoffPending && !staffingHandoffPreview);
 }
 async function staffingPreviewHandoff() {
   const check=staffingIdentity(), card=staffingCard(), req=staffingHandoffInputs();
@@ -832,12 +833,14 @@ async function staffingPreviewHandoff() {
 async function staffingConfirmHandoff() {
   const check=staffingIdentity(), card=staffingCard(), preview=staffingHandoffPreview;
   if (!staffingStillCurrent(check)||staffingWork?.tier!==3||staffingHandoffBusy
-    ||staffingHandoffNeedsRefresh||!preview) return;
-  const req={p_work_order:preview.request.p_work_order,
+    ||staffingHandoffNeedsRefresh||(!preview&&!staffingHandoffPending)) return;
+  const req=staffingHandoffPending?.request || (preview && {
+    p_work_order:preview.request.p_work_order,
     p_destination:preview.request.p_destination,
     p_expected_fingerprint:preview.fingerprint,
-    p_reason:preview.request.p_reason,p_environment:STAFFING_ENVIRONMENT};
-  if (JSON.stringify(staffingHandoffInputs())!==JSON.stringify(preview.request)) {
+    p_reason:preview.request.p_reason,p_environment:STAFFING_ENVIRONMENT});
+  const reviewedInputs={p_work_order:req.p_work_order,p_destination:req.p_destination,p_reason:req.p_reason};
+  if (JSON.stringify(staffingHandoffInputs())!==JSON.stringify(reviewedInputs)) {
     staffingHandoffMessage('Restore the exact reviewed fields before retrying.',true); return;
   }
   if (staffingHandoffPending && JSON.stringify(staffingHandoffPending.request)!==JSON.stringify(req)) {
