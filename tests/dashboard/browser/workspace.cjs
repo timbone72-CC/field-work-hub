@@ -1004,6 +1004,25 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#owner-supervisor-list')?.textContent.includes('new-supervisor@example.invalid'));
     assert.equal(ownerEnrolled,true);
     assert.equal(ownerEnrollWrites.length,1);
+    page.once('dialog', dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_grant_state')),
+      page.locator('#owner-supervisor-list .row').filter({hasText:/^new-supervisor@example\\.invalid/})
+        .getByRole('button',{name:'Remove grant'}).click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved.'));
+    assert.equal(ownerEnrolledGrantActive,false);
+    assert.equal(await page.locator('#owner-office-people .row').filter({hasText:/^new-supervisor@example\\.invalid/})
+      .getByRole('button',{name:'Review restore'}).isDisabled(),true);
+    page.once('dialog', dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_grant_state')),
+      page.locator('#owner-supervisor-list .row').filter({hasText:/^new-supervisor@example\\.invalid/})
+        .getByRole('button',{name:'Re-enable grant'}).click()
+    ]);
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved.'));
+    assert.equal(ownerEnrolledGrantActive,true);
+    assert.equal(ownerGrantWrites.length,2);
     assert.equal(await page.locator('#owner-enrollment-user').locator('option').count(),1,
       'Already enrolled Supervisor cannot be offered for a second enrollment');
     await page.screenshot({path:path.join(output,'phase6f-owner-desktop.png'),fullPage:true});
