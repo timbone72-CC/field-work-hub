@@ -10,6 +10,7 @@ declare
   actor uuid; role_name text; result jsonb; cursor_text text; denied boolean;
   count_rows integer; tier integer; original_scope text;
   correction_action uuid:=gen_random_uuid(); prior_revision timestamptz;
+  assigned_contractor uuid:=gen_random_uuid();
   correction_result jsonb; prior_digest text;
 begin
   insert into public.organizations(id,name) values
@@ -128,6 +129,24 @@ begin
     or result->'work_order' ? 'photos' then
     raise exception 'Selected detail crossed exact read-only scope: %',result;
   end if;
+  -- A server-confirmed phone receipt is not the human's separate Accept.
+  -- A Supervisor sees only an assignee on an already authorized exact WO.
+  insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+    values(assigned_contractor,'assignment-demo@example.invalid',now(),
+      jsonb_build_object('role','CONTRACTOR','organization_id',org));
+  insert into private.account_work_access(organization_id,user_id,work_role,active)
+    values(org,assigned_contractor,'CONTRACTOR',true);
+  insert into private.contractor_team_memberships(organization_id,user_id,team_id,active)
+    values(org,assigned_contractor,team_a,true);
+  update public.work_orders
+    set assigned_user_id=assigned_contractor,assignment_received_at=clock_timestamp()
+    where id=wo_a2;
+  result:=public.office_supervisor_work_detail(org,wo_a2,original_scope);
+  if result->'work_order'->'assignment'->>'assignee_id'<>assigned_contractor::text
+    or result->'work_order'->'assignment'->>'assignee_label'<>'assignment-demo@example.invalid'
+    or result->'work_order'->'assignment'->>'download_received_at' is null
+    or result->'work_order'->'assignment'->>'human_accepted_at' is not null
+  then raise exception 'Supervisor assignment conflated receipt with human Accept: %',result;end if;
   denied:=false;
   begin perform public.office_supervisor_work_detail(org,wo_b,original_scope);
     exception when insufficient_privilege then denied:=true; end;
