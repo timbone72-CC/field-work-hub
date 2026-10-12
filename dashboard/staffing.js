@@ -114,8 +114,16 @@ function staffingCard() {
   });
   for (const id of ['staffing-handoff-wo','staffing-handoff-team','staffing-handoff-reason']) {
     card.querySelector('#'+id).addEventListener('input', () => {
-      if (!staffingHandoffPending) staffingHandoffPreview = null;
-      card.querySelector('#staffing-handoff-review').classList.add('hidden');
+      if (!staffingHandoffPending) {
+        staffingHandoffPreview = null;
+        card.querySelector('#staffing-handoff-review').classList.add('hidden');
+      } else {
+        // Changed-input retry cannot create another transaction; restoring
+        // the exact reviewed fields reveals the original-action retry.
+        card.querySelector('#staffing-handoff-review').classList.toggle('hidden',
+          JSON.stringify(staffingHandoffInputs()) !==
+            JSON.stringify(staffingHandoffPreview?.request));
+      }
     });
   }
   card.querySelector('#staffing-handoff-preview').addEventListener('click', () => void staffingPreviewHandoff());
