@@ -9,6 +9,8 @@ declare
   g private.supervisor_grants%rowtype;
   next_revision uuid;
   scoped boolean;
+  access_revision uuid;
+  cutoff_action uuid;
 begin
   if p_org is null or p_user is null or p_team is null or p_allowed is null
      or p_expected_revision is null or p_reason is null
@@ -38,6 +40,22 @@ begin
   select exists(select 1 from private.supervisor_team_scopes s
     where s.organization_id=p_org and s.user_id=p_user and s.team_id=p_team) into scoped;
   if scoped=p_allowed then return g.revision; end if;
+  -- Removing an existing team scope is a real evidence-access cutoff.
+  -- Materialize the exact old photo set BEFORE the team ceases to be visible.
+  -- A previously disabled account already has its separate work-disable cutoff.
+  if scoped and not p_allowed
+    and private.team_capability_for_user(p_user,p_org,p_team,'WORK') then
+    select a.revision into access_revision from private.account_work_access a
+      where a.organization_id=p_org and a.user_id=p_user and a.active
+        and a.disabled_at is null and a.suspension_authority is null;
+    if access_revision is null then
+      raise exception 'Active Supervisor access revision required for cutoff' using errcode='42501';
+    end if;
+    cutoff_action:=gen_random_uuid();
+    perform private.freeze_photo_recovery_scope(
+      cutoff_action,p_org,p_user,access_revision,array[p_team],btrim(p_reason));
+    perform private.complete_photo_recovery_grant(cutoff_action);
+  end if;
   if p_allowed then
     insert into private.supervisor_team_scopes(organization_id,user_id,team_id)
     values(p_org,p_user,p_team);
