@@ -61,7 +61,7 @@ declare
   trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
   pending_oldrun uuid; pending_oldrev timestamptz; pending_capture jsonb;
-  issue_draft jsonb; issue_preview jsonb; issue_payload jsonb;
+  issue_draft jsonb; issue_preview jsonb; issue_payload jsonb; issue_capture jsonb;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
   insert into public.admin_teams(id,organization_id,name) values(team,org,'REVIEW');
@@ -584,9 +584,12 @@ begin
     into pending_oldrun,pending_oldrev,pending_capture
     from public.work_orders w join public.work_order_runs r on r.id=w.current_run_id
     where w.id=wo;
+  issue_capture:=jsonb_set(pending_capture,'{total}',jsonb_build_object(
+    'enabled',true,'minimum',1));
+  issue_capture:=jsonb_set(issue_capture,'{revision}',to_jsonb(gen_random_uuid()::text));
   issue_draft:=public.admin_save_correction_draft(wo,pending_oldrun,pending_oldrev,
     null,'Correct reviewed photo',array[photo],contractor,current_date,
-    'Retake the reviewed photo',pending_capture,'[]'::jsonb,pending_capture);
+    'Retake the reviewed photo',issue_capture,'[]'::jsonb,pending_capture);
   issue_payload:=jsonb_build_array(jsonb_build_object(
     'photo_id',photo,'item_id',null,'reason','Blurred front photo',
     'requested_count',1));
@@ -599,7 +602,7 @@ begin
     perform public.admin_save_correction_draft_with_issues(
       wo,pending_oldrun,pending_oldrev,(issue_draft->>'revision')::uuid,
       'SHOULD NOT PERSIST',array[photo],contractor,current_date,
-      'Retake the reviewed photo',pending_capture,'[]'::jsonb,pending_capture,
+      'Retake the reviewed photo',issue_capture,'[]'::jsonb,pending_capture,
       jsonb_build_array(jsonb_build_object('photo_id',gen_random_uuid(),
         'item_id',null,'reason','Foreign photo','requested_count',1)));
   exception when insufficient_privilege then denied:=true;end;
@@ -609,7 +612,7 @@ begin
   issue_draft:=public.admin_save_correction_draft_with_issues(
     wo,pending_oldrun,pending_oldrev,(issue_draft->>'revision')::uuid,
     'Correct reviewed photo',array[photo],contractor,current_date,
-    'Retake the reviewed photo',pending_capture,'[]'::jsonb,pending_capture,
+    'Retake the reviewed photo',issue_capture,'[]'::jsonb,pending_capture,
     issue_payload);
   issue_preview:=public.admin_preview_correction_draft(wo,
      (issue_draft->>'revision')::uuid);
