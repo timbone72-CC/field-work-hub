@@ -85,6 +85,7 @@ function staffingCard() {
     event.preventDefault(); void staffingPlaceContractor();
   });
   card.querySelector('#staffing-roster-person').addEventListener('change', staffingRenderRoster);
+  card.querySelector('#staffing-roster-team').addEventListener('change', staffingRenderRoster);
   card.querySelector('#staffing-copy').addEventListener('click', async () => {
     const link = card.querySelector('#staffing-link').value;
     if (!link || !staffingSnapshot) return;
@@ -256,10 +257,7 @@ async function staffingReadRoster(org) {
     first ||= value;
     for (const person of value.contractors) {
       if (!person.user_id || seen.has(person.user_id)
-        || (after && person.user_id<=after)
-        || (Number(value.caller_tier)===2 && person.team_id
-          && !staffingSnapshot?.teams?.some(t=>t.team_id===person.team_id)
-          && !first.teams?.some(t=>t.team_id===person.team_id))) {
+        || (after && person.user_id<=after)) {
         throw new Error('Contractor roster did not satisfy exact paging or team scope.');
       }
       seen.add(person.user_id);
