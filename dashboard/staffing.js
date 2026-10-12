@@ -263,6 +263,24 @@ function staffingRenderDetail() {
     value.textContent = staffingWorkDetail[key] == null ? '—' : String(staffingWorkDetail[key]);
     details.append(title,value);
   }
+  // Read only: distinguish the phone's durable download receipt from
+  // a Contractor's explicit Accept. Neither fact is inferred from Start.
+  const assignment = staffingWorkDetail.assignment;
+  if (assignment && typeof assignment === 'object') {
+    for (const [label, value] of [
+      ['Current assignee', assignment.assignee_label],
+      ['Phone download received', assignment.download_received_at],
+      ['Contractor accepted', assignment.human_accepted_at],
+      ['Pending reassignment to', assignment.pending_assignee_label],
+      ['Reassignment requested', assignment.reassignment_requested_at]
+    ]) {
+      const title = document.createElement('dt');
+      title.textContent = label;
+      const entry = document.createElement('dd');
+      entry.textContent = value == null || value === '' ? 'Not confirmed' : String(value);
+      details.append(title,entry);
+    }
+  }
   const canCorrect = ['ASSIGNED','IN_PROGRESS'].includes(staffingWorkDetail.field_status)
     && Boolean(staffingWorkDetail.work_revision) && Boolean(staffingWorkDetail.updated_at);
   const form = section.querySelector('#staffing-work-edit-form');
