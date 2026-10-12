@@ -1355,7 +1355,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#staffing-work-edit-reason').fill('Correction from team review');
     await page.locator('#staffing-work-edit-submit').click();
     await wait(page,()=>document.querySelector('#staffing-work-detail-status')?.textContent
-      .includes('Temporary server outcome uncertain'));
+      .includes('Server correction outcome uncertain.'));
     assert.equal(staffWorkEdits.length,1);
     await page.locator('#staffing-work-edit-note').fill('Changed unsafe retry');
     await page.locator('#staffing-work-edit-submit').click();
