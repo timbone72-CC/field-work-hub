@@ -12,6 +12,10 @@ let staffingRosterBusy = false;
 let staffingRosterNeedsRefresh = false;
 let staffingWork = null;
 let staffingWorkBusy = false;
+let staffingHandoffPreview = null;
+let staffingHandoffPending = null;
+let staffingHandoffBusy = false;
+let staffingHandoffNeedsRefresh = false;
 
 function staffingIdentity() {
   return { epoch: adminSessionEpoch, generation: staffingGeneration,
@@ -78,6 +82,22 @@ function staffingCard() {
       </table></div>
       <button id="staffing-work-more" type="button" class="secondary hidden">More authorized work</button>
     </section>
+    <section id="staffing-handoff-area" class="subsection hidden">
+      <h3>Reviewed team handoff</h3>
+      <p class="muted">Tier 3 may move only completely undispatched jobs with no assigned person,
+        field action or photo history. Other work needs a separate consent and recovery process.</p>
+      <form id="staffing-handoff-form" autocomplete="off">
+        <label>Authorized work order<select id="staffing-handoff-wo" required></select></label>
+        <label>Destination team<select id="staffing-handoff-team" required></select></label>
+        <label>Handoff reason<input id="staffing-handoff-reason" maxlength="1000" required></label>
+        <button id="staffing-handoff-preview" type="button">Review current eligibility</button>
+        <div id="staffing-handoff-review" class="hidden">
+          <p id="staffing-handoff-review-text" role="status"></p>
+          <button type="button" id="staffing-handoff-confirm">Confirm reviewed handoff</button>
+        </div>
+      </form>
+      <p id="staffing-handoff-status" class="status" aria-live="polite" role="status"></p>
+    </section>
     <div id="staffing-link-result" class="hidden">
       <label>Verified one-time Admin setup link<input id="staffing-link" readonly></label>
       <button type="button" id="staffing-copy" class="secondary">Copy Setup Link</button>
@@ -92,6 +112,14 @@ function staffingCard() {
   card.querySelector('#staffing-work-more').addEventListener('click', () => {
     void staffingLoadMore();
   });
+  for (const id of ['staffing-handoff-wo','staffing-handoff-team','staffing-handoff-reason']) {
+    card.querySelector('#'+id).addEventListener('input', () => {
+      if (!staffingHandoffPending) staffingHandoffPreview = null;
+      card.querySelector('#staffing-handoff-review').classList.add('hidden');
+    });
+  }
+  card.querySelector('#staffing-handoff-preview').addEventListener('click', () => void staffingPreviewHandoff());
+  card.querySelector('#staffing-handoff-confirm').addEventListener('click', () => void staffingConfirmHandoff());
   card.querySelector('#staffing-invite-form').addEventListener('submit', event => {
     event.preventDefault(); void staffingInvite();
   });
@@ -190,6 +218,7 @@ function staffingRenderWork() {
   card.querySelector('#staffing-invite-form').classList.toggle('hidden', work?.tier < 2);
   card.querySelector('#staffing-roster-area').classList.toggle('hidden', work?.tier < 2);
   card.querySelector('#staffing-capacity').classList.toggle('hidden', work?.tier < 2);
+  staffingRenderHandoff();
 }
 async function staffingLoadMore() {
   const check = staffingIdentity(), current = staffingWork;
@@ -248,6 +277,9 @@ async function staffingRefresh() {
   if (staffingRosterPending) {
     throw new Error('Reconcile the exact pending Contractor action before refreshing staffing.');
   }
+  if (staffingHandoffPending) {
+    throw new Error('Retry the exact unresolved work-order handoff before refreshing.');
+  }
   // A fresh work gate is required even to render staffing; a changed tier is
   // never inferred from an old browser selection or cached JWT role.
   try {
@@ -261,6 +293,8 @@ async function staffingRefresh() {
     staffingSnapshot = snapshot;
     staffingRoster = roster;
     staffingRosterNeedsRefresh = false;
+    staffingHandoffPreview = null;
+    staffingHandoffNeedsRefresh = false;
     if (snapshot) { staffingRender(); staffingRenderRoster(); }
     else staffingCard().querySelector('#staffing-link-result').classList.add('hidden');
     staffingRenderWork();
@@ -458,6 +492,132 @@ async function staffingPlaceContractor() {
   }
 }
 
+// Review and confirm through the one existing audited no-evidence handoff
+// transaction. This cannot reassign an active WO or migrate photo authority.
+function staffingHandoffMessage(value, error = false) {
+  const node = document.getElementById('staffing-handoff-status');
+  if (node) { node.textContent = value; node.classList.toggle('error',error); }
+}
+function staffingHandoffInputs() {
+  const card=staffingCard();
+  return { p_work_order:card.querySelector('#staffing-handoff-wo').value,
+    p_destination:card.querySelector('#staffing-handoff-team').value,
+    p_reason:card.querySelector('#staffing-handoff-reason').value.trim() };
+}
+function staffingRenderHandoff() {
+  const card=staffingCard(), work=staffingWork;
+  const section=card.querySelector('#staffing-handoff-area');
+  section.classList.toggle('hidden',work?.tier!==3);
+  if (work?.tier!==3) {
+    card.querySelector('#staffing-handoff-review').classList.add('hidden');
+    return;
+  }
+  const job=card.querySelector('#staffing-handoff-wo');
+  const destination=card.querySelector('#staffing-handoff-team');
+  const oldJob=job.value,oldTeam=destination.value;
+  job.replaceChildren(new Option('Choose an authorized work order',''));
+  for (const row of work.rows) job.add(
+    new Option(`${row.wo_number||'Work order'} · ${row.property_address||'Address not listed'}`,
+      row.work_order_id));
+  destination.replaceChildren(new Option('Choose another authorized team',''));
+  for (const team of staffingSnapshot?.teams||[])
+    destination.add(new Option(team.name,team.team_id));
+  if ([...job.options].some(o=>o.value===oldJob)) job.value=oldJob;
+  if ([...destination.options].some(o=>o.value===oldTeam)) destination.value=oldTeam;
+  const selected=work.rows.find(w=>w.work_order_id===job.value);
+  for (const option of destination.options) option.disabled=Boolean(selected&&option.value===selected.team_id);
+  if (destination.selectedOptions[0]?.disabled) destination.value='';
+  card.querySelector('#staffing-handoff-preview').disabled=
+    staffingHandoffBusy || staffingHandoffNeedsRefresh || Boolean(staffingHandoffPending);
+  card.querySelector('#staffing-handoff-confirm').disabled=
+    staffingHandoffBusy || staffingHandoffNeedsRefresh || !staffingHandoffPreview;
+}
+async function staffingPreviewHandoff() {
+  const check=staffingIdentity(), card=staffingCard(), req=staffingHandoffInputs();
+  if (!staffingStillCurrent(check)||staffingWork?.tier!==3||staffingHandoffBusy
+    ||staffingHandoffPending||staffingHandoffNeedsRefresh) return;
+  const row=staffingWork.rows.find(w=>w.work_order_id===req.p_work_order);
+  if (!row||!staffingSnapshot?.teams.some(t=>t.team_id===req.p_destination)
+    ||row.team_id===req.p_destination||!req.p_reason||req.p_reason.length>1000) {
+    staffingHandoffMessage('Choose a listed job, another authorized team and a reason.',true); return;
+  }
+  staffingHandoffPreview=null;
+  card.querySelector('#staffing-handoff-review').classList.add('hidden');
+  staffingHandoffBusy=true; staffingRenderHandoff();
+  staffingHandoffMessage('Checking exact current work and team eligibility…');
+  try {
+    const response=await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/preview_work_order_team_handoff`,{
+      method:'POST',headers:authHeaders(true),
+      body:JSON.stringify({p_work_order:req.p_work_order,
+        p_destination:req.p_destination,p_environment:STAFFING_ENVIRONMENT})
+    });
+    const review=await response.json().catch(()=>({}));
+    if (!staffingStillCurrent(check)) return;
+    if (!response.ok) throw new Error(review.message||'Handoff review is not authorized.');
+    if (review.organization_id!==check.org||review.work_order_id!==req.p_work_order
+      ||review.old_team_id!==row.team_id||review.new_team_id!==req.p_destination
+      ||typeof review.eligible!=='boolean'
+      ||(review.eligible&&!/^[0-9a-f]{32}$/.test(review.review_fingerprint||''))) {
+      throw new Error('Handoff review identity changed; reload before attempting transfer.');
+    }
+    if (!review.eligible) {
+      staffingHandoffMessage(review.block_reason||'This job has protected work and cannot be handed off.',true);
+      return;
+    }
+    staffingHandoffPreview={request:req,fingerprint:review.review_fingerprint};
+    card.querySelector('#staffing-handoff-review-text').textContent=
+      `Move unassigned job ${row.wo_number||row.work_order_id} from ${review.old_team_name} to ${review.new_team_name}? ${req.p_reason}`;
+    card.querySelector('#staffing-handoff-review').classList.remove('hidden');
+    staffingHandoffMessage('Eligible now. Confirmation will recheck the same fingerprint under lock.');
+  } catch(error) {
+    if (staffingStillCurrent(check)) staffingHandoffMessage(error.message,true);
+  } finally {
+    staffingHandoffBusy=false;
+    if (staffingStillCurrent(check)) staffingRenderHandoff();
+  }
+}
+async function staffingConfirmHandoff() {
+  const check=staffingIdentity(), card=staffingCard(), preview=staffingHandoffPreview;
+  if (!staffingStillCurrent(check)||staffingWork?.tier!==3||staffingHandoffBusy
+    ||staffingHandoffNeedsRefresh||!preview) return;
+  const req={p_work_order:preview.request.p_work_order,
+    p_destination:preview.request.p_destination,
+    p_expected_fingerprint:preview.fingerprint,
+    p_reason:preview.request.p_reason,p_environment:STAFFING_ENVIRONMENT};
+  if (JSON.stringify(staffingHandoffInputs())!==JSON.stringify(preview.request)) {
+    staffingHandoffMessage('Restore the exact reviewed fields before retrying.',true); return;
+  }
+  if (staffingHandoffPending && JSON.stringify(staffingHandoffPending.request)!==JSON.stringify(req)) {
+    staffingHandoffMessage('An earlier handoff is unresolved. Retry only its original reviewed action.',true); return;
+  }
+  staffingHandoffPending ||= {action:crypto.randomUUID(),request:req};
+  staffingHandoffBusy=true; staffingRenderHandoff();
+  staffingHandoffMessage('Confirming exact audited team handoff…');
+  try {
+    const response=await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/handoff_work_order_team`,{
+      method:'POST',headers:authHeaders(true),
+      body:JSON.stringify({...req,p_action:staffingHandoffPending.action})
+    });
+    const outcome=await response.json().catch(()=>({}));
+    if (!staffingStillCurrent(check)) return;
+    if (!response.ok||outcome.status!=='HANDED_OFF'
+      ||outcome.action_id!==staffingHandoffPending.action
+      ||outcome.work_order_id!==req.p_work_order
+      ||outcome.new_team_id!==req.p_destination)
+      throw new Error(outcome.message||'Handoff outcome needs exact-action reconciliation.');
+    staffingHandoffPending=null;
+    staffingHandoffPreview=null;
+    staffingHandoffNeedsRefresh=true;
+    card.querySelector('#staffing-handoff-review').classList.add('hidden');
+    staffingHandoffMessage('Server confirmed audited handoff. Refresh work before another move.');
+  } catch(error) {
+    if (staffingStillCurrent(check)) staffingHandoffMessage(
+      `${error.message} Retain the exact action for safe retry.`,true);
+  } finally {
+    staffingHandoffBusy=false;
+    if (staffingStillCurrent(check)) staffingRenderHandoff();
+  }
+}
 function staffingSignedOut() {
   staffingGeneration++;
   staffingSnapshot = null;
@@ -468,6 +628,10 @@ function staffingSignedOut() {
   staffingRosterNeedsRefresh = false;
   staffingWork = null;
   staffingWorkBusy = false;
+  staffingHandoffPreview = null;
+  staffingHandoffPending = null;
+  staffingHandoffBusy = false;
+  staffingHandoffNeedsRefresh = false;
   staffingBusy = false;
   staffingNeedsRefresh = false;
   const card = document.getElementById('staffing-card');
@@ -482,6 +646,10 @@ function staffingSignedOut() {
     card.querySelector('#staffing-work-rows').replaceChildren();
     card.querySelector('#staffing-work-more').classList.add('hidden');
     card.querySelector('#staffing-work-status').textContent = '';
+    card.querySelector('#staffing-handoff-form').reset();
+    card.querySelector('#staffing-handoff-review').classList.add('hidden');
+    card.querySelector('#staffing-handoff-area').classList.add('hidden');
+    staffingHandoffMessage('');
     staffingRosterMessage('');
   }
 }
