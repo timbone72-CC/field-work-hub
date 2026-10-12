@@ -258,7 +258,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
               property_address:'Example work address',work_type:'Inspection',
               instructions:staffWorkNote,
               due_date:staffWorkDue,field_status:'ASSIGNED',created_at:'2026-10-12T12:00:00Z',
-              updated_at:'2026-10-12T12:10:00Z',work_revision:staffWorkRevision}});
+              updated_at:'2026-10-12T12:10:00Z',work_revision:staffWorkRevision,
+              assignment:{assignee_id:uuid(9315),assignee_label:'Demo contractor <script>unsafe</script>',
+                download_received_at:'2026-10-12T12:04:00Z',human_accepted_at:null,
+                pending_assignee_id:null,pending_assignee_label:null,
+                reassignment_requested_at:null}});
         }
         if (url.pathname.endsWith('/office_supervisor_work_page')) {
          const p=req.postDataJSON();
@@ -1347,6 +1351,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'Work instructions must remain inert text');
     assert.equal(await page.locator('#edit-work-order-section:visible').count(),0,
       'Supervisor selected detail cannot expose Admin editing');
+    const assignmentDetail = await page.locator('#staffing-work-detail-fields').innerText();
+    assert.match(assignmentDetail,/Demo contractor <script>unsafe<\/script>/);
+    assert.match(assignmentDetail,/Phone download received/);
+    assert.match(assignmentDetail,/Contractor accepted\\s+Not confirmed/);
+    assert.equal(await page.locator('#staffing-work-detail script').count(),0,
+      'Server-provided assignee labels must remain inert DOM text');
     // Tier 2 may make an authorized due-date and additive-instruction edit;
     // uncertain network outcomes must reuse the exact action ID and inputs.
     await page.locator('#staffing-work-edit-form:visible').waitFor();
