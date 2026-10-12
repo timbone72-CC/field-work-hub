@@ -143,7 +143,7 @@ $$;
 -- Settings read avoids returning any sensitive Push endpoint/auth key.
 create function private.admin_notification_settings()
 returns jsonb language plpgsql stable security definer set search_path='' as $settings$
-declare org uuid; prefs jsonb; devices jsonb; zone text;
+declare org uuid; prefs jsonb; devices jsonb; zone text; zone_revision uuid;
 begin
  org:=private.admin_alert_current_org();
  select coalesce(jsonb_agg(jsonb_build_object(
@@ -163,10 +163,11 @@ begin
   order by sub.device_id),'[]'::jsonb) into devices
  from private.admin_push_subscriptions sub
  where sub.organization_id=org and sub.user_id=auth.uid();
- select timezone into zone from private.admin_alert_organization_config
+ select timezone,revision into zone,zone_revision from private.admin_alert_organization_config
  where organization_id=org;
  return jsonb_build_object('organization_id',org,'types',prefs,
   'devices',devices,'organization_timezone',zone,
+  'organization_timezone_revision',zone_revision,
   'push_ready',false);
 end;$settings$;
 create function public.admin_notification_settings()

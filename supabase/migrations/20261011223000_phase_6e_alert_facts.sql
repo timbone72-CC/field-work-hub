@@ -149,7 +149,16 @@ begin
    and rec.user_id=auth.uid() and rec.organization_id=org
  left join private.admin_alert_settings prefs on prefs.user_id=auth.uid()
    and prefs.organization_id=org and prefs.alert_type=i.alert_type
- where coalesce(prefs.dashboard_enabled,true);
+ where coalesce(prefs.dashboard_enabled,true)
+   and i.resolved_at is null
+   and (i.alert_type<>'ACCEPT_REMINDER' or exists(
+     select 1 from public.work_order_assignments assign
+     where assign.run_id=i.run_id and assign.assignment_ended_at is null
+       and assign.acknowledgment_received_at is null
+       and assign.assignment_started_at<=clock_timestamp()-
+         make_interval(mins=>coalesce(prefs.reminder_minutes,1440))))
+   and not (i.alert_type='CLIENT_DELIVERED'
+     and rec.acknowledged_at is not null and rec.version_key=i.version_key);
  select exists(select 1 from private.admin_alert_issues i
   where i.organization_id=org and private.can_work_order(i.work_order_id)
     and (p_after_created is null or i.first_at<p_after_created or
