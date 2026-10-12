@@ -12,7 +12,7 @@ let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, 
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
-let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true;
+let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
 let staffingAttempts=[];
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
@@ -221,7 +221,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         }
         throw Error('Unexpected owner request');
       }
-      if (url.pathname.endsWith('/office_contractor_roster_snapshot')) {
+      if (url.pathname.endsWith('/office_supervisor_work_page')) {
+         const p=req.postDataJSON();
+         assert.equal(p.p_org,organization);
+         assert.equal(p.p_limit,25);
+         if (!staffingGranted) return reply({message:'Supervisor work access denied'},403);
+         const sample={work_order_id:uuid(9304),team_id:uuid(9213),team_name:'West test team',
+           property_address:'Example work address',wo_number:'TEST-WO-1',field_status:'ASSIGNED',
+           due_date:'2026-10-20'};
+         return reply({organization_id:organization,caller_tier:staffingWorkTier,
+           work_orders:p.p_after?[]:[sample],next_after:null});
+       }
+       if (url.pathname.endsWith('/office_contractor_roster_snapshot')) {
         const p=req.postDataJSON();
         assert.equal(p.p_org,organization);
         assert.equal(p.p_environment,'TEST');
@@ -1241,7 +1252,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#password').fill('disposable');
     await page.locator('#sign-in').click();
     await wait(page,()=>document.querySelector('#login-status')?.textContent
-      .includes('Tier 2/3 staffing grant unavailable'));
+      .includes('Supervisor work access denied'));
     assert.equal(await page.locator('#staffing-card:visible').count(),0);
     assert.equal(await page.locator('#results-card:visible').count(),0);
     staffingGranted=true;
@@ -1254,6 +1265,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.match(await page.locator('#staffing-capacity').innerText(),/2 available of 5/);
     assert.equal(await page.locator('#staffing-team option').count(),2);
     assert.equal(await page.locator('#staffing-roster-person option').count(),2);
+     assert.match(await page.locator('#staffing-work-status').innerText(),/Tier 2 · 1 authorized jobs/);
+     assert.equal(await page.locator('#staffing-work-rows tr').count(),1);
     await page.locator('#staffing-roster-person').selectOption(uuid(9315));
     await page.locator('#staffing-roster-team').selectOption(uuid(9213));
     await page.locator('#staffing-roster-reason').fill('Supervisor reviewed idle placement');
@@ -1308,6 +1321,24 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.evaluate(()=>sessionStorage.length),0,
       'Sign out must clear the existing single tab session.');
 
+    // Tier 1 sees its own server-scoped job labels without any staffing RPC.
+    staffingWorkTier=1;
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-card:visible').waitFor();
+    assert.match(await page.locator('#staffing-work-status').innerText(),/Tier 1 · 1 authorized jobs/);
+    assert.equal(await page.locator('#staffing-invite-form:visible').count(),0);
+    assert.equal(await page.locator('#staffing-roster-area:visible').count(),0);
+    assert.equal(await page.locator('#results-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-work-rows tr').count(),1);
+    // A failed current-scope refresh clears previously presented job labels.
+    staffingGranted=false;
+    await page.locator('#staffing-refresh').click();
+    await wait(page,()=>document.querySelector('#login-status')?.textContent
+      .includes('Current Supervisor authorization could not be reverified'));
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-work-rows tr').count(),0);
     assert.equal(errors.length, 0, errors.join('\n'));
     assert.equal(requests.filter(url => url.startsWith('/storage/v1/object/sign/')).length, 3,
       'Three explicit inspections open three short-lived private images; no gallery prefetch');
