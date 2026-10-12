@@ -136,7 +136,7 @@ returns boolean language sql stable security definer set search_path='' as $scop
                where scope.user_id=p_user and scope.organization_id=w.organization_id
                  and scope.team_id=t.id))))
    ))
-$$;
+$scope$;
 revoke all on function private.service_admin_alert_user_scope(uuid,uuid)
  from public,anon,authenticated,service_role;
 grant execute on function private.service_admin_alert_user_scope(uuid,uuid) to service_role;
