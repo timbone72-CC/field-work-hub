@@ -987,7 +987,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     ownerRejectNext=true;
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_team_scope')),
-      page.locator('#owner-supervisor-team-panel').getByRole('button',{name:'Remove: West test team'}).click()
+      page.locator('#owner-supervisor-team-panel').getByRole('button',{name:'Add: West test team'}).click()
     ]);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Work scope changed'));
     assert.deepEqual(ownerScope,[],'Rejected change cannot mutate Supervisor scope');
