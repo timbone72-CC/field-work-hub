@@ -955,7 +955,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Work scope changed'));
     assert.deepEqual(ownerScope,[],'Rejected change cannot mutate Supervisor scope');
     // Reviewed disablement must explicitly identify an existing team manager.
-    await page.locator('#owner-office-people .row').filter({hasText:'supervisor@example.invalid'})
+    await page.locator('#owner-office-people .row').filter({hasText:/^supervisor@example\\.invalid ·/})
       .getByRole('button',{name:'Review disable'}).click();
     await wait(page,()=>document.querySelector('#owner-access-review-panel')?.textContent.includes('West test team'));
     await page.locator('#owner-access-review-panel button').click();
@@ -969,7 +969,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     ]);
     await wait(page,()=>Array.from(document.querySelectorAll('#owner-office-people .row')).some(row=>row.textContent.includes('supervisor@example.invalid') && row.textContent.includes('work disabled')));
     assert.equal(ownerPersonActive,false);
-    await page.locator('#owner-office-people .row').filter({hasText:'supervisor@example.invalid'})
+    await page.locator('#owner-office-people .row').filter({hasText:/^supervisor@example\\.invalid ·/})
       .getByRole('button',{name:'Review restore'}).click();
     await wait(page,()=>document.querySelector('#owner-access-review-panel')?.textContent.includes('Restore work'));
     page.once('dialog', dialog=>dialog.accept());
