@@ -297,6 +297,20 @@ begin
  select count(*) into n from public.owner_office_team_list(org,'TEST',null,1);
  if n<>1 then raise exception 'Owner team choice page exceeded limit';end if;
 
+ -- Exact team grants are owner-only; a team count is not authorization.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin perform public.owner_supervisor_team_scope_list(org,supervisors[2],'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin read Supervisor scope metadata';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ select count(*) into n from public.owner_supervisor_team_scope_list(org,supervisors[2],'TEST');
+ if n<>1 then raise exception 'Owner Supervisor team grant count wrong';end if;
+ denied:=false;
+ begin perform public.owner_supervisor_team_scope_list(other_org,supervisors[2],'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Owner enumerated unconfigured foreign scope';end if;
+
  -- Phase 6F owner-only office seat reservation, immutable action and per-role cap.
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
  denied:=false;
