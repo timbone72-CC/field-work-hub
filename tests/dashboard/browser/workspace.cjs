@@ -1007,17 +1007,17 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     page.once('dialog', dialog=>dialog.accept());
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_grant_state')),
-      page.locator('#owner-supervisor-list .row').filter({hasText:/^new-supervisor@example\\.invalid/})
+      page.locator('#owner-supervisor-list .row').filter({hasText:/^new-supervisor@example\.invalid/})
         .getByRole('button',{name:'Remove grant'}).click()
     ]);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved.'));
     assert.equal(ownerEnrolledGrantActive,false);
-    assert.equal(await page.locator('#owner-office-people .row').filter({hasText:/^new-supervisor@example\\.invalid/})
+    assert.equal(await page.locator('#owner-office-people .row').filter({hasText:/^new-supervisor@example\.invalid/})
       .getByRole('button',{name:'Review restore'}).isDisabled(),true);
     page.once('dialog', dialog=>dialog.accept());
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_grant_state')),
-      page.locator('#owner-supervisor-list .row').filter({hasText:/^new-supervisor@example\\.invalid/})
+      page.locator('#owner-supervisor-list .row').filter({hasText:/^new-supervisor@example\.invalid/})
         .getByRole('button',{name:'Re-enable grant'}).click()
     ]);
     await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Saved.'));
