@@ -134,3 +134,94 @@ revoke all on function public.owner_enroll_supervisor_with_seat(
  uuid,uuid,uuid,uuid,smallint,uuid[],text,text) from public,anon;
 grant execute on function public.owner_enroll_supervisor_with_seat(
  uuid,uuid,uuid,uuid,smallint,uuid[],text,text) to authenticated,service_role;
+
+-- Removing or re-enabling a Supervisor GRANT is separate from work disablement.
+-- An active work account must first go through Phase 5 reviewed disablement,
+-- including its immutable historical-photo cutoff and team continuity.
+create table private.supervisor_grant_state_actions (
+ action_id uuid primary key,
+ organization_id uuid not null,
+ user_id uuid not null,
+ actor_id uuid not null references auth.users(id) on delete restrict,
+ expected_grant_revision uuid not null,
+ expected_access_revision uuid not null,
+ requested_active boolean not null,
+ reason text not null check(char_length(btrim(reason)) between 1 and 1000),
+ environment text not null check(environment in ('TEST','PRODUCTION')),
+ result_grant_revision uuid not null,
+ created_at timestamptz not null default clock_timestamp(),
+ foreign key(organization_id,user_id)
+   references private.supervisor_grants(organization_id,user_id) on delete restrict
+);
+alter table private.supervisor_grant_state_actions enable row level security;
+revoke all on private.supervisor_grant_state_actions from public,anon,authenticated,service_role;
+grant select,insert on private.supervisor_grant_state_actions to service_role;
+
+create function public.owner_set_supervisor_grant_state(
+ p_action uuid,p_org uuid,p_user uuid,p_expected_grant_revision uuid,
+ p_expected_access_revision uuid,p_active boolean,p_reason text,p_environment text
+) returns uuid language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare
+ prior private.supervisor_grant_state_actions%rowtype;
+ g private.supervisor_grants%rowtype;
+ a private.account_work_access%rowtype;
+ next_revision uuid:=gen_random_uuid();
+begin
+ if p_action is null or p_org is null or p_user is null
+  or p_expected_grant_revision is null or p_expected_access_revision is null
+  or p_active is null or p_reason is null
+  or char_length(btrim(p_reason)) not between 1 and 1000
+  or p_environment is null or p_environment not in ('TEST','PRODUCTION')
+ then raise exception 'Explicit Supervisor grant action required' using errcode='22023';end if;
+ if auth.uid()=p_user or not private.is_current_platform_owner(p_environment) then
+   raise exception 'Separate verified Product Owner required' using errcode='42501';end if;
+ perform private.lock_account_lifecycle();
+ if not private.is_current_platform_owner(p_environment) then
+   raise exception 'Product Owner authorization changed' using errcode='42501';end if;
+ select * into prior from private.supervisor_grant_state_actions x where x.action_id=p_action;
+ if found then
+   if row(prior.organization_id,prior.user_id,prior.actor_id,
+     prior.expected_grant_revision,prior.expected_access_revision,
+     prior.requested_active,prior.reason,prior.environment)
+     is distinct from row(p_org,p_user,auth.uid(),p_expected_grant_revision,
+     p_expected_access_revision,p_active,btrim(p_reason),p_environment)
+   then raise exception 'Supervisor grant action reused with changed request' using errcode='22023';end if;
+   return prior.result_grant_revision;
+ end if;
+ select * into a from private.account_work_access
+   where organization_id=p_org and user_id=p_user for update;
+ select * into g from private.supervisor_grants
+   where organization_id=p_org and user_id=p_user for update;
+ if not found or a.work_role is distinct from 'SUPERVISOR'
+   or a.active or a.disabled_at is null and a.suspension_authority is null and g.active=false and p_active=false
+ then
+   -- Previously never enabled accounts may remove an active grant, but
+   -- no state action can silently disable an account that still has work.
+   raise exception 'Existing inactive-work Supervisor required' using errcode='42501';end if;
+ if g.revision is distinct from p_expected_grant_revision
+   or a.revision is distinct from p_expected_access_revision then
+   raise exception 'Supervisor grant or work access changed' using errcode='40001';end if;
+ if g.active=p_active then raise exception 'Supervisor grant already in requested state' using errcode='22023';end if;
+ if p_active and (not private.account_identity_ready(p_org,p_user,'SUPERVISOR')
+   or (g.tier<3 and not exists(
+     select 1 from private.supervisor_team_scopes s join public.admin_teams t
+       on t.organization_id=s.organization_id and t.id=s.team_id and t.active
+     where s.organization_id=p_org and s.user_id=p_user))) then
+   raise exception 'Verified scoped Supervisor identity required' using errcode='42501';end if;
+ update private.supervisor_grants set active=p_active,revision=next_revision,
+   granted_by=auth.uid(),reason=btrim(p_reason)
+ where organization_id=p_org and user_id=p_user;
+ insert into private.supervisor_grant_state_actions(action_id,organization_id,user_id,actor_id,
+   expected_grant_revision,expected_access_revision,requested_active,reason,environment,
+   result_grant_revision)
+ values(p_action,p_org,p_user,auth.uid(),p_expected_grant_revision,p_expected_access_revision,
+   p_active,btrim(p_reason),p_environment,next_revision);
+ -- Inactive account stays inactive; recovery members and historical scopes
+ -- are preserved and cannot be reused as a work role without reviewed restore.
+ return next_revision;
+end;
+$$;
+revoke all on function public.owner_set_supervisor_grant_state(
+ uuid,uuid,uuid,uuid,uuid,boolean,text,text) from public,anon;
+grant execute on function public.owner_set_supervisor_grant_state(
+ uuid,uuid,uuid,uuid,uuid,boolean,text,text) to authenticated,service_role;
