@@ -97,11 +97,18 @@ begin
   perform set_config('request.jwt.claims',jsonb_build_object('sub',target_admin,'session_id',target_admin,
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
   if not private.can_work_order(wo) then raise exception 'Receiving office cannot manage completed work';end if;
+  perform public.admin_update_work_order_v4(wo,before_wo->>'wo_number',before_wo->>'property_address',
+    before_wo->>'work_type',coalesce(before_wo->>'instructions',''),current_date,contractor,
+    (before_run->'requirement_snapshot'->>'revision')::uuid,before_run->'requirement_snapshot');
   -- Original contractor retains completed assignment read and accepted original transfer, never new work.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor,'session_id',contractor,
     'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
   if not private.can_read_work_order(wo) or not private.photo_transfer_authorized_for_user(contractor,contractor,photo)
     then raise exception 'Original completed assignment/accepted transfer was stranded';end if;
+  perform public.acknowledge_assignment_received(wo);
+  if not exists(select 1 from public.work_order_assignments a where a.id=assignment_id
+      and a.assignment_received_at is not null and a.end_reason='FIELD_COMPLETE')
+    then raise exception 'Delayed durable receipt did not retain exact completed instance';end if;
   denied:=false;begin perform private.guard_legacy_work_order(wo,'CONTRACTOR');exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Completed assignment read became new work authority';end if;
   -- A later unaccepted photo under the same WO cannot enter the fixed recovery grant.

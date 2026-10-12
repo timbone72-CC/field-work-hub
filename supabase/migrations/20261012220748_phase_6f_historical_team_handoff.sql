@@ -283,8 +283,22 @@ revoke all on function public.handoff_work_order_team(uuid,uuid,uuid,text,text,t
 grant execute on function public.handoff_work_order_team(uuid,uuid,uuid,text,text,text)
   to authenticated;
 
+-- One exact completed-assignment exception, shared by RLS and the existing
+-- durable download receipt owner. No new field action/capture permission.
+create function private.completed_handoff_assignment_for_user(p_user uuid,p_work_order uuid)
+returns boolean language sql stable security definer set search_path='' as $$
+  select exists(select 1 from public.work_orders w
+    join private.work_order_team_handoff_actions h on h.work_order_id=w.id and h.organization_id=w.organization_id
+    join public.work_order_assignments a on a.id=h.original_assignment_id
+    where w.id=p_work_order and w.field_status='FIELD_COMPLETE' and w.assigned_user_id=p_user
+      and h.handoff_kind='FIELD_COMPLETE' and h.original_run_id=w.current_run_id
+      and h.original_assignee_id=p_user and a.run_id=w.current_run_id
+      and a.assigned_user_id=p_user and a.end_reason='FIELD_COMPLETE')
+$$;
+revoke all on function private.completed_handoff_assignment_for_user(uuid,uuid) from public,anon,authenticated;
+
 -- Completed original owners retain only their exact completed assignment read.
--- This does NOT authorize START/Finish/capture/edit/ACK or a later corrective run.
+-- This does NOT authorize START/Finish/capture/edit/human Accept or a later run.
 create or replace function private.can_read_work_order(p_work_order uuid) returns boolean
 language sql stable security definer set search_path='' as $$
   select private.current_identity_valid() and exists(select 1 from public.work_orders w
@@ -293,11 +307,56 @@ language sql stable security definer set search_path='' as $$
       private.has_team_capability(w.organization_id,w.responsible_team_id,'WORK')
       or (private.current_work_role(w.organization_id)='CONTRACTOR' and w.assigned_user_id=auth.uid()
         and (private.contractor_current_team(auth.uid(),w.organization_id)=w.responsible_team_id
-          or (w.field_status='FIELD_COMPLETE' and exists(
-            select 1 from private.work_order_team_handoff_actions h
-            join public.work_order_assignments a on a.id=h.original_assignment_id
-            where h.work_order_id=w.id and h.organization_id=w.organization_id
-              and h.handoff_kind='FIELD_COMPLETE' and h.original_run_id=w.current_run_id
-              and h.original_assignee_id=auth.uid() and a.run_id=w.current_run_id
-              and a.assigned_user_id=auth.uid() and a.end_reason='FIELD_COMPLETE'))))));
+          or private.completed_handoff_assignment_for_user(auth.uid(),w.id)))));
 $$;
+
+-- A delayed download receipt for the unchanged completed instance must not
+-- strand an Android refresh. Reuse the retained receipt engine, never human ACK.
+create or replace function private.acknowledge_assignment_received(p_work_order_id uuid)
+returns table(work_order_id uuid,assignment_received_at timestamptz)
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare org uuid;
+begin
+  perform private.lock_legacy_work_authority();
+  org:=private.legacy_work_org('CONTRACTOR');
+  perform 1 from public.work_orders w where w.id=p_work_order_id and w.organization_id=org for update;
+  if private.completed_handoff_assignment_for_user(auth.uid(),p_work_order_id)
+    and private.can_read_work_order(p_work_order_id) then
+    return query select * from private.acknowledge_assignment_received_phase4_engine(p_work_order_id);
+  else
+    perform private.guard_legacy_work_order(p_work_order_id,'CONTRACTOR');
+    return query select * from private.acknowledge_assignment_received_phase4_engine(p_work_order_id);
+  end if;
+end;$$;
+
+-- Receiving Admin retains legacy edit continuity only for this unchanged completed assignee.
+create or replace function private.admin_update_work_order(p_work_order_id uuid, p_wo_number text, p_property_address text, p_work_type text, p_instructions text, p_due_date date, p_assigned_user_id uuid) returns TABLE(work_order_id uuid, organization_id uuid, assigned_user_id uuid, pending_assignee_user_id uuid, reassignment_requested_at timestamp with time zone, wo_number text, property_address text, work_type text, instructions text, due_date date, field_status text, updated_at timestamp with time zone)
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+begin
+  perform private.guard_legacy_work_order(p_work_order_id,'ADMIN');
+  if p_assigned_user_id is distinct from (select w.assigned_user_id from public.work_orders w where w.id=p_work_order_id) then
+    if private.legacy_dispatch_team(private.phase4_admin_org(),p_assigned_user_id) is distinct from (select w.responsible_team_id from public.work_orders w where w.id=p_work_order_id) then
+      raise exception 'Reassignment must retain responsible team' using errcode='42501';end if;
+  elsif private.work_role_for_user(p_assigned_user_id,private.phase4_admin_org())='CONTRACTOR' then
+    if private.contractor_current_team(p_assigned_user_id,private.phase4_admin_org()) is distinct from (select w.responsible_team_id from public.work_orders w where w.id=p_work_order_id)
+      and not private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id) then
+      raise exception 'Current Contractor unavailable in responsible team' using errcode='42501';end if;
+  end if;
+  return query select * from private.admin_update_work_order_phase4_engine(p_work_order_id,p_wo_number,p_property_address,p_work_type,p_instructions,p_due_date,p_assigned_user_id);
+end; $$;
+
+-- Receiving Admin retains legacy edit continuity only for this unchanged completed assignee.
+create or replace function private.admin_update_work_order_v4(p_work_order_id uuid, p_wo_number text, p_property_address text, p_work_type text, p_instructions text, p_due_date date, p_assigned_user_id uuid, p_expected_revision uuid, p_requirements jsonb) returns SETOF jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+begin
+  perform private.guard_legacy_work_order(p_work_order_id,'ADMIN');
+  if p_assigned_user_id is distinct from (select w.assigned_user_id from public.work_orders w where w.id=p_work_order_id) then
+    if private.legacy_dispatch_team(private.phase4_admin_org(),p_assigned_user_id) is distinct from (select w.responsible_team_id from public.work_orders w where w.id=p_work_order_id) then
+      raise exception 'Reassignment must retain responsible team' using errcode='42501';end if;
+  elsif private.work_role_for_user(p_assigned_user_id,private.phase4_admin_org())='CONTRACTOR' then
+    if private.contractor_current_team(p_assigned_user_id,private.phase4_admin_org()) is distinct from (select w.responsible_team_id from public.work_orders w where w.id=p_work_order_id)
+      and not private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id) then
+      raise exception 'Current Contractor unavailable in responsible team' using errcode='42501';end if;
+  end if;
+  return query select * from private.admin_update_work_order_v4_phase4_engine(p_work_order_id,p_wo_number,p_property_address,p_work_type,p_instructions,p_due_date,p_assigned_user_id,p_expected_revision,p_requirements);
+end; $$;
