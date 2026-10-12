@@ -93,6 +93,19 @@ begin
       and not (private.is_current_platform_owner(p_environment)
        and exists(select 1 from private.org_office_allowances o where o.organization_id=p_org)) then
      raise exception 'Tier 2 or 3 supervised placement authority required' using errcode='42501';end if;
+   -- A Tier 2 manager places a Contractor UNDER an active team Admin,
+   -- not into a freshly created but still unmanned placeholder team.
+   if not private.has_team_capability(p_org,p_team,'TRANSFER_CONTRACTOR')
+     and not private.is_current_platform_owner(p_environment)
+     and not exists(select 1 from private.admin_team_memberships m
+       join private.account_work_access a on a.organization_id=m.organization_id
+         and a.user_id=m.user_id
+       where m.organization_id=p_org and m.team_id=p_team and m.active
+         and a.work_role='ADMIN' and a.active and a.disabled_at is null
+         and a.suspension_authority is null
+         and private.account_identity_ready(p_org,a.user_id,'ADMIN')) then
+     raise exception 'A verified active team Admin is required for Tier 2 placement'
+       using errcode='42501';end if;
  else
    kind:='TRANSFER';
    if not ((private.has_team_capability(p_org,previous_team,'TRANSFER_CONTRACTOR')
