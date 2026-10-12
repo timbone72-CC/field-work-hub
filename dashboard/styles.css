@@ -289,3 +289,17 @@ button:focus-visible, summary:focus-visible { outline: 3px solid #3a82c0; outlin
   #job-delivery .workspace-navigation button { width: 100%; }
   .release-preview { max-height: 220px; }
 }
+
+/* Phase 6F shares the existing Admin surface; person UUID fallbacks and
+   continuity choices must wrap rather than cover other mobile controls. */
+#owner-office-console .row { align-items: center; flex-wrap: wrap; margin: 10px 0; }
+#owner-office-console .row span { flex: 1 1 220px; overflow-wrap: anywhere; }
+#owner-office-console select { max-width: 100%; }
+#owner-supervisor-team-panel button { margin: 4px 8px 4px 0; }
+#owner-access-review-panel label { display: block; margin: 12px 0; overflow-wrap: anywhere; }
+#owner-access-review-panel select { display: block; width: min(100%, 460px); margin-top: 8px; }
+@media (max-width: 620px) {
+  #owner-office-console .row { display: block; }
+  #owner-office-console .row button,
+  #owner-office-console .row select { width: 100%; margin-top: 8px; }
+}
