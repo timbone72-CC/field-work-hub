@@ -236,6 +236,7 @@ async function staffingReadWorkPage(org, after = null) {
     scopeFingerprint: value.scope_fingerprint, nextAfter: value.next_after || null };
 }
 function staffingClearWorkDetail() {
+  SupervisorAssignmentCandidates.reset();
   SupervisorPhotoReview.reset();
   staffingDetailGeneration++;
   staffingWorkDetail = null;
