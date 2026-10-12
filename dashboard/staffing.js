@@ -131,7 +131,7 @@ function staffingCard() {
     void staffingLoadMore();
   });
   card.querySelector('#staffing-work-detail-close').addEventListener('click', () => {
-    if (staffingWorkEditPending || staffingWorkEditBusy) {
+    if (staffingWorkEditPending || staffingWorkEditBusy || SupervisorPhotoReview.blocked) {
       card.querySelector('#staffing-work-detail-status').textContent =
         'Resolve the exact pending correction before closing this job.';
       return;
@@ -236,6 +236,7 @@ async function staffingReadWorkPage(org, after = null) {
     scopeFingerprint: value.scope_fingerprint, nextAfter: value.next_after || null };
 }
 function staffingClearWorkDetail() {
+  SupervisorPhotoReview.reset();
   staffingDetailGeneration++;
   staffingWorkDetail = null;
   const section = document.getElementById('staffing-work-detail');
@@ -300,7 +301,7 @@ async function staffingOpenWorkDetail(workOrderId) {
   const check = staffingIdentity(), work = staffingWork;
   if (!staffingStillCurrent(check) || !work ||
     !work.rows.some(row => row.work_order_id === workOrderId)) return;
-  if (staffingWorkEditPending || staffingWorkEditBusy) {
+  if (staffingWorkEditPending || staffingWorkEditBusy || SupervisorPhotoReview.blocked) {
     staffingCard().querySelector('#staffing-work-detail-status').textContent =
       'Resolve the pending exact correction before changing jobs.';
     return;
@@ -516,7 +517,7 @@ async function showScopedStaffingPortal(organizationId) {
 }
 async function staffingRefresh() {
   const check = staffingIdentity();
-  if (staffingWorkEditPending || staffingWorkEditBusy) {
+  if (staffingWorkEditPending || staffingWorkEditBusy || SupervisorPhotoReview.blocked) {
     throw new Error('Retry the exact pending job correction before refreshing.');
   }
   staffingClearWorkDetail();
@@ -879,6 +880,7 @@ function staffingSignedOut() {
   staffingRosterNeedsRefresh = false;
   staffingWork = null;
   staffingWorkBusy = false;
+  SupervisorPhotoReview.reset();
   staffingWorkEditPending = null;
   staffingWorkEditBusy = false;
   staffingClearWorkDetail();
