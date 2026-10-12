@@ -14,6 +14,7 @@ let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true;
 let staffingAttempts=[];
+let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
 let ownerEnrollFailOnce=true;
@@ -102,6 +103,28 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         ownerPersonActive=p.p_active;ownerAccessRevision=uuid(9225);
         return reply([{action_id:p.p_action,target_user_id:p.p_target,active:p.p_active,
           revision:ownerAccessRevision,recovery_grant_id:p.p_active?null:p.p_action}]);
+      }
+      if (url.pathname.endsWith('/rest/v1/rpc/manage_idle_contractor_roster') &&
+          syntheticRole === 'SUPERVISOR') {
+        const p=req.postDataJSON();
+        assert.equal(p.p_org,organization);
+        assert.equal(p.p_environment,'TEST');
+        assert.equal(p.p_user,uuid(9315));
+        assert.equal(p.p_team,uuid(9213));
+        assert.equal(p.p_expected_revision,staffRosterRevision);
+        assert.equal(p.p_reason,'Supervisor reviewed idle placement');
+        assert.match(p.p_action,/^[a-f0-9-]{36}$/);
+        staffRosterAttempts.push(p);
+        if (staffRosterFailOnce) {
+          staffRosterFailOnce=false;
+          return reply({message:'Temporary roster response uncertain'},503);
+        }
+        const previous=staffRosterTeam;
+        staffRosterTeam=p.p_team;
+        staffRosterRevision=uuid(9316);
+        return reply({action_id:p.p_action,user_id:p.p_user,
+          old_team_id:previous,new_team_id:staffRosterTeam,
+          revision:staffRosterRevision,action_kind:previous?'TRANSFER':'PLACE'});
       }
       if (url.pathname.startsWith('/rest/v1/rpc/owner_') || url.pathname.endsWith('/rest/v1/rpc/manage_idle_contractor_roster')) {
         if (!syntheticOwner) return reply({message:'Verified Product Owner required'},403);
@@ -197,6 +220,17 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           assert.equal(p.p_admin_limit,5);ownerAdminLimit=p.p_admin_limit;ownerQuotaRevision=uuid(9219);return reply(ownerQuotaRevision);
         }
         throw Error('Unexpected owner request');
+      }
+      if (url.pathname.endsWith('/office_contractor_roster_snapshot')) {
+        const p=req.postDataJSON();
+        assert.equal(p.p_org,organization);
+        assert.equal(p.p_environment,'TEST');
+        assert.equal(p.p_limit,50);
+        if (!staffingGranted) return reply({message:'Tier 2/3 staffing grant unavailable'},403);
+        return reply({organization_id:organization,caller_tier:2,
+          contractors:[{user_id:uuid(9315),email:'available-contractor@example.invalid',
+            team_id:staffRosterTeam,revision:staffRosterRevision,idle:true}],
+          next_after:null});
       }
       if (url.pathname.endsWith('/office_staffing_scope_snapshot')) {
         const p=req.postDataJSON();
@@ -1210,6 +1244,30 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#owner-office-console').count(),0);
     assert.match(await page.locator('#staffing-capacity').innerText(),/2 available of 5/);
     assert.equal(await page.locator('#staffing-team option').count(),2);
+    assert.equal(await page.locator('#staffing-roster-person option').count(),2);
+    await page.locator('#staffing-roster-person').selectOption(uuid(9315));
+    await page.locator('#staffing-roster-team').selectOption(uuid(9213));
+    await page.locator('#staffing-roster-reason').fill('Supervisor reviewed idle placement');
+    await page.locator('#staffing-roster-submit').click();
+    await wait(page,()=>document.querySelector('#staffing-roster-status')?.textContent
+      .includes('Temporary roster response uncertain'));
+    await page.locator('#staffing-roster-reason').fill('Changed request');
+    await page.locator('#staffing-roster-submit').click();
+    assert.equal(staffRosterAttempts.length,1,
+      'Uncertain Contractor action cannot be retried with changed inputs.');
+    await page.locator('#staffing-roster-reason').fill('Supervisor reviewed idle placement');
+    await page.locator('#staffing-roster-submit').click();
+    await wait(page,()=>document.querySelector('#staffing-roster-status')?.textContent
+      .includes('Server confirmed the roster change'));
+    assert.equal(staffRosterAttempts.length,2);
+    assert.equal(staffRosterAttempts[0].p_action,staffRosterAttempts[1].p_action,
+      'Uncertain Contractor placement must retry the exact action ID.');
+    assert.equal(await page.locator('#staffing-roster-submit').isDisabled(),true,
+      'A confirmed Contractor placement must require a fresh roster read.');
+    await page.locator('#staffing-refresh').click();
+    await wait(page,()=>document.querySelector('#staffing-roster-person option:nth-child(2)')?.disabled);
+    assert.equal(await page.locator('#staffing-roster-submit').isDisabled(),true,
+      'Tier 2 must not transfer an already placed Contractor.');
     await page.locator('#staffing-team-name').fill('North test team');
     await page.locator('#staffing-name').fill('New Staff Admin');
     await page.locator('#staffing-email').fill('staff-admin@example.invalid');
