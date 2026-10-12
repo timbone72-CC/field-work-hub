@@ -16,6 +16,10 @@ const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(990
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
 let largePackage=false,packagePageCalls=0,persistedPackagePhotoIds=[];
+const alertTypes=['READY_FOR_REVIEW','FOLLOWUP_READY_FOR_REVIEW','ASSIGNMENT_NEEDS_ACCEPT','ACCEPT_REMINDER',
+  'OVERDUE','UPLOAD_PROBLEM','APP_OR_SYNC_PROBLEM','DELIVERY_PROBLEM','CLIENT_DELIVERED'];
+const syntheticAlertId=uuid(9754),alertRun=uuid(9755);
+let alertSettings=new Map(),alertReceipt=null,alertWrites=[],alertOrgTimezone=null;
 const templateRows=[];
 const optionalTemplate=()=>({schema:1,revision:uuid(9978),total:{enabled:false,minimum:0},items:[]});
 let templateSaves=[];
@@ -169,6 +173,59 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         row.run={requirement_snapshot:correctionDraft.capture_requirements};
         return reply({work_order_id:row.id,run_id:correctiveNewRun,
           run_sequence:2,assignment_instance_id:uuid(9969),kind:'INTERNAL_CORRECTION',status:'ASSIGNED'});
+      }
+      if (url.pathname.endsWith('/admin_notification_settings')) {
+        return reply({organization_id:organization,push_ready:false,
+          organization_timezone:alertOrgTimezone,organization_timezone_revision:
+            alertOrgTimezone?uuid(9753):null,devices:[],types:alertTypes.map(type=>({
+            type,revision:alertSettings.get(type)?.revision||null,
+            dashboard:alertSettings.get(type)?.dashboard??true,
+            phone:alertSettings.get(type)?.phone??false,
+            computer:alertSettings.get(type)?.computer??false,
+            quiet_timezone:alertSettings.get(type)?.quiet_timezone||null,
+            quiet_start:alertSettings.get(type)?.quiet_start||null,
+            quiet_end:alertSettings.get(type)?.quiet_end||null,
+            reminder_minutes:alertSettings.get(type)?.reminder_minutes||1440
+          }))});
+      }
+      if (url.pathname.endsWith('/admin_alert_list')) {
+        const p=req.postDataJSON();assert.equal(p.p_limit,25);
+        return reply({organization_id:organization,alerts:[{
+          id:syntheticAlertId,work_order_id:uuid(51),run_id:alertRun,
+          type:'ASSIGNMENT_NEEDS_ACCEPT',current:true,
+          first_at:'2026-10-11T10:00:00Z',last_at:'2026-10-11T10:00:00Z',
+          version_key:'a'.repeat(64),receipt_revision:alertReceipt?.revision||null,
+          acknowledged:alertReceipt?.mode==='ACKNOWLEDGE',
+          snoozed_until:alertReceipt?.snoozed_until||null
+        }].filter(a=>alertSettings.get(a.type)?.dashboard!==false)});
+      }
+      if (url.pathname.endsWith('/admin_set_notification_preferences')) {
+        const p=req.postDataJSON();assert.ok(alertTypes.includes(p.p_type));
+        assert.equal(p.p_phone,false);assert.equal(p.p_computer,false);
+        const current=alertSettings.get(p.p_type);
+        assert.equal(p.p_expected_revision,current?.revision||null);
+        const revision=uuid(9750+alertWrites.length);
+        alertSettings.set(p.p_type,{...p,revision,
+          dashboard:p.p_dashboard,phone:p.p_phone,computer:p.p_computer,
+          reminder_minutes:p.p_reminder_minutes,
+          quiet_timezone:p.p_quiet_timezone,quiet_start:p.p_quiet_start,
+          quiet_end:p.p_quiet_end});
+        alertWrites.push(p);
+        return reply({type:p.p_type,revision,dashboard:p.p_dashboard,
+          phone:p.p_phone,computer:p.p_computer});
+      }
+      if (url.pathname.endsWith('/admin_alert_receipt_action')) {
+        const p=req.postDataJSON();assert.equal(p.p_issue,syntheticAlertId);
+        assert.equal(p.p_expected_revision,alertReceipt?.revision||null);
+        alertReceipt={mode:p.p_mode,snoozed_until:p.p_snoozed_until,revision:uuid(9778)};
+        return reply({issue_id:syntheticAlertId,mode:p.p_mode,
+          revision:alertReceipt.revision,acknowledged:p.p_mode==='ACKNOWLEDGE',
+          snoozed_until:p.p_snoozed_until});
+      }
+      if (url.pathname.endsWith('/admin_configure_alert_timezone')) {
+        const p=req.postDataJSON();assert.equal(p.p_timezone,'America/Chicago');
+        alertOrgTimezone=p.p_timezone;
+        return reply({organization_id:organization,timezone:p.p_timezone,revision:uuid(9753)});
       }
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
       if (url.pathname.endsWith('/admin_client_choices')) {
@@ -374,6 +431,25 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       await page.evaluate(() => stopAdminAutoRefresh());
     }
     await login();
+    assert.equal(await page.evaluate(()=>Notification.permission),'default',
+      'Opening the dashboard must not request OS notification permission.');
+    await page.locator('#notification-center > summary').click();
+    await wait(page,()=>document.querySelectorAll('.notification-preference').length===9);
+    assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
+    assert.equal(await page.locator('#notification-settings input[type=checkbox]:checked').count(),9);
+    assert.match(await page.locator('#notification-list').innerText(),/Awaiting contractor Accept/);
+    await page.locator('.notification-preference').filter({hasText:'Awaiting contractor Accept'})
+      .getByRole('button',{name:'Save Awaiting contractor Accept'}).click();
+    await wait(page,()=>alertWrites.length===1);
+    assert.equal(alertWrites[0].p_dashboard,true);
+    assert.equal(alertWrites[0].p_phone,false);
+    assert.equal(alertWrites[0].p_computer,false);
+    await page.locator('#notification-list').getByRole('button',{name:'Snooze 4 hours'}).click();
+    await wait(page,()=>alertReceipt?.mode==='SNOOZE');
+    await page.locator('#notification-list').getByRole('button',{name:'Acknowledge'}).click();
+    await wait(page,()=>alertReceipt?.mode==='ACKNOWLEDGE');
+    assert.match(await page.locator('#notification-list').innerText(),/Acknowledged/);
+    await page.locator('#notification-center > summary').click();
     assert.match(await page.locator('#job-page-info').innerText(), /1–25 of 1000/);
     assert.equal(await page.locator('details.admin-action[open]').count(), 0);
     await page.screenshot({ path: path.join(output, 'dashboard-desktop.png'), fullPage: true });
