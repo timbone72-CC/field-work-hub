@@ -146,7 +146,7 @@ grant execute on function public.owner_supervisor_team_scope_list(uuid,uuid,text
 create function public.owner_office_people_list(
  p_org uuid,p_environment text,p_after uuid default null,p_limit integer default 50)
 returns table(user_id uuid,account_email text,work_role text,work_active boolean,
- access_revision uuid,identity_ready boolean)
+ access_revision uuid,identity_ready boolean,roster_team_id uuid,roster_revision uuid)
 language plpgsql security definer set search_path='' as $$
 begin
  if p_org is null or p_limit is null or p_limit not between 1 and 50
@@ -157,9 +157,13 @@ begin
  return query
    select a.user_id,u.email::text,a.work_role,
      (a.active and a.disabled_at is null),a.revision,
-     private.account_identity_ready(a.organization_id,a.user_id,a.work_role)
+     private.account_identity_ready(a.organization_id,a.user_id,a.work_role),
+     case when a.work_role='CONTRACTOR' and m.active then m.team_id else null end,
+     case when a.work_role='CONTRACTOR' then m.revision else null end
    from private.account_work_access a
    join auth.users u on u.id=a.user_id
+   left join private.contractor_team_memberships m
+     on m.organization_id=a.organization_id and m.user_id=a.user_id
    where a.organization_id=p_org and (p_after is null or a.user_id>p_after)
    order by a.user_id limit p_limit;
 end;$$;
