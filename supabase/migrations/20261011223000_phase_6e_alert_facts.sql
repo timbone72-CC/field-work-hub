@@ -79,15 +79,10 @@ begin
      active_keys:=array_append(active_keys,k::text);
    end if;
  end if;
- -- A stalled transfer is a server-observed lack of progress, not proof that
- -- an offline device is broken. Only server-known active upload is eligible.
- if exists(select 1 from private.photo_transfers t
-   where t.work_order_id=w.id and t.state='UPLOADING'
-      and t.updated_at<=clock_timestamp()-interval '30 minutes') then
-   k:=private.admin_alert_sync_fact(w.id,run.id,'UPLOAD_PROBLEM',run.id::text,
-     'NO_RECENT_UPLOAD_PROGRESS');
-   active_keys:=array_append(active_keys,k::text);
- end if;
+ -- Do not invent "No recent upload progress": the private transfer
+ -- ledger currently has WAITING/RECEIVED only, with no authoritative
+ -- persisted upload heartbeat. UPLOAD_PROBLEM will be enabled only after a
+ -- server-known STARTED/last-progress fact is available.
  if exists(select 1 from private.client_packages p
    where p.work_order_id=w.id and p.status in ('FAILED','UNCERTAIN')) then
    k:=private.admin_alert_sync_fact(w.id,run.id,'DELIVERY_PROBLEM',run.id::text,
