@@ -742,8 +742,8 @@ async function staffingPlaceContractor() {
   }
 }
 
-// Review and confirm through the one existing audited no-evidence handoff
-// transaction. This cannot reassign an active WO or migrate photo authority.
+// Review and confirm through the existing audited handoff and exact-recovery owners.
+// Started assignments remain blocked until their separate consent gate is ready.
 function staffingHandoffMessage(value, error = false) {
   const node = document.getElementById('staffing-handoff-status');
   if (node) { node.textContent = value; node.classList.toggle('error',error); }
@@ -818,8 +818,16 @@ async function staffingPreviewHandoff() {
       return;
     }
     staffingHandoffPreview={request:req,fingerprint:review.review_fingerprint};
+    const historical=review.handoff_kind==='FIELD_COMPLETE';
+    if(historical && (review.field_status!=='FIELD_COMPLETE'
+      ||!Number.isSafeInteger(review.recovery_recipient_count)||review.recovery_recipient_count<0
+      ||!Number.isSafeInteger(review.protected_photo_count)||review.protected_photo_count<0)) {
+      staffingHandoffPreview=null;
+      throw new Error('Historical recovery summary is incomplete; reload before handoff.');
+    }
     card.querySelector('#staffing-handoff-review-text').textContent=
-      `Move unassigned job ${row.wo_number||row.work_order_id} from ${review.old_team_name} to ${review.new_team_name}? ${req.p_reason}`;
+      `Move ${historical?'field-complete':'unassigned'} job ${row.wo_number||row.work_order_id} from ${review.old_team_name} to ${review.new_team_name}? ${req.p_reason}`
+      +(historical?` Original Contractor and photo identities stay fixed. ${review.recovery_recipient_count} former office users retain recovery of ${review.protected_photo_count} existing photos.`:'');
     card.querySelector('#staffing-handoff-review').classList.remove('hidden');
     staffingHandoffMessage('Eligible now. Confirmation will recheck the same fingerprint under lock.');
   } catch(error) {

@@ -18,7 +18,7 @@ let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
 let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=true;
 let staffWorkNote='Read-only <script>not executable</script>';
 let staffWorkRevision='d'.repeat(32);
-let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
+let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true,staffHistoricalHandoff=false;
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
@@ -316,6 +316,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           old_team_id:uuid(9213),old_team_name:'West test team',
           new_team_id:uuid(9222),new_team_name:'East test team',
           eligible,block_reason:eligible?null:'Protected active work requires consent',
+          handoff_kind:staffHistoricalHandoff?'FIELD_COMPLETE':'UNDISPATCHED',
+          field_status:staffHistoricalHandoff?'FIELD_COMPLETE':'ASSIGNED',
+          recovery_recipient_count:staffHistoricalHandoff?2:0,protected_photo_count:staffHistoricalHandoff?7:0,
           review_fingerprint:'d'.repeat(32)});
       }
       if (url.pathname.endsWith('/handoff_work_order_team')) {
@@ -1606,9 +1609,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       .includes('Protected active work requires consent'));
     assert.equal(await page.locator('#staffing-handoff-review:visible').count(),0);
     assert.equal(staffHandoffAttempts.length,0,'In-progress work must not issue handoff');
+    staffHistoricalHandoff=true;
     await page.locator('#staffing-handoff-wo').selectOption(uuid(9304));
     await page.locator('#staffing-handoff-preview').click();
     await page.locator('#staffing-handoff-review:not(.hidden)').waitFor();
+    assert.match(await page.locator('#staffing-handoff-review-text').textContent(),/field-complete.*2 former office users retain recovery of 7 existing photos/);
     await page.locator('#staffing-handoff-confirm').click();
     await wait(page,()=>document.querySelector('#staffing-handoff-status')?.textContent
       .includes('Outcome uncertain'));
