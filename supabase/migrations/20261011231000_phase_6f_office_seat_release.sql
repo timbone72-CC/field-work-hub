@@ -118,3 +118,24 @@ begin
 end;$$;
 revoke all on function public.owner_office_team_list(uuid,text,uuid,integer) from public,anon;
 grant execute on function public.owner_office_team_list(uuid,text,uuid,integer) to authenticated,service_role;
+
+-- Product Owner can inspect only the exact team UUIDs granted to an existing
+-- Supervisor; this endpoint never reveals work-order or photo data.
+create function public.owner_supervisor_team_scope_list(
+ p_org uuid,p_user uuid,p_environment text)
+returns table(team_id uuid)
+language plpgsql security definer set search_path='' as $$
+begin
+ if p_org is null or p_user is null
+   or p_environment not in ('TEST','PRODUCTION')
+   or not private.is_current_platform_owner(p_environment)
+   or not exists(select 1 from private.org_office_allowances o where o.organization_id=p_org)
+   or not exists(select 1 from private.supervisor_grants g
+       where g.organization_id=p_org and g.user_id=p_user)
+ then raise exception 'Verified owner and existing Supervisor required' using errcode='42501';end if;
+ return query select s.team_id from private.supervisor_team_scopes s
+   where s.organization_id=p_org and s.user_id=p_user
+   order by s.team_id;
+end;$$;
+revoke all on function public.owner_supervisor_team_scope_list(uuid,uuid,text) from public,anon;
+grant execute on function public.owner_supervisor_team_scope_list(uuid,uuid,text) to authenticated,service_role;
