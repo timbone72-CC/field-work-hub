@@ -14,6 +14,8 @@ let staffingWork = null;
 let staffingWorkBusy = false;
 let staffingDetailGeneration = 0;
 let staffingWorkDetail = null;
+let staffingWorkEditPending = null;
+let staffingWorkEditBusy = false;
 let staffingHandoffPreview = null;
 let staffingHandoffPending = null;
 let staffingHandoffBusy = false;
@@ -45,7 +47,7 @@ function staffingCard() {
       <h2>Supervisor work and staffing</h2><p id="staffing-account" class="muted"></p>
     </div><button type="button" id="staffing-sign-out" class="secondary">Sign Out</button></div>
     <p class="muted">Work orders below are limited to current server-authorized teams.
-      This source checkpoint is read-only: editing, photos and Send remain unavailable.</p>
+      Only due-date corrections and appended instructions are editable here. Assignments, photos and Send remain unavailable.</p>
     <p id="staffing-capacity" class="muted"></p>
     <button type="button" class="secondary" id="staffing-refresh">Refresh staffing</button>
     <p id="staffing-status" class="status" role="status" aria-live="polite"></p>
@@ -83,11 +85,19 @@ function staffingCard() {
         <tbody id="staffing-work-rows"></tbody>
       </table></div>
       <button id="staffing-work-more" type="button" class="secondary hidden">More authorized work</button>
-      <section id="staffing-work-detail" class="subsection hidden" aria-label="Selected read-only work order">
-        <div class="row between gap"><h4>Selected work order · view only</h4>
+      <section id="staffing-work-detail" class="subsection hidden" aria-label="Selected work order">
+        <div class="row between gap"><h4>Selected work order</h4>
           <button id="staffing-work-detail-close" type="button" class="secondary">Close details</button></div>
         <p id="staffing-work-detail-status" class="muted" role="status" aria-live="polite"></p>
         <dl id="staffing-work-detail-fields"></dl>
+        <form id="staffing-work-edit-form" class="admin-form hidden" autocomplete="off">
+          <p class="muted">Correct due date or append instructions; existing instructions stay intact.</p>
+          <label>Corrected due date<input id="staffing-work-edit-due" type="date" required></label>
+          <label>Additional instructions (append only)
+            <textarea id="staffing-work-edit-note" maxlength="1000"></textarea></label>
+          <label>Correction reason<input id="staffing-work-edit-reason" maxlength="1000" required></label>
+          <button id="staffing-work-edit-submit" type="submit">Save correction</button>
+        </form>
       </section>
     </section>
     <section id="staffing-handoff-area" class="subsection hidden">
@@ -120,7 +130,18 @@ function staffingCard() {
   card.querySelector('#staffing-work-more').addEventListener('click', () => {
     void staffingLoadMore();
   });
-  card.querySelector('#staffing-work-detail-close').addEventListener('click', staffingClearWorkDetail);
+  card.querySelector('#staffing-work-detail-close').addEventListener('click', () => {
+    if (staffingWorkEditPending || staffingWorkEditBusy) {
+      card.querySelector('#staffing-work-detail-status').textContent =
+        'Resolve the exact pending correction before closing this job.';
+      return;
+    }
+    staffingClearWorkDetail();
+  });
+  card.querySelector('#staffing-work-edit-form').addEventListener('submit', event => {
+    event.preventDefault();
+    void staffingSaveWorkCorrection();
+  });
   for (const id of ['staffing-handoff-wo','staffing-handoff-team','staffing-handoff-reason']) {
     card.querySelector('#'+id).addEventListener('input', () => {
       if (!staffingHandoffPending) {
@@ -222,6 +243,8 @@ function staffingClearWorkDetail() {
     section.classList.add('hidden');
     section.querySelector('#staffing-work-detail-status').textContent = '';
     section.querySelector('#staffing-work-detail-fields').replaceChildren();
+    section.querySelector('#staffing-work-edit-form').classList.add('hidden');
+    section.querySelector('#staffing-work-edit-form').reset();
   }
 }
 function staffingRenderDetail() {
@@ -240,14 +263,30 @@ function staffingRenderDetail() {
     value.textContent = staffingWorkDetail[key] == null ? '—' : String(staffingWorkDetail[key]);
     details.append(title,value);
   }
+  const canCorrect = ['ASSIGNED','IN_PROGRESS'].includes(staffingWorkDetail.field_status)
+    && Boolean(staffingWorkDetail.work_revision) && Boolean(staffingWorkDetail.updated_at);
+  const form = section.querySelector('#staffing-work-edit-form');
+  form.classList.toggle('hidden', !canCorrect);
+  if (canCorrect) {
+    form.querySelector('#staffing-work-edit-due').value = staffingWorkDetail.due_date || '';
+    form.querySelector('#staffing-work-edit-note').value = '';
+    form.querySelector('#staffing-work-edit-reason').value = '';
+    form.querySelector('#staffing-work-edit-submit').disabled = staffingWorkEditBusy;
+  }
   section.querySelector('#staffing-work-detail-status').textContent =
-    'Current team authorization confirmed. No editing, assignments or photo access.';
+    canCorrect ? 'Current team authorization confirmed. Due date and added instructions may be corrected.'
+      : 'Current scope confirmed. This job is not eligible for schedule correction.';
   section.classList.remove('hidden');
 }
 async function staffingOpenWorkDetail(workOrderId) {
   const check = staffingIdentity(), work = staffingWork;
   if (!staffingStillCurrent(check) || !work ||
     !work.rows.some(row => row.work_order_id === workOrderId)) return;
+  if (staffingWorkEditPending || staffingWorkEditBusy) {
+    staffingCard().querySelector('#staffing-work-detail-status').textContent =
+      'Resolve the pending exact correction before changing jobs.';
+    return;
+  }
   staffingClearWorkDetail();
   const generation = staffingDetailGeneration, row = work.rows.find(r=>r.work_order_id===workOrderId);
   const section = staffingCard().querySelector('#staffing-work-detail');
@@ -312,7 +351,7 @@ function staffingRenderWork() {
     rows.append(tr);
   }
   card.querySelector('#staffing-work-status').textContent = work
-    ? `Tier ${work.tier} · ${work.rows.length} authorized jobs loaded (read-only).`
+    ? `Tier ${work.tier} · ${work.rows.length} authorized jobs loaded (guarded correction only).`
     : '';
   const more = card.querySelector('#staffing-work-more');
   more.classList.toggle('hidden', !work?.nextAfter);
@@ -375,6 +414,9 @@ async function showScopedStaffingPortal(organizationId) {
 }
 async function staffingRefresh() {
   const check = staffingIdentity();
+  if (staffingWorkEditPending || staffingWorkEditBusy) {
+    throw new Error('Retry the exact pending job correction before refreshing.');
+  }
   staffingClearWorkDetail();
   if (!staffingStillCurrent(check)) throw new Error('Sign in as an authorized Supervisor.');
   if (staffingRosterPending) {
@@ -735,6 +777,8 @@ function staffingSignedOut() {
   staffingRosterNeedsRefresh = false;
   staffingWork = null;
   staffingWorkBusy = false;
+  staffingWorkEditPending = null;
+  staffingWorkEditBusy = false;
   staffingClearWorkDetail();
   staffingHandoffPreview = null;
   staffingHandoffPending = null;
