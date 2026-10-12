@@ -15,6 +15,7 @@ let largeReview=false,maxPhotoPage=0;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
+let largePackage=false,packagePageCalls=0,persistedPackagePhotoIds=[];
 const templateRows=[];
 const optionalTemplate=()=>({schema:1,revision:uuid(9978),total:{enabled:false,minimum:0},items:[]});
 let templateSaves=[];
@@ -187,17 +188,48 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply({work_order_id:p.p_work_order,company_id:selectedCompany,
           review_policy_revision:reviewPolicyRevision});
       }
+      if (url.pathname.endsWith('/admin_release_history')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));assert.equal(p.p_limit,25);
+        return reply({work_order_id:uuid(51),bounded_to:25,
+          runs:[{run_id:correctiveOriginalRun,run_sequence:1,field_status:'FIELD_COMPLETE',
+            registered_photos:1,private_receipts:1,
+            started_at:'2026-10-01T12:00:00Z',finished_at:'2026-10-01T12:10:00Z'}],
+          corrections:[],packages:[{package_id:uuid(9987),run_id:correctiveOriginalRun,
+            status:'DELIVERED',selected_count:1,approved_at:'2026-10-01T13:00:00Z',
+            frozen_wo_number:'DEMO-0051',receipt_confirmed_at:'2026-10-01T15:00:00Z',
+            verified_drive_folder_id:'SYNTHETIC-VERIFIED-HISTORICAL',
+            receipt_sha256:'a'.repeat(64)}],more_runs:false,more_packages:false});
+      }
+      if(url.pathname.endsWith('/admin_package_photo_page')){
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        assert.equal(p.p_limit,25);packagePageCalls++;
+        const all=Array.from({length:500},(_,i)=>({
+          photo_id:uuid(20000+i),run_id:i<250?correctiveNewRun:correctiveOriginalRun,
+          run_sequence:i<250?2:1,release_item_id:null,
+          decision:'APPROVED',transfer_version:reviewVersion
+        }));
+        const candidates=all.filter(x=>p.p_after_sequence===null
+          ||x.run_sequence<p.p_after_sequence
+          ||x.run_sequence===p.p_after_sequence&&x.photo_id>p.p_after_photo);
+        const slice=candidates.slice(0,25);
+        return reply({work_order_id:uuid(51),photos:slice,
+          next_sequence:candidates.length>25?slice.at(-1).run_sequence:null,
+          next_photo:candidates.length>25?slice.at(-1).photo_id:null});
+      }
       if (url.pathname.endsWith('/admin_package_state')) {
         const p=req.postDataJSON();
-        return reply({work_order_id:p.p_wo,available_photos:selectedCompany
+        return reply({work_order_id:p.p_wo,paged_selection:largePackage,available_photos:selectedCompany
           ? [{photo_id:reviewPhoto,transfer_version:reviewVersion,decision:'APPROVED',requirement_label:'Extra'}]:[],
           too_many_photos:false,coverage_message:'Release goals verified',
           destination:selectedCompany?{verified:true,company_name:'DISPOSABLE COMPANY'}:null,
-          package:simulatedPackage});
+          package:largePackage?null:simulatedPackage});
       }
       if (url.pathname.endsWith('/admin_save_package_draft')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
-        assert.deepEqual(p.p_photo_ids,[reviewPhoto]);
+        if(largePackage){
+          assert.deepEqual(p.p_photo_ids,[uuid(20000),uuid(20025)]);
+          persistedPackagePhotoIds=p.p_photo_ids;
+        }else assert.deepEqual(p.p_photo_ids,[reviewPhoto]);
         assert.equal(p.p_expected_revision,null);
         simulatedPackage={id:reviewPackageId,status:'DRAFT',revision:uuid(9992),
           notes:p.p_notes,photos:[{photo_id:reviewPhoto}],manifest_sha256:approvedHash,
@@ -443,6 +475,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('#release-status').textContent.includes('Package DRAFT'));
     assert.equal(await page.locator('#release-approve').isDisabled(), true,
       'Approval cannot precede viewing the exact preview');
+    await page.locator('[data-job-tab="history"]').click();
+    await wait(page,()=>document.querySelector('#job-history-status').textContent.includes('read-only'));
+    assert.match(await page.locator('#job-history-packages').innerText(),/DELIVERED/);
+    assert.match(await page.locator('#job-history-packages').innerText(),/SYNTHETIC-VERIFIED-HISTORICAL/);
+    await page.locator('[data-job-tab="delivery"]').click();
     await page.locator('#release-preview').click();
     await wait(page, () => !document.querySelector('#release-exact-preview').hidden);
     assert.match(await page.locator('#release-exact-preview').innerText(), /DISPOSABLE VERIFIED TEST/);
@@ -658,6 +695,20 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#private-review-stage').selectOption('');
     await wait(page,()=>document.querySelectorAll('.private-review-photo').length===25);
     largeReview=false;
+    largePackage=true;simulatedPackage=null;
+    await page.locator('[data-job-tab="delivery"]').click();
+    await wait(page,()=>document.querySelectorAll('#release-photo-list input').length===25);
+    assert.equal(await page.locator('#release-photos-more').isVisible(),true);
+    await page.locator('#release-photo-list input').first().check();
+    await page.locator('#release-photos-more').click();
+    await wait(page,()=>document.querySelectorAll('#release-photo-list input').length===50);
+    await page.locator('#release-photo-list input').nth(25).check();
+    assert.match(await page.locator('#release-photo-count').innerText(),/2 photos selected/);
+    await page.locator('#release-save').click();
+    await wait(page,()=>persistedPackagePhotoIds.length===2);
+    assert.equal(packagePageCalls>=2,true);
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
+    largePackage=false;
     await page.locator('#cancel-edit').click();
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
