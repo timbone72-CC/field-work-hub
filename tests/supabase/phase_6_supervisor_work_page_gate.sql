@@ -9,6 +9,8 @@ declare
   wo_a uuid; wo_a2 uuid; wo_b uuid; wo_foreign uuid;
   actor uuid; role_name text; result jsonb; cursor_text text; denied boolean;
   count_rows integer; tier integer; original_scope text;
+  correction_action uuid:=gen_random_uuid(); prior_revision timestamptz;
+  correction_result jsonb;
 begin
   insert into public.organizations(id,name) values
     (org,'Supervisor work gate'),(foreign_org,'Other organization');
@@ -75,7 +77,45 @@ begin
   result:=public.office_supervisor_work_page(org,null,1);
   cursor_text:=result->>'next_after';
   original_scope:=result->>'scope_fingerprint';
-  result:=public.office_supervisor_work_detail(org,wo_a,original_scope);
+  -- Tier 1 may correct a current job's deadline and append instructions;
+  -- same action UUID must be replay-safe and no assignment/photo authority follows.
+  select updated_at into prior_revision from public.work_orders where id=wo_a;
+  correction_result:=public.office_supervisor_correct_work_schedule(
+    correction_action,org,wo_a,original_scope,prior_revision,
+    current_date+1,'Added safe visit note','Scheduling correction');
+  if correction_result->>'status'<>'SAVED'
+     or correction_result->>'work_order_id'<>wo_a::text
+     or (select due_date from public.work_orders where id=wo_a)<>current_date+1
+     or (select instructions from public.work_orders where id=wo_a)<>'Added safe visit note'
+     or (select updated_at from public.work_orders where id=wo_a)=prior_revision
+  then raise exception 'Tier 1 job correction failed';end if;
+  if public.office_supervisor_correct_work_schedule(
+     correction_action,org,wo_a,original_scope,prior_revision,
+     current_date+1,'Added safe visit note','Scheduling correction')
+     is distinct from correction_result
+  then raise exception 'Identical action retry was not idempotent';end if;
+  denied:=false;
+  begin perform public.office_supervisor_correct_work_schedule(
+     correction_action,org,wo_a,original_scope,prior_revision,
+     current_date+2,'Changed payload','Scheduling correction');
+  exception when serialization_failure then denied:=true;end;
+  if not denied then raise exception 'Correction action UUID accepted changed input';end if;
+  denied:=false;
+  begin perform public.office_supervisor_correct_work_schedule(
+     gen_random_uuid(),org,wo_a,original_scope,prior_revision,
+     current_date+2,'Stale write','Scheduling correction');
+  exception when serialization_failure then denied:=true;end;
+  if not denied then raise exception 'Stale revision overwrote job correction';end if;
+  denied:=false;
+  begin perform public.office_supervisor_correct_work_schedule(
+     gen_random_uuid(),org,wo_b,original_scope,
+     (select updated_at from public.work_orders where id=wo_b),
+     current_date+1,'Wrong team','Scheduling correction');
+  exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Wrong-team Supervisor edit succeeded';end if;
+  if (select assigned_user_id from public.work_orders where id=wo_a) is not null
+  then raise exception 'Schedule correction changed assignment';end if;
+    result:=public.office_supervisor_work_detail(org,wo_a,original_scope);
   if result->>'organization_id'<>org::text
     or result->>'caller_tier'<>'1'
     or result->>'scope_fingerprint'<>original_scope
