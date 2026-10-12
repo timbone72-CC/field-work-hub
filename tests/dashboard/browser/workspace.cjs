@@ -18,7 +18,8 @@ const templateRows=[];
 const optionalTemplate=()=>({schema:1,revision:uuid(9978),total:{enabled:false,minimum:0},items:[]});
 let templateSaves=[];
 const correctiveOriginalRun=uuid(9961),correctiveNewRun=uuid(9962);
-const correctionDraftRev=uuid(9963),correctionHash='c'.repeat(64);
+let correctionDraftRev=uuid(9963);const correctionHash='c'.repeat(64);
+let correctionIssues=[];
 let correctionDraft=null,correctionPreviewCount=0,correctionDispatchCount=0;
 let cancelCount=0,replaceCount=0,managementStatus='ASSIGNED';
 const replacementRun=uuid(9979);
@@ -122,6 +123,19 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           item_mapping:p.p_item_mapping,release_requirements:p.p_release_requirements};
         return reply({draft_id:correctionDraft.id,revision:correctionDraftRev,status:'DRAFT'});
       }
+      if (url.pathname.endsWith('/admin_save_correction_issues')) {
+        const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
+        assert.equal(p.p_expected_revision,correctionDraftRev);
+        assert.equal(p.p_issues.length,1);
+        assert.equal(p.p_issues[0].photo_id,reviewPhoto);
+        assert.equal(p.p_issues[0].reason,'Blurry exterior');
+        assert.equal(p.p_issues[0].requested_count,1);
+        correctionIssues=p.p_issues;correctionDraftRev=uuid(9966);
+        correctionDraft.revision=correctionDraftRev;
+        correctionDraft.issues=structuredClone(correctionIssues);
+        return reply({work_order_id:uuid(51),draft_id:correctionDraft.id,
+          revision:correctionDraftRev,issues:correctionIssues});
+      }
       if (url.pathname.endsWith('/admin_preview_correction_draft')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
         assert.equal(p.p_revision,correctionDraftRev);
@@ -132,7 +146,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
             origin_run_id:d.origin_run_id,kind:d.kind,reason:d.reason,due_date:d.due_date,
             assigned_user_id:d.assigned_user_id,instructions:d.instructions,
             capture_requirements:d.capture_requirements,release_requirements:d.release_requirements,
-            reference_photos:d.reference_photos,item_mapping:d.item_mapping}});
+            reference_photos:d.reference_photos,item_mapping:d.item_mapping,
+            issues:d.issues||[]}});
       }
       if (url.pathname.endsWith('/admin_dispatch_correction_draft')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
@@ -524,6 +539,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('[data-job-tab="photos"]').click();
     await wait(page,()=>!document.getElementById('correction-details').hidden);
     await page.locator('#correction-details > summary').click();
+    await page.locator('.private-review-photo').getByLabel('Photo rejection reason')
+      .fill('Blurry exterior');
+    await page.locator('.private-review-photo').getByRole('button',{name:'Add correction issue'}).click();
+    assert.match(await page.locator('#correction-issue-list').innerText(),/Blurry exterior/);
     await page.locator('#correction-reason').fill('Replace exterior evidence');
     await page.locator('#correction-assignee').selectOption(contractor);
     await page.locator('#correction-due').fill('2026-10-22');
@@ -543,6 +562,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>!document.getElementById('correction-summary').hidden);
     assert.match(await page.locator('#correction-summary').innerText(),/DEMO-0051/);
     assert.match(await page.locator('#correction-summary').innerText(),/New visit photos/);
+    assert.match(await page.locator('#correction-summary').innerText(),/Blurry exterior/);
+    assert.equal(correctionIssues[0].photo_id,reviewPhoto);
     assert.equal(correctionPreviewCount,1);
     assert.equal(correctionDispatchCount,0);
     await Promise.all([
