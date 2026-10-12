@@ -10,6 +10,8 @@ let staffingRoster = null;
 let staffingRosterPending = null;
 let staffingRosterBusy = false;
 let staffingRosterNeedsRefresh = false;
+let staffingWork = null;
+let staffingWorkBusy = false;
 
 function staffingIdentity() {
   return { epoch: adminSessionEpoch, generation: staffingGeneration,
@@ -34,10 +36,10 @@ function staffingCard() {
   card.innerHTML = `
     <div class="row between gap"><div>
       <p class="eyebrow">Field Work Hub · Supervisor</p>
-      <h2>Team staffing</h2><p id="staffing-account" class="muted"></p>
+      <h2>Supervisor work and staffing</h2><p id="staffing-account" class="muted"></p>
     </div><button type="button" id="staffing-sign-out" class="secondary">Sign Out</button></div>
-    <p class="muted">Only your server-authorized teams and available Admin seats appear here.
-      Job and photo controls are not enabled on this staffing screen.</p>
+    <p class="muted">Work orders below are limited to current server-authorized teams.
+      This source checkpoint is read-only: editing, photos and Send remain unavailable.</p>
     <p id="staffing-capacity" class="muted"></p>
     <button type="button" class="secondary" id="staffing-refresh">Refresh staffing</button>
     <p id="staffing-status" class="status" role="status" aria-live="polite"></p>
@@ -67,6 +69,15 @@ function staffingCard() {
         <button id="staffing-roster-submit" type="submit">Confirm Contractor placement</button>
       </form>
     </section>
+    <section id="staffing-work-area" class="subsection" aria-label="Authorized work orders">
+      <h3>Authorized team work</h3>
+      <p id="staffing-work-status" class="muted" role="status" aria-live="polite"></p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Team</th><th>Address</th><th>WO</th><th>Status</th><th>Due</th></tr></thead>
+        <tbody id="staffing-work-rows"></tbody>
+      </table></div>
+      <button id="staffing-work-more" type="button" class="secondary hidden">More authorized work</button>
+    </section>
     <div id="staffing-link-result" class="hidden">
       <label>Verified one-time Admin setup link<input id="staffing-link" readonly></label>
       <button type="button" id="staffing-copy" class="secondary">Copy Setup Link</button>
@@ -78,6 +89,9 @@ function staffingCard() {
     void staffingRefresh().catch(error => staffingMessage(error.message, true));
   });
   card.querySelector('#staffing-operation').addEventListener('change', staffingRenderOperation);
+  card.querySelector('#staffing-work-more').addEventListener('click', () => {
+    void staffingLoadMore();
+  });
   card.querySelector('#staffing-invite-form').addEventListener('submit', event => {
     event.preventDefault(); void staffingInvite();
   });
@@ -128,16 +142,96 @@ async function staffingReadSnapshot(org) {
   }
   throw new Error('Staffing scope exceeds the supported page window.');
 }
+// A Supervisor's work page has its own current-session/team read predicate.
+// No legacy Admin work mutation or photo endpoint is called from this screen.
+async function staffingReadWorkPage(org, after = null) {
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/office_supervisor_work_page`, {
+    method: 'POST', headers: authHeaders(true),
+    body: JSON.stringify({ p_org: org, p_after: after, p_limit: 25 })
+  });
+  if (!response.ok) throw new Error(await readableError(response,
+    'Current Supervisor work access denied.'));
+  const value = await response.json();
+  if (value?.organization_id !== org || ![1,2,3].includes(Number(value.caller_tier))
+    || !Array.isArray(value.work_orders) || value.work_orders.length > 25
+    || (value.next_after && !value.work_orders.length)
+    || (after && value.work_orders.some(row => row.work_order_id <= after))) {
+    throw new Error('Work scope or paging changed. Reload the authorized view.');
+  }
+  const seen = new Set();
+  for (const row of value.work_orders) {
+    if (!row.work_order_id || !row.team_id || !row.team_name
+      || seen.has(row.work_order_id)) throw new Error('Invalid scoped work page.');
+    seen.add(row.work_order_id);
+  }
+  return { tier: Number(value.caller_tier), rows: value.work_orders,
+    nextAfter: value.next_after || null };
+}
+function staffingRenderWork() {
+  const card = staffingCard(), work = staffingWork;
+  const rows = card.querySelector('#staffing-work-rows');
+  rows.replaceChildren();
+  for (const row of work?.rows || []) {
+    const tr = document.createElement('tr');
+    for (const value of [row.team_name, row.property_address, row.wo_number,
+      row.field_status, row.due_date]) {
+      const td = document.createElement('td');
+      td.textContent = value == null ? '—' : String(value);
+      tr.append(td);
+    }
+    rows.append(tr);
+  }
+  card.querySelector('#staffing-work-status').textContent = work
+    ? `Tier ${work.tier} · ${work.rows.length} authorized jobs loaded (read-only).`
+    : '';
+  const more = card.querySelector('#staffing-work-more');
+  more.classList.toggle('hidden', !work?.nextAfter);
+  more.disabled = staffingWorkBusy;
+  card.querySelector('#staffing-invite-form').classList.toggle('hidden', work?.tier < 2);
+  card.querySelector('#staffing-roster-area').classList.toggle('hidden', work?.tier < 2);
+  card.querySelector('#staffing-capacity').classList.toggle('hidden', work?.tier < 2);
+}
+async function staffingLoadMore() {
+  const check = staffingIdentity(), current = staffingWork;
+  if (!staffingStillCurrent(check) || staffingWorkBusy || !current?.nextAfter) return;
+  staffingWorkBusy = true;
+  staffingRenderWork();
+  try {
+    const page = await staffingReadWorkPage(check.org, current.nextAfter);
+    if (!staffingStillCurrent(check)) return;
+    if (page.tier !== current.tier
+      || page.rows.some(row => current.rows.some(old => old.work_order_id === row.work_order_id))
+      || (page.nextAfter && page.nextAfter === current.nextAfter)) {
+      throw new Error('Supervisor scope changed; refresh before viewing more jobs.');
+    }
+    staffingWork = { tier: current.tier, rows: [...current.rows, ...page.rows],
+      nextAfter: page.nextAfter };
+  } catch (error) {
+    if (staffingStillCurrent(check)) {
+      staffingWork = null;
+      staffingCard().querySelector('#staffing-work-status').textContent = error.message;
+      signOutButton.click(); // Old rows must not remain visible after denied read.
+      setLoginStatus('Supervisor work scope needs a fresh sign-in.', true);
+    }
+  } finally {
+    staffingWorkBusy = false;
+    if (staffingStillCurrent(check)) staffingRenderWork();
+  }
+}
 async function showScopedStaffingPortal(organizationId) {
   if (currentUser?.app_metadata?.role !== 'SUPERVISOR'
       || currentUser.app_metadata.organization_id !== organizationId) {
     throw new Error('Verified Supervisor account required.');
   }
   const check = staffingIdentity();
-  const [snapshot, roster] = await Promise.all([
-    staffingReadSnapshot(organizationId), staffingReadRoster(organizationId)
-  ]);
+  const work = await staffingReadWorkPage(organizationId);
   if (!staffingStillCurrent(check)) throw new Error('The Supervisor session changed.');
+  // Tier 1 cannot call the staffing/roster RPCs at all.
+  const [snapshot, roster] = work.tier >= 2 ? await Promise.all([
+    staffingReadSnapshot(organizationId), staffingReadRoster(organizationId)
+  ]) : [null, null];
+  if (!staffingStillCurrent(check)) throw new Error('The Supervisor session changed.');
+  staffingWork = work;
   staffingSnapshot = snapshot;
   staffingRoster = roster;
   const card = staffingCard();
@@ -145,8 +239,8 @@ async function showScopedStaffingPortal(organizationId) {
   resultsCard.classList.add('hidden');
   card.classList.remove('hidden');
   card.querySelector('#staffing-account').textContent = currentUser.email || 'Supervisor account';
-  staffingRender();
-  staffingRenderRoster();
+  if (snapshot) { staffingRender(); staffingRenderRoster(); }
+  staffingRenderWork();
 }
 async function staffingRefresh() {
   const check = staffingIdentity();
@@ -154,16 +248,30 @@ async function staffingRefresh() {
   if (staffingRosterPending) {
     throw new Error('Reconcile the exact pending Contractor action before refreshing staffing.');
   }
-  const [result, roster] = await Promise.all([
-    staffingReadSnapshot(check.org), staffingReadRoster(check.org)
-  ]);
-  if (!staffingStillCurrent(check)) return;
-  staffingSnapshot = result;
-  staffingRoster = roster;
-  staffingRosterNeedsRefresh = false;
-  staffingRender();
-  staffingRenderRoster();
-  staffingMessage('Current seat allowance and exact team permissions verified.');
+  // A fresh work gate is required even to render staffing; a changed tier is
+  // never inferred from an old browser selection or cached JWT role.
+  try {
+    const work = await staffingReadWorkPage(check.org);
+    if (!staffingStillCurrent(check)) return;
+    const [snapshot, roster] = work.tier >= 2 ? await Promise.all([
+      staffingReadSnapshot(check.org), staffingReadRoster(check.org)
+    ]) : [null, null];
+    if (!staffingStillCurrent(check)) return;
+    staffingWork = work;
+    staffingSnapshot = snapshot;
+    staffingRoster = roster;
+    staffingRosterNeedsRefresh = false;
+    if (snapshot) { staffingRender(); staffingRenderRoster(); }
+    else staffingCard().querySelector('#staffing-link-result').classList.add('hidden');
+    staffingRenderWork();
+    staffingMessage('Current Supervisor work/team scope verified.');
+  } catch (error) {
+    if (staffingStillCurrent(check)) {
+      signOutButton.click();
+      setLoginStatus('Current Supervisor authorization could not be reverified.', true);
+    }
+    throw error;
+  }
 }
 function staffingRender() {
   const card = staffingCard(), data = staffingSnapshot;
@@ -358,6 +466,8 @@ function staffingSignedOut() {
   staffingRosterPending = null;
   staffingRosterBusy = false;
   staffingRosterNeedsRefresh = false;
+  staffingWork = null;
+  staffingWorkBusy = false;
   staffingBusy = false;
   staffingNeedsRefresh = false;
   const card = document.getElementById('staffing-card');
@@ -369,6 +479,9 @@ function staffingSignedOut() {
     card.querySelector('#staffing-roster-form').reset();
     card.querySelector('#staffing-roster-person').replaceChildren();
     card.querySelector('#staffing-roster-team').replaceChildren();
+    card.querySelector('#staffing-work-rows').replaceChildren();
+    card.querySelector('#staffing-work-more').classList.add('hidden');
+    card.querySelector('#staffing-work-status').textContent = '';
     staffingRosterMessage('');
   }
 }
