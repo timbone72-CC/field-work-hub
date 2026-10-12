@@ -269,6 +269,33 @@ begin
  if (select count(*) from private.office_seat_reservations where organization_id=org and state='RESERVED')<>1 then
    raise exception 'Idempotent replay consumed extra office seat';
  end if;
+
+ -- Phase 6F explicit seat cancellation preserves reservation identity and limits.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_release_office_seat(sid,org,'Unauthorized release','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Admin released owner reservation';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_release_office_seat(sid,other_org,'Wrong organization','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Cross-organization seat release allowed';end if;
+ if public.owner_release_office_seat(sid,org,'Explicit release','TEST')<>'RELEASED'
+    or public.owner_release_office_seat(sid,org,'Repeat release','TEST')<>'RELEASED' then
+   raise exception 'Release was not idempotent';end if;
+ if (select state from private.office_seat_reservations where action_id=sid)<>'RELEASED' then
+   raise exception 'Seat remains reserved';end if;
+ denied:=false;
+ begin
+   perform public.owner_reserve_office_seat(sid,org,'ADMIN','Reserved owner seat','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Released reservation resurrected';end if;
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
 
