@@ -226,6 +226,12 @@ begin
     where s.user_id=job.user_id and s.organization_id=job.organization_id
       and s.device_id=job.device_id;
   select * into issue from private.admin_alert_issues i where i.id=job.issue_id;
+  -- Revalidate current Download/ACK/Start/Finish, delivery and company work
+  -- status under the active lease claim, not a stale prior scanner snapshot.
+  if issue.id is not null then
+    perform private.admin_alert_reconcile_wo(issue.work_order_id,job.organization_id);
+    select * into issue from private.admin_alert_issues i where i.id=job.issue_id;
+  end if;
   select * into settings from private.admin_alert_settings p
     where p.user_id=job.user_id and p.organization_id=job.organization_id
       and p.alert_type=issue.alert_type;
@@ -234,13 +240,20 @@ begin
   select coalesce(r.worker_ready and r.operator_verified,false) into pushready
     from private.admin_push_runtime r where r.organization_id=job.organization_id;
   if not coalesce(pushready,false) or sub.enabled is distinct from true
-    or issue.resolved_at is not null or issue.version_key is distinct from job.version_key
+    or issue.id is null or issue.resolved_at is not null
+    or issue.version_key is distinct from job.version_key
     or not private.service_admin_alert_user_scope(job.user_id,issue.work_order_id)
     or (case sub.device_class when 'PHONE'
        then coalesce(settings.phone_enabled,false)
        else coalesce(settings.computer_enabled,false) end) is false
     or (rec.version_key=issue.version_key and
        (rec.acknowledged_at is not null or rec.snoozed_until>clock_timestamp()))
+    or (issue.alert_type='ACCEPT_REMINDER' and not exists(
+      select 1 from public.work_order_assignments assign
+       where assign.run_id=issue.run_id and assign.assignment_ended_at is null
+        and assign.acknowledgment_received_at is null
+        and assign.assignment_started_at<=clock_timestamp()-
+           make_interval(mins=>coalesce(settings.reminder_minutes,1440))))
   then
    update private.admin_notification_outbox set state='CANCELLED',
       changed_at=clock_timestamp() where id=job.id;
