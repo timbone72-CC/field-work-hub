@@ -184,7 +184,13 @@ function ownerSupervisorUI(grants) {
     scope.textContent = 'Manage teams';
     scope.disabled = grant.tier === 3 || !grant.grant_active;
     scope.addEventListener('click', () => void ownerTeamPanel(grant));
-    row.append(description, tier, save, scope); list.append(row);
+    const state = document.createElement('button');
+    state.type = 'button'; state.className = 'secondary';
+    state.textContent = grant.grant_active ? 'Remove grant' : 'Re-enable grant';
+    state.disabled = Boolean(grant.work_active);
+    if (state.disabled) state.title = 'Review and disable work access first.';
+    state.addEventListener('click', () => void ownerChangeGrantState(grant, !grant.grant_active));
+    row.append(description, tier, save, scope, state); list.append(row);
   }
 }
 function ownerReason() {
@@ -240,6 +246,28 @@ async function ownerChangeTier(grant, tier) {
     }), async () => loadOwnerConsole(true));
   } catch (error) { ownerStatus(error.message, true); }
 }
+async function ownerChangeGrantState(grant, active) {
+  try {
+    const data = ownerConsoleData;
+    const person = data?.people.find(p => p.user_id === grant.user_id);
+    if (!person || person.work_role !== 'SUPERVISOR' || person.work_active
+      || grant.work_active || grant.grant_active === active) {
+      throw Error('Supervisor work must be disabled with reviewed continuity before changing the grant.');
+    }
+    const reason = ownerReason();
+    if (!window.confirm(active
+      ? 'Re-enable the existing Supervisor grant? Work access remains OFF until separately reviewed.'
+      : 'Remove Supervisor permission? Work access must already be OFF and historical photo grants will be retained.')) return;
+    const actionId = crypto.randomUUID();
+    await ownerChange(current => ownerRpc('owner_set_supervisor_grant_state', {
+      p_action: actionId, p_org: current.organization, p_user: grant.user_id,
+      p_expected_grant_revision: grant.grant_revision,
+      p_expected_access_revision: person.access_revision, p_active: active,
+      p_reason: reason, p_environment: OWNER_CONSOLE_ENVIRONMENT
+    }), async () => loadOwnerConsole(true));
+  } catch (error) { ownerStatus(error.message, true); }
+}
+
 async function ownerTeamPanel(grant) {
   const check = ownerIdentity(), panel = document.getElementById('owner-supervisor-team-panel');
   if (!panel || !ownerConsoleData || ownerConsoleBusy) return;
@@ -373,6 +401,11 @@ function ownerPeopleUI(people) {
     if (person.user_id === currentUser?.id && person.work_active) {
       button.disabled = true;
       button.title = 'Use a separate verified owner session to change this account.';
+    }
+    if (!person.work_active && person.work_role === 'SUPERVISOR'
+      && ownerConsoleData?.grants.some(g => g.user_id === person.user_id && !g.grant_active)) {
+      button.disabled = true;
+      button.title = 'Re-enable the Supervisor grant before reviewing work restoration.';
     }
     button.addEventListener('click', () => void ownerReviewAccess(person, !person.work_active));
     row.append(label, button);
