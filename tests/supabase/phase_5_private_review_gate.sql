@@ -61,6 +61,7 @@ declare
   trusted_plan jsonb;
   t private.photo_transfers%rowtype; denied boolean;
   pending_oldrun uuid; pending_oldrev timestamptz; pending_capture jsonb;
+  issue_draft jsonb; issue_preview jsonb; issue_payload jsonb;
 begin
   insert into public.organizations(id,name) values(org,'PHOTO REVIEW TEST');
   insert into public.admin_teams(id,organization_id,name) values(team,org,'REVIEW');
@@ -575,6 +576,41 @@ begin
   perform public.admin_review_photo(gen_random_uuid(),wo,photo,t.version,
     (select revision from private.photo_review_decisions where photo_id=photo),
     'REJECTED','Missing side');
+
+  -- Phase 6C server-backed issue provenance: a received exact photo is
+  -- permitted, an invented/cross-WO photo is denied, and saved issues are
+  -- included in the same checked correction preview/hash.
+  select w.current_run_id,w.updated_at,r.requirement_snapshot
+    into pending_oldrun,pending_oldrev,pending_capture
+    from public.work_orders w join public.work_order_runs r on r.id=w.current_run_id
+    where w.id=wo;
+  issue_draft:=public.admin_save_correction_draft(wo,pending_oldrun,pending_oldrev,
+    null,'Correct reviewed photo',array[photo],contractor,current_date,
+    'Retake the reviewed photo',pending_capture,'[]'::jsonb,pending_capture);
+  issue_payload:=jsonb_build_array(jsonb_build_object(
+    'photo_id',photo,'item_id',null,'reason','Blurred front photo',
+    'requested_count',1));
+  issue_draft:=public.admin_save_correction_issues(wo,
+     (issue_draft->>'revision')::uuid,issue_payload);
+  issue_preview:=public.admin_preview_correction_draft(wo,
+     (issue_draft->>'revision')::uuid);
+  if jsonb_array_length(issue_preview->'summary'->'issues')<>1
+     or issue_preview->'summary'->'issues'->0->>'photo_id'<>photo::text
+     or (public.admin_correction_state(wo)->'draft'->>'revision')<>
+       (issue_draft->>'revision')
+  then raise exception 'Correction issue lost checked server revision/provenance';end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.admin_save_correction_issues(%L,%L,%L::jsonb)',
+    wo,gen_random_uuid(),issue_payload::text));
+  issue_payload:=jsonb_build_array(jsonb_build_object(
+    'photo_id',gen_random_uuid(),'item_id',null,'reason','Foreign photo',
+    'requested_count',1));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_save_correction_issues(%L,%L,%L::jsonb)',
+    wo,issue_draft->>'revision',issue_payload::text));
+  if has_function_privilege('anon',
+    'public.admin_save_correction_issues(uuid,uuid,jsonb)','EXECUTE')
+  then raise exception 'Correction issue authorization leaked';end if;
 
   -- Same-organization role alone does not grant a gallery or review capability.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',other_admin,'session_id',other_admin,
