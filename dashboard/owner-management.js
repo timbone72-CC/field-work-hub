@@ -7,6 +7,8 @@ let ownerConsoleBusy = false;
 let ownerReviewGeneration = 0;
 let ownerEnrollmentPending = null;
 let ownerRosterPending = null;
+let ownerInvitePending = null;
+let ownerInviteBusy = false;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -21,6 +23,8 @@ signOutButton.addEventListener('click', () => {
   ownerConsoleBusy = false;
   ownerEnrollmentPending = null;
   ownerRosterPending = null;
+  ownerInvitePending = null;
+  ownerInviteBusy = false;
   document.getElementById('owner-office-console')?.remove();
 });
 
@@ -126,6 +130,24 @@ function ownerCreateConsole() {
        cannot invite a new user or activate a suspended account.</p>
     <div id="owner-supervisor-list"></div>
     <div id="owner-supervisor-team-panel" class="hidden"></div>
+    <h3>Invite an Admin to an existing team</h3>
+    <p class="muted">Choose a current authorized team. Seats and team scope are checked by
+      the server; the new Admin cannot work until the invitee completes verified setup.
+      No invitation email is sent by this setup-link workflow.</p>
+    <form id="owner-admin-invite-form" class="admin-form" autocomplete="off">
+      <label>Existing team <select id="owner-admin-invite-team" required></select></label>
+      <label>Admin name <input id="owner-admin-invite-name" type="text" maxlength="200" required></label>
+      <label>Admin email <input id="owner-admin-invite-email" type="email" maxlength="320" required autocomplete="off"></label>
+      <label>Audit reason <input id="owner-admin-invite-reason" type="text" maxlength="1000" required></label>
+      <button id="owner-admin-invite-submit" type="submit">Create Admin setup link</button>
+      <p id="owner-admin-invite-status" class="status" role="status" aria-live="polite"></p>
+    </form>
+    <div id="owner-admin-invite-link-result" class="hidden">
+      <p class="muted">Give this one-time link only to the intended Admin. It is a bearer
+        setup credential and is not saved to browser storage.</p>
+      <label>Admin setup link <textarea id="owner-admin-invite-link" rows="4" readonly></textarea></label>
+      <button id="owner-admin-invite-copy" class="secondary" type="button">Copy Admin setup link</button>
+    </div>
     <h3>Contractor roster</h3>
     <p class="muted">Place genuinely unassigned Contractors or move an idle Contractor
       into another team. Open jobs remain with their original team; active work
@@ -150,6 +172,19 @@ function ownerCreateConsole() {
   section.querySelector('#owner-enrollment-form').addEventListener('submit', event => {
     event.preventDefault();
     void ownerEnrollExisting();
+  });
+  section.querySelector('#owner-admin-invite-form').addEventListener('submit', event => {
+    event.preventDefault();
+    void ownerCreateAdminInvitation();
+  });
+  section.querySelector('#owner-admin-invite-copy').addEventListener('click', () => {
+    const url = document.getElementById('owner-admin-invite-link')?.value;
+    if (url) {
+      void navigator.clipboard.writeText(url).then(
+        () => ownerInviteStatus('Admin setup link copied.'),
+        () => ownerInviteStatus('Copy was blocked. Select and copy the link manually.',true)
+      );
+    }
   });
   return section;
 }
@@ -642,6 +677,96 @@ async function ownerReviewAccess(person, requestedActive) {
   }
 }
 
+function ownerInviteStatus(message, error = false) {
+  const el = document.getElementById('owner-admin-invite-status');
+  if (el) { el.textContent = message; el.classList.toggle('error', error); }
+}
+
+function ownerInviteUI(capacity, teams) {
+  const select = document.getElementById('owner-admin-invite-team');
+  const button = document.getElementById('owner-admin-invite-submit');
+  if (!select || !button) return;
+  const previous = select.value;
+  select.replaceChildren(new Option('Choose an active team', ''));
+  for (const team of teams.filter(t => t.active)) {
+    select.add(new Option(team.team_name, team.team_id));
+  }
+  select.value = [...select.options].some(o => o.value === previous) ? previous : '';
+  button.disabled = ownerInviteBusy || Number(capacity.admin_available) < 1;
+  if (Number(capacity.admin_available) < 1 && !ownerInvitePending) {
+    ownerInviteStatus('No Admin seat is available; only the Product Owner can raise the allowance.');
+  }
+}
+
+async function ownerCreateAdminInvitation() {
+  const check = ownerIdentity();
+  const teamId = document.getElementById('owner-admin-invite-team')?.value || '';
+  const displayName = document.getElementById('owner-admin-invite-name')?.value.trim() || '';
+  const email = document.getElementById('owner-admin-invite-email')?.value.trim().toLowerCase() || '';
+  const reason = document.getElementById('owner-admin-invite-reason')?.value.trim() || '';
+  const quota = ownerConsoleData?.capacity;
+  if (ownerInviteBusy || !ownerStillCurrent(check) || !quota ||
+    ownerConsoleData?.organization !== check.organization ||
+    Number(quota.admin_available) < 1 ||
+    !ownerConsoleData.teams.some(team => team.team_id === teamId && team.active) ||
+    !email || !displayName || !reason) {
+    ownerInviteStatus('Refresh office seats and select an available, authorized team.', true);
+    return;
+  }
+  // The action UUID is never regenerated for a retry after an ambiguous
+  // network/side-effect outcome. Editing inputs requires a separate reviewed
+  // operation, not silent replacement of a reserved seat.
+  const request = { team_id: teamId, display_name: displayName, email, reason,
+    expected_allowance_revision: quota.revision };
+  if (ownerInvitePending &&
+    JSON.stringify(ownerInvitePending.request) !== JSON.stringify(request)) {
+    ownerInviteStatus('An earlier invitation needs review first. Do not start another request.', true);
+    return;
+  }
+  if (!ownerInvitePending) {
+    ownerInvitePending = { action: crypto.randomUUID(), request };
+  }
+  const action = ownerInvitePending.action;
+  ownerInviteBusy = true;
+  document.getElementById('owner-admin-invite-submit').disabled = true;
+  document.getElementById('owner-admin-invite-link-result')?.classList.add('hidden');
+  ownerInviteStatus('Verifying the exact Admin seat and invitation…');
+  try {
+    const response = await adminFetch(`${SUPABASE_URL}/functions/v1/admin-invite-contractor`, {
+      method: 'POST', headers: authHeaders(true),
+      body: JSON.stringify({ operation: 'invite_admin', action_id: action, ...request })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!ownerStillCurrent(check)) return;
+    if (!response.ok || result.status !== 'BOUND' || !result.setup_url ||
+      result.action_id !== action) {
+      throw new Error(result.error || 'The original invitation requires reconciliation.');
+    }
+    // Only the original completed request can display its returned bearer link.
+    const link = document.getElementById('owner-admin-invite-link');
+    if (link) link.value = result.setup_url;
+    document.getElementById('owner-admin-invite-link-result')?.classList.remove('hidden');
+    ownerInvitePending = null;
+    ownerInviteStatus('The verified setup link is ready to copy securely.');
+    document.getElementById('owner-admin-invite-name').value = '';
+    document.getElementById('owner-admin-invite-email').value = '';
+    document.getElementById('owner-admin-invite-reason').value = '';
+    void loadOwnerConsole(true);
+  } catch (error) {
+    if (ownerStillCurrent(check)) {
+      ownerInviteStatus(
+        (error instanceof Error ? error.message : 'Invitation status is uncertain.') +
+        ' The original action is protected; retry only this exact request.', true);
+    }
+  } finally {
+    ownerInviteBusy = false;
+    if (ownerStillCurrent(check)) {
+      const button = document.getElementById('owner-admin-invite-submit');
+      if (button) button.disabled = false;
+    }
+  }
+}
+
 async function loadOwnerConsole(force = false) {
   const check = ownerIdentity();
   if (!check.user || !check.organization) return;
@@ -666,6 +791,7 @@ async function loadOwnerConsole(force = false) {
     ownerCapacityUI(capacity);
     ownerSupervisorUI(grants);
     ownerEnrollmentUI(people, grants, teams);
+    ownerInviteUI(capacity, teams);
     ownerRosterUI(people, teams);
     ownerPeopleUI(people);
     if (force) {
