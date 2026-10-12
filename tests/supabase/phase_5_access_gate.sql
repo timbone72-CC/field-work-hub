@@ -270,6 +270,24 @@ begin
    raise exception 'Idempotent replay consumed extra office seat';
  end if;
 
+ -- An active ADMIN plus one reserved ADMIN consumes both allowed seats.
+ -- Lowering to exactly that occupancy succeeds, but the next reservation fails.
+ select oa.revision into actor from private.org_office_allowances oa where oa.organization_id=org;
+ actor:=public.owner_set_office_allowances(org,actor,2,5,
+   'Capacity boundary with pending reservation','TEST');
+ denied:=false;
+ begin
+   perform public.owner_reserve_office_seat(gen_random_uuid(),org,'ADMIN',
+     'Rejected over-capacity reservation','TEST');
+ exception when check_violation then denied:=true;
+ end;
+ if not denied then raise exception 'Office reservation exceeded active plus reserved capacity';end if;
+ if (select count(*) from private.office_seat_reservations
+      where organization_id=org and state='RESERVED' and requested_role='ADMIN')<>1 then
+   raise exception 'Rejected reservation altered reserved seats';end if;
+ actor:=public.owner_set_office_allowances(org,actor,4,5,
+   'Restore configured allowance for release gate','TEST');
+
  -- Phase 6F explicit seat cancellation preserves reservation identity and limits.
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
  denied:=false;
