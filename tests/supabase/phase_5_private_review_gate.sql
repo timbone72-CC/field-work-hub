@@ -819,7 +819,7 @@ declare
  set_id uuid:=gen_random_uuid(); digest text;
  new_photo uuid:=gen_random_uuid(); photo_set jsonb;
  transfer private.photo_transfers%rowtype; new_object uuid:=gen_random_uuid();
- old_decision_revision uuid; old_transfer_version uuid; history jsonb;
+ old_decision_revision uuid; old_transfer_version uuid; history jsonb; page jsonb;
 begin
  select * into old_pkg from private.client_packages
   where status='DELIVERED' and approved_manifest is not null limit 1;
@@ -921,6 +921,18 @@ begin
     (next_pkg->>'revision')::uuid,'Full corrected package',array[old_photo,new_photo]);
  execute 'reset role';
  selected:=private.client_package_manifest((next_pkg->>'id')::uuid);
+ perform set_config('request.jwt.claims',claims_admin,true);
+ execute 'set local role authenticated';
+ page:=public.admin_package_photo_page(wo,25,null,null);
+ if jsonb_array_length(page->'photos')<>2
+   or page->'photos'->0->>'photo_id'<>new_photo::text
+   or page->'photos'->0->>'run_sequence'<>'2'
+   or page->'photos'->1->>'photo_id'<>old_photo::text
+   or page->'photos'->1->>'run_sequence'<>'1'
+   or page->'photos'->0 ? 'object_key'
+   or page->>'next_photo' is not null
+ then raise exception 'Newest-run package page order, privacy or pagination wrong: %',page;end if;
+ execute 'reset role';
  if selected->>'current_run_id'<>newrun::text
    or selected->'selected_photos'->0->>'photo_id'<>old_photo::text
    or selected->'selected_photos'->0->>'run_id'<>oldrun::text
@@ -953,6 +965,8 @@ begin
  execute 'set local role authenticated';
  perform pg_temp.expect_photo_review_error('42501',format(
    'select public.admin_release_history(%L,25)',wo));
+ perform pg_temp.expect_photo_review_error('42501',format(
+   'select public.admin_package_photo_page(%L,25,null,null)',wo));
  execute 'reset role';
  raise notice 'Phase 6D original/new photo minima, prior confirmed delivery and bounded history PASS';
 end;$phase6_multi_run$;
