@@ -123,4 +123,74 @@ begin
  then raise exception 'Private alert credential/data authority leaked';end if;
  raise notice '6E default channels, pending ACK, delayed reminder, preferences CAS, snooze, isolation and endpoint protection PASS';
 end;$phase6e$;
+
+-- Separate disposable trusted worker gate; source-only, never HTTP push.
+do $push_worker_gate$
+declare
+ org uuid:='00000000-0000-0000-0000-000000000001';
+ admin_id uuid:='00000000-0000-0000-0000-000000000010';
+ contractor uuid:='00000000-0000-0000-0000-000000000011';
+ wo uuid; run uuid; instance uuid; action uuid; device uuid:=gen_random_uuid();
+ pref jsonb; enrollment jsonb; claim jsonb; finished jsonb; prepared jsonb;
+ adminjwt text;workerjwt text;
+begin
+ adminjwt:=jsonb_build_object('sub',admin_id,'session_id',admin_id,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text;
+ workerjwt:=jsonb_build_object('sub',contractor,'session_id',contractor,
+  'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
+ perform set_config('request.jwt.claims',adminjwt,true);
+ execute 'set local role authenticated';
+ pref:=public.admin_set_notification_preferences(gen_random_uuid(),
+   'ASSIGNMENT_NEEDS_ACCEPT',null,true,true,false,1440,null,null,null);
+ enrollment:=public.admin_enroll_push(gen_random_uuid(),device,'PHONE',
+   'https://fcm.googleapis.com/fcm/send/synthetic-only',
+   repeat('A',87),repeat('B',22),null);
+ if enrollment->>'enabled'<>'true' then raise exception 'Explicit Push enrollment failed';end if;
+ execute 'reset role';
+ insert into private.admin_push_runtime(
+   organization_id,vapid_public_key,operator_verified,worker_ready,verified_at)
+ values(org,repeat('C',87),true,true,clock_timestamp());
+ perform set_config('request.jwt.claims',adminjwt,true);
+ execute 'set local role authenticated';
+ select (x->>'work_order_id')::uuid into wo
+  from public.admin_create_work_order_v4(false,'PUSH-DISPOSABLE-'||gen_random_uuid(),
+   'Synthetic push job','CHECK','',current_date,contractor,
+   jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+    'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb)) x;
+ execute 'reset role';
+ select current_run_id into run from public.work_orders where id=wo;
+ select id into instance from public.work_order_assignments where run_id=run
+   and assignment_ended_at is null;
+ perform set_config('request.jwt.claims',jsonb_build_object('role','service_role')::text,true);
+ execute 'set local role service_role';
+ prepared:=public.service_prepare_admin_push(null,50);
+ if (prepared->>'new_jobs')::int<1 then
+   raise exception 'New opt-in event not enqueued by trusted bounded scanner: %',prepared;end if;
+ claim:=public.service_claim_admin_push(gen_random_uuid());
+ if claim->>'alert_id' is null or claim->>'vapid_public_key'<>repeat('C',87)
+   or claim->>'endpoint' not like 'https://fcm.googleapis.com/%' then
+   raise exception 'Trusted claim lost exact endpoint/VAPID or scope: %',claim;end if;
+ finished:=public.service_finish_admin_push((claim->>'job_id')::uuid,
+  (claim->>'worker_id')::uuid,(claim->>'generation')::bigint,202);
+ if finished->>'state'<>'PUSH_ACCEPTED_BY_SERVICE'
+  or (select state from private.admin_notification_outbox
+    where id=(claim->>'job_id')::uuid)<>'PUSH_ACCEPTED_BY_SERVICE'
+ then raise exception 'Push service accepted receipt became OS/human success';end if;
+ -- Repeated dispatch cannot claim the exact accepted issue version.
+ if exists(select 1 from private.admin_notification_outbox outbox
+   where outbox.id=(claim->>'job_id')::uuid and outbox.state='QUEUED')
+ then raise exception 'Accepted push was silently requeued';end if;
+ execute 'reset role';
+ perform set_config('request.jwt.claims',workerjwt,true);
+ execute 'set local role authenticated';
+ if (select count(*) from public.work_order_assignments where run_id=run
+     and acknowledgment_received_at is not null)<>0
+ then raise exception 'Push send invented contractor human Accept';end if;
+ execute 'reset role';
+ if has_function_privilege('authenticated','public.service_claim_admin_push(uuid)','EXECUTE')
+  or has_function_privilege('anon','public.service_prepare_admin_push(uuid,integer)','EXECUTE')
+  or has_table_privilege('authenticated','private.admin_notification_outbox','SELECT')
+ then raise exception 'Trusted push outbox was exposed to a browser';end if;
+ raise notice '6E explicitly enrolled fake Push, exact service-only claim, provider receipt only and no invented ACK PASS';
+end;$push_worker_gate$;
 rollback;
