@@ -184,6 +184,54 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[1],'session_id',supervisors[1])::text,true);
  if private.has_team_capability(org,team_b,'WORK') then raise exception 'Removed team scope remained accessible';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+
+ -- Phase 6F existing-organization allowance guard. Never creates seats/accounts.
+ insert into private.org_office_allowances(organization_id,admin_limit,supervisor_limit)
+ values(org,2,3);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_set_office_allowances(org,
+     (select oa.revision from private.org_office_allowances oa where oa.organization_id=org),
+     4,4,'Admin attempted limits','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Admin altered office allowances';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[3],'session_id',supervisors[3])::text,true);
+ denied:=false;
+ begin
+   perform public.owner_set_office_allowances(org,
+     (select oa.revision from private.org_office_allowances oa where oa.organization_id=org),
+     4,4,'Supervisor attempted limits','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Supervisor altered office allowances';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ select oa.revision into sid from private.org_office_allowances oa where oa.organization_id=org;
+ denied:=false;
+ begin
+   perform public.owner_set_office_allowances(other_org,sid,4,4,'Unconfigured org','TEST');
+ exception when insufficient_privilege then denied:=true;
+ end;
+ if not denied then raise exception 'Owner silently created other-org allowance';end if;
+ denied:=false;
+ begin
+   perform public.owner_set_office_allowances(org,sid,0,1,'Under active usage','TEST');
+ exception when check_violation then denied:=true;
+ end;
+ if not denied then raise exception 'Allowances reduced below active usage';end if;
+ actor:=public.owner_set_office_allowances(org,sid,4,5,'Reviewed owner allowance','TEST');
+ if actor=sid then raise exception 'Allowance revision not advanced';end if;
+ denied:=false;
+ begin
+   perform public.owner_set_office_allowances(org,sid,6,7,'Stale update','TEST');
+ exception when serialization_failure then denied:=true;
+ end;
+ if not denied then raise exception 'Stale allowance update allowed';end if;
+ if (select oa.admin_limit from private.org_office_allowances oa where oa.organization_id=org)<>4
+    or (select oa.supervisor_limit from private.org_office_allowances oa where oa.organization_id=org)<>5 then
+   raise exception 'Owner allowance values incorrect';
+ end if;
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
 
