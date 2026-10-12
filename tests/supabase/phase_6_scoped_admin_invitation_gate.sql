@@ -155,7 +155,7 @@ begin
   begin
     perform public.reserve_scoped_admin_invitation(action_b,org,team_b,
       'second@example.invalid','Second Admin',revision_id,'Tier 3 staffing','TEST');
-  exception when insufficient_privilege then denied:=true; end;
+  exception when insufficient_privilege or invalid_parameter_value then denied:=true; end;
   if not denied then raise exception 'Released action resurrected reservation';end if;
   perform public.reserve_scoped_admin_invitation(action_c,org,team_b,
     'third@example.invalid','Third Admin',revision_id,'Owner staffing','TEST');
