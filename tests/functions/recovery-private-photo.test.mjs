@@ -56,7 +56,7 @@ test('recovery refuses client-chosen destination, identity, TTL or untrusted bea
     assert.equal(calls.length,0);
   }
   const {handle,calls}=fixture();
-  assert.equal((await handle(request(undefined,'Bearer invalid)).status,401);
+  assert.equal((await handle(request(undefined,'Bearer invalid!'))).status,401);
   assert.equal(calls.length,0);
 });
 test('recovery is not an independent authorization bypass: rejected Auth/target never signs',async()=>{
