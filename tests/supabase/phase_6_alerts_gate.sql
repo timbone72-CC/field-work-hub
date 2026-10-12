@@ -100,6 +100,22 @@ begin
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Contractor marked office issue read';end if;
  execute 'reset role';
+ -- The worker has no subscription to send to by default; deliberately
+ -- unconfigured push runtime cannot produce or claim outgoing notifications.
+ perform set_config('request.jwt.claims',
+   jsonb_build_object('role','service_role')::text,true);
+ execute 'set local role service_role';
+ if not private.service_admin_alert_user_scope(office,w)
+    or private.service_admin_alert_user_scope(worker,w)
+ then raise exception 'Trusted scope evaluator allowed contractor or denied Admin';end if;
+ saved:=public.service_prepare_admin_push(null,50);
+ if (saved->>'processed_work_orders')::int<1
+    or (saved->>'new_jobs')::int<>0
+ then raise exception 'Unactivated push runtime enqueued work';end if;
+ saved:=public.service_claim_admin_push(gen_random_uuid());
+ if saved->>'claimed'<>'false' then
+   raise exception 'No valid trusted enrollment produced a push claim';end if;
+ execute 'reset role';
  if has_table_privilege('authenticated','private.admin_push_subscriptions','SELECT')
   or has_table_privilege('authenticated','private.admin_alert_issues','UPDATE')
   or has_function_privilege('anon',
