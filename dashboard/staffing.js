@@ -342,6 +342,7 @@ async function staffingOpenWorkDetail(workOrderId) {
     staffingWorkDetail = detail;
     staffingRenderDetail();
     SupervisorPhotoReview.mount(section);
+    SupervisorAssignmentCandidates.mount(section);
   } catch (error) {
     if (staffingStillCurrent(check) && generation === staffingDetailGeneration) {
       section.querySelector('#staffing-work-detail-status').textContent = error.message;
