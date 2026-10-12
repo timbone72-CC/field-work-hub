@@ -140,8 +140,12 @@ begin
   'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text;
  perform set_config('request.jwt.claims',adminjwt,true);
  execute 'set local role authenticated';
+ pref:=public.admin_notification_settings();
+ select (x.value->>'revision')::uuid into action
+   from jsonb_array_elements(pref->'types') x
+   where x.value->>'type'='ASSIGNMENT_NEEDS_ACCEPT';
  pref:=public.admin_set_notification_preferences(gen_random_uuid(),
-   'ASSIGNMENT_NEEDS_ACCEPT',null,true,true,false,1440,null,null,null);
+   'ASSIGNMENT_NEEDS_ACCEPT',action,true,true,false,1440,null,null,null);
  enrollment:=public.admin_enroll_push(gen_random_uuid(),device,'PHONE',
    'https://fcm.googleapis.com/fcm/send/synthetic-only',
    repeat('A',87),repeat('B',22),null);
@@ -183,8 +187,11 @@ begin
  execute 'reset role';
  perform set_config('request.jwt.claims',workerjwt,true);
  execute 'set local role authenticated';
- if (select count(*) from public.work_order_assignments where run_id=run
-     and acknowledgment_received_at is not null)<>0
+ -- Worker can verify only its own assignment projection; no direct
+ -- work_order_assignments table access is granted.
+ if exists(select 1 from public.field_assignments() a
+    where a.value->>'id'=wo::text
+      and a.value->>'acknowledgment_received_at' is not null)
  then raise exception 'Push send invented contractor human Accept';end if;
  execute 'reset role';
  if has_function_privilege('authenticated','public.service_claim_admin_push(uuid)','EXECUTE')
