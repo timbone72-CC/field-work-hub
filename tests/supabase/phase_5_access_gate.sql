@@ -10,6 +10,7 @@ declare
  action text; expected boolean; result boolean; denied boolean; tier integer; n integer; capacity jsonb;
  enroll_user uuid:=gen_random_uuid(); enroll_action uuid:=gen_random_uuid(); enroll_res uuid; enroll_revision uuid; enroll_access_rev uuid;
  enroll_user2 uuid:=gen_random_uuid(); combined_action uuid:=gen_random_uuid(); combined_rev uuid;
+ roster_worker uuid:=gen_random_uuid(); roster_action uuid:=gen_random_uuid(); roster_rev uuid; roster_result jsonb; busy_wo uuid;
  grant_state_action uuid:=gen_random_uuid(); grant_state_revision uuid;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
@@ -597,6 +598,86 @@ begin
  update auth.users set email_confirmed_at=now() where id=admin_id;
  delete from auth.sessions where id=admin_id;
  if private.can_work_order(wo) then raise exception 'Revoked session authorized';end if;
+
+ -- Phase 6F: staff placement and idle transfers are separate from job handoff.
+ insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+ values(roster_worker,'roster-test@example.invalid',now(),
+   jsonb_build_object('organization_id',org,'role','CONTRACTOR'));
+ insert into auth.sessions(id,user_id) values(roster_worker,roster_worker);
+ insert into private.account_work_access(organization_id,user_id,work_role,active)
+ values(org,roster_worker,'CONTRACTOR',true);
+ update public.organizations set contractor_seat_limit=8 where id=org;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[1],
+   'session_id',supervisors[1])::text,true);
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_a,
+     null,'Tier 1 cannot recruit','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Tier 1 placed unassigned Contractor';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[2],
+   'session_id',supervisors[2])::text,true);
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_b,
+     null,'Tier 2 foreign supervised team','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Tier 2 placed Contractor outside team scope';end if;
+ roster_result:=public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_a,
+   null,'Tier 2 reviewed unassigned placement','TEST');
+ roster_rev:=(roster_result->>'revision')::uuid;
+ if roster_result->>'action_kind'<>'PLACE'
+   or (select m.team_id from private.contractor_team_memberships m where m.user_id=roster_worker)<>team_a
+   or (select a.active from private.account_work_access a where a.user_id=roster_worker) is not true then
+   raise exception 'Tier 2 placement changed work entitlement or failed';end if;
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,team_b,
+     roster_rev,'Tier 2 forbidden transfer','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Tier 2 transferred an assigned Contractor';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisors[3],
+   'session_id',supervisors[3])::text,true);
+ roster_action:=gen_random_uuid();
+ roster_result:=public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_b,
+   roster_rev,'Tier 3 explicit idle transfer','TEST');
+ if roster_result->>'action_kind'<>'TRANSFER' or
+   (roster_result->>'old_team_id')::uuid<>team_a or
+   (select m.team_id from private.contractor_team_memberships m where m.user_id=roster_worker)<>team_b
+ then raise exception 'Tier 3 idle Contractor transfer incorrect';end if;
+ if roster_result is distinct from public.manage_idle_contractor_roster(roster_action,org,
+    roster_worker,team_b,roster_rev,'Tier 3 explicit idle transfer','TEST') then
+   raise exception 'Roster transfer replay produced different result';end if;
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,team_a,
+     roster_rev,'Stale transfer','TEST');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Stale roster revision accepted';end if;
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,other_team,
+     (roster_result->>'revision')::uuid,'Foreign team transfer','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Cross-org roster transfer accepted';end if;
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(roster_action,org,roster_worker,team_a,
+     roster_rev,'Changed replay payload','TEST');
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Roster action UUID replay accepted changed inputs';end if;
+ insert into public.work_orders(organization_id,responsible_team_id,wo_number,
+   property_address,work_type,due_date,assigned_user_id)
+ values(org,team_b,'ROSTER-'||gen_random_uuid(),'TEST','TEST',current_date,roster_worker)
+ returning id into busy_wo;
+ denied:=false;
+ begin
+   perform public.manage_idle_contractor_roster(gen_random_uuid(),org,roster_worker,team_a,
+     (roster_result->>'revision')::uuid,'Busy roster move forbidden','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Busy Contractor transferred without job handoff';end if;
+ if (select w.responsible_team_id from public.work_orders w where w.id=busy_wo)<>team_b then
+   raise exception 'Roster operation changed existing work-order ownership';end if;
 
  -- Roster movement cannot move existing WO/photo/run authority.
  update private.contractor_team_memberships set team_id=team_b where user_id=contractor;
