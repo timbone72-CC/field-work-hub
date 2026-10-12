@@ -90,37 +90,3 @@ test('invalid recovery target configuration is rejected during trusted endpoint 
   assert.throws(()=>createPrivatePhotoViewer({url:'https://fwh-disposable.supabase.co',
     anonKey:'anon',serviceKey:'service',targetRpc:'any_user_photo_target'}),/Unapproved/);
 });
-))).status,401);
-  assert.equal(calls.length,0);
-});
-test('recovery is not an independent authorization bypass: rejected Auth/target never signs',async()=>{
-  const cases=[
-    {auth:()=>json({},401)}, {auth:()=>json({id:crypto.randomUUID(),is_anonymous:false})},
-    {auth:()=>json({id:user,is_anonymous:true})},
-    {target:()=>json({error:'DENIED'},403)},
-    {target:()=>json({...target,object_key:`${org}/${wo}/${run}/${crypto.randomUUID()}.jpg`})},
-    {target:()=>json({...target,bucket:'public'})},
-    {target:()=>json({...target,object_version:''})},
-  ];
-  for(const config of cases){
-    const {handle,calls}=fixture(config);
-    const response=await handle(request());
-    assert.notEqual(response.status,200);
-    assert.equal(calls.filter(c=>c.url.pathname.includes('/object/sign/')).length,0);
-    assert.ok(!JSON.stringify(await response.json()).includes('service-test'));
-  }
-});
-test('invalid storage signer reply cannot be used for a cross-path private link',async()=>{
-  for(const signedURL of [
-    'https://example.invalid/escape?token=x',
-    `/object/sign/fwh-review-private/${path}?token=x&expires=86400`,
-    `/object/sign/fwh-review-private/${org}/${wo}/${run}/${crypto.randomUUID()}.jpg?token=x`
-  ]){
-    const {handle}=fixture({sign:()=>json({signedURL})});
-    assert.notEqual((await handle(request())).status,200);
-  }
-});
-test('invalid recovery target configuration is rejected during trusted endpoint setup',()=>{
-  assert.throws(()=>createPrivatePhotoViewer({url:'https://fwh-disposable.supabase.co',
-    anonKey:'anon',serviceKey:'service',targetRpc:'any_user_photo_target'}),/Unapproved/);
-});
