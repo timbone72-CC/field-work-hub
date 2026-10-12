@@ -230,7 +230,12 @@ public final class MainActivity extends Activity {
                     } catch (IOException error) {
                         postStatus(operation, sessionGeneration, "Offline — showing last downloaded assignments.");
                     } catch (SupabaseApi.ApiException error) {
-                        if (error.isAuthenticationRejection()) {
+                        if (error.statusCode == 403 && runtime.sessions.matches(sessionGeneration,
+                                saved.userId, saved.organizationId)) {
+                            postIfCurrent(operation, sessionGeneration, () -> showSignedIn(
+                                    runtime.sessions.load(), java.util.Collections.emptyList(), false,
+                                    "Work access is unavailable. Protected originals can be recovered from this phone."));
+                        } else if (error.isAuthenticationRejection()) {
                             runtime.sessions.reject(sessionGeneration);
                             postSessionExpired(operation, sessionGeneration);
                         } else {
@@ -369,7 +374,12 @@ public final class MainActivity extends Activity {
                                             "Offline — downloaded assignments remain available.");
                                 });
                     } catch (SupabaseApi.ApiException error) {
-                        if (error.isAuthenticationRejection()) {
+                        if (error.statusCode == 403 && runtime.sessions.matches(sessionGeneration,
+                                session.userId, session.organizationId)) {
+                            postIfCurrent(operation, sessionGeneration, () -> showSignedIn(
+                                    runtime.sessions.load(), java.util.Collections.emptyList(), false,
+                                    "Work access is unavailable. Protected originals can be recovered from this phone."));
+                        } else if (error.isAuthenticationRejection()) {
                             runtime.sessions.reject(sessionGeneration);
                             postSessionExpired(operation, sessionGeneration);
                         } else {
