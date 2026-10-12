@@ -48,6 +48,12 @@ const FollowupManagement=(()=>{
       if(!['ASSIGNED','CANCELLED'].includes(remote.status)||!UUID.test(remote.run_id))
         throw Error('Current run identity changed. Reload job.');
       facts=remote;
+      if(remote.status==='CANCELLED'){
+        el('job-next-action').textContent=
+          'Cancelled follow-up — correction still unresolved · Review replacement';
+        el('job-next-action-open').textContent='Review replacement';
+        el('job-next-action-open').dataset.panel='photos';
+      }
       el('followup-management').hidden=false;
       const cancel=remote.status==='ASSIGNED'&&remote.can_cancel;
       const replace=remote.status==='CANCELLED'&&remote.can_replace;
