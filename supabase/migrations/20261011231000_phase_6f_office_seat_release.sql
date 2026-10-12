@@ -38,3 +38,31 @@ revoke all on function public.owner_release_office_seat(uuid,uuid,text,text)
  from public,anon;
 grant execute on function public.owner_release_office_seat(uuid,uuid,text,text)
  to authenticated,service_role;
+
+-- Owner-only metadata; no customer work or photo rows returned.
+create function public.owner_office_capacity_status(p_org uuid,p_environment text)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare q private.org_office_allowances%rowtype; a bigint; s bigint; ra bigint; rs bigint;
+begin
+ if p_org is null or p_environment not in ('TEST','PRODUCTION')
+   or not private.is_current_platform_owner(p_environment) then
+   raise exception 'Verified Product Owner required' using errcode='42501';
+ end if;
+ select * into q from private.org_office_allowances where organization_id=p_org;
+ if not found then raise exception 'Office limits unavailable' using errcode='42501';end if;
+ select count(*) filter(where work_role='ADMIN'),
+        count(*) filter(where work_role='SUPERVISOR')
+ into a,s from private.account_work_access
+ where organization_id=p_org and active and disabled_at is null;
+ select count(*) filter(where requested_role='ADMIN'),
+        count(*) filter(where requested_role='SUPERVISOR')
+ into ra,rs from private.office_seat_reservations
+ where organization_id=p_org and state='RESERVED';
+ return jsonb_build_object('organization_id',p_org,'revision',q.revision,
+ 'admin_limit',q.admin_limit,'admin_active',a,'admin_reserved',ra,
+ 'admin_available',greatest(0,q.admin_limit-a-ra),
+ 'supervisor_limit',q.supervisor_limit,'supervisor_active',s,'supervisor_reserved',rs,
+ 'supervisor_available',greatest(0,q.supervisor_limit-s-rs));
+end;$$;
+revoke all on function public.owner_office_capacity_status(uuid,text) from public,anon;
+grant execute on function public.owner_office_capacity_status(uuid,text) to authenticated,service_role;
