@@ -9,6 +9,7 @@ declare
  actors uuid[]; actor uuid; sid uuid; wo uuid; empty_wo uuid;
  action text; expected boolean; result boolean; denied boolean; tier integer; n integer; capacity jsonb;
  enroll_user uuid:=gen_random_uuid(); enroll_action uuid:=gen_random_uuid(); enroll_res uuid; enroll_revision uuid; enroll_access_rev uuid;
+ enroll_user2 uuid:=gen_random_uuid(); combined_action uuid:=gen_random_uuid(); combined_rev uuid;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
 begin
@@ -483,6 +484,37 @@ begin
      enroll_access_rev,1::smallint,array[team_a],'Second enrollment','TEST');
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Consumed reservation used twice';end if;
+
+ -- UI composition never leaves a reserved seat after a failed enrollment.
+ denied:=false;
+ begin
+   perform public.owner_enroll_supervisor_with_seat(gen_random_uuid(),org,gen_random_uuid(),
+     gen_random_uuid(),1::smallint,array[team_a],'Reject nonexistent identity','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied or exists(select 1 from private.office_seat_reservations
+     where reason='Reject nonexistent identity') then
+   raise exception 'Atomic enrollment created an orphaned seat';end if;
+ insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+ values(enroll_user2,'another-supervisor@example.invalid',now(),
+   jsonb_build_object('organization_id',org,'role','SUPERVISOR'));
+ insert into private.account_work_access(organization_id,user_id,work_role,active)
+ values(org,enroll_user2,'SUPERVISOR',false);
+ select revision into enroll_access_rev from private.account_work_access where user_id=enroll_user2;
+ combined_rev:=public.owner_enroll_supervisor_with_seat(combined_action,org,enroll_user2,
+   enroll_access_rev,3::smallint,'{}'::uuid[],'Atomic owner enrollment','TEST');
+ if combined_rev<>public.owner_enroll_supervisor_with_seat(combined_action,org,enroll_user2,
+   enroll_access_rev,3::smallint,'{}'::uuid[],'Atomic owner enrollment','TEST')
+   or (select state from private.office_seat_reservations where action_id=combined_action)<>'CONSUMED'
+   or (select tier from private.supervisor_grants where user_id=enroll_user2)<>3
+   or (select active from private.account_work_access where user_id=enroll_user2)
+   or (select count(*) from private.supervisor_enrollment_actions where action_id=combined_action)<>1 then
+   raise exception 'Atomic enrollment failed replay, quota or work gate';end if;
+ denied:=false;
+ begin
+   perform public.owner_enroll_supervisor_with_seat(combined_action,org,enroll_user2,
+     enroll_access_rev,1::smallint,array[team_a],'Changed atomic replay','TEST');
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Atomic action replay accepted changed tier';end if;
 
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
