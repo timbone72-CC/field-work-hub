@@ -6,6 +6,7 @@ let ownerConsoleData = null;
 let ownerConsoleBusy = false;
 let ownerReviewGeneration = 0;
 let ownerEnrollmentPending = null;
+let ownerRosterPending = null;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -19,6 +20,7 @@ signOutButton.addEventListener('click', () => {
   ownerConsoleData = null;
   ownerConsoleBusy = false;
   ownerEnrollmentPending = null;
+  ownerRosterPending = null;
   document.getElementById('owner-office-console')?.remove();
 });
 
@@ -124,6 +126,11 @@ function ownerCreateConsole() {
        cannot invite a new user or activate a suspended account.</p>
     <div id="owner-supervisor-list"></div>
     <div id="owner-supervisor-team-panel" class="hidden"></div>
+    <h3>Contractor roster</h3>
+    <p class="muted">Place genuinely unassigned Contractors or move an idle Contractor
+      into another team. Open jobs remain with their original team; active work
+      needs a separate reviewed handoff and cannot be moved here.</p>
+    <div id="owner-contractor-roster"></div>
     <h3>Reviewed work access</h3>
     <p class="muted">Disabling work does not delete historical photos. Review affected teams and choose who retains responsibility before committing.</p>
     <div id="owner-office-people"></div>
@@ -398,6 +405,77 @@ async function ownerEnrollExisting() {
   }
 }
 
+function ownerRosterUI(people, teams) {
+  const root = document.getElementById('owner-contractor-roster');
+  if (!root) return;
+  root.replaceChildren();
+  const activeTeams = teams.filter(team => team.active);
+  const contractors = people.filter(person => person.work_role === 'CONTRACTOR');
+  if (ownerRosterPending) {
+    const target = contractors.find(person => person.user_id === ownerRosterPending.user);
+    if (target && target.roster_team_id === ownerRosterPending.destination) ownerRosterPending = null;
+  }
+  if (!contractors.length) {
+    const p = document.createElement('p');
+    p.className = 'muted';p.textContent = 'No Contractor identities available.';
+    root.append(p);
+  }
+  for (const person of contractors) {
+    const row = document.createElement('div');row.className = 'row gap';
+    const currentTeam = teams.find(t => t.team_id === person.roster_team_id);
+    const label = document.createElement('span');
+    label.textContent = `${person.account_email || person.user_id} ·
+      ${currentTeam?.team_name || 'Unassigned'} ·
+      ${person.work_active ? 'work enabled' : 'work disabled'}`;
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', `Roster destination for ${person.account_email || person.user_id}`);
+    select.add(new Option('Choose destination team', ''));
+    for (const team of activeTeams) {
+      if (team.team_id !== person.roster_team_id)
+        select.add(new Option(team.team_name, team.team_id));
+    }
+    const action = document.createElement('button');
+    action.className = 'secondary';action.type = 'button';
+    action.textContent = person.roster_team_id ? 'Review idle transfer' : 'Place unassigned';
+    action.disabled = !person.work_active || person.identity_ready !== true
+      || !activeTeams.length;
+    action.addEventListener('click', () => void ownerMoveRoster(person, select.value));
+    row.append(label, select, action);root.append(row);
+  }
+}
+async function ownerMoveRoster(person, destination) {
+  try {
+    const data = ownerConsoleData;
+    if (!data || !person.work_active || person.identity_ready !== true
+      || person.work_role !== 'CONTRACTOR'
+      || !data.teams.some(t => t.team_id === destination && t.active)
+      || destination === person.roster_team_id) {
+      throw Error('Choose a different active team for a verified Contractor.');
+    }
+    const reason = ownerReason();
+    const fingerprint = JSON.stringify({org:data.organization, user:person.user_id,
+      destination, revision:person.roster_revision || null, reason});
+    if (ownerRosterPending && ownerRosterPending.fingerprint !== fingerprint)
+      throw Error('A previous roster operation may be uncertain. Reconcile that operation before changing details.');
+    if (!window.confirm(person.roster_team_id
+      ? 'Move this idle Contractor roster entry? Existing job and photo ownership will NOT move; an active assignment blocks this operation.'
+      : 'Place this unassigned Contractor with the selected team? A verified Contractor seat is required.')) return;
+    const actionId = ownerRosterPending?.actionId || crypto.randomUUID();
+    ownerRosterPending = {actionId,fingerprint,user:person.user_id,destination};
+    await ownerChange(current => ownerRpc('manage_idle_contractor_roster',{
+      p_action:actionId,p_org:current.organization,p_user:person.user_id,p_team:destination,
+      p_expected_revision:person.roster_revision || null,p_reason:reason,
+      p_environment:OWNER_CONSOLE_ENVIRONMENT
+    }),async () => {
+      await loadOwnerConsole(true);
+      const current = ownerConsoleData?.people.find(p=>p.user_id === person.user_id);
+      if (!current || current.roster_team_id !== destination)
+        throw Error('Roster change outcome needs reconciliation. Refresh and retry the same request.');
+      ownerRosterPending=null;
+    });
+  } catch (error) {ownerStatus(error.message || 'Roster change failed.',true);}
+}
+
 function ownerPeopleUI(people) {
   const root = document.getElementById('owner-office-people');
   if (!root) return;
@@ -570,6 +648,7 @@ async function loadOwnerConsole(force = false) {
     ownerCapacityUI(capacity);
     ownerSupervisorUI(grants);
     ownerEnrollmentUI(people, grants, teams);
+    ownerRosterUI(people, teams);
     ownerPeopleUI(people);
     if (force) {
       section.open = true;
