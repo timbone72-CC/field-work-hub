@@ -7,7 +7,8 @@ const valid = value => typeof value === 'string' && UUID.test(value);
 const fail = (status, message) => response(status, { error: message });
 
 export async function handleScopedAdminInvite({
-  body, callerClient, adminClient, organizationId, environment, redirectUrl
+  body, callerClient, adminClient, organizationId, environment, redirectUrl,
+  newTeam = false
 }) {
   if (!valid(organizationId) || !['TEST', 'PRODUCTION'].includes(environment) ||
     typeof redirectUrl !== 'string' ||
@@ -17,23 +18,30 @@ export async function handleScopedAdminInvite({
   const action = body.action_id;
   const team = body.team_id;
   const expectedRevision = body.expected_allowance_revision;
+  const teamName = typeof body.team_name === 'string' ? body.team_name.trim() : '';
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const displayName = typeof body.display_name === 'string' ? body.display_name.trim() : '';
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (![action, team, expectedRevision].every(valid) ||
       !email || email.length > 320 || !displayName || displayName.length > 200 ||
-      reason.length < 1 || reason.length > 1000) {
+      reason.length < 1 || reason.length > 1000 ||
+      (newTeam && (teamName.length < 1 || teamName.length > 100))) {
     return fail(400, 'An action ID, team, capacity revision, email, name, and reason are required.');
   }
   // An untrusted actor cannot claim an Auth outcome by calling the service-role
   // finalizer: the two ordinary RPCs re-evaluate current team and seat grants.
   const { data: seat, error: seatError } = await callerClient.rpc(
-    'reserve_scoped_admin_invitation', {
-      p_action: action, p_org: organizationId, p_team: team, p_email: email,
-      p_name: displayName, p_expected_allowance_revision: expectedRevision,
+    newTeam ? 'create_admin_team_and_reserve_invitation' :
+      'reserve_scoped_admin_invitation', {
+      p_action: action, p_org: organizationId, p_team: team,
+      ...(newTeam ? { p_team_name: teamName } : {}),
+      p_email: email, p_name: displayName,
+      p_expected_allowance_revision: expectedRevision,
       p_reason: reason, p_environment: environment
     });
-  if (seatError || !['RESERVED', 'ISSUING', 'BOUND', 'PROBLEM'].includes(seat?.status)) {
+  if (seatError || seat?.team_id !== team ||
+      !['RESERVED', 'ISSUING', 'BOUND', 'PROBLEM'].includes(seat?.status) ||
+      (newTeam && (seat.new_team !== true || seat.team_name !== teamName))) {
     return fail(409, 'The Admin seat or team is no longer available. Refresh and review the request.');
   }
   const { data: claim, error: claimError } = await callerClient.rpc(
