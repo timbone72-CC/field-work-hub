@@ -109,7 +109,10 @@ const PrivateReview = (() => {
           await rpc('admin_review_photo', { p_action: crypto.randomUUID(), p_work_order: wo,
             p_photo: item.photo_id, p_transfer_version: item.transfer_version,
             p_expected_revision: item.decision_revision, p_decision: decision, p_reason: reason }, token);
-          if (active(gen,wo,token)) await load(false);
+          if (active(gen,wo,token)){
+            selected.delete(item.photo_id); inspected.delete(item.photo_id);
+            await load(false);
+          }
         } catch (error) {
           if (active(gen,wo,token)) {
             status('Review not saved: ' + error.message + ' Reload verified photos before retrying.', true);
@@ -260,12 +263,15 @@ const PrivateReview = (() => {
         throw Error('Unexpected bulk review receipt. Reload to verify.');
       selected.clear();inspected.clear();
       if(response.outcome==='CONFLICT'){
-        status('Nothing changed. '+response.conflicts.length+' selected photo(s) changed; reload and inspect again.',true);
         await load(false);
+        if(active(gen,wo,token))status('Nothing changed. '+response.conflicts.length+
+          ' selected photo(s) changed. Inspect the new versions before choosing again.',true);
       }else{
-        status('Saved '+response.applied+' selected review decision(s). No client package was sent.');
         await load(false);
-        ClientRelease.open(wo,'photos');
+        if(active(gen,wo,token)){
+          status('Saved '+response.applied+' selected review decision(s). No client package was sent.');
+          ClientRelease.open(wo,'photos');
+        }
       }
     }catch(error){
       if(active(gen,wo,token)){
