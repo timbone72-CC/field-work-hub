@@ -94,6 +94,30 @@ function ownerCreateConsole() {
       <button id="owner-office-limit-save" type="submit">Save office seat limits</button>
     </form>
     <h3>Supervisors</h3>
+    <details id="owner-enrollment" class="admin-action">
+      <summary>Enroll a verified existing Supervisor</summary>
+      <p class="muted">Choose an already verified inactive Supervisor account. This reserves
+        and consumes an available Supervisor seat atomically; it does not create an
+        account, send an invitation, or turn on work access.</p>
+      <form id="owner-enrollment-form" class="admin-form">
+        <label>Verified inactive Supervisor
+          <select id="owner-enrollment-user" required></select>
+        </label>
+        <label>Supervisor tier
+          <select id="owner-enrollment-tier">
+            <option value="1">Tier 1 — Work Supervisor</option>
+            <option value="2">Tier 2 — Team Manager</option>
+            <option value="3">Tier 3 — Organization Manager</option>
+          </select>
+        </label>
+        <fieldset id="owner-enrollment-team-field">
+          <legend>Exact supervised teams (Tier 1 or 2)</legend>
+          <div id="owner-enrollment-teams"></div>
+        </fieldset>
+        <button type="submit">Enroll existing Supervisor</button>
+        <p id="owner-enrollment-status" role="status" class="status"></p>
+      </form>
+    </details>
     <p class="muted">Only existing verified Supervisor grants are listed. A tier or team change
        cannot invite a new user or activate a suspended account.</p>
     <div id="owner-supervisor-list"></div>
@@ -109,6 +133,14 @@ function ownerCreateConsole() {
   section.querySelector('#owner-office-limit-form').addEventListener('submit', event => {
     event.preventDefault();
     void ownerSaveLimits();
+  });
+  section.querySelector('#owner-enrollment-tier').addEventListener('change', () => {
+    const field = document.getElementById('owner-enrollment-team-field');
+    field.hidden = document.getElementById('owner-enrollment-tier').value === '3';
+  });
+  section.querySelector('#owner-enrollment-form').addEventListener('submit', event => {
+    event.preventDefault();
+    void ownerEnrollExisting();
   });
   return section;
 }
@@ -128,7 +160,7 @@ function ownerSupervisorUI(grants) {
   list.replaceChildren();
   if (!grants.length) {
     const p = document.createElement('p'); p.className = 'muted';
-    p.textContent = 'No existing Supervisor grants. Initial enrollment is not enabled.';
+    p.textContent = 'No Supervisor grants yet. Choose a verified account above to enroll.';
     list.append(p); return;
   }
   for (const grant of grants) {
@@ -417,6 +449,7 @@ async function loadOwnerConsole(force = false) {
     const section = ownerCreateConsole();
     ownerCapacityUI(capacity);
     ownerSupervisorUI(grants);
+    ownerEnrollmentUI(people, grants, teams);
     ownerPeopleUI(people);
     if (force) {
       section.open = true;
