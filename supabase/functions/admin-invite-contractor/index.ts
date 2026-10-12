@@ -1,3 +1,4 @@
+import { handleScopedAdminInvite } from './scoped-admin-invite.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -78,7 +79,7 @@ Deno.serve(async (req: Request) => {
   const callerRole = caller?.app_metadata?.role;
   const callerOrganizationId = caller?.app_metadata?.organization_id;
 
-  if (callerError || !caller || callerRole !== 'ADMIN' || !callerOrganizationId) {
+  if (callerError || !caller || !['ADMIN', 'SUPERVISOR'].includes(String(callerRole)) || !callerOrganizationId) {
     return jsonResponse(403, { error: 'Admin permission required.' });
   }
 
@@ -97,6 +98,29 @@ Deno.serve(async (req: Request) => {
   const operation = typeof body.operation === 'string'
     ? body.operation.trim().toLowerCase()
     : 'invite';
+
+  if (operation === 'invite_admin') {
+    // Explicitly disabled unless this exact Team environment has been
+    // provider-reviewed; ordinary Contractor invitations remain unchanged.
+    if (Deno.env.get('TEAM_ADMIN_INVITE_ENABLED') !== 'true') {
+      return jsonResponse(503, { error: 'Staff setup links are not enabled.' });
+    }
+    const result = await handleScopedAdminInvite({
+      body,
+      callerClient,
+      adminClient,
+      organizationId: String(callerOrganizationId),
+      environment: Deno.env.get('TEAM_ADMIN_INVITE_ENVIRONMENT') ?? '',
+      redirectUrl: Deno.env.get('TEAM_ADMIN_INVITE_REDIRECT_URL') ?? '',
+    });
+    return jsonResponse(result.status, result.body);
+  }
+
+  // The original Contractor invite/cancel owner remains ADMIN-only; extending
+  // staff recruitment cannot silently widen existing Contractor authority.
+  if (callerRole !== 'ADMIN') {
+    return jsonResponse(403, { error: 'Admin permission required.' });
+  }
 
   if (operation === 'cancel') {
     return handleCancel(
