@@ -8,6 +8,7 @@ declare
  supervisors uuid[]:=array[gen_random_uuid(),gen_random_uuid(),gen_random_uuid()];
  actors uuid[]; actor uuid; sid uuid; wo uuid; empty_wo uuid;
  action text; expected boolean; result boolean; denied boolean; tier integer; n integer; capacity jsonb;
+ enroll_user uuid:=gen_random_uuid(); enroll_action uuid:=gen_random_uuid(); enroll_res uuid; enroll_revision uuid; enroll_access_rev uuid;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
 begin
@@ -421,6 +422,68 @@ begin
  exception when insufficient_privilege then denied:=true;
  end;
  if not denied then raise exception 'Released reservation resurrected';end if;
+ -- Phase 6F verified existing Supervisor enrollment uses a real reserved seat.
+ insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+ values(enroll_user,'new-supervisor@example.invalid',now(),jsonb_build_object('organization_id',org,'role','SUPERVISOR'));
+ insert into auth.sessions(id,user_id) values(enroll_user,enroll_user);
+ insert into private.account_work_access(organization_id,user_id,work_role,active)
+ values(org,enroll_user,'SUPERVISOR',false);
+ select revision into enroll_access_rev from private.account_work_access where user_id=enroll_user;
+ enroll_res:=public.owner_reserve_office_seat(gen_random_uuid(),org,'SUPERVISOR','Reviewed verified identity','TEST');
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     enroll_access_rev,1::smallint,array[team_a],'Unauthorized enrollment','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Ordinary Admin enrolled Supervisor';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     enroll_access_rev,1::smallint,array[other_team],'Cross-org team','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Supervisor enrollment accepted foreign team';end if;
+ denied:=false;
+ begin
+   perform public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     gen_random_uuid(),1::smallint,array[team_a],'Reviewed verified identity','TEST');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Supervisor enrollment ignored access revision';end if;
+ update auth.users set email_confirmed_at=null where id=enroll_user;
+ denied:=false;
+ begin
+   perform public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     enroll_access_rev,1::smallint,array[team_a],'Reviewed verified identity','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Unverified Auth identity enrolled';end if;
+ update auth.users set email_confirmed_at=now() where id=enroll_user;
+ enroll_revision:=public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     enroll_access_rev,1::smallint,array[team_a],'Reviewed verified identity','TEST');
+ if enroll_revision<>public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     enroll_access_rev,1::smallint,array[team_a],'Reviewed verified identity','TEST')
+   or (select state from private.office_seat_reservations where action_id=enroll_res)<>'CONSUMED'
+   or (select count(*) from private.supervisor_enrollment_actions where action_id=enroll_action)<>1
+   or (select count(*) from private.supervisor_team_scopes where user_id=enroll_user and team_id=team_a)<>1
+   or (select active from private.account_work_access where user_id=enroll_user) then
+   raise exception 'Enrollment created duplicate, lost seat or enabled work';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',enroll_user,'session_id',enroll_user)::text,true);
+ if private.has_team_capability(org,team_a,'WORK') then
+   raise exception 'Inactive newly enrolled Supervisor gained work';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ denied:=false;
+ begin
+   perform public.owner_enroll_existing_supervisor(enroll_action,org,enroll_user,enroll_res,
+     enroll_access_rev,2::smallint,array[team_a],'Changed replay payload','TEST');
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Enrollment replay changed tier';end if;
+ denied:=false;
+ begin
+   perform public.owner_enroll_existing_supervisor(gen_random_uuid(),org,enroll_user,enroll_res,
+     enroll_access_rev,1::smallint,array[team_a],'Second enrollment','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Consumed reservation used twice';end if;
+
  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner_id;
  if private.is_current_platform_owner('TEST') then raise exception 'Owner recent-auth boundary failed';end if;
 
