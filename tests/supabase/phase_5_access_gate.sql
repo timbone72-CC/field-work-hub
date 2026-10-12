@@ -7,7 +7,7 @@ declare
  admin_id uuid:=gen_random_uuid(); owner_id uuid:=gen_random_uuid(); contractor uuid:=gen_random_uuid();
  supervisors uuid[]:=array[gen_random_uuid(),gen_random_uuid(),gen_random_uuid()];
  actors uuid[]; actor uuid; sid uuid; wo uuid; empty_wo uuid;
- action text; expected boolean; result boolean; denied boolean; tier integer; n integer;
+ action text; expected boolean; result boolean; denied boolean; tier integer; n integer; capacity jsonb;
  actions text[]:=array['WORK','INVITE_CONTRACTOR','MANAGE_CONTRACTOR','MANAGE_ADMIN',
    'PLACE_UNASSIGNED_CONTRACTOR','TRANSFER_CONTRACTOR','HANDOFF_TEAM','GRANT_SUPERVISOR','RAISE_ALLOWANCE','UNKNOWN'];
 begin
@@ -247,6 +247,27 @@ begin
     or (select oa.supervisor_limit from private.org_office_allowances oa where oa.organization_id=org)<>5 then
    raise exception 'Owner allowance values incorrect';
  end if;
+
+ -- The owner-only capacity projection is metadata, not office or photo access.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin perform public.owner_office_capacity_status(org,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin read Product Owner allowance metadata';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ denied:=false;
+ begin perform public.owner_office_capacity_status(org,'PRODUCTION');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Owner bypassed verified environment';end if;
+ capacity:=public.owner_office_capacity_status(org,'TEST');
+ if capacity->>'organization_id'<>org::text
+   or (capacity->>'admin_limit')::integer<>4
+   or (capacity->>'admin_active')::integer<>2
+   or (capacity->>'admin_available')::integer<>2
+   or (capacity->>'supervisor_active')::integer<>3
+   or (capacity->>'supervisor_available')::integer<>2
+   or capacity ? 'photo_id' or capacity ? 'work_order_id' then
+   raise exception 'Owner capacity status is inaccurate or leaks job context: %',capacity;end if;
 
  -- Phase 6F owner-only office seat reservation, immutable action and per-role cap.
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
