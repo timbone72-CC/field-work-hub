@@ -188,6 +188,18 @@ begin
  -- Scoped removal must produce a committed recovery header before losing visibility.
  if not exists(select 1 from private.photo_recovery_grants g where g.organization_id=org and g.user_id=supervisors[1] and g.state='READY' and g.removed_team_ids=array[team_b]) then raise exception 'Removed team lacked historical photo recovery cutoff';end if;
 
+ -- A Tier 3 -> Tier 2 downgrade freezes teams outside the explicit team set.
+ select revision into sid from private.supervisor_grants where organization_id=org and user_id=supervisors[3];
+ actor:=public.owner_change_supervisor_tier(org,supervisors[3],sid,2::smallint,'Scoped tier downgrade','TEST');
+ if private.team_capability_for_user(supervisors[3],org,team_b,'WORK')
+    or not private.team_capability_for_user(supervisors[3],org,team_a,'WORK') then
+   raise exception 'Tier downgrade retained ungranted office work scope';end if;
+ if not exists(select 1 from private.photo_recovery_grants g where g.organization_id=org
+    and g.user_id=supervisors[3] and g.state='READY'
+    and g.removed_team_ids=array[team_b]) then
+   raise exception 'Tier downgrade did not freeze removed team photo scope';end if;
+ actor:=public.owner_change_supervisor_tier(org,supervisors[3],actor,3::smallint,'Restore test tier','TEST');
+
  -- Phase 6F existing-organization allowance guard. Never creates seats/accounts.
  insert into private.org_office_allowances(organization_id,admin_limit,supervisor_limit)
  values(org,2,3);
