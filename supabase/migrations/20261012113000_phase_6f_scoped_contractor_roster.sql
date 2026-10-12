@@ -18,12 +18,12 @@ create table private.contractor_roster_actions (
 );
 create index contractor_roster_actor_idx on private.contractor_roster_actions(organization_id,user_id,created_at);
 create function private.protect_contractor_roster_action() returns trigger
-language plpgsql set search_path='' as $
+language plpgsql set search_path='' as $roster_audit$
 begin
   raise exception 'Contractor roster action history is immutable' using errcode='42501';
   return old;
 end;
-$;
+$roster_audit$;
 revoke all on function private.protect_contractor_roster_action() from public,anon,authenticated;
 create trigger contractor_roster_actions_immutable
  before update or delete on private.contractor_roster_actions
