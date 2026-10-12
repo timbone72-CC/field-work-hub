@@ -192,9 +192,7 @@ begin
    where organization_id=p_org and user_id=p_user for update;
  select * into g from private.supervisor_grants
    where organization_id=p_org and user_id=p_user for update;
- if not found or a.work_role is distinct from 'SUPERVISOR'
-   or a.active or a.disabled_at is null and a.suspension_authority is null and g.active=false and p_active=false
- then
+ if not found or a.work_role is distinct from 'SUPERVISOR' or a.active then
    -- Previously never enabled accounts may remove an active grant, but
    -- no state action can silently disable an account that still has work.
    raise exception 'Existing inactive-work Supervisor required' using errcode='42501';end if;
