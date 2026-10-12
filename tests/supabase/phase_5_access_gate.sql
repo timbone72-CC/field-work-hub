@@ -314,6 +314,22 @@ begin
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Owner enumerated unconfigured foreign scope';end if;
 
+ -- Owner-only personnel labels for reviewed continuity, not client job access.
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
+ denied:=false;
+ begin perform public.owner_office_people_list(org,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin enumerated owner personnel';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id)::text,true);
+ select count(*) into n from public.owner_office_people_list(org,'TEST');
+ if n<>6 then raise exception 'Owner personnel scope missed or leaked accounts';end if;
+ select count(*) into n from public.owner_office_people_list(org,'TEST',null,1);
+ if n<>1 then raise exception 'Owner personnel paging failed';end if;
+ denied:=false;
+ begin perform public.owner_office_people_list(other_org,'TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Owner enumerated unconfigured foreign personnel';end if;
+
  -- Phase 6F owner-only office seat reservation, immutable action and per-role cap.
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id)::text,true);
  denied:=false;
