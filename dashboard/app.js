@@ -171,6 +171,22 @@ loginForm.addEventListener('submit', async (event) => {
     verifyAdminRls(rows, metadata.organization_id);
     renderSignedIn(rows, users, metadata.organization_id);
   } catch (error) {
+    // A denied operational request is not an Auth failure. A fresh server
+    // recovery grant read decides whether this identity can enter read-only mode.
+    if (error?.status === 403 && accessToken && currentUser?.id) {
+      try {
+        await RecoveryGallery.show();
+        if (pendingAdminSession) {
+          storeAdminSession(pendingAdminSession);
+          pendingAdminSession = null;
+        }
+        passwordInput.value = '';
+        return;
+      } catch {
+        // Never treat an unverified photo grant or broken network as authority.
+      }
+    }
+    RecoveryGallery.reset();
     accessToken = null;
     currentUser = null;
     assignableUsers = [];
@@ -271,6 +287,7 @@ editForm.addEventListener('submit', async (event) => {
 cancelEditButton.addEventListener('click', closeEditor);
 
 signOutButton.addEventListener('click', () => {
+  RecoveryGallery.reset();
   PushDevice.signedOut();
   NotificationCenter.reset();
   accessToken = null;
@@ -354,7 +371,9 @@ async function fetchWorkOrders() {
   );
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to load work orders.'));
+    const error = new Error(await readableError(response, 'Unable to load work orders.'));
+    error.status = response.status;
+    throw error;
   }
 
   const rows = await response.json();
@@ -418,7 +437,9 @@ async function fetchAssignableUsers() {
   });
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to load Team users.'));
+    const error = new Error(await readableError(response, 'Unable to load Team users.'));
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
