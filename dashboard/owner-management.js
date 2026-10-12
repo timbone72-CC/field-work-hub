@@ -248,6 +248,143 @@ async function ownerUpdateTeam(grant, team, allowed) {
     }), async () => loadOwnerConsole(true));
   } catch (error) { ownerStatus(error.message, true); }
 }
+
+function ownerPeopleUI(people) {
+  const root = document.getElementById('owner-office-people');
+  if (!root) return;
+  root.replaceChildren();
+  for (const person of people) {
+    const row = document.createElement('div');
+    row.className = 'row gap';
+    const label = document.createElement('span');
+    label.textContent = `${person.account_email || person.user_id} · ${person.work_role} ·
+      ${person.work_active ? 'work enabled' : 'work disabled'}`;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = person.work_active ? 'secondary' : '';
+    button.textContent = person.work_active ? 'Review disable' : 'Review restore';
+    button.addEventListener('click', () => void ownerReviewAccess(person, !person.work_active));
+    row.append(label, button);
+    root.append(row);
+  }
+}
+async function ownerReadAccessReview(person, requestedActive, organization) {
+  const teams = [];
+  let cursor = null;
+  let fingerprint = null;
+  let first = null;
+  for (let page = 0; page < 20; page++) {
+    const result = await ownerRpc('review_account_work_access', {
+      p_target: person.user_id,
+      p_active: requestedActive,
+      p_environment: OWNER_CONSOLE_ENVIRONMENT,
+      p_limit: 50,
+      p_after_team: cursor,
+      p_expected_fingerprint: fingerprint
+    });
+    if (!result || result.organization_id !== organization
+        || result.target_user_id !== person.user_id
+        || result.requested_active !== requestedActive
+        || !/^[a-f0-9]{64}$/.test(result.review_fingerprint)
+        || !Array.isArray(result.teams) || result.teams.length > 50
+        || (fingerprint && fingerprint !== result.review_fingerprint)) {
+      throw Error('Account review changed or included unexpected scope; reload.');
+    }
+    if (!first) {
+      first = result;
+      fingerprint = result.review_fingerprint;
+    }
+    teams.push(...result.teams);
+    cursor = result.next_team;
+    if (!cursor) {
+      if (teams.length !== Number(result.total_teams))
+        throw Error('Incomplete account-team review; no change authorized.');
+      return { ...first, teams };
+    }
+  }
+  throw Error('Too many teams to review safely in this page.');
+}
+async function ownerReviewAccess(person, requestedActive) {
+  if (!ownerConsoleData || ownerConsoleBusy) return;
+  const check = ownerIdentity();
+  const region = document.getElementById('owner-access-review-panel');
+  if (!region) return;
+  region.classList.remove('hidden'); region.replaceChildren();
+  ownerStatus('Reviewing current account, teams, and affected work…');
+  try {
+    const data = ownerConsoleData;
+    const review = await ownerReadAccessReview(person, requestedActive, data.organization);
+    if (!ownerStillCurrent(check)) return;
+    const heading = document.createElement('p');
+    heading.textContent = `${requestedActive ? 'Restore' : 'Disable'} work for
+      ${person.account_email || person.user_id}: ${review.affected_jobs} current jobs,
+      ${review.in_progress_jobs} in progress, ${review.field_complete_jobs} field-complete.`;
+    region.append(heading);
+    const decisions = [];
+    if (review.continuity_required) {
+      for (const team of review.teams) {
+        const label = document.createElement('label');
+        label.textContent = `${team.name} · ${team.affected_jobs} affected jobs · `;
+        const available = Array.isArray(team.manager_user_ids) ? team.manager_user_ids : [];
+        if (Number(team.manager_count) > 0 && !available.length)
+          throw Error('A team manager exists but cannot be selected; stop and reload.');
+        if (available.length) {
+          const select = document.createElement('select');
+          select.add(new Option('Choose the responsible manager', ''));
+          for (const userId of available) {
+            const manager = data.people.find(p => p.user_id === userId);
+            if (!manager) throw Error('Manager identity not verified in current organization.');
+            select.add(new Option(manager.account_email || userId, userId));
+          }
+          label.append(select);
+          decisions.push(() => {
+            if (!select.value) throw Error(`Choose a responsible manager for ${team.name}.`);
+            return { team_id: team.team_id, decision: 'KEEP_MANAGER',
+              manager_user_id: select.value };
+          });
+        } else {
+          const ack = document.createElement('input');
+          ack.type = 'checkbox';
+          label.append('No eligible manager. Explicitly mark this team as needing one.', ack);
+          decisions.push(() => {
+            if (!ack.checked) throw Error(`Acknowledge the missing manager for ${team.name}.`);
+            return { team_id: team.team_id, decision: 'NEEDS_MANAGER' };
+          });
+        }
+        region.append(label);
+      }
+    }
+    const confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.textContent = requestedActive ? 'Confirm reviewed restore' : 'Confirm reviewed disable';
+    confirm.addEventListener('click', () => {
+      try {
+        const continuity = decisions.map(getDecision => getDecision());
+        const reason = ownerReason();
+        if (!window.confirm(requestedActive
+          ? 'Restore this account’s current work permissions? Historical recovery remains separate.'
+          : 'Disable new work access? Existing protected photos remain recoverable; active jobs and offline work must still be handled.')) return;
+        void ownerChange(data => ownerRpc('set_reviewed_account_work_access', {
+          p_action: crypto.randomUUID(),
+          p_target: person.user_id,
+          p_expected_revision: review.access_revision,
+          p_active: requestedActive, p_reason: reason,
+          p_environment: OWNER_CONSOLE_ENVIRONMENT,
+          p_review_fingerprint: review.review_fingerprint,
+          p_continuity: continuity
+        }), async () => loadOwnerConsole(true));
+      } catch (error) { ownerStatus(error.message, true); }
+    });
+    region.append(confirm);
+    ownerStatus('Review the listed team continuity before confirming. Nothing has been changed.');
+  } catch (error) {
+    if (ownerStillCurrent(check)) {
+      region.replaceChildren();
+      ownerStatus(error.message || 'Unable to review this account.', true);
+    }
+  }
+}
+
 async function loadOwnerConsole(force = false) {
   const check = ownerIdentity();
   if (!check.user || !check.organization) return;
