@@ -13,6 +13,7 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
+let staffingPagingRace=false, staffingScopeShift=false;
 let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true;
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
@@ -230,9 +231,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
            property_address:'Example work address',wo_number:'TEST-WO-1',field_status:'ASSIGNED',
            due_date:'2026-10-20'};
          return reply({organization_id:organization,caller_tier:staffingWorkTier,
-           work_orders:p.p_after?[]:staffingWorkTier===3
+           scope_fingerprint:staffingScopeShift?'b'.repeat(32):'a'.repeat(32),
+           work_orders:p.p_after?(staffingPagingRace?[{...sample,work_order_id:uuid(9306)}]:[]):staffingWorkTier===3
              ? [sample,{...sample,work_order_id:uuid(9305),wo_number:'TEST-ACTIVE',field_status:'IN_PROGRESS'}]
-             : [sample],next_after:null});
+             : [sample],next_after:staffingPagingRace&&!p.p_after?uuid(9304):null});
        }
        if (url.pathname.endsWith('/preview_work_order_team_handoff')) {
         const p=req.postDataJSON();
@@ -1371,6 +1373,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       .includes('Current Supervisor authorization could not be reverified'));
     assert.equal(await page.locator('#staffing-card:visible').count(),0);
     assert.equal(await page.locator('#staffing-work-rows tr').count(),0);
+    // A changed current authorized-team set across a page boundary must
+    // discard previously presented rows instead of mixing scopes.
+    staffingGranted=true; staffingPagingRace=true; staffingWorkTier=1;
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-work-more:visible').waitFor();
+    staffingScopeShift=true;
+    await page.locator('#staffing-work-more').click();
+    await wait(page,()=>document.querySelector('#login-status')?.textContent
+      .includes('Supervisor work scope needs a fresh sign-in'));
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-work-rows tr').count(),0,
+      'Changed server scope must discard every prior work row');
+    staffingScopeShift=false; staffingPagingRace=false;
     // Tier 3 alone receives the reviewed no-evidence work-order handoff.
     staffingWorkTier=3;staffingGranted=true;
     await page.locator('#email').fill('supervisor@example.invalid');
