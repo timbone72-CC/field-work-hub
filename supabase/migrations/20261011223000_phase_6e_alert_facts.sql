@@ -160,13 +160,10 @@ begin
          make_interval(mins=>coalesce(prefs.reminder_minutes,1440))))
    and not (i.alert_type='CLIENT_DELIVERED'
      and rec.acknowledged_at is not null and rec.version_key=i.version_key);
- select exists(select 1 from private.admin_alert_issues i
-  where i.organization_id=org and private.can_work_order(i.work_order_id)
-    and (p_after_created is null or i.first_at<p_after_created or
-      (i.first_at=p_after_created and i.id<p_after_issue)))
- into more;
+ select (count(*)>50) into more from public.work_orders w
+    where w.organization_id=org and private.can_work_order(w.id);
  return jsonb_build_object('organization_id',org,'alerts',alerts,
-   'bounded_evaluation_jobs',50,'has_more_unverified',false,
+   'bounded_evaluation_jobs',50,'has_more_unverified',more,
    'evaluation_scope','MOST_RECENT_50_SCOPED_WORK_ORDERS',
    'next_cursor',case when jsonb_array_length(alerts)=p_limit then
        jsonb_build_object('at',alerts->(p_limit-1)->>'first_at',

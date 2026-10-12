@@ -103,15 +103,40 @@ const PushDevice=(()=>{
       p_expected_revision:data.revision},token);
     await record(k,{...data,revision:answer.revision,pending_revoke:false});
   }
+  async function reconcilePending(){
+    const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+    if(!user||!org||!accessToken)return;
+    const keyName=key(user,org),saved=await record(keyName);
+    if(!saved?.pending_revoke||!saved.device_id)return;
+    await disableLocal().catch(()=>{});
+    const receipt=await rpc('admin_disable_push',{
+      p_action:crypto.randomUUID(),p_device:saved.device_id,
+      p_expected_revision:saved.revision},accessToken);
+    await record(keyName,{...saved,revision:receipt.revision,pending_revoke:false});
+  }
   function signedOut(){
     const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+    const token=accessToken;
     if(!user||!org)return;
-    // Do not postpone signout for a remote push request. A best-effort local
-    // unsubscribe runs, and next authorized login can reconcile pending marker.
-    record(key(user,org)).then(async data=>{
-      await disableLocal();
-      if(data?.device_id)await record(key(user,org),{...data,pending_revoke:true});
+    // Start local unsubscription immediately, and revoke server enrollment
+    // with the old exact actor's token only. Never persist the token.
+    const local=disableLocal().catch(()=>{});
+    Promise.all([local,record(key(user,org))]).then(async([,data])=>{
+      if(!data?.device_id)return;
+      await record(key(user,org),{...data,pending_revoke:true});
+      if(!token)return;
+      try{
+        const res=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_disable_push',{
+          method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,
+            Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:JSON.stringify({p_action:crypto.randomUUID(),p_device:data.device_id,
+            p_expected_revision:data.revision}),signal:AbortSignal.timeout(10000)});
+        if(res.ok){
+          const receipt=await res.json();
+          await record(key(user,org),{...data,revision:receipt.revision,pending_revoke:false});
+        }
+      }catch{/* Offline signout leaves a durable non-secret pending revoke. */}
     }).catch(()=>{});
   }
-  return {supported,enroll,disable,signedOut};
+  return {supported,enroll,disable,signedOut,reconcilePending};
 })();
