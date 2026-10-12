@@ -25,6 +25,8 @@ let ownerEnrollFailOnce=true;
 let ownerRosterTeam=null,ownerRosterRevision=null,ownerRosterWrites=[],ownerRosterBusyOnce=true,ownerRosterTransportOnce=true;
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
+let supervisorReviewDecision = 'PENDING', supervisorReviewRevision = null;
+let supervisorReviewWrites = [], supervisorReviewFailOnce = true;
 let bulkSaves = [], bulkConflict = false;
 let largeReview=false,maxPhotoPage=0;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
@@ -616,7 +618,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply({package_id:reviewPackageId,status:'APPROVED',revision:simulatedPackage.revision});
       }
       if (url.pathname.endsWith('/admin_review_photo_page')) {
-        const p=req.postDataJSON(); assert.equal(p.p_wo,uuid(51));
+        const p=req.postDataJSON();
+        if (syntheticRole === 'SUPERVISOR') {
+          assert.equal(p.p_wo,uuid(9304));assert.equal(p.p_limit,25);
+          if (!staffingGranted) return reply({message:'Scoped review revoked'},403);
+          return reply({work_order_id:uuid(9304),photos:[{
+            photo_id:reviewPhoto,transfer_version:reviewVersion,run_id:reviewRun,
+            run_sequence:1,requirement_label:'Roof <script>unsafe</script>',
+            stage:'BEFORE',decision:supervisorReviewDecision,
+            decision_revision:supervisorReviewRevision
+          }],next_photo:null,next_sequence:null});
+        }
+        assert.equal(p.p_wo,uuid(51));
         assert.ok([25,50].includes(p.p_limit));
         if(largeReview){
           const all=Array.from({length:500},(_,i)=>({
@@ -673,6 +686,24 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       }
       if (url.pathname.endsWith('/admin_review_photo')) {
         const p = req.postDataJSON();
+        if (syntheticRole === 'SUPERVISOR') {
+          assert.equal(p.p_work_order,uuid(9304));
+          assert.equal(p.p_photo,reviewPhoto);
+          assert.equal(p.p_transfer_version,reviewVersion);
+          assert.equal(p.p_expected_revision,supervisorReviewRevision);
+          assert.equal(p.p_decision,'APPROVED');
+          assert.equal(p.p_reason,'');
+          supervisorReviewWrites.push(p);
+          if (!staffingGranted) return reply({message:'Scoped review revoked'},403);
+          if (supervisorReviewFailOnce) {
+            supervisorReviewFailOnce=false;
+            return reply({message:'Uncertain receipt from server'},503);
+          }
+          supervisorReviewDecision='APPROVED';supervisorReviewRevision=uuid(9261);
+          return reply({action_id:p.p_action,photo_id:reviewPhoto,
+            work_order_id:uuid(9304),transfer_version:reviewVersion,
+            decision:'APPROVED',decision_revision:supervisorReviewRevision});
+        }
         assert.equal(p.p_photo, reviewPhoto);
         assert.equal(p.p_transfer_version, reviewVersion);
         assert.equal(p.p_expected_revision, reviewedRevision);
@@ -687,7 +718,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         const p = req.postDataJSON();
         assert.equal(p.photo_id, reviewPhoto); assert.equal(p.transfer_version, reviewVersion);
         return reply({ photo_id: reviewPhoto, transfer_version: reviewVersion, expires_in: 120,
-          url: `https://vyocaujuwrivoqynvitm.supabase.co/storage/v1/object/sign/fwh-review-private/${organization}/${uuid(51)}/${reviewRun}/${reviewPhoto}.jpg?token=disposable-preview` });
+          url: `https://vyocaujuwrivoqynvitm.supabase.co/storage/v1/object/sign/fwh-review-private/${organization}/${syntheticRole==='SUPERVISOR'?uuid(9304):uuid(51)}/${reviewRun}/${reviewPhoto}.jpg?token=disposable-preview` });
       }
       if (url.pathname.startsWith('/storage/v1/object/sign/fwh-review-private/')) {
         assert.equal(url.searchParams.get('token'), 'disposable-preview');
@@ -1357,6 +1388,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.match(assignmentDetail,/Contractor accepted\s+Not confirmed/);
     assert.equal(await page.locator('#staffing-work-detail script').count(),0,
       'Server-provided assignee labels must remain inert DOM text');
+    // Supervisor uses the same scoped verified gallery and decision engine as Admin.
+    await page.locator('#supervisor-photo-review button').first().click();
+    await page.locator('#supervisor-photo-rows .private-review-photo').first().waitFor();
+    assert.match(await page.locator('#supervisor-photo-rows').innerText(),/Roof <script>unsafe<\/script>/);
+    assert.equal(await page.locator('#supervisor-photo-rows script').count(),0);
+    assert.equal(await page.locator('#supervisor-photo-rows button:has-text("Approve")').isDisabled(),true,
+      'Uninspected Supervisor photos cannot be approved');
+    await page.locator('#supervisor-photo-rows button:has-text("Inspect photo")').click();
+    await wait(page,()=>document.querySelector('#supervisor-photo-status')?.textContent
+      .includes('Photo inspected'));
+    await page.locator('#supervisor-photo-rows button:has-text("Approve")').click();
+    await wait(page,()=>document.querySelector('#supervisor-photo-status')?.textContent
+      .includes('outcome uncertain'));
+    assert.equal(supervisorReviewWrites.length,1);
+    await page.locator('#supervisor-photo-rows button:has-text("Approve")').click();
+    await wait(page,()=>document.querySelector('#supervisor-photo-rows')?.textContent
+      .includes('APPROVED'));
+    assert.equal(supervisorReviewWrites.length,2);
+    assert.equal(supervisorReviewWrites[0].p_action,supervisorReviewWrites[1].p_action);
+    assert.equal(await page.locator('#supervisor-photo-rows button:has-text("Approve")').isDisabled(),true,
+      'Confirmed review requires inspecting the currently returned version again');
     // Tier 2 may make an authorized due-date and additive-instruction edit;
     // uncertain network outcomes must reuse the exact action ID and inputs.
     await page.locator('#staffing-work-edit-form:visible').waitFor();
