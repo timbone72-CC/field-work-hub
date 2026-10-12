@@ -270,10 +270,10 @@ begin
    raise exception 'Idempotent replay consumed extra office seat';
  end if;
 
- -- An active ADMIN plus one reserved ADMIN consumes both allowed seats.
- -- Lowering to exactly that occupancy succeeds, but the next reservation fails.
+ -- Two active ADMIN roles (including the synthetic Product Owner) and one
+ -- reserved ADMIN consume all three allowed seats; the next reservation fails.
  select oa.revision into actor from private.org_office_allowances oa where oa.organization_id=org;
- actor:=public.owner_set_office_allowances(org,actor,2,5,
+ actor:=public.owner_set_office_allowances(org,actor,3,5,
    'Capacity boundary with pending reservation','TEST');
  denied:=false;
  begin
