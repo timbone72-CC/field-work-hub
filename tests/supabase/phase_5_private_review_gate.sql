@@ -616,6 +616,11 @@ begin
     issue_payload);
   issue_preview:=public.admin_preview_correction_draft(wo,
      (issue_draft->>'revision')::uuid);
+  perform pg_temp.expect_photo_review_error('22023',format(
+    'select public.admin_save_correction_issues(%L,%L,%L::jsonb)',
+    wo,issue_draft->>'revision',jsonb_build_array(jsonb_build_object(
+       'photo_id',photo,'item_id',null,'reason','Too many new photos',
+       'requested_count',2))::text));
   if jsonb_array_length(issue_preview->'summary'->'issues')<>1
      or issue_preview->'summary'->'issues'->0->>'photo_id'<>photo::text
      or (public.admin_correction_state(wo)->'draft'->>'revision')<>
