@@ -86,11 +86,14 @@ begin
         normalized_name,p_expected_allowance_revision,normalized_reason,p_environment) then
       raise exception 'Invitation action reused with changed inputs' using errcode='22023';
     end if;
-    if prior.state<>'RESERVED' then
-      raise exception 'Released invitation cannot reserve another seat' using errcode='42501';
+    if prior.state not in ('RESERVED','ISSUING','BOUND','PROBLEM') then
+      raise exception 'Released or consumed invitation cannot reserve another seat'
+        using errcode='42501';
     end if;
+    -- Identical action replay inspects the existing outcome; it NEVER
+    -- allocates a second seat or permits a second external Auth create.
     return jsonb_build_object('action_id',p_action,'organization_id',p_org,
-      'team_id',p_team,'status','RESERVED');
+      'team_id',p_team,'status',prior.state);
   end if;
   select * into quota from private.org_office_allowances
     where organization_id=p_org for update;
