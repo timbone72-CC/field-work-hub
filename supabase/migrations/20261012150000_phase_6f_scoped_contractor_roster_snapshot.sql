@@ -76,7 +76,8 @@ begin
       max(user_id::text) filter(where rn=p_limit) else null end
   into rows_page,next_cursor from numbered;
   return jsonb_build_object(
-    'organization_id',p_org,'contractors',rows_page,'next_after',next_cursor);
+    'organization_id',p_org,'caller_tier',caller_tier,
+    'contractors',rows_page,'next_after',next_cursor);
 end;
 $roster_snapshot$;
 
