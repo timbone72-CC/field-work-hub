@@ -138,7 +138,9 @@ begin
  if p_action is null or p_device is null or p_class not in ('PHONE','COMPUTER')
     or not private.valid_admin_push_endpoint(p_endpoint)
     or length(coalesce(p_p256dh,'')) not between 40 and 300
-    or p_p256dh !~ '^[A-Za-z0-9_-]+
+    or translate(p_p256dh,'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-','')<>''
+    or length(coalesce(p_auth_secret,'')) not between 10 and 200
+    or translate(p_auth_secret,'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-','')<>''
  then raise exception 'Valid HTTPS browser push device/keys required' using errcode='22023';end if;
  perform private.lock_account_lifecycle();org:=private.admin_alert_current_org();
  endpoint_hash:=encode(sha256(convert_to(p_endpoint,'UTF8')),'hex');
