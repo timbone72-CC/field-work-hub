@@ -3,7 +3,7 @@
  * Never treats an eligible roster row as consent to move active work. */
 const SupervisorAssignmentCandidates = (() => {
   const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let generation=0,selected='',rows=[],next=null,busy=false;
+  let generation=0,selected='',rows=[],next=null,busy=false,pending=null,assignBusy=false;
   const panel=()=>document.getElementById('supervisor-candidates');
   function status(message,error=false){
     const node=panel()?.querySelector('#supervisor-candidates-status');
@@ -16,7 +16,7 @@ const SupervisorAssignmentCandidates = (() => {
         && row.team_id===staffingWorkDetail.team_id);
   }
   function reset(){
-    generation++;selected='';rows=[];next=null;busy=false;
+    generation++;selected='';rows=[];next=null;busy=false;pending=null;assignBusy=false;
     panel()?.remove();
   }
   function mount(section){
@@ -27,7 +27,7 @@ const SupervisorAssignmentCandidates = (() => {
     root.className='subsection';
     const heading=document.createElement('h4');heading.textContent='Eligible team contractors';
     const description=document.createElement('p');description.className='muted';
-    description.textContent='Current authorized options for this job. Preview only: this list does not assign or transfer anyone.';
+    description.textContent='Current authorized options for this job. Assignment is rechecked by the server; in-progress work requires the current Contractor’s consent.';
     const load=document.createElement('button');load.type='button';load.className='secondary';
     load.textContent='Show eligible contractors';load.addEventListener('click',()=>void loadPage(false));
     const info=document.createElement('p');info.id='supervisor-candidates-status';
@@ -36,7 +36,15 @@ const SupervisorAssignmentCandidates = (() => {
     const more=document.createElement('button');more.type='button';more.className='secondary hidden';
     more.id='supervisor-candidates-more';more.textContent='More eligible contractors';
     more.addEventListener('click',()=>void loadPage(true));
-    root.append(heading,description,load,info,list,more);
+    const form=document.createElement('form');form.id='supervisor-assignment-form';form.className='admin-form hidden';
+    const selectLabel=document.createElement('label');selectLabel.textContent='Assign to Contractor';
+    const select=document.createElement('select');select.id='supervisor-assignment-person';select.required=true;selectLabel.append(select);
+    const reasonLabel=document.createElement('label');reasonLabel.textContent='Assignment reason';
+    const reason=document.createElement('input');reason.id='supervisor-assignment-reason';reason.maxLength=1000;reason.required=true;reasonLabel.append(reason);
+    const submit=document.createElement('button');submit.type='submit';submit.textContent='Confirm assignment';
+    form.append(selectLabel,reasonLabel,submit);
+    form.addEventListener('submit',event=>{event.preventDefault();void assign()});
+    root.append(heading,description,load,info,list,more,form);
     section.append(root);
   }
   function render(){
@@ -49,6 +57,16 @@ const SupervisorAssignmentCandidates = (() => {
       list.append(row);
     }
     p.querySelector('#supervisor-candidates-more').classList.toggle('hidden',!next);
+    const form=p.querySelector('#supervisor-assignment-form'),select=form.querySelector('select');
+    const previous=select.value;select.replaceChildren(new Option('Choose an eligible Contractor',''));
+    for(const candidate of rows){
+      const option=new Option(candidate.label,candidate.user_id);
+      option.disabled=staffingWorkDetail?.assignment?.assignee_id===candidate.user_id;
+      select.add(option);
+    }
+    if([...select.options].some(o=>o.value===previous&&!o.disabled))select.value=previous;
+    form.classList.toggle('hidden',rows.length===0);
+    form.querySelector('button').disabled=assignBusy;
   }
   async function loadPage(append){
     const identity=staffingIdentity(),gen=generation,wo=selected;
@@ -100,6 +118,56 @@ const SupervisorAssignmentCandidates = (() => {
         rows=[];next=null;render();status(error.message,true);
       }
     }finally{busy=false}
+  }
+  async function assign(){
+    const identity=staffingIdentity(),gen=generation,wo=selected,p=panel();
+    if(!current(gen,wo,identity)||assignBusy||!p)return;
+    const assignee=p.querySelector('#supervisor-assignment-person').value;
+    const reason=p.querySelector('#supervisor-assignment-reason').value.trim();
+    const candidate=rows.find(row=>row.user_id===assignee);
+    if(!candidate||assignee===staffingWorkDetail?.assignment?.assignee_id||!reason||reason.length>1000){
+      status('Choose a different eligible Contractor and enter a reason.',true);return;
+    }
+    const request={p_org:identity.org,p_work_order:wo,p_assignee:assignee,
+      p_expected_scope_fingerprint:staffingWork.scopeFingerprint,
+      p_expected_work_revision:staffingWorkDetail.work_revision,p_reason:reason};
+    if(pending&&JSON.stringify(pending.request)!==JSON.stringify(request)){
+      status('An assignment outcome is unresolved. Restore the exact Contractor and reason before retrying.',true);return;
+    }
+    pending||={action:crypto.randomUUID(),request};
+    assignBusy=true;render();status('Submitting the exact assignment action…');
+    try{
+      const response=await adminFetch(SUPABASE_URL+'/rest/v1/rpc/office_supervisor_assign_work',{
+        method:'POST',headers:authHeaders(true),body:JSON.stringify({...request,p_action:pending.action})
+      });
+      const result=await response.json().catch(()=>({}));
+      if(!current(gen,wo,identity))return;
+      if(!response.ok)throw Error(result.message||await readableError(response,'Assignment was not confirmed.'));
+      if(result.action_id!==pending.action||result.work_order_id!==wo
+        ||result.pending_assignee_user_id!==((result.status==='CONSENT_REQUIRED')?assignee:null)
+        ||!['ASSIGNED','CONSENT_REQUIRED'].includes(result.status)||!result.work_revision)
+        throw Error('Assignment response did not match the exact requested action.');
+      pending=null;
+      staffingWorkDetail.work_revision=result.work_revision;
+      if(result.status==='ASSIGNED'){
+        staffingWorkDetail.assignment.assignee_id=assignee;
+        staffingWorkDetail.assignment.assignee_label=candidate.label;
+        staffingWorkDetail.assignment.download_received_at=null;
+        staffingWorkDetail.assignment.human_accepted_at=null;
+        staffingWorkDetail.assignment.pending_assignee_id=null;
+        staffingWorkDetail.assignment.pending_assignee_label=null;
+        staffingWorkDetail.assignment.reassignment_requested_at=null;
+        status('Server confirmed the new assignment. The Contractor must still explicitly Accept it.');
+      }else{
+        staffingWorkDetail.assignment.pending_assignee_id=assignee;
+        staffingWorkDetail.assignment.pending_assignee_label=candidate.label;
+        staffingWorkDetail.assignment.reassignment_requested_at='Pending current Contractor consent';
+        status('Reassignment requested. The current Contractor keeps control until they consent.');
+      }
+      staffingRenderDetail();
+    }catch(error){
+      if(current(gen,wo,identity))status(error.message+' Exact action retained for safe retry.',true);
+    }finally{assignBusy=false;render()}
   }
   return {mount,reset};
 })();
