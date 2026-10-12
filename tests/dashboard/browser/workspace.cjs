@@ -13,7 +13,7 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
-let recoveryMode=false, recoveryPhotoRequests=0;
+let recoveryMode=false, recoveryGranted=true, recoveryPhotoRequests=0;
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
 let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=true;
@@ -398,7 +398,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           setup_url:'https://auth.example.invalid/one-time-setup'});
       }
       if (url.pathname === '/rest/v1/rpc/photo_recovery_page') {
-        if (!recoveryMode) return reply({message:'Recovery unavailable'},403);
+        if (!recoveryMode || !recoveryGranted) return reply({message:'Recovery unavailable'},403);
         const p=req.postDataJSON(); assert.equal(p.p_limit,25);
         assert.equal(p.p_after_photo,null);
         return reply({photos:[{photo_id:reviewPhoto,transfer_version:reviewVersion,
@@ -1673,6 +1673,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#recovery-card button').filter({hasText:'Sign Out'}).click();
     assert.equal(await page.locator('#recovery-card:visible').count(),0);
     assert.equal(await page.locator('#login-card:visible').count(),1);
+    // A valid office Auth session alone cannot recover an ungranted photo.
+    recoveryGranted=false;
+    await page.locator('#email').fill('admin@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await wait(page,()=>document.querySelector('#login-status')?.textContent.includes('Office work access disabled'));
+    assert.equal(await page.locator('#recovery-card:visible').count(),0);
+    assert.equal(await page.locator('#results-card:visible').count(),0);
+    assert.equal(recoveryPhotoRequests,2);
+    recoveryMode=false;recoveryGranted=true;
     assert.equal(errors.length,0,errors.join('\\n'));
     console.log('PASS: bounded job workspace and exact on-demand signed-in recovery after denied work. No live backend traffic.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
