@@ -15,13 +15,17 @@ const user = {
   user_metadata: { scoped_admin_invitation_id: id }
 };
 function harness({ seatStatus = 'RESERVED', claimInstruction = 'CREATE_ONCE', claimStatus = 'ISSUING',
-  authUser = user, generateError = null, listing = [], bindError = null } = {}) {
+  authUser = user, generateError = null, listing = [], bindError = null,
+  newTeam = false } = {}) {
   const events = [];
   let beginCount = 0;
   const callerClient = { async rpc(name, params) {
     events.push(['caller', name, params]);
-    if (name === 'reserve_scoped_admin_invitation') {
-      return { data: { status: seatStatus } };
+    if (name === 'reserve_scoped_admin_invitation' ||
+        name === 'create_admin_team_and_reserve_invitation') {
+      return { data: { status: seatStatus, team_id: team,
+        ...(name === 'create_admin_team_and_reserve_invitation' ?
+          { new_team: true, team_name: 'Fresh Admin Team' } : {}) } };
     }
     if (name === 'begin_scoped_admin_invitation_issue') {
       return { data: {
@@ -61,9 +65,11 @@ function harness({ seatStatus = 'RESERVED', claimInstruction = 'CREATE_ONCE', cl
     body: {
       action_id: id, team_id: team, expected_allowance_revision: revision,
       email: '  STAFF@EXAMPLE.INVALID  ', display_name: ' Staff ',
-      reason: ' Approved staffed access '
+      reason: ' Approved staffed access ',
+      ...(newTeam ? { team_name: ' Fresh Admin Team ' } : {})
     },
     callerClient, adminClient, organizationId: org, environment: 'TEST',
+    newTeam,
     redirectUrl
   };
   return { events, args };
@@ -101,6 +107,41 @@ test('released or consumed actions never enter Auth reconciliation', async () =>
     assert.equal(result.status, 409);
     assert.equal(events.length, 1);
   }
+});
+
+test('new team and Admin seat are reserved in one guarded RPC before external Auth', async () => {
+  const { events, args } = harness({ newTeam: true });
+  const result = await handleScopedAdminInvite(args);
+  assert.equal(result.status, 200);
+  assert.deepEqual(events.map(e => e[0]), [
+    'caller','caller','generateLink','caller','updateUser','service'
+  ]);
+  assert.equal(events[0][1], 'create_admin_team_and_reserve_invitation');
+  assert.equal(events[0][2].p_team, team);
+  assert.equal(events[0][2].p_team_name, 'Fresh Admin Team');
+  assert.equal(events[0][2].p_expected_allowance_revision, revision);
+  assert.equal(events[2][1].options.data.scoped_admin_invitation_id, id);
+});
+
+test('same-action new-team retry reconciles without another Auth link', async () => {
+  const { events, args } = harness({
+    newTeam: true, seatStatus: 'ISSUING',
+    claimInstruction: 'RECONCILE', listing: [user]
+  });
+  const result = await handleScopedAdminInvite(args);
+  assert.equal(result.status, 409);
+  assert.equal(result.body.status, 'BOUND');
+  assert.equal(events[0][1], 'create_admin_team_and_reserve_invitation');
+  assert.equal(events.filter(e => e[0] === 'generateLink').length, 0);
+});
+
+test('new-team request must name its team before any DB or Auth side effect', async () => {
+  const { events, args } = harness({ newTeam: true });
+  const result = await handleScopedAdminInvite({
+    ...args, body: { ...args.body, team_name: '  ' }
+  });
+  assert.equal(result.status, 400);
+  assert.equal(events.length, 0);
 });
 
 test('recorded binding never generates another setup link', async () => {
