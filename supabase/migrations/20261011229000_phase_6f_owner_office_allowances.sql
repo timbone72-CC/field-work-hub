@@ -9,6 +9,8 @@ declare
  current_row private.org_office_allowances%rowtype;
  active_admins integer;
  active_supervisors integer;
+ pending_admins integer;
+ pending_supervisors integer;
  next_revision uuid;
 begin
  if p_org is null or p_expected_revision is null or p_admin_limit is null
@@ -39,7 +41,11 @@ begin
    join private.supervisor_grants g on g.organization_id=a.organization_id and g.user_id=a.user_id
    where a.organization_id=p_org and a.work_role='SUPERVISOR' and a.active
    and a.disabled_at is null and g.active;
- if p_admin_limit<active_admins or p_supervisor_limit<active_supervisors then
+ select count(*) into pending_admins from private.office_seat_reservations s
+   where s.organization_id=p_org and s.requested_role='ADMIN' and s.state='RESERVED';
+ select count(*) into pending_supervisors from private.office_seat_reservations s
+   where s.organization_id=p_org and s.requested_role='SUPERVISOR' and s.state='RESERVED';
+ if p_admin_limit<active_admins+pending_admins or p_supervisor_limit<active_supervisors+pending_supervisors then
    raise exception 'Allowance below current active account count' using errcode='23514';
  end if;
  if current_row.admin_limit=p_admin_limit and current_row.supervisor_limit=p_supervisor_limit then
