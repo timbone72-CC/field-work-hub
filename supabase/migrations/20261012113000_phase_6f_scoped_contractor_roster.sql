@@ -135,6 +135,10 @@ begin
      set team_id=p_team,active=true,revision=next_revision
      where organization_id=p_org and user_id=p_user;
  end if;
+ -- The same authoritative assignment predicate must recognize the new
+ -- roster identity; otherwise roll back placement/transfer without exposure.
+ if not private.is_assignable_contractor(p_user,p_org) then
+   raise exception 'Contractor cannot be assigned after roster change' using errcode='42501';end if;
  insert into private.contractor_roster_actions(
   action_id,organization_id,user_id,actor_id,old_team_id,new_team_id,
   expected_revision,result_revision,action_kind,reason,environment)
