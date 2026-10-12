@@ -469,7 +469,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.locator('#notification-list').getByRole('button',{name:'Acknowledge'}).click()
     ]);
     assert.equal(alertReceipt?.mode,'ACKNOWLEDGE');
-    assert.match(await page.locator('#notification-list').innerText(),/Acknowledged/);
+    await wait(page,()=>document.querySelector('#notification-list')?.textContent.includes('Acknowledged ·'));
     await page.locator('#notification-center > summary').click();
     assert.match(await page.locator('#job-page-info').innerText(), /1–25 of 1000/);
     assert.equal(await page.locator('details.admin-action[open]').count(), 0);
