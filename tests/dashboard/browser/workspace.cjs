@@ -13,6 +13,7 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
+let ownerEnrollFailOnce=true;
 
 let reviewedDecision = 'PENDING', reviewedRevision = null;
 let bulkSaves = [], bulkConflict = false;
@@ -146,6 +147,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           assert.deepEqual(p.p_team_ids,[uuid(9213)]);
           assert.match(p.p_action,/^[a-f0-9-]{36}$/);
           assert.equal(ownerEnrolled,false,'Enrollment must create only one grant');
+          if (ownerEnrollFailOnce) {
+            ownerEnrollFailOnce=false;
+            return reply({message:'Temporary gateway failure; verify enrollment state'},503);
+          }
           ownerEnrolled=true;
           return reply(uuid(9234));
         }
@@ -1001,9 +1006,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       page.waitForResponse(response=>response.url().includes('/owner_enroll_supervisor_with_seat')),
       page.locator('#owner-enrollment button[type=submit]').click()
     ]);
+    await wait(page,()=>document.querySelector('#owner-office-status')?.textContent.includes('Temporary gateway failure'));
+    assert.equal(ownerEnrolled,false,'Gateway failure cannot claim enrollment');
+    page.once('dialog', dialog=>dialog.accept());
+    await Promise.all([
+      page.waitForResponse(response=>response.url().includes('/owner_enroll_supervisor_with_seat')),
+      page.locator('#owner-enrollment button[type=submit]').click()
+    ]);
     await wait(page,()=>document.querySelector('#owner-supervisor-list')?.textContent.includes('new-supervisor@example.invalid'));
     assert.equal(ownerEnrolled,true);
-    assert.equal(ownerEnrollWrites.length,1);
+    assert.equal(ownerEnrollWrites.length,2);
+    assert.equal(ownerEnrollWrites[0].p_action,ownerEnrollWrites[1].p_action,
+      'Retry must carry the same immutable enrollment action UUID');
     page.once('dialog', dialog=>dialog.accept());
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/owner_set_supervisor_grant_state')),
