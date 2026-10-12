@@ -12,6 +12,8 @@ let staffingRosterBusy = false;
 let staffingRosterNeedsRefresh = false;
 let staffingWork = null;
 let staffingWorkBusy = false;
+let staffingDetailGeneration = 0;
+let staffingWorkDetail = null;
 let staffingHandoffPreview = null;
 let staffingHandoffPending = null;
 let staffingHandoffBusy = false;
@@ -77,10 +79,16 @@ function staffingCard() {
       <h3>Authorized team work</h3>
       <p id="staffing-work-status" class="muted" role="status" aria-live="polite"></p>
       <div class="table-scroll"><table>
-        <thead><tr><th>Team</th><th>Address</th><th>WO</th><th>Status</th><th>Due</th></tr></thead>
+        <thead><tr><th>Team</th><th>Address</th><th>WO</th><th>Status</th><th>Due</th><th>Details</th></tr></thead>
         <tbody id="staffing-work-rows"></tbody>
       </table></div>
       <button id="staffing-work-more" type="button" class="secondary hidden">More authorized work</button>
+      <section id="staffing-work-detail" class="subsection hidden" aria-label="Selected read-only work order">
+        <div class="row between gap"><h4>Selected work order · view only</h4>
+          <button id="staffing-work-detail-close" type="button" class="secondary">Close details</button></div>
+        <p id="staffing-work-detail-status" class="muted" role="status" aria-live="polite"></p>
+        <dl id="staffing-work-detail-fields"></dl>
+      </section>
     </section>
     <section id="staffing-handoff-area" class="subsection hidden">
       <h3>Reviewed team handoff</h3>
@@ -112,6 +120,7 @@ function staffingCard() {
   card.querySelector('#staffing-work-more').addEventListener('click', () => {
     void staffingLoadMore();
   });
+  card.querySelector('#staffing-work-detail-close').addEventListener('click', staffingClearWorkDetail);
   for (const id of ['staffing-handoff-wo','staffing-handoff-team','staffing-handoff-reason']) {
     card.querySelector('#'+id).addEventListener('input', () => {
       if (!staffingHandoffPending) {
@@ -205,6 +214,80 @@ async function staffingReadWorkPage(org, after = null) {
   return { tier: Number(value.caller_tier), rows: value.work_orders,
     scopeFingerprint: value.scope_fingerprint, nextAfter: value.next_after || null };
 }
+function staffingClearWorkDetail() {
+  staffingDetailGeneration++;
+  staffingWorkDetail = null;
+  const section = document.getElementById('staffing-work-detail');
+  if (section) {
+    section.classList.add('hidden');
+    section.querySelector('#staffing-work-detail-status').textContent = '';
+    section.querySelector('#staffing-work-detail-fields').replaceChildren();
+  }
+}
+function staffingRenderDetail() {
+  const section = document.getElementById('staffing-work-detail');
+  if (!section || !staffingWorkDetail) return;
+  const details = section.querySelector('#staffing-work-detail-fields');
+  details.replaceChildren();
+  for (const [label, key] of [
+    ['Team','team_name'],['Work order','wo_number'],['Address','property_address'],
+    ['Work type','work_type'],['Instructions','instructions'],
+    ['Field status','field_status'],['Due','due_date'],['Created','created_at']
+  ]) {
+    const title = document.createElement('dt');
+    title.textContent = label;
+    const value = document.createElement('dd');
+    value.textContent = staffingWorkDetail[key] == null ? '—' : String(staffingWorkDetail[key]);
+    details.append(title,value);
+  }
+  section.querySelector('#staffing-work-detail-status').textContent =
+    'Current team authorization confirmed. No editing, assignments or photo access.';
+  section.classList.remove('hidden');
+}
+async function staffingOpenWorkDetail(workOrderId) {
+  const check = staffingIdentity(), work = staffingWork;
+  if (!staffingStillCurrent(check) || !work ||
+    !work.rows.some(row => row.work_order_id === workOrderId)) return;
+  staffingClearWorkDetail();
+  const generation = staffingDetailGeneration, row = work.rows.find(r=>r.work_order_id===workOrderId);
+  const section = staffingCard().querySelector('#staffing-work-detail');
+  section.classList.remove('hidden');
+  section.querySelector('#staffing-work-detail-status').textContent = 'Checking current work scope…';
+  try {
+    const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/office_supervisor_work_detail`,{
+      method:'POST',headers:authHeaders(true),
+      body:JSON.stringify({p_org:check.org,p_work_order:workOrderId,
+        p_expected_scope_fingerprint:work.scopeFingerprint})
+    });
+    if (!staffingStillCurrent(check) || generation !== staffingDetailGeneration) return;
+    if (!response.ok) {
+      if ([401,403,409].includes(response.status)) {
+        signOutButton.click();
+        setLoginStatus('Supervisor work scope needs a fresh sign-in.',true);
+        return;
+      }
+      throw new Error(await readableError(response,'Selected work order is unavailable.'));
+    }
+    const result = await response.json();
+    if (!staffingStillCurrent(check) || generation !== staffingDetailGeneration) return;
+    const detail = result?.work_order;
+    if (result?.organization_id !== check.org || result.caller_tier !== work.tier
+      || result.scope_fingerprint !== work.scopeFingerprint
+      || !detail || detail.work_order_id !== workOrderId || detail.team_id !== row.team_id
+      || staffingWork?.scopeFingerprint !== work.scopeFingerprint
+      || !staffingWork.rows.some(r=>r.work_order_id===workOrderId&&r.team_id===detail.team_id)) {
+      signOutButton.click();
+      setLoginStatus('Supervisor work scope needs a fresh sign-in.',true);
+      return;
+    }
+    staffingWorkDetail = detail;
+    staffingRenderDetail();
+  } catch (error) {
+    if (staffingStillCurrent(check) && generation === staffingDetailGeneration) {
+      section.querySelector('#staffing-work-detail-status').textContent = error.message;
+    }
+  }
+}
 function staffingRenderWork() {
   const card = staffingCard(), work = staffingWork;
   const rows = card.querySelector('#staffing-work-rows');
@@ -217,6 +300,15 @@ function staffingRenderWork() {
       td.textContent = value == null ? '—' : String(value);
       tr.append(td);
     }
+    const action = document.createElement('td');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary staffing-view-detail';
+    button.textContent = 'View details';
+    button.setAttribute('aria-label',`View details for ${row.wo_number || row.work_order_id}`);
+    button.addEventListener('click', () => void staffingOpenWorkDetail(row.work_order_id));
+    action.append(button);
+    tr.append(action);
     rows.append(tr);
   }
   card.querySelector('#staffing-work-status').textContent = work
@@ -283,6 +375,7 @@ async function showScopedStaffingPortal(organizationId) {
 }
 async function staffingRefresh() {
   const check = staffingIdentity();
+  staffingClearWorkDetail();
   if (!staffingStillCurrent(check)) throw new Error('Sign in as an authorized Supervisor.');
   if (staffingRosterPending) {
     throw new Error('Reconcile the exact pending Contractor action before refreshing staffing.');
@@ -621,6 +714,7 @@ async function staffingConfirmHandoff() {
     staffingHandoffPending=null;
     staffingHandoffPreview=null;
     staffingHandoffNeedsRefresh=true;
+    staffingClearWorkDetail();
     card.querySelector('#staffing-handoff-review').classList.add('hidden');
     staffingHandoffMessage('Server confirmed audited handoff. Refresh work before another move.');
   } catch(error) {
@@ -641,6 +735,7 @@ function staffingSignedOut() {
   staffingRosterNeedsRefresh = false;
   staffingWork = null;
   staffingWorkBusy = false;
+  staffingClearWorkDetail();
   staffingHandoffPreview = null;
   staffingHandoffPending = null;
   staffingHandoffBusy = false;
