@@ -49,9 +49,24 @@ export async function handleScopedAdminInvite({
   async function bindUser(user) {
     if (!user || !valid(user.id) ||
       (user.email ?? '').trim().toLowerCase() !== email ||
-      user.user_metadata?.scoped_admin_invitation_id !== action) {
+      user.user_metadata?.scoped_admin_invitation_id !== action ||
+      // Never mutate an already-claimed identity or move it between tenants.
+      user.email_confirmed_at || user.last_sign_in_at ||
+      (user.app_metadata?.organization_id &&
+        user.app_metadata.organization_id !== organizationId) ||
+      (user.app_metadata?.role &&
+        !['ADMIN', 'authenticated'].includes(user.app_metadata.role))) {
       return false;
     }
+    // Recheck the original actor's live scope after the network/Auth roundtrip.
+    // If revoked, do not write elevated Auth metadata at all.
+    const { data: scoped, error: scopeError } = await callerClient.rpc(
+      'begin_scoped_admin_invitation_issue', {
+        p_action: action, p_org: organizationId, p_environment: environment
+      });
+    if (scopeError || scoped?.status !== 'ISSUING' ||
+      scoped.instruction !== 'RECONCILE' || scoped.action_id !== action ||
+      scoped.team_id !== team) return false;
     // Metadata is server-managed. The reserved scope is verified again in SQL
     // and activation cannot grant work from a user-controlled marker.
     const { data: updated, error: updateError } =
