@@ -109,3 +109,28 @@ revoke all on function public.owner_enroll_existing_supervisor(
   uuid,uuid,uuid,uuid,uuid,smallint,uuid[],text,text) from public,anon;
 grant execute on function public.owner_enroll_existing_supervisor(
   uuid,uuid,uuid,uuid,uuid,smallint,uuid[],text,text) to authenticated,service_role;
+
+-- One transaction combines reservation and enrollment for the existing owner UI.
+-- On failure the seat reservation rolls back; an ambiguous client retry uses
+-- the SAME immutable action UUID and never creates another identity or seat.
+create function public.owner_enroll_supervisor_with_seat(
+ p_action uuid,p_org uuid,p_user uuid,p_expected_access_revision uuid,
+ p_tier smallint,p_team_ids uuid[],p_reason text,p_environment text
+) returns uuid
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+begin
+ if p_action is null or not private.is_current_platform_owner(p_environment) then
+   raise exception 'Current verified Product Owner required' using errcode='42501';end if;
+ if exists(select 1 from private.supervisor_enrollment_actions a where a.action_id=p_action) then
+   return public.owner_enroll_existing_supervisor(p_action,p_org,p_user,p_action,
+     p_expected_access_revision,p_tier,p_team_ids,p_reason,p_environment);
+ end if;
+ perform public.owner_reserve_office_seat(p_action,p_org,'SUPERVISOR',p_reason,p_environment);
+ return public.owner_enroll_existing_supervisor(p_action,p_org,p_user,p_action,
+   p_expected_access_revision,p_tier,p_team_ids,p_reason,p_environment);
+end;
+$$;
+revoke all on function public.owner_enroll_supervisor_with_seat(
+ uuid,uuid,uuid,uuid,smallint,uuid[],text,text) from public,anon;
+grant execute on function public.owner_enroll_supervisor_with_seat(
+ uuid,uuid,uuid,uuid,smallint,uuid[],text,text) to authenticated,service_role;
