@@ -17,6 +17,7 @@ const user = {
 function harness({ claimInstruction = 'CREATE_ONCE', claimStatus = 'ISSUING',
   authUser = user, generateError = null, listing = [], bindError = null } = {}) {
   const events = [];
+  let beginCount = 0;
   const callerClient = { async rpc(name, params) {
     events.push(['caller', name, params]);
     if (name === 'reserve_scoped_admin_invitation') {
@@ -24,7 +25,7 @@ function harness({ claimInstruction = 'CREATE_ONCE', claimStatus = 'ISSUING',
     }
     if (name === 'begin_scoped_admin_invitation_issue') {
       return { data: {
-        instruction: claimInstruction, status: claimStatus,
+        instruction: ++beginCount === 1 ? claimInstruction : 'RECONCILE', status: claimStatus,
         action_id: id, organization_id: org, team_id: team, invite_email: email
       } };
     }
@@ -74,11 +75,10 @@ test('fresh verified request binds exact Auth UUID before returning the single s
   assert.equal(result.status, 200);
   assert.equal(result.body.status, 'BOUND');
   assert.equal(result.body.setup_url, 'https://auth.example.invalid/action');
-  assert.deepEqual(events.map(x => x[0]), ['caller','caller','generateLink','updateUser','service']);
-  assert.equal(events[2][0], 'generateLink');
+  assert.deepEqual(events.map(x => x[0]), ['caller','caller','generateLink','caller','updateUser','service']);
   assert.equal(events[2][1].options.data.scoped_admin_invitation_id, id);
-  assert.equal(events[3][2].app_metadata.role, 'ADMIN');
-  assert.equal(events[4][2].p_auth_user, userId);
+  assert.equal(events[4][2].app_metadata.role, 'ADMIN');
+  assert.equal(events[5][2].p_auth_user, userId);
 });
 
 test('recorded binding never generates another setup link', async () => {
@@ -123,6 +123,24 @@ test('wrong Auth marker or role binding failure can never return usable setup UR
   const denied = await handleScopedAdminInvite(bound.args);
   assert.equal(denied.status, 503);
   assert.equal(denied.body.setup_url, undefined);
+});
+
+test('a claimed or foreign-organization Auth identity never has metadata rewritten', async () => {
+  const claimed = harness({
+    authUser: { ...user, email_confirmed_at: '2026-10-12T00:00:00Z' }, listing: []
+  });
+  const result = await handleScopedAdminInvite(claimed.args);
+  assert.equal(result.status, 503);
+  assert.equal(claimed.events.filter(x => x[0] === 'updateUser').length, 0);
+  assert.equal(claimed.events.filter(x => x[0] === 'service').length, 0);
+
+  const foreign = harness({
+    authUser: { ...user, app_metadata: { role: 'ADMIN', organization_id: team } },
+    listing: []
+  });
+  const denied = await handleScopedAdminInvite(foreign.args);
+  assert.equal(denied.status, 503);
+  assert.equal(foreign.events.filter(x => x[0] === 'updateUser').length, 0);
 });
 
 test('invalid team, unconfigured environment or cross-account details fail before reserving', async () => {
