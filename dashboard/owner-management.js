@@ -95,7 +95,11 @@ function ownerCreateConsole() {
     <p class="muted">Only existing verified Supervisor grants are listed. A tier or team change
        cannot invite a new user or activate a suspended account.</p>
     <div id="owner-supervisor-list"></div>
-    <div id="owner-supervisor-team-panel" class="hidden"></div>`;
+    <div id="owner-supervisor-team-panel" class="hidden"></div>
+    <h3>Reviewed work access</h3>
+    <p class="muted">Disabling work does not delete historical photos. Review affected teams and choose who retains responsibility before committing.</p>
+    <div id="owner-office-people"></div>
+    <div id="owner-access-review-panel" class="hidden"></div>`;
   const notifications = document.getElementById('notification-center');
   if (notifications) notifications.after(section);
   else document.getElementById('results-card').append(section);
@@ -254,16 +258,21 @@ async function loadOwnerConsole(force = false) {
       p_org: check.organization, p_environment: OWNER_CONSOLE_ENVIRONMENT
     });
     if (!ownerStillCurrent(check)) return;
-    const [grants, teams] = await Promise.all([
+    const [grants, teams, people] = await Promise.all([
       ownerPaged('owner_supervisor_grant_list', check.organization),
-      ownerPaged('owner_office_team_list', check.organization)
+      ownerPaged('owner_office_team_list', check.organization),
+      ownerPaged('owner_office_people_list', check.organization)
     ]);
     if (!ownerStillCurrent(check)) return;
-    ownerConsoleData = { organization: check.organization, capacity, grants, teams };
+    ownerConsoleData = { organization: check.organization, capacity, grants, teams, people };
     const section = ownerCreateConsole();
     ownerCapacityUI(capacity);
     ownerSupervisorUI(grants);
-    if (force) section.open = true;
+    ownerPeopleUI(people);
+    if (force) {
+      section.open = true;
+      document.getElementById('owner-access-review-panel')?.classList.add('hidden');
+    }
     ownerStatus('Current owner entitlement verified by the server.');
   } catch (error) {
     if (!ownerStillCurrent(check)) return;
