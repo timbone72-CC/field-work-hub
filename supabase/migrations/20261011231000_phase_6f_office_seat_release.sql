@@ -50,10 +50,12 @@ begin
  end if;
  select * into q from private.org_office_allowances where organization_id=p_org;
  if not found then raise exception 'Office limits unavailable' using errcode='42501';end if;
- select count(*) filter(where work_role='ADMIN'),
-        count(*) filter(where work_role='SUPERVISOR')
- into a,s from private.account_work_access
- where organization_id=p_org and active and disabled_at is null;
+ select count(*) filter(where w.work_role='ADMIN'),
+        count(*) filter(where w.work_role='SUPERVISOR' and g.active)
+ into a,s from private.account_work_access w
+ left join private.supervisor_grants g
+   on g.organization_id=w.organization_id and g.user_id=w.user_id
+ where w.organization_id=p_org and w.active and w.disabled_at is null;
  select count(*) filter(where requested_role='ADMIN'),
         count(*) filter(where requested_role='SUPERVISOR')
  into ra,rs from private.office_seat_reservations
