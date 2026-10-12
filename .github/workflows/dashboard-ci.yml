@@ -62,6 +62,7 @@ jobs:
           node --check dashboard/app.js
           node --check dashboard/auto-refresh.js
           node --check dashboard/owner-management.js
+          node --check dashboard/staffing.js
           node --check dashboard/session.js
           node --check dashboard/contractors.js
           node --check dashboard/contractor-invite.js
