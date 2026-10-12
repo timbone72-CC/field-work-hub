@@ -32,7 +32,7 @@ declare
  access_row private.account_work_access%rowtype;
  previous_team uuid;
  kind text;
- revision uuid:=gen_random_uuid();
+ next_revision uuid:=gen_random_uuid();
  limit_value integer;
  used_count integer;
  pending_count integer;
@@ -117,20 +117,20 @@ begin
  if membership.user_id is null then
    insert into private.contractor_team_memberships(
      organization_id,user_id,team_id,active,revision)
-   values(p_org,p_user,p_team,true,revision);
+   values(p_org,p_user,p_team,true,next_revision);
  else
    update private.contractor_team_memberships
-     set team_id=p_team,active=true,revision=revision
+     set team_id=p_team,active=true,revision=next_revision
      where organization_id=p_org and user_id=p_user;
  end if;
  insert into private.contractor_roster_actions(
   action_id,organization_id,user_id,actor_id,old_team_id,new_team_id,
   expected_revision,result_revision,action_kind,reason,environment)
  values(p_action,p_org,p_user,auth.uid(),previous_team,p_team,
-   p_expected_revision,revision,kind,btrim(p_reason),p_environment);
+   p_expected_revision,next_revision,kind,btrim(p_reason),p_environment);
  result:=jsonb_build_object('action_id',p_action,'user_id',p_user,
    'old_team_id',previous_team,'new_team_id',p_team,
-   'revision',revision,'action_kind',kind);
+   'revision',next_revision,'action_kind',kind);
  return result;
 end;
 $$;
