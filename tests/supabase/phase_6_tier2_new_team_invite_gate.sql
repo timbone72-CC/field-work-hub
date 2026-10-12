@@ -8,6 +8,8 @@ declare
  existing_team uuid:=gen_random_uuid();
  foreign_team uuid:=gen_random_uuid();
  new_team uuid:=gen_random_uuid();
+ cancel_team uuid:=gen_random_uuid();
+ cancel_action uuid:=gen_random_uuid();
  tier3_team uuid:=gen_random_uuid();
  denied_team uuid:=gen_random_uuid();
  action_id uuid:=gen_random_uuid();
@@ -97,6 +99,38 @@ begin
  if not denied then raise exception 'Stale quota allowed team';end if;
  if exists(select 1 from public.admin_teams where id=denied_team) then
    raise exception 'Failed staff operation persisted ghost team';end if;
+
+ -- Pre-Auth cancellation must retire exactly the empty new team and
+ -- preserve its immutable action audit rather than orphaning a live office.
+ result:=public.create_admin_team_and_reserve_invitation(
+   cancel_action,org,cancel_team,'Cancelled staff team',
+   'cancelledstaff@example.invalid','Cancelled Staff',quota_revision,
+   'Review cancelled before Auth','TEST');
+ denied:=false;
+ begin
+   insert into private.contractor_team_memberships(
+     organization_id,user_id,team_id,active)
+   values(org,admin_user,cancel_team,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Unstaffed new team accepted roster placement';end if;
+ result:=public.release_scoped_admin_invitation(cancel_action,org,'TEST');
+ if result->>'status'<>'RELEASED'
+   or (select active from public.admin_teams where id=cancel_team)
+   or exists(select 1 from private.supervisor_team_scopes
+     where organization_id=org and user_id=tier2 and team_id=cancel_team)
+   or (select state from private.office_seat_reservations
+     where action_id=cancel_action)<>'RELEASED'
+   or not exists(select 1 from private.created_admin_team_invitation_actions
+     where action_id=cancel_action and team_id=cancel_team) then
+   raise exception 'Cancelled pending team was not safely retired';end if;
+ denied:=false;
+ begin
+   perform public.create_admin_team_and_reserve_invitation(
+     cancel_action,org,cancel_team,'Cancelled staff team',
+     'cancelledstaff@example.invalid','Cancelled Staff',quota_revision,
+     'Review cancelled before Auth','TEST');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Retired team was resurrected';end if;
 
  result:=public.create_admin_team_and_reserve_invitation(
    action_id,org,new_team,'New managed team',
