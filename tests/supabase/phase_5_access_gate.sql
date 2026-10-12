@@ -600,6 +600,8 @@ begin
  if private.can_work_order(wo) then raise exception 'Revoked session authorized';end if;
 
  -- Phase 6F: staff placement and idle transfers are separate from job handoff.
+ -- Earlier tier-change tests promoted this actor; restore Tier 1 for denial proof.
+ update private.supervisor_grants set tier=1 where organization_id=org and user_id=supervisors[1];
  insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
  values(roster_worker,'roster-test@example.invalid',now(),
    jsonb_build_object('organization_id',org,'role','CONTRACTOR'));
