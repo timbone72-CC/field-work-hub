@@ -630,7 +630,8 @@ begin
  roster_rev:=(roster_result->>'revision')::uuid;
  if roster_result->>'action_kind'<>'PLACE'
    or (select m.team_id from private.contractor_team_memberships m where m.user_id=roster_worker)<>team_a
-   or (select a.active from private.account_work_access a where a.user_id=roster_worker) is not true then
+   or (select a.active from private.account_work_access a where a.user_id=roster_worker) is not true
+   or not private.is_assignable_contractor(roster_worker,org) then
    raise exception 'Tier 2 placement changed work entitlement or failed';end if;
  denied:=false;
  begin
