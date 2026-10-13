@@ -360,3 +360,176 @@ begin
   end if;
   return query select * from private.admin_update_work_order_v4_phase4_engine(p_work_order_id,p_wo_number,p_property_address,p_work_type,p_instructions,p_due_date,p_assigned_user_id,p_expected_revision,p_requirements);
 end; $$;
+
+
+-- Phase 6F: separate, exact-instance Contractor consent for an office-team move.
+-- This does not authorize an active handoff by itself. The guarded handoff
+-- transaction must separately consume consent and retain the original assignment.
+create table private.work_order_team_handoff_consent_requests (
+  request_id uuid primary key,
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  work_order_id uuid not null references public.work_orders(id) on delete restrict,
+  source_team_id uuid not null,
+  target_team_id uuid not null,
+  requested_by uuid not null references auth.users(id) on delete restrict,
+  contractor_id uuid not null references auth.users(id) on delete restrict,
+  run_id uuid not null references public.work_order_runs(id) on delete restrict,
+  assignment_id uuid not null references public.work_order_assignments(id) on delete restrict,
+  expected_fingerprint text not null check(expected_fingerprint ~ '^[0-9a-f]{32}$'),
+  reason text not null check(char_length(btrim(reason)) between 1 and 1000),
+  environment text not null check(environment in ('TEST','PRODUCTION')),
+  decision text not null default 'PENDING'
+    check(decision in ('PENDING','APPROVED','DECLINED','SUPERSEDED','CONSUMED')),
+  decided_by uuid references auth.users(id) on delete restrict,
+  requested_at timestamptz not null default clock_timestamp(),
+  decided_at timestamptz,
+  consumed_action_id uuid,
+  foreign key(organization_id,source_team_id)
+    references public.admin_teams(organization_id,id) on delete restrict,
+  foreign key(organization_id,target_team_id)
+    references public.admin_teams(organization_id,id) on delete restrict,
+  check(source_team_id<>target_team_id),
+  check((decision='PENDING' and decided_at is null and decided_by is null)
+    or (decision<>'PENDING')),
+  check((consumed_action_id is null) or decision='CONSUMED')
+);
+create unique index work_order_team_handoff_one_live_consent
+ on private.work_order_team_handoff_consent_requests(work_order_id)
+ where decision in ('PENDING','APPROVED');
+create index work_order_team_handoff_consent_contractor
+ on private.work_order_team_handoff_consent_requests(contractor_id,decision,work_order_id);
+alter table private.work_order_team_handoff_consent_requests enable row level security;
+revoke all on private.work_order_team_handoff_consent_requests from public,anon,authenticated,service_role;
+
+-- The same Tier 3 review/fingerprint is mandatory before requesting consent.
+-- A consent request is deliberately not a WO move or a new assignment.
+create function public.request_work_order_team_handoff_consent(
+ p_request uuid,p_work_order uuid,p_destination uuid,p_expected_fingerprint text,
+ p_reason text,p_environment text
+) returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $consent$
+declare v public.work_orders%rowtype; a public.work_order_assignments%rowtype;
+  r private.work_order_team_handoff_consent_requests%rowtype; reviewed jsonb;
+begin
+ if p_request is null or p_work_order is null or p_destination is null
+   or p_expected_fingerprint !~ '^[0-9a-f]{32}$'
+   or coalesce(char_length(btrim(p_reason)) between 1 and 1000,false)=false
+   or p_environment not in ('TEST','PRODUCTION') then
+   raise exception 'Exact active handoff request required' using errcode='22023';end if;
+ perform private.lock_legacy_work_authority();
+ select * into v from public.work_orders where id=p_work_order for update;
+ reviewed:=private.work_order_team_handoff_review(p_work_order,p_destination,p_environment);
+ if (reviewed->>'review_fingerprint') is distinct from p_expected_fingerprint then
+   raise exception 'Active handoff review changed' using errcode='40001';end if;
+ select * into r from private.work_order_team_handoff_consent_requests where request_id=p_request;
+ if found then
+   if row(r.work_order_id,r.source_team_id,r.target_team_id,r.requested_by,r.expected_fingerprint,r.reason,r.environment)
+     is distinct from row(p_work_order,v.responsible_team_id,p_destination,auth.uid(),p_expected_fingerprint,btrim(p_reason),p_environment)
+     then raise exception 'Consent request ID reused with changed inputs' using errcode='22023';end if;
+   return jsonb_build_object('request_id',p_request,'status',r.decision,'work_order_id',p_work_order);
+ end if;
+ if v.field_status<>'IN_PROGRESS' or v.assigned_user_id is null
+   or v.pending_assignee_user_id is not null or v.current_run_id is null
+   or v.started_at is null or v.field_completed_at is not null
+   or private.contractor_current_team(v.assigned_user_id,v.organization_id)
+       is distinct from v.responsible_team_id
+   or exists(select 1 from public.work_order_runs x where x.work_order_id=v.id
+       and x.id<>v.current_run_id and x.field_status in ('ASSIGNED','IN_PROGRESS'))
+   or exists(select 1 from private.client_packages k where k.work_order_id=v.id
+       and k.status in ('QUEUED','DELIVERING','UNCERTAIN','FAILED')) then
+   raise exception 'Only current in-progress original assignments can request team consent'
+     using errcode='42501';end if;
+ select * into a from public.work_order_assignments
+   where run_id=v.current_run_id and assigned_user_id=v.assigned_user_id
+     and assignment_ended_at is null order by assignment_started_at desc limit 1;
+ if not found then raise exception 'Original active assignment missing' using errcode='42501';end if;
+ -- An outdated approval may not authorize a new request. A fresh reviewed
+ -- fingerprint supersedes it atomically; the old UUID can never be approved.
+ update private.work_order_team_handoff_consent_requests c
+   set decision='SUPERSEDED'
+   where c.work_order_id=p_work_order and c.decision in ('PENDING','APPROVED')
+     and c.expected_fingerprint is distinct from p_expected_fingerprint;
+ if exists(select 1 from private.work_order_team_handoff_consent_requests c
+   where c.work_order_id=p_work_order and c.decision in ('PENDING','APPROVED')) then
+   raise exception 'Existing consent request must be resolved before another'
+     using errcode='40001';end if;
+ insert into private.work_order_team_handoff_consent_requests(
+   request_id,organization_id,work_order_id,source_team_id,target_team_id,requested_by,
+   contractor_id,run_id,assignment_id,expected_fingerprint,reason,environment)
+ values(p_request,v.organization_id,p_work_order,v.responsible_team_id,p_destination,auth.uid(),
+   v.assigned_user_id,v.current_run_id,a.id,p_expected_fingerprint,btrim(p_reason),p_environment);
+ return jsonb_build_object('request_id',p_request,'status','PENDING',
+   'work_order_id',p_work_order);
+end;$consent$;
+revoke all on function public.request_work_order_team_handoff_consent(uuid,uuid,uuid,text,text,text)
+  from public,anon;
+grant execute on function public.request_work_order_team_handoff_consent(uuid,uuid,uuid,text,text,text)
+  to authenticated;
+
+-- Online-only Contractor prompt; no old team roster, destination credentials or
+-- photo access is returned. It never exposes another Contractor's requests.
+create function public.pending_work_order_team_handoff_consents()
+returns setof jsonb language sql stable security definer set search_path='' as $$
+ select jsonb_build_object('request_id',c.request_id,'work_order_id',c.work_order_id)
+ from private.work_order_team_handoff_consent_requests c
+ join public.work_orders w on w.id=c.work_order_id and w.organization_id=c.organization_id
+ where c.contractor_id=auth.uid() and c.decision='PENDING'
+   and w.current_run_id=c.run_id and w.assigned_user_id=c.contractor_id
+   and w.responsible_team_id=c.source_team_id and w.field_status='IN_PROGRESS'
+   and w.pending_assignee_user_id is null
+   and private.current_operational_identity(c.organization_id)
+   and private.current_work_role(c.organization_id)='CONTRACTOR'
+   and private.contractor_current_team(auth.uid(),c.organization_id)=c.source_team_id
+ order by c.requested_at,c.request_id
+$$;
+revoke all on function public.pending_work_order_team_handoff_consents() from public,anon;
+grant execute on function public.pending_work_order_team_handoff_consents() to authenticated;
+
+-- This is affirmative consent to move office responsibility, *not* reassignment
+-- consent and not an authorization to discard locally captured work.
+create function public.respond_work_order_team_handoff_consent(p_request uuid,p_accept boolean)
+returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $respond$
+declare c private.work_order_team_handoff_consent_requests%rowtype;
+  v public.work_orders%rowtype; reviewed jsonb; a public.work_order_assignments%rowtype;
+begin
+ if p_request is null or p_accept is null then
+   raise exception 'Exact consent response required' using errcode='22023';end if;
+ perform private.lock_legacy_work_authority();
+ select * into c from private.work_order_team_handoff_consent_requests where request_id=p_request;
+ if not found or c.contractor_id is distinct from auth.uid()
+    or not private.current_operational_identity(c.organization_id)
+    or private.current_work_role(c.organization_id)<>'CONTRACTOR' then
+   raise exception 'Current original Contractor required' using errcode='42501';end if;
+ select * into v from public.work_orders where id=c.work_order_id for update;
+ select * into c from private.work_order_team_handoff_consent_requests where request_id=p_request for update;
+ if c.decision in ('APPROVED','DECLINED') then
+   if (c.decision='APPROVED') is distinct from p_accept then
+     raise exception 'Consent response cannot be changed' using errcode='22023';end if;
+   return jsonb_build_object('request_id',p_request,'status',c.decision,'work_order_id',c.work_order_id);
+ end if;
+ if c.decision<>'PENDING' then raise exception 'Consent request is no longer pending' using errcode='40001';end if;
+ if v.organization_id is distinct from c.organization_id
+   or v.responsible_team_id is distinct from c.source_team_id
+   or v.current_run_id is distinct from c.run_id or v.assigned_user_id is distinct from c.contractor_id
+   or private.contractor_current_team(auth.uid(),c.organization_id) is distinct from c.source_team_id
+   or v.field_status<>'IN_PROGRESS' or v.pending_assignee_user_id is not null then
+   raise exception 'Original assignment or authority changed' using errcode='40001';end if;
+ select * into a from public.work_order_assignments where id=c.assignment_id;
+ if not found or a.run_id<>c.run_id or a.assigned_user_id<>c.contractor_id or a.assignment_ended_at is not null then
+   raise exception 'Original assignment instance changed' using errcode='40001';end if;
+ if p_accept then
+   -- Requires current manager scope and unchanged reviewed work/photo facts;
+   -- the caller cannot approve an arbitrary destination or stale request.
+   -- An actual move still needs a separate fresh Tier-3 confirmation.
+   reviewed:=private.work_order_team_handoff_review(c.work_order_id,c.target_team_id,c.environment);
+   if reviewed->>'review_fingerprint' is distinct from c.expected_fingerprint then
+     raise exception 'Reviewed handoff facts changed; office must request again' using errcode='40001';end if;
+ end if;
+ update private.work_order_team_handoff_consent_requests set
+   decision=case when p_accept then 'APPROVED' else 'DECLINED' end,
+   decided_by=auth.uid(),decided_at=clock_timestamp()
+ where request_id=p_request;
+ return jsonb_build_object('request_id',p_request,'status',
+   case when p_accept then 'APPROVED' else 'DECLINED' end,'work_order_id',c.work_order_id);
+end;$respond$;
+revoke all on function public.respond_work_order_team_handoff_consent(uuid,boolean) from public,anon;
+grant execute on function public.respond_work_order_team_handoff_consent(uuid,boolean) to authenticated;
