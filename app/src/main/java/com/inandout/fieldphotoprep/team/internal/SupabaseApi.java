@@ -92,6 +92,7 @@ final class SupabaseApi
         String acknowledgedAt = "";
         String reopenReason = "";
         boolean acceptPending = false;
+        String teamHandoffRequestId = "";
 
         WorkOrder(
                 String id,
@@ -249,6 +250,42 @@ final class SupabaseApi
         request.put("p_work_order_id", workOrderId);
         request.put("p_accept", accept);
         postRpc(accessToken, "respond_reassignment", request);
+    }
+
+    // Online-only, exact-job consent. The request is not cached as a field action,
+    // reassignment, or photo; no offline tap can falsely approve an office move.
+    void attachPendingTeamHandoffConsents(String token, List<WorkOrder> orders)
+            throws IOException, JSONException, ApiException {
+        JSONArray pending = new JSONArray(postRpc(token,
+                "pending_work_order_team_handoff_consents", new JSONObject()));
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.getJSONObject(i);
+            String workOrderId = nullableString(item, "work_order_id");
+            String requestId = nullableString(item, "request_id");
+            if (requestId.isEmpty() || workOrderId.isEmpty())
+                throw new IllegalStateException("Invalid team-handoff consent identity");
+            for (WorkOrder workOrder : orders) {
+                if (workOrder.id.equals(workOrderId)
+                        && "IN_PROGRESS".equals(workOrder.fieldStatus)) {
+                    if (!workOrder.teamHandoffRequestId.isEmpty())
+                        throw new IllegalStateException("Duplicate team-handoff consent");
+                    workOrder.teamHandoffRequestId = requestId;
+                }
+            }
+        }
+    }
+
+    void respondTeamHandoffConsent(String token, String requestId, boolean accept)
+            throws IOException, JSONException, ApiException {
+        JSONObject request = new JSONObject();
+        request.put("p_request", requestId);
+        request.put("p_accept", accept);
+        String response = postRpc(token, "respond_work_order_team_handoff_consent", request);
+        JSONObject result = new JSONObject(response);
+        if (!requestId.equals(nullableString(result, "request_id"))
+                || !(accept ? "APPROVED" : "DECLINED").equals(
+                        nullableString(result, "status")))
+            throw new IllegalStateException("Team-handoff consent receipt did not match request");
     }
 
     @Override
