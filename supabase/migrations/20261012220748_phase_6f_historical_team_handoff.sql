@@ -339,7 +339,8 @@ begin
       raise exception 'Reassignment must retain responsible team' using errcode='42501';end if;
   elsif private.work_role_for_user(p_assigned_user_id,private.phase4_admin_org())='CONTRACTOR' then
     if private.contractor_current_team(p_assigned_user_id,private.phase4_admin_org()) is distinct from (select w.responsible_team_id from public.work_orders w where w.id=p_work_order_id)
-      and not private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id) then
+      and not private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id)
+      and not private.active_team_handoff_original_assignment(p_assigned_user_id,p_work_order_id) then
       raise exception 'Current Contractor unavailable in responsible team' using errcode='42501';end if;
   end if;
   return query select * from private.admin_update_work_order_phase4_engine(p_work_order_id,p_wo_number,p_property_address,p_work_type,p_instructions,p_due_date,p_assigned_user_id);
@@ -355,7 +356,8 @@ begin
       raise exception 'Reassignment must retain responsible team' using errcode='42501';end if;
   elsif private.work_role_for_user(p_assigned_user_id,private.phase4_admin_org())='CONTRACTOR' then
     if private.contractor_current_team(p_assigned_user_id,private.phase4_admin_org()) is distinct from (select w.responsible_team_id from public.work_orders w where w.id=p_work_order_id)
-      and not private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id) then
+      and not private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id)
+      and not private.active_team_handoff_original_assignment(p_assigned_user_id,p_work_order_id) then
       raise exception 'Current Contractor unavailable in responsible team' using errcode='42501';end if;
   end if;
   return query select * from private.admin_update_work_order_v4_phase4_engine(p_work_order_id,p_wo_number,p_property_address,p_work_type,p_instructions,p_due_date,p_assigned_user_id,p_expected_revision,p_requirements);
@@ -582,3 +584,210 @@ begin
 end;$preview$;
 revoke all on function public.preview_work_order_team_handoff(uuid,uuid,text) from public,anon;
 grant execute on function public.preview_work_order_team_handoff(uuid,uuid,text) to authenticated;
+
+
+-- Explicit approved in-progress office handoff continuation. The existing
+-- audited owner, exact Contractor assignment, photo cutoff and retry path
+-- remain; team binding alone changes only after Contractor consent is consumed.
+alter table private.work_order_team_handoff_actions
+ drop constraint work_order_team_handoff_actions_handoff_kind_check,
+ add constraint work_order_team_handoff_actions_handoff_kind_check
+   check(handoff_kind in ('UNDISPATCHED','FIELD_COMPLETE','IN_PROGRESS'));
+
+alter function private.work_order_team_handoff_review(uuid,uuid,text)
+ rename to work_order_team_handoff_review_pre_active;
+revoke all on function private.work_order_team_handoff_review_pre_active(uuid,uuid,text)
+ from public,anon,authenticated;
+
+create function private.work_order_team_handoff_review(
+ p_work_order uuid,p_destination uuid,p_environment text
+) returns jsonb language plpgsql security definer set search_path='' as $active_review$
+declare reviewed jsonb; v public.work_orders%rowtype;
+  a public.work_order_assignments%rowtype; c private.work_order_team_handoff_consent_requests%rowtype;
+  recipient_count bigint; photo_count bigint;
+begin
+ reviewed:=private.work_order_team_handoff_review_pre_active(p_work_order,p_destination,p_environment);
+ if (reviewed->>'eligible')::boolean then return reviewed;end if;
+ select * into v from public.work_orders where id=p_work_order;
+ if v.field_status<>'IN_PROGRESS' or v.started_at is null or v.field_completed_at is not null
+   or v.pending_assignee_user_id is not null or v.assigned_user_id is null
+   or v.current_run_id is null or private.contractor_current_team(v.assigned_user_id,v.organization_id)
+     is distinct from v.responsible_team_id
+   or exists(select 1 from public.work_order_runs r where r.work_order_id=v.id
+       and r.id<>v.current_run_id and r.field_status in ('ASSIGNED','IN_PROGRESS'))
+   or exists(select 1 from private.client_packages k where k.work_order_id=v.id
+       and k.status in ('QUEUED','DELIVERING','UNCERTAIN','FAILED')) then
+   return reviewed;end if;
+ select * into a from public.work_order_assignments
+   where run_id=v.current_run_id and assigned_user_id=v.assigned_user_id
+     and assignment_ended_at is null order by assignment_started_at desc limit 1;
+ if not found then return reviewed;end if;
+ select * into c from private.work_order_team_handoff_consent_requests
+   where work_order_id=v.id and organization_id=v.organization_id
+     and source_team_id=v.responsible_team_id and target_team_id=p_destination
+     and contractor_id=v.assigned_user_id and run_id=v.current_run_id and assignment_id=a.id
+     and expected_fingerprint=reviewed->>'review_fingerprint'
+     and environment=p_environment and decision='APPROVED';
+ if not found then return reviewed;end if;
+ select count(*) into recipient_count from private.handoff_recovery_recipients(
+   v.organization_id,v.responsible_team_id,p_destination);
+ select count(*) into photo_count from public.photos where work_order_id=v.id;
+ return reviewed || jsonb_build_object('eligible',true,'handoff_kind','IN_PROGRESS',
+   'block_reason',null,'original_run_id',v.current_run_id,'original_assignment_id',a.id,
+   'original_assignee_id',v.assigned_user_id,
+   'recovery_recipient_count',recipient_count,'protected_photo_count',photo_count);
+end;$active_review$;
+revoke all on function private.work_order_team_handoff_review(uuid,uuid,text)
+ from public,anon,authenticated;
+grant execute on function private.work_order_team_handoff_review(uuid,uuid,text) to service_role;
+
+-- Existing audited execution path, unchanged identity; approved consent is
+-- consumed only inside its locked transaction. A retry reads the same audit.
+create or replace function public.handoff_work_order_team(
+  p_action uuid,p_work_order uuid,p_destination uuid,p_expected_fingerprint text,
+  p_reason text,p_environment text
+) returns jsonb
+language plpgsql security definer set search_path='' set lock_timeout='5s' as $handoff$
+declare
+  previous private.work_order_team_handoff_actions%rowtype;
+  reviewed jsonb;
+  source_team uuid;
+  org uuid; recipient record; grant_id uuid;
+begin
+  if p_action is null or p_work_order is null or p_destination is null
+    or p_expected_fingerprint is null or p_expected_fingerprint !~ '^[0-9a-f]{32}$'
+    or coalesce(char_length(btrim(p_reason)) between 1 and 1000,false)=false
+    or p_environment is null or p_environment not in ('TEST','PRODUCTION') then
+    raise exception 'Exact reviewed handoff inputs required' using errcode='22023';
+  end if;
+  -- Match cutoff/lifecycle ordering before upgrading grant/work locks.
+  lock table private.photo_recovery_grants in share row exclusive mode;
+  perform private.lock_legacy_work_authority();
+  -- Replays remain bound to the original actor, inputs and *current* tier.
+  select * into previous from private.work_order_team_handoff_actions a
+    where a.action_id=p_action;
+  if found then
+    if row(previous.work_order_id,previous.actor_id,previous.new_team_id,
+      previous.expected_fingerprint,previous.reason,previous.environment)
+       is distinct from
+       row(p_work_order,auth.uid(),p_destination,
+         p_expected_fingerprint,btrim(p_reason),p_environment) then
+      raise exception 'Handoff action UUID reused with different inputs' using errcode='22023';
+    end if;
+    if not private.current_identity_valid()
+      or private.current_work_role(previous.organization_id) is distinct from 'SUPERVISOR'
+      or not private.has_team_capability(previous.organization_id,previous.old_team_id,'HANDOFF_TEAM')
+      or not private.has_team_capability(previous.organization_id,previous.new_team_id,'HANDOFF_TEAM') then
+      raise exception 'Current authority required for historical handoff receipt'
+        using errcode='42501';
+    end if;
+    return jsonb_build_object('action_id',p_action,
+      'work_order_id',previous.work_order_id,'old_team_id',previous.old_team_id,
+      'new_team_id',previous.new_team_id,'status','HANDED_OFF');
+  end if;
+  -- Short locks exclude racing edits, newly accepted actions/photos and
+  -- reviewed account/scope changes between validation and commit.
+  lock table public.work_orders,public.work_order_runs,public.work_order_assignments,
+    public.photos,public.field_actions,public.photo_finish_sets in share row exclusive mode;
+  lock table private.client_packages in share mode;
+  perform 1 from public.work_orders w where w.id=p_work_order for update;
+  reviewed:=private.work_order_team_handoff_review(p_work_order,p_destination,p_environment);
+  if (reviewed->>'review_fingerprint') is distinct from p_expected_fingerprint then
+    raise exception 'Work order/team review changed; refresh before handoff' using errcode='40001';
+  end if;
+  if (reviewed->>'eligible')::boolean is not true then
+    raise exception 'Active or protected work requires separate consent/recovery handoff'
+      using errcode='42501';
+  end if;
+  source_team:=(reviewed->>'old_team_id')::uuid;
+  org:=(reviewed->>'organization_id')::uuid;
+  if reviewed->>'handoff_kind'='IN_PROGRESS' then
+    update private.work_order_team_handoff_consent_requests c
+      set decision='CONSUMED',consumed_action_id=p_action
+      where c.work_order_id=p_work_order and c.organization_id=org
+        and c.source_team_id=source_team and c.target_team_id=p_destination
+        and c.contractor_id=(reviewed->>'original_assignee_id')::uuid
+        and c.run_id=(reviewed->>'original_run_id')::uuid
+        and c.assignment_id=(reviewed->>'original_assignment_id')::uuid
+        and c.expected_fingerprint=p_expected_fingerprint
+        and c.reason=btrim(p_reason) and c.environment=p_environment
+        and c.decision='APPROVED';
+    if not found then
+      raise exception 'Exact approved original Contractor consent required' using errcode='40001';
+    end if;
+  end if;
+  insert into private.work_order_team_handoff_actions(
+    action_id,organization_id,work_order_id,actor_id,old_team_id,new_team_id,
+    environment,expected_fingerprint,reason,source_transaction,original_run_id,original_assignment_id,original_assignee_id,handoff_kind
+  ) values(p_action,org,p_work_order,auth.uid(),source_team,p_destination,
+    p_environment,p_expected_fingerprint,btrim(p_reason),txid_current(),
+    (reviewed->>'original_run_id')::uuid,(reviewed->>'original_assignment_id')::uuid,
+    (reviewed->>'original_assignee_id')::uuid,reviewed->>'handoff_kind');
+  if reviewed->>'handoff_kind' in ('FIELD_COMPLETE','IN_PROGRESS') then
+    for recipient in select * from private.handoff_recovery_recipients(org,source_team,p_destination) loop
+      grant_id:=private.freeze_photo_recovery_scope(gen_random_uuid(),org,recipient.user_id,
+        recipient.access_revision,array[source_team],btrim(p_reason),p_work_order);
+      perform private.complete_photo_recovery_grant(grant_id);
+    end loop;
+  end if;
+  update public.work_orders set responsible_team_id=p_destination where id=p_work_order;
+  return jsonb_build_object('action_id',p_action,'work_order_id',p_work_order,
+    'old_team_id',source_team,'new_team_id',p_destination,'status','HANDED_OFF');
+end;
+$handoff$;
+revoke all on function public.handoff_work_order_team(uuid,uuid,uuid,text,text,text)
+  from public,anon;
+grant execute on function public.handoff_work_order_team(uuid,uuid,uuid,text,text,text)
+  to authenticated;
+
+
+
+-- Exact original active assignment only. Never grants new dispatch, a new
+-- field run, a replacement assignee or a generic old-office read.
+create function private.active_team_handoff_original_assignment(p_user uuid,p_work_order uuid)
+returns boolean language sql stable security definer set search_path='' as $$
+ select exists(select 1 from public.work_orders w
+   join private.work_order_team_handoff_actions h
+     on h.work_order_id=w.id and h.organization_id=w.organization_id
+   join public.work_order_assignments a on a.id=h.original_assignment_id
+   where w.id=p_work_order and w.assigned_user_id=p_user
+     and h.handoff_kind='IN_PROGRESS' and h.original_assignee_id=p_user
+     and h.original_run_id=w.current_run_id and a.run_id=w.current_run_id
+     and a.assigned_user_id=p_user
+     and w.field_status in ('IN_PROGRESS','FIELD_COMPLETE')
+     and (w.field_status='IN_PROGRESS' and a.assignment_ended_at is null
+       or w.field_status='FIELD_COMPLETE' and a.end_reason='FIELD_COMPLETE'))
+$$;
+revoke all on function private.active_team_handoff_original_assignment(uuid,uuid)
+ from public,anon,authenticated;
+
+create or replace function private.can_read_work_order(p_work_order uuid) returns boolean
+language sql stable security definer set search_path='' as $$
+ select private.current_identity_valid() and exists(select 1 from public.work_orders w
+   join public.admin_teams t on t.id=w.responsible_team_id
+     and t.organization_id=w.organization_id and t.active
+   where w.id=p_work_order and private.current_operational_identity(w.organization_id) and (
+     private.has_team_capability(w.organization_id,w.responsible_team_id,'WORK')
+     or (private.current_work_role(w.organization_id)='CONTRACTOR'
+       and w.assigned_user_id=auth.uid()
+       and (private.contractor_current_team(auth.uid(),w.organization_id)=w.responsible_team_id
+         or private.completed_handoff_assignment_for_user(auth.uid(),w.id)
+         or private.active_team_handoff_original_assignment(auth.uid(),w.id)))));
+$$;
+
+create or replace function private.guard_legacy_work_order(p_work_order uuid,p_role text)
+returns void language plpgsql security definer set search_path='' set lock_timeout='5s' as $$
+declare o uuid; w public.work_orders%rowtype;
+begin
+ perform private.lock_legacy_work_authority();
+ o:=private.legacy_work_org(p_role);
+ select * into w from public.work_orders where id=p_work_order for update;
+ if not found or w.organization_id is distinct from o or w.responsible_team_id is null
+   or not exists(select 1 from public.admin_teams t
+       where t.id=w.responsible_team_id and t.organization_id=o and t.active)
+   or (p_role='ADMIN' and not private.has_team_capability(o,w.responsible_team_id,'WORK'))
+   or (p_role='CONTRACTOR'
+       and private.contractor_current_team(auth.uid(),o) is distinct from w.responsible_team_id
+       and not private.active_team_handoff_original_assignment(auth.uid(),p_work_order)) then
+   raise exception 'Work order unavailable in current scope' using errcode='42501';end if;
+end;$$;
