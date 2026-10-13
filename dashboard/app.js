@@ -192,7 +192,13 @@ loginForm.addEventListener('submit', async (event) => {
     assignableUsers = [];
     workOrderRows = [];
     passwordInput.value = '';
-    setLoginStatus(error instanceof Error ? error.message : 'Sign-in failed.', true);
+    // A browser request timeout is not a password rejection. Do not
+    // misdiagnose the error or suggest resetting an existing account.
+    const message=error instanceof Error ? error.message : 'Sign-in failed.';
+    const timedOut=error?.name==='TimeoutError'||/signal timed out/i.test(message);
+    setLoginStatus(timedOut
+      ? 'Field Work Hub connection timed out while checking sign-in. This does not mean your password is wrong. Wait briefly and try again.'
+      : message,true);
   }
 });
 
