@@ -8,6 +8,12 @@ on:
       - 'dashboard/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+    inputs:
+      phase56_preview:
+        description: 'Manually stage Phase 5/6 under /phase56-review, preserving main dashboard at root; environment approval required'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,8 +31,55 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Enforce protected same-origin deployment modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODE="${{ inputs.phase56_preview || false }}"
+          if [[ "$GITHUB_REF" == "refs/heads/main" && "$MODE" == "false" ]]; then
+            echo "Approved normal main dashboard deployment."
+          elif [[ "$GITHUB_REF" == "refs/heads/feat/phase-5-6-dashboard-workflow" && "$MODE" == "true" && "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "Manual Phase 5/6 review-preview mode. Public root must be a byte-exact main dashboard copy."
+          else
+            echo "STOP: Pages preview may only be manually staged on the approved PR #40 branch; main deploys only main." >&2
+            exit 1
+          fi
+      - name: Checkout approved workflow source
         uses: actions/checkout@v6
+      - name: Checkout current published-main dashboard baseline for manual preview
+        if: ${{ inputs.phase56_preview }}
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: preview-main
+      - name: Assemble same-origin candidate without modifying root
+        if: ${{ inputs.phase56_preview }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f preview-main/dashboard/index.html
+          test -f dashboard/private-review.js
+          mkdir -p phase56-preview-site
+          cp -a preview-main/dashboard/. phase56-preview-site/
+          mkdir -p phase56-preview-site/phase56-review
+          cp -a dashboard/. phase56-preview-site/phase56-review/
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          main = Path("preview-main/dashboard")
+          site = Path("phase56-preview-site")
+          for original in main.rglob("*"):
+              if original.is_file():
+                  served = site / original.relative_to(main)
+                  assert served.is_file() and hashlib.sha256(original.read_bytes()).digest() == hashlib.sha256(served.read_bytes()).digest(), original
+          assert "private-review.js" not in (site / "index.html").read_text()
+          preview = site / "phase56-review"
+          assert (preview / "private-review.js").is_file()
+          assert 'id="job-photos"' in (preview / "index.html").read_text()
+          assert 'private-review.js?v=' in (preview / "index.html").read_text()
+          print("Main dashboard retained unchanged; Phase 5C preview path: /field-work-hub/phase56-review/")
+          PY
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
@@ -34,7 +87,7 @@ jobs:
       - name: Upload dashboard artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: dashboard
+          path: ${{ inputs.phase56_preview && 'phase56-preview-site' || 'dashboard' }}
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
