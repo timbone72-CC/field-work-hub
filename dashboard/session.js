@@ -160,6 +160,9 @@ async function adminHttpFailure(response, stage = 'contacting the dashboard serv
     }
     if (body?.message === 'JWT issued at future') failure.validationReason = 'token time validation';
     if (body?.message === 'JWT expired') failure.validationReason = 'token expiry validation';
+    if (response.status === 403 && body?.message === 'Office work access disabled') {
+      failure.accessReason = 'Office work access disabled';
+    }
   } catch {
     // HTTP denial remains a denial even if its body cannot be read.
   }
@@ -177,7 +180,8 @@ function adminLoginFailureMessage(error) {
   }
   if (!error.status) return `The connection failed while ${stage} (${detail}). No work data was opened.`;
   const reason = error.validationReason ? ` The service reported ${error.validationReason}.` : '';
-  return `The service rejected the request while ${stage} (${detail}).${reason} No work data was opened.`;
+  const accessReason = error.accessReason ? ` ${error.accessReason}.` : '';
+  return `The service rejected the request while ${stage} (${detail}).${reason}${accessReason} No work data was opened.`;
 }
 
 async function refreshAdminSession(refreshToken) {

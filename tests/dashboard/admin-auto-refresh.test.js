@@ -334,3 +334,21 @@ test('superseded password login failure cannot clear a newer verified login',asy
   assert.equal(f.context.accessToken,'new-access');assert.equal(f.context.currentUser.id,user.id);
   assert.equal(f.storage.size,1);assert.equal(f.calls.messages.some(message=>message.includes('PGRST303')),false);
 });
+
+test('disabled-work explanation survives denied recovery without revealing arbitrary server text',async()=>{
+  const f=loginFixture();f.storage.clear();let recoveryReads=0;
+  f.context.RecoveryGallery.show=async()=>{recoveryReads++;throw Error('no recovery grant');};
+  f.context.fetch=async url=>{
+    if(url.includes('/token'))return response({access_token:'new-access',refresh_token:'new-refresh',expires_in:3600});
+    if(url.endsWith('/user'))return response(user);
+    return response({message:'Office work access disabled',details:'PRIVATE-ACCOUNT'},403);
+  };
+  f.context.fetchWorkOrders=async()=>{
+    const result=await f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")');
+    throw await f.context.adminHttpFailure(result,result.adminRequestStage,result.adminRequestStartedAt);
+  };
+  await f.submit();
+  assert.equal(recoveryReads,1);assert.equal(f.context.accessToken,null);assert.equal(f.context.currentUser,null);
+  assert.equal(f.storage.size,0);assert.match(f.calls.messages.at(-1),/Office work access disabled/);
+  assert.doesNotMatch(f.calls.messages.at(-1),/PRIVATE/);
+});
