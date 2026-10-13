@@ -15,7 +15,7 @@ let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
 let recoveryMode=false, recoveryGranted=true, recoveryPhotoRequests=0, recoveryCorruptBytes='NONE';
 const recoveryJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==','base64');
-const recoveryJpegSha256='9dacf9b93ef343cb1b10d45dcd84959c4448a68d0859d818cc3decfb7dbf619f';
+const recoveryJpegSha256=require('node:crypto').createHash('sha256').update(recoveryJpeg).digest('hex');
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
 let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=true;
@@ -1687,8 +1687,13 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(recoveryPhotoRequests,3,'Same-size changed bytes must fail private SHA-256');
     recoveryCorruptBytes='NONE';
     await page.locator('#recovery-card button').filter({hasText:'Download selected JPEG'}).click();
-    await wait(page,()=>document.querySelector('#recovery-card .status')
-      ?.textContent.includes('offered for download'));
+    try {
+      await wait(page,()=>document.querySelector('#recovery-card .status')
+        ?.textContent.includes('offered for download'));
+    } catch(error) {
+      throw new Error('Valid recovery fixture failed: ' +
+        await page.locator('#recovery-card .status').textContent(),{cause:error});
+    }
     assert.equal(recoveryPhotoRequests,4,'Valid copy uses a fresh exact authorization');
     await page.locator('#recovery-card button').filter({hasText:'Sign Out'}).click();
     assert.equal(await page.locator('#recovery-card:visible').count(),0);
