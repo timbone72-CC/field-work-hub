@@ -484,6 +484,30 @@ $$;
 revoke all on function public.pending_work_order_team_handoff_consents() from public,anon;
 grant execute on function public.pending_work_order_team_handoff_consents() to authenticated;
 
+-- Pure current-facts fingerprint for the original Contractor. The Tier-3
+-- reviewer uses the identical expression with safe=false,complete_safe=false
+-- for in-progress work; consent callers cannot borrow Supervisor authority.
+create function private.in_progress_team_handoff_fingerprint(
+ p_work_order uuid,p_destination uuid
+) returns text language sql stable security definer set search_path='' as $
+ select md5(to_jsonb(w)::text || ':' || source.revision::text
+   || ':' || target.revision::text || ':false:false:'
+   || (select coalesce(jsonb_agg(to_jsonb(r) order by r.user_id),'[]'::jsonb)::text
+       from private.handoff_recovery_recipients(w.organization_id,source.id,target.id) r)
+   || ':' || (select coalesce(jsonb_agg(to_jsonb(p) order by p.id),'[]'::jsonb)::text
+       from public.photos p where p.work_order_id=w.id)
+   || ':' || (select coalesce(jsonb_agg(to_jsonb(r) order by r.id),'[]'::jsonb)::text
+       from public.work_order_runs r where r.work_order_id=w.id))
+ from public.work_orders w
+ join public.admin_teams source on source.id=w.responsible_team_id
+   and source.organization_id=w.organization_id and source.active
+ join public.admin_teams target on target.id=p_destination
+   and target.organization_id=w.organization_id and target.active
+ where w.id=p_work_order and w.field_status='IN_PROGRESS'
+$;
+revoke all on function private.in_progress_team_handoff_fingerprint(uuid,uuid)
+ from public,anon,authenticated;
+
 -- This is affirmative consent to move office responsibility, *not* reassignment
 -- consent and not an authorization to discard locally captured work.
 create function public.respond_work_order_team_handoff_consent(p_request uuid,p_accept boolean)
@@ -520,8 +544,8 @@ begin
    -- Requires current manager scope and unchanged reviewed work/photo facts;
    -- the caller cannot approve an arbitrary destination or stale request.
    -- An actual move still needs a separate fresh Tier-3 confirmation.
-   reviewed:=private.work_order_team_handoff_review(c.work_order_id,c.target_team_id,c.environment);
-   if reviewed->>'review_fingerprint' is distinct from c.expected_fingerprint then
+   if private.in_progress_team_handoff_fingerprint(c.work_order_id,c.target_team_id)
+      is distinct from c.expected_fingerprint then
      raise exception 'Reviewed handoff facts changed; office must request again' using errcode='40001';end if;
  end if;
  update private.work_order_team_handoff_consent_requests set
