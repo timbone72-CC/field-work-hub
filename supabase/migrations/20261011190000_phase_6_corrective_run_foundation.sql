@@ -1,15 +1,14 @@
 -- Phase 6B+6D governed source candidate. No hosted Team deployment.
 -- Historical Run/Finish/photo and client-provider receipt identities are immutable.
+-- A non-null temporary schema default protects existing rows while the migration
+-- installs its constraints and insert trigger. Drop that default before installs
+-- complete so new work still uses the canonical insert trigger.
+-- Backfill LAST: updating existing work queues deferred FK trigger events, and
+-- PostgreSQL refuses subsequent ALTER TABLE/CREATE TRIGGER on this relation.
 alter table public.work_orders
- add column release_requirement_snapshot jsonb,
+ add column release_requirement_snapshot jsonb not null default '{}'::jsonb,
  add column release_requirement_revision uuid not null default gen_random_uuid();
-update public.work_orders w set release_requirement_snapshot =
-  case when r.requirement_snapshot='{}'::jsonb then
-   jsonb_build_object('schema',1,'revision',gen_random_uuid(),
-    'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb)
-  else r.requirement_snapshot end
-from public.work_order_runs r where r.id=w.current_run_id;
-alter table public.work_orders alter column release_requirement_snapshot set not null;
+alter table public.work_orders alter column release_requirement_snapshot drop default;
 alter table public.work_orders add constraint wo_release_snapshot_object_chk
  check(jsonb_typeof(release_requirement_snapshot)='object');
 -- Later initial WO inserts acquire their own canonical Run 1 goal snapshot.
@@ -292,3 +291,13 @@ revoke all on function private.admin_create_followup(uuid,uuid,uuid,timestamptz,
 grant execute on function private.admin_create_followup(uuid,uuid,uuid,timestamptz,text,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb),
  public.admin_create_followup(uuid,uuid,uuid,timestamptz,text,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb)
  to authenticated,service_role;
+
+-- Historic migration backfill deferred trigger: leave row/FK events to commit.
+-- Existing current Run snapshot is authoritative; empty legacy Run snapshots
+-- receive the canonical disabled goal. Do not touch immutable Run/Finish/photos.
+update public.work_orders w set release_requirement_snapshot =
+  case when r.requirement_snapshot='{}'::jsonb then
+   jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+    'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb)
+  else r.requirement_snapshot end
+from public.work_order_runs r where r.id=w.current_run_id;
