@@ -166,6 +166,14 @@ jobs:
             exit 1
           fi
           grep -q 'deleteUser' supabase/functions/admin-invite-contractor/index.ts
+      - name: Verify protected preview operator helper syntax and no automatic dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ci/stage_phase56_review_preview.sh
+          grep -q 'gh workflow run pages.yml' ci/stage_phase56_review_preview.sh
+          grep -q 'protected-or-unknown' ci/stage_phase56_review_preview.sh
+          grep -q 'gh api -X DELETE' ci/stage_phase56_review_preview.sh
       - name: Check out published-main dashboard source for isolated preview packaging
         uses: actions/checkout@v4
         with:
