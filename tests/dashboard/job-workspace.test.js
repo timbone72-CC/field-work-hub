@@ -177,3 +177,9 @@ test('Phase 6B repeat and custom work both open new protected drafts, never disp
  assert.match(handler,/prepareWorkFromSelectedJob\(false\)/);
  assert.doesNotMatch(handler,/woNumberInput\.value\s*=|assigneeSelect\.value\s*=|dueDateInput\.value\s*=|createWorkOrder\(/);
 });
+
+test('connection timeout guidance never implies a rejected Admin password', () => {
+  assert.match(app,/error\?\.name==='TimeoutError'/);
+  assert.match(app,/does not mean your password is wrong/);
+  assert.match(app,/setLoginStatus\(timedOut/);
+});
