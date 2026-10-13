@@ -80,6 +80,7 @@ jobs:
           python3 tests/supabase/phase_5_recovery_races.py
           python3 tests/supabase/phase_6_historical_handoff_races.py
           python3 tests/supabase/phase_5_legacy_work_races.py
+          python3 tests/supabase/phase_5_auth_lock_order_races.py
           python3 tests/supabase/phase_5_lifecycle_races.py
           python3 tests/supabase/phase_5_invitation_races.py
           python3 tests/supabase/phase_5_reviewed_access_races.py
