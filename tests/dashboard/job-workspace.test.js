@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const rules = require('../../dashboard/job-workspace.js');
-const app = fs.readFileSync(require.resolve('../../dashboard/app.js'), 'utf8');
+const app = fs.readFileSync(require.resolve('../../dashboard/app.js'), 'utf8').replace(/\r\n/g, '\n');
 
 test('job reads are bounded and presentation filters cannot supply columns or operators', () => {
   const query = rules.parameters({ size: 1000, sort: 'organization_id.asc', status: 'eq.ADMIN',
@@ -181,7 +181,7 @@ test('Phase 6B repeat and custom work both open new protected drafts, never disp
 test('connection timeout guidance never implies a rejected Admin password', () => {
   assert.match(app,/error\?\.name==='TimeoutError'/);
   assert.match(app,/does not mean your password is wrong/);
-  assert.match(app,/setLoginStatus\(timedOut/);
+  assert.match(app,/setLoginStatus\(error\?\.requestStage \? adminLoginFailureMessage\(error\) : timedOut/);
 });
 
 function adminRestoreRig({errorStage='identity',errorType='TimeoutError'}={}) {

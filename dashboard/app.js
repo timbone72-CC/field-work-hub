@@ -141,8 +141,12 @@ loginForm.addEventListener('submit', async (event) => {
   const email = emailInput.value.trim();
   const password = passwordInput.value;
 
+  let loginEpoch;
   try {
-    const session = await signInWithPassword(email, password);
+    const flight = signInWithPassword(email, password);
+    loginEpoch = adminSessionEpoch;
+    const session = await flight;
+    if (loginEpoch !== adminSessionEpoch) return;
     passwordInput.value = '';
     accessToken = session.access_token;
 
@@ -168,9 +172,13 @@ loginForm.addEventListener('submit', async (event) => {
       fetchAssignableUsers()
     ]);
 
+    if (loginEpoch !== adminSessionEpoch) return;
     verifyAdminRls(rows, metadata.organization_id);
     renderSignedIn(rows, users, metadata.organization_id);
   } catch (error) {
+    // A superseded login must not clear or relabel the newer account's view.
+    // A current HTTP 401 already cleared access and displayed its safe error.
+    if (loginEpoch !== undefined && loginEpoch !== adminSessionEpoch) return;
     // A denied operational request is not an Auth failure. A fresh server
     // recovery grant read decides whether this identity can enter read-only mode.
     if (error?.status === 403 && accessToken && currentUser?.id) {
@@ -208,7 +216,7 @@ loginForm.addEventListener('submit', async (event) => {
     // misdiagnose the error or suggest resetting an existing account.
     const message=error instanceof Error ? error.message : 'Sign-in failed.';
     const timedOut=error?.name==='TimeoutError'||/signal timed out/i.test(message);
-    setLoginStatus(timedOut
+    setLoginStatus(error?.requestStage ? adminLoginFailureMessage(error) : timedOut
       ? 'Field Work Hub connection timed out while checking sign-in. This does not mean your password is wrong. Wait briefly and try again.'
       : message,true);
   }
@@ -331,20 +339,30 @@ signOutButton.addEventListener('click', () => {
 });
 
 async function signInWithPassword(email, password) {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ email, password })
-  });
-
-  if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to sign in.'));
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, password })
+    });
+  } catch (error) {
+    throw adminConnectionFailure(error, 'signing in', startedAt);
   }
 
-  return response.json();
+  if (!response.ok) {
+    throw await adminHttpFailure(response, 'signing in', startedAt);
+  }
+
+  try {
+    return await response.json();
+  } catch (error) {
+    throw adminConnectionFailure(error, 'signing in', startedAt);
+  }
 }
 
 async function fetchCurrentUser() {
@@ -352,7 +370,7 @@ async function fetchCurrentUser() {
   const response = await adminFetch(`${SUPABASE_URL}/auth/v1/user`, { headers: authHeaders() });
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to verify the signed-in user.'));
+    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
   }
 
   return response.json();
@@ -389,9 +407,7 @@ async function fetchWorkOrders() {
   );
 
   if (!response.ok) {
-    const error = new Error(await readableError(response, 'Unable to load work orders.'));
-    error.status = response.status;
-    throw error;
+    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
   }
 
   const rows = await response.json();
@@ -455,9 +471,7 @@ async function fetchAssignableUsers() {
   });
 
   if (!response.ok) {
-    const error = new Error(await readableError(response, 'Unable to load Team users.'));
-    error.status = response.status;
-    throw error;
+    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
   }
 
   return response.json();
