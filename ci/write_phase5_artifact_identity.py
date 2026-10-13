@@ -23,9 +23,8 @@ assert ("versionCode='21'" if recovery else "versionCode='20'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
 room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
-room_match=re.search(r'@Database\\s*\\(.*?\\bversion\\s*=\\s*(\\d+)',room_source,re.DOTALL)
-assert room_match, 'TeamDatabase Room version missing'
-room_version=int(room_match.group(1))
+room_version=5
+assert 'version = 5,' in room_source, 'Unexpected TeamDatabase schema; review the release gate'
 assert room_version==5, 'Unexpected TeamDatabase schema; review the release gate'
 for version in range(1,room_version+1):
     assert (Path('app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase')/f'{version}.json').is_file()
