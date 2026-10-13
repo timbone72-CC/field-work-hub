@@ -50,3 +50,23 @@ The trusted SQL source projection now names each selected JPEG `field-photo-<per
 The new `folder-one.mjs` accepts only a trusted server-frozen package folder below a verified WORK_ORDER folder. It enforces immutable package UUID, preallocated ID/parent/name, manifest binding, current lease and expected client Shared Drive. Its ledger interface requires an atomic server `beginFolderCreate` transition to ATTEMPTED **before** the first external POST. On any ambiguous POST or restarted attempt, it can only GET/verify the original ID; no replacement ID or blind second create is allowed. An independent authenticated Drive GET checks exact name, ID, parent, MIME and appProperties before a durable confirmation.
 
 **Important:** Server-side ADDRESS/WO mapping and one-shot ATTEMPTED/VERIFIED RPCs now exist in **unapplied candidate migrations**, and the existing preflight/ledger reads and reserves those IDs before package files. PACKAGE-folder one-shot `getFolderPlan`, `beginFolderCreate` and `confirmFolder` now exist as **unapplied service-only candidate SQL RPCs**, backed by a unique original-ID attempt journal and full independent same-client Google Drive GET receipt. `service_finish_delivery` now requires that receipt before DELIVERED. The existing worker's service ledger invokes these RPCs only from trusted internal code; the actual provider folder-create/reconciliation executor remains **unimplemented and disabled**. This helper is not exposed by the disabled Edge worker or invoked by the current `worker-runtime.mjs`; SQL rejects direct-root package reservation. Tests remain synthetic, not evidence of Google folder creation or deletion.
+
+## TEST-only Workspace provider identity preflight (read-only operator helper)
+
+The source-only `ci/verify_phase5_workspace_provider.mjs` invokes the **existing** trusted `workspace-oauth.mjs` and `drive-client.mjs` boundaries without exposing a new server/Android/dashboard endpoint. Run it only once the intended Workspace OAuth refresh credential and a disposable **client-specific** Google Shared Drive/folder have been independently provisioned and protected outside this public repository. It does **not** create consent, obtain a refresh token from an interactive browser, configure the actual FWH backend, create destination rows, deploy a worker, upload photos or enable Send.
+
+Supply these exact values from a **locally protected environment** (never commit a `.env` file, paste credentials into a shell command/chat, screenshot them or put them in GitHub secrets without the approved deployment process):
+
+| Name | Meaning |
+| --- | --- |
+| `FWH_TEST_EVIDENCE_CLASS` | Exact `DISPOSABLE_FWH_TEST_ONLY` safety marker |
+| `FWH_TEST_WORKSPACE_EMAIL`, `FWH_TEST_WORKSPACE_DOMAIN` | Exact intended backend Workspace user and domain, never an assumed ChatGPT Drive connector identity |
+| `FWH_TEST_INTERNAL_SHARED_DRIVE_ID` | Existing *company-internal* Workspace Shared Drive ID; this must differ from the client TEST Drive |
+| `FWH_TEST_CLIENT_SHARED_DRIVE_ID` | Independent disposable client-specific TEST Shared Drive ID |
+| `FWH_TEST_CLIENT_ROOT_FOLDER_ID` | Existing disposable client-specific folder under that exact TEST Shared Drive |
+| `FWH_TEST_WORKSPACE_CLIENT_ID`, `FWH_TEST_WORKSPACE_CLIENT_SECRET`, `FWH_TEST_WORKSPACE_REFRESH_TOKEN` | Backend-approved OAuth refresh credentials, supplied privately |
+| `FWH_TEST_WORKSPACE_SCOPE` | Exact approved `https://www.googleapis.com/auth/drive.file` or `https://www.googleapis.com/auth/drive` scope |
+
+Run from the existing PR #40 checkout: `node ci/verify_phase5_workspace_provider.mjs`. A redacted `PASS` means only: Google OAuth refresh succeeded, Drive `about.get` returned the exact intended Workspace identity, and Drive `files.get` independently verified a writable folder within the exact distinct client Shared Drive. The helper performs only OAuth token refresh POST and Drive **GET** calls; no Google file POST, provider upload, ACL change, database mutation, scheduler action or client Send. A `BLOCKED` is a real operator credential/destination gate; retain the protected original evidence and do not switch to the internal Shared Drive as a workaround. No secrets, file IDs, email, URLs or tokens are printed.
+
+`node --test tests/functions/client-delivery-provider-preflight.test.mjs` runs **synthetic no-network** allow/deny cases and is included in the existing dashboard CI function-test glob. It cannot prove Workspace membership, real OAuth consent, writable client folder or hosted worker configuration. Even a real helper PASS does **not** activate `client_delivery_runtime.worker_ready`; preserve the separate exact provider upload/GET/uncertainty test and signed-off Phase 5/6 release gates.
