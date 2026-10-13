@@ -527,10 +527,13 @@ begin
    raise exception 'Current original Contractor required' using errcode='42501';end if;
  select * into v from public.work_orders where id=c.work_order_id for update;
  select * into c from private.work_order_team_handoff_consent_requests where request_id=p_request for update;
- if c.decision in ('APPROVED','DECLINED') then
-   if (c.decision='APPROVED') is distinct from p_accept then
+ if c.decision in ('APPROVED','DECLINED','CONSUMED') then
+   if (c.decision in ('APPROVED','CONSUMED')) is distinct from p_accept
+     or (c.decision='CONSUMED' and c.decided_by is distinct from auth.uid()) then
      raise exception 'Consent response cannot be changed' using errcode='22023';end if;
-   return jsonb_build_object('request_id',p_request,'status',c.decision,'work_order_id',c.work_order_id);
+   return jsonb_build_object('request_id',p_request,
+     'status',case when c.decision='CONSUMED' then 'APPROVED' else c.decision end,
+     'work_order_id',c.work_order_id);
  end if;
  if c.decision<>'PENDING' then raise exception 'Consent request is no longer pending' using errcode='40001';end if;
  if v.organization_id is distinct from c.organization_id
