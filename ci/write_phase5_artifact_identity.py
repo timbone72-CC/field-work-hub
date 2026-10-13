@@ -22,7 +22,13 @@ assert "name='com.inandout.fieldphotoprep.team.internal'" in badging
 assert ("versionCode='21'" if recovery else "versionCode='20'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
-assert (Path('app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase/4.json')).is_file()
+room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
+room_match=re.search(r'@Database\\s*\\(.*?\\bversion\\s*=\\s*(\\d+)',room_source,re.DOTALL)
+assert room_match, 'TeamDatabase Room version missing'
+room_version=int(room_match.group(1))
+assert room_version==5, 'Unexpected TeamDatabase schema; review the release gate'
+for version in range(1,room_version+1):
+    assert (Path('app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase')/f'{version}.json').is_file()
 permissions=subprocess.check_output([str(build_tools/'aapt'),'dump','permissions',str(apk)],text=True)
 assert 'android.permission.CAMERA' in permissions
 out=Path('phase5-artifacts')/variant;out.mkdir(parents=True,exist_ok=True)
@@ -30,6 +36,6 @@ filename=f'Field-Work-Hub-0.5-Phase5-{variant}-{head[:7]}.apk'
 shutil.copyfile(apk,out/filename)
 identity={'runtime_head':head,'variant':variant,'file':filename,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
           'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':21 if recovery else 20,
-          'room_version':4,'field_sync_enabled':not recovery,'private_photo_network_enabled':not recovery,'automatic_cleanup_enabled':False}
+          'room_version':room_version,'field_sync_enabled':not recovery,'private_photo_network_enabled':not recovery,'automatic_cleanup_enabled':False}
 (out/'identity.json').write_text(json.dumps(identity,indent=2)+'\n')
 print(json.dumps(identity,indent=2))
