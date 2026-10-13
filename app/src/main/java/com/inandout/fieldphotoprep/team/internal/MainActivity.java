@@ -643,6 +643,33 @@ public final class MainActivity extends Activity {
             card.addView(decline);
         }
 
+        if (currentSession != null
+                && currentSession.userId.equals(workOrder.assignedUserId)
+                && "IN_PROGRESS".equals(workOrder.fieldStatus)
+                && !workOrder.teamHandoffRequestId.isEmpty()
+                && BuildConfig.FIELD_SYNC_ENABLED) {
+            card.addView(text("A manager requests moving office responsibility for this job."
+                    + " You remain the Contractor, with the same work and photos."
+                    + " Approve or decline online.", 14, true));
+            Button approveTeam = new Button(this);
+            approveTeam.setText("Approve Office-Team Change");
+            approveTeam.setLayoutParams(matchWrap());
+            approveTeam.setEnabled(workOrder.pendingKind.isEmpty()
+                    && workOrder.conflictReason.isEmpty());
+            approveTeam.setOnClickListener(v -> respondToTeamHandoff(
+                    workOrder.id, workOrder.teamHandoffRequestId, true));
+            card.addView(approveTeam);
+            if (!approveTeam.isEnabled())
+                card.addView(text("Sync pending work and protect saved photos"
+                        + " before approving this office change.", 14, true));
+            Button declineTeam = new Button(this);
+            declineTeam.setText("Decline Office-Team Change");
+            declineTeam.setLayoutParams(matchWrap());
+            declineTeam.setOnClickListener(v -> respondToTeamHandoff(
+                    workOrder.id, workOrder.teamHandoffRequestId, false));
+            card.addView(declineTeam);
+        }
+
         workOrdersContainer.addView(card);
     }
 
@@ -721,6 +748,51 @@ public final class MainActivity extends Activity {
                                 .putExtra("run", workOrder.currentRunId)))
                 .setNegativeButton("OK", null)
                 .show();
+    }
+
+    private void respondToTeamHandoff(String workOrderId, String requestId, boolean accept) {
+        long operation = sessionOperations.capture();
+        long sessionGeneration = runtime.sessions.generation();
+        SupabaseApi.AuthSession session = currentSession;
+        if (session == null || requestId == null || requestId.isEmpty()) {
+            statusText.setText("Sign in and refresh before responding to an office change.");
+            return;
+        }
+        progress.setVisibility(View.VISIBLE);
+        refreshAssignmentsButton.setEnabled(false);
+        statusText.setText(accept ? "Approving office change…" : "Declining office change…");
+        executor.execute(() -> {
+            try {
+                runtime.respondTeamHandoffConsent(session, sessionGeneration,
+                        workOrderId, requestId, accept);
+                List<SupabaseApi.WorkOrder> workOrders =
+                        runtime.refresh(session, sessionGeneration);
+                SupabaseApi.AuthSession refreshed = runtime.sessions.load();
+                if (refreshed == null) return;
+                postIfCurrent(operation, sessionGeneration, () -> {
+                    progress.setVisibility(View.GONE);
+                    refreshAssignmentsButton.setEnabled(true);
+                    showSignedIn(refreshed, workOrders, true, accept
+                            ? "Office-team request approved. The manager must still confirm"
+                                + " the change; your current work and photos remain yours."
+                            : "Office-team request declined. Your assignment is unchanged.");
+                });
+            } catch (IOException error) {
+                showRefreshFailure(operation, sessionGeneration,
+                        "Network required to respond to an office-team change.");
+            } catch (SupabaseApi.ApiException error) {
+                if (error.isAuthenticationRejection()) {
+                    runtime.sessions.reject(sessionGeneration);
+                    postSessionExpired(operation, sessionGeneration);
+                } else {
+                    showRefreshFailure(operation, sessionGeneration,
+                            safeMessage(error, "Unable to respond to office-team change."));
+                }
+            } catch (Exception error) {
+                showRefreshFailure(operation, sessionGeneration,
+                        safeMessage(error, "Unable to respond to office-team change."));
+            }
+        });
     }
 
     private void respondToReassignment(String workOrderId, boolean accept) {
