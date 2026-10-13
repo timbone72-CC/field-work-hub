@@ -53,7 +53,11 @@ const RecoveryGallery = (() => {
     if (!matches(g) || !Array.isArray(result?.photos) || result.photos.length > 25
       || (result.next_photo !== null && result.next_photo !== undefined && !UUID.test(result.next_photo))
       || result.photos.some(p => !UUID.test(p.photo_id || '') || !UUID.test(p.transfer_version || '')
-        || (after && p.photo_id <= after))) throw Error('Recovery page is stale or invalid.');
+        || (after && p.photo_id <= after)
+        || !Number.isSafeInteger(p.prepared_size) || p.prepared_size < 4
+        || p.prepared_size > 33554432
+        || !/^[0-9a-f]{64}$/.test(p.prepared_sha256 || '')))
+      throw Error('Recovery page is stale or invalid.');
     return result;
   }
   async function appendPage(after, g) {
@@ -116,8 +120,17 @@ const RecoveryGallery = (() => {
       const response = await fetch(url, {cache: 'no-store', redirect: 'error'});
       if (!response.ok) throw Error('Private photo download failed. No photo status changed.');
       const bytes = await response.blob();
-      if (!matches(g) || bytes.size <= 0 || bytes.size > 33554432 || !bytes.type.startsWith('image/'))
-        throw Error('The downloaded photo is unavailable or invalid.');
+      if (!matches(g) || bytes.size !== photo.prepared_size
+        || bytes.type.toLowerCase() !== 'image/jpeg')
+        throw Error('The downloaded photo does not match its verified private receipt.');
+      const file = new Uint8Array(await bytes.arrayBuffer());
+      if (!matches(g) || file[0] !== 255 || file[1] !== 216
+        || file[2] !== 255 || file[file.length-2] !== 255 || file[file.length-1] !== 217)
+        throw Error('The downloaded photo is not a complete prepared JPEG.');
+      const digest = await crypto.subtle.digest('SHA-256', file);
+      const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2,'0')).join('');
+      if (!matches(g) || actual !== photo.prepared_sha256)
+        throw Error('The downloaded photo failed its private checksum verification.');
       const local = URL.createObjectURL(bytes);
       try {
         const link = document.createElement('a');
