@@ -118,6 +118,12 @@ jobs:
           PY
       - name: Freeze candidate identity and APK
         run: python3 ci/write_phase5_artifact_identity.py candidate
+      - name: Validate operator-only release helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ci/publish_internal_update.sh
+          python3 -m py_compile ci/verify_internal_release.py
       - name: Verify bounded internal release file matches frozen candidate bytes
         shell: bash
         run: |
