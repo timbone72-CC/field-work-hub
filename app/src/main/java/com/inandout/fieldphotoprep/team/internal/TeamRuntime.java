@@ -82,7 +82,12 @@ final class TeamRuntime {
                             }
                         },
                         new RoomAssignmentStore(dao));
-        return guarded.refresh(expected);
+        List<SupabaseApi.WorkOrder> rows = guarded.refresh(expected);
+        SupabaseApi.AuthSession current = sessions.authorized(
+                generation, expected.userId, expected.organizationId, false);
+        if ("CONTRACTOR".equals(current.role))
+            api.attachPendingTeamHandoffConsents(current.accessToken, rows);
+        return rows;
     }
 
     FieldAction create(SupabaseApi.AuthSession expected, long gen, String wo, String run, String kind)
@@ -111,6 +116,26 @@ final class TeamRuntime {
                 if (!sessions.matches(gen, expected.userId, expected.organizationId))
                     throw new SessionCoordinator.SessionChanged();
                 api.respondReassignment(s.accessToken, wo, accept);
+            }
+        }
+    }
+
+    void respondTeamHandoffConsent(SupabaseApi.AuthSession expected, long gen,
+            String workOrderId, String requestId, boolean accept) throws Exception {
+        if (!BuildConfig.FIELD_SYNC_ENABLED)
+            throw new IllegalStateException("Recovery mode is read only.");
+        synchronized (sync.drainLock) {
+            synchronized (actionCreationLock) {
+                // Consent is online only; never send an approval while local
+                // actions or protected photo evidence are not fully settled.
+                if (accept) sync.requireHandoffReady(expected.userId,
+                        expected.organizationId, workOrderId);
+                SupabaseApi.AuthSession s = sessions.authorized(
+                        gen, expected.userId, expected.organizationId, true);
+                if (!"CONTRACTOR".equals(s.role)
+                        || !sessions.matches(gen, expected.userId, expected.organizationId))
+                    throw new SessionCoordinator.SessionChanged();
+                api.respondTeamHandoffConsent(s.accessToken, requestId, accept);
             }
         }
     }
