@@ -169,7 +169,7 @@ export async function continueTrustedGeographicLeaf({
  tokenProvider,ledger,workerId,generation,packageId,kind,
  expectedEmail,expectedDriveId,fetcher=fetch
 }={}){
- const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  if(!UUID.test(workerId??'')||!UUID.test(packageId??'')
   ||!Number.isSafeInteger(generation)||generation<1
   ||!['ADDRESS','WORK_ORDER'].includes(kind)
@@ -196,7 +196,18 @@ export async function continueTrustedGeographicLeaf({
   throw new DriveUncertain('EXACT_PREALLOCATED_GEOGRAPHIC_LEAF_REQUIRED');
  // The same reconciler validates the server-fetched remote ID, company
  // appProperties, expected Shared Drive, original create attempt, and GET.
+ // Re-read the exact geographic leaf under its strict, server-authorized
+ // path. Legacy readParent uses a different ADDRESS/WO map and must not
+ // silently replace the geographic lookup at the provider receipt gate.
+ const geographicLedger={
+  ...ledger,
+  readParent:(p,w,g,k)=>{
+   if(k!==kind)throw new DriveUncertain('EXACT_GEOGRAPHIC_LEAF_REQUIRED');
+   return ledger.readGeographicLeaf(p,w,g,k);
+  }
+ };
  return reconcileOnePreallocatedParent({
-  map,packageId,workerId,generation,drive,ledger,expectedDriveId
+  map,packageId,workerId,generation,drive,
+  ledger:geographicLedger,expectedDriveId
  });
 }
