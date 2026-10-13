@@ -55,7 +55,7 @@ export async function verifyPhase5WorkspaceProvider({env=process.env,fetcher=fet
 
 if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   verifyPhase5WorkspaceProvider().then(()=>{
-    process.stdout.write('PASS: TEST Workspace identity and separate writable client root. No Drive writes or Send.\\n');
+    process.stdout.write('PASS: TEST Workspace identity and separate writable client root. No Drive writes or Send.\n');
   }).catch(error=>{
     // No caller-controlled message, backend credential, Drive URL or token.
     const allow=new Set(['TEST_ONLY_EVIDENCE_REQUIRED','EXACT_WORKSPACE_ACCOUNT_REQUIRED',
@@ -66,7 +66,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).
       'DESTINATION_NOT_VERIFIED','DESTINATION_ID_REQUIRED','PROVIDER_AUTH_DENIED',
       'PROVIDER_IDENTITY_UNCERTAIN','PROVIDER_RETRY_REQUIRED','PROVIDER_OUTCOME_UNCERTAIN',
       'PROVIDER_RESPONSE_UNCERTAIN','EXACT_TEST_CLIENT_DESTINATION_UNVERIFIED']);
-    process.stderr.write('BLOCKED: '+(allow.has(error?.code)?error.code:'PROVIDER_PREFLIGHT_UNCERTAIN')+'\\n');
+    process.stderr.write('BLOCKED: '+(allow.has(error?.code)?error.code:'PROVIDER_PREFLIGHT_UNCERTAIN')+'\n');
     process.exitCode=1;
   });
 }
