@@ -86,6 +86,8 @@ begin
   if jsonb_array_length(page->'photos')<>1
     or page->'photos'->0->>'photo_id'<>photo::text
     or page->'photos'->0->>'transfer_version'<>transfer.version::text
+    or page->'photos'->0->>'prepared_sha256'<>repeat('a',64)
+    or (page->'photos'->0->>'prepared_size')::integer<>250000
     or page->>'next_photo' is not null
     or page ? 'object_key' or page->'photos'->0 ? 'object_key'
     or page->'photos'->0 ? 'review_reason' or page->'photos'->0 ? 'signed_url'
