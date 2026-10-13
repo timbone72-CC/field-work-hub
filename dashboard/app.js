@@ -186,6 +186,18 @@ loginForm.addEventListener('submit', async (event) => {
         // Never treat an unverified photo grant or broken network as authority.
       }
     }
+    // If Auth already verified the exact office identity but fetching the
+    // first work page timed out, preserve the tab credential, not its stale
+    // data. A refresh can restore the signed-in screen after connectivity
+    // returns without submitting the password again. Never persist a denied
+    // or unverified identity.
+    const verifiedRole=currentUser?.app_metadata?.role;
+    if (transientAdminConnectionError(error) && pendingAdminSession
+        && currentUser?.app_metadata?.organization_id
+        && ['ADMIN','SUPERVISOR'].includes(verifiedRole)) {
+      storeAdminSession(pendingAdminSession);
+      pendingAdminSession=null;
+    }
     RecoveryGallery.reset();
     accessToken = null;
     currentUser = null;
