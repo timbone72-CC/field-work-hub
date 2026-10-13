@@ -489,7 +489,7 @@ grant execute on function public.pending_work_order_team_handoff_consents() to a
 -- for in-progress work; consent callers cannot borrow Supervisor authority.
 create function private.in_progress_team_handoff_fingerprint(
  p_work_order uuid,p_destination uuid
-) returns text language sql stable security definer set search_path='' as $
+) returns text language sql stable security definer set search_path='' as $fingerprint$
  select md5(to_jsonb(w)::text || ':' || source.revision::text
    || ':' || target.revision::text || ':false:false:'
    || (select coalesce(jsonb_agg(to_jsonb(r) order by r.user_id),'[]'::jsonb)::text
@@ -504,7 +504,7 @@ create function private.in_progress_team_handoff_fingerprint(
  join public.admin_teams target on target.id=p_destination
    and target.organization_id=w.organization_id and target.active
  where w.id=p_work_order and w.field_status='IN_PROGRESS'
-$;
+$fingerprint$;
 revoke all on function private.in_progress_team_handoff_fingerprint(uuid,uuid)
  from public,anon,authenticated;
 
