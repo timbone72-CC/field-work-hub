@@ -93,7 +93,7 @@ begin
   values(p_action,w.id,auth.uid(),p_company,p_expected_policy_revision,result);
   return result;
 end;
-$function$
+$function$;
 
 
 do $verify$
