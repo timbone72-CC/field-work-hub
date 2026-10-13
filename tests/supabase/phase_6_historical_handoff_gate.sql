@@ -208,13 +208,40 @@ begin
   perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisor_id,'session_id',supervisor_id,
     'app_metadata',jsonb_build_object('role','SUPERVISOR','organization_id',org))::text,true);
   preview:=public.preview_work_order_team_handoff(wo,dest_team,'TEST');
-  if preview->>'consent_status'<>'APPROVED' or preview->>'eligible'<>'false' then
-    raise exception 'Approved consent falsely enabled unimplemented handoff: %',preview;end if;
+  if preview->>'consent_status'<>'APPROVED' or preview->>'eligible'<>'true'
+    or preview->>'handoff_kind'<>'IN_PROGRESS' or preview->>'original_run_id'<>run::text
+    or preview->>'original_assignment_id'<>assignment_id::text then
+    raise exception 'Approved consent did not bind exact active assignment: %',preview;end if;
   denied:=false;
-  begin perform public.handoff_work_order_team(gen_random_uuid(),wo,dest_team,fp,'Office continuity','TEST');
-  exception when insufficient_privilege then denied:=true;end;
+  begin perform public.handoff_work_order_team(gen_random_uuid(),wo,dest_team,fp,'Changed reason','TEST');
+  exception when serialization_failure then denied:=true;end;
   if not denied or (select responsible_team_id from public.work_orders where id=wo)<>source_team then
-    raise exception 'Consent approval alone incorrectly moved the active job';end if;
+    raise exception 'Changed reason bypassed the approved Contractor consent';end if;
+  receipt:=public.handoff_work_order_team(gen_random_uuid(),wo,dest_team,fp,'Office continuity','TEST');
+  if receipt->>'status'<>'HANDED_OFF'
+    or (select responsible_team_id from public.work_orders where id=wo)<>dest_team
+    or (select assigned_user_id from public.work_orders where id=wo)<>contractor_id
+    or (select current_run_id from public.work_orders where id=wo)<>run
+    or (select id from public.work_order_assignments where id=assignment_id
+        and assignment_ended_at is null and assigned_user_id=contractor_id)<>assignment_id
+    or (select decision from private.work_order_team_handoff_consent_requests
+        where request_id=request_id)<>'CONSUMED'
+    then raise exception 'Audited approved handoff broke original active assignment: %',receipt;end if;
+  if not exists(select 1 from private.photo_recovery_grants g
+    where g.scope_work_order_id=wo and g.user_id=admin_id and g.state='READY')
+    then raise exception 'Former office lost its fixed recovery cutoff';end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id,
+    'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
+  if private.can_work_order(wo) or private.can_read_work_order(wo) then
+    raise exception 'Former office kept live active work authorization';end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor_id,'session_id',contractor_id,
+    'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+  if not private.can_read_work_order(wo)
+    or not private.active_team_handoff_original_assignment(contractor_id,wo) then
+    raise exception 'Original Contractor could not read unchanged active assignment';end if;
+  perform private.guard_legacy_work_order(wo,'CONTRACTOR');
+  if private.contractor_current_team(contractor_id,org)<>source_team then
+    raise exception 'Handoff silently moved Contractor to another team';end if;
   if has_table_privilege('authenticated','private.work_order_team_handoff_consent_requests','SELECT')
     or has_table_privilege('authenticated','private.work_order_team_handoff_consent_requests','UPDATE') then
     raise exception 'Private team-handoff consent ledger exposed';end if;
