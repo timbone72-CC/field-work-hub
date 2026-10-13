@@ -126,4 +126,97 @@ begin
     then raise exception 'Private handoff/cutoff authority exposed';end if;
 end;
 $historical$;
+
+-- Exact active consent is separate from reassignment and does not yet enable
+-- changing a started job's team until the original-instance continuation gate.
+do $active_consent$
+declare
+  org uuid:=gen_random_uuid(); source_team uuid:=gen_random_uuid(); dest_team uuid:=gen_random_uuid();
+  admin_id uuid:=gen_random_uuid(); supervisor_id uuid:=gen_random_uuid();
+  contractor_id uuid:=gen_random_uuid(); actor uuid; wo uuid; run uuid; assignment_id uuid;
+  request_id uuid:=gen_random_uuid(); fp text; preview jsonb; receipt jsonb; req jsonb;
+  cfg jsonb; revision uuid; denied boolean; count_pending bigint;
+begin
+  insert into public.organizations(id,name) values(org,'Active consent fixture');
+  insert into public.admin_teams(id,organization_id,name)
+    values(source_team,org,'Original office'),(dest_team,org,'Receiving office');
+  foreach actor in array array[admin_id,supervisor_id,contractor_id] loop
+    insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+      values(actor,actor::text||'@example.invalid',now(),jsonb_build_object(
+        'organization_id',org,'role',case when actor=supervisor_id then 'SUPERVISOR'
+          when actor=contractor_id then 'CONTRACTOR' else 'ADMIN' end));
+    insert into auth.sessions(id,user_id) values(actor,actor);
+    insert into private.account_work_access(organization_id,user_id,work_role,active)
+      select org,actor,raw_app_meta_data->>'role',true from auth.users where id=actor;
+  end loop;
+  insert into private.admin_team_memberships(organization_id,team_id,user_id,active)
+    values(org,source_team,admin_id,true);
+  insert into private.contractor_team_memberships(organization_id,team_id,user_id,active)
+    values(org,source_team,contractor_id,true);
+  insert into private.org_work_settings(organization_id,supervisor_work_ready) values(org,true);
+  insert into private.supervisor_grants(organization_id,user_id,tier,active,granted_by,reason)
+    values(org,supervisor_id,3,true,admin_id,'TEST');
+  cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+    'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id,
+    'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
+  select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(
+    false,'CONSENT-A','TEST','TEST','',current_date,contractor_id,cfg) j;
+  select current_run_id into run from public.work_orders where id=wo;
+  select id into assignment_id from public.work_order_assignments
+    where run_id=run and assignment_ended_at is null;
+  select (requirement_snapshot->>'revision')::uuid into revision
+    from public.work_order_runs where id=run;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor_id,'session_id',contractor_id,
+    'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+  receipt:=public.accept_field_action_v4(gen_random_uuid(),wo,run,assignment_id,'START',
+    to_char(now()-interval '30 seconds','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),revision,null,'');
+  if receipt->>'outcome'<>'APPLIED' then raise exception 'Active consent fixture Start failed: %',receipt;end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisor_id,'session_id',supervisor_id,
+    'app_metadata',jsonb_build_object('role','SUPERVISOR','organization_id',org))::text,true);
+  preview:=public.preview_work_order_team_handoff(wo,dest_team,'TEST');
+  if preview->>'eligible'<>'false' or preview->>'consent_possible'<>'true'
+    or preview->>'consent_status'<>'NOT_REQUESTED' then
+    raise exception 'Started job incorrectly eligible or unavailable for consent: %',preview;end if;
+  fp:=preview->>'review_fingerprint';
+  req:=public.request_work_order_team_handoff_consent(request_id,wo,dest_team,fp,'Office continuity','TEST');
+  if req->>'status'<>'PENDING'
+    or (select responsible_team_id from public.work_orders where id=wo)<>source_team
+    or (select assigned_user_id from public.work_orders where id=wo)<>contractor_id
+    then raise exception 'Consent request changed live work or was not saved: %',req;end if;
+  if public.request_work_order_team_handoff_consent(request_id,wo,dest_team,fp,'Office continuity','TEST')
+    is distinct from req then raise exception 'Same consent request not idempotent';end if;
+  denied:=false;
+  begin perform public.handoff_work_order_team(gen_random_uuid(),wo,dest_team,fp,'Office continuity','TEST');
+  exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Active office job moved before original Contractor consent';end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor_id,'session_id',contractor_id,
+    'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+  select count(*) into count_pending from public.pending_work_order_team_handoff_consents() j
+    where j->>'request_id'=request_id::text and j->>'work_order_id'=wo::text;
+  if count_pending<>1 then raise exception 'Original Contractor did not receive exact consent request';end if;
+  receipt:=public.respond_work_order_team_handoff_consent(request_id,true);
+  if receipt->>'status'<>'APPROVED'
+    or public.respond_work_order_team_handoff_consent(request_id,true) is distinct from receipt
+    then raise exception 'Original Contractor approval not idempotent: %',receipt;end if;
+  denied:=false;
+  begin perform public.respond_work_order_team_handoff_consent(request_id,false);
+  exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Approved consent could be reversed';end if;
+  if (select count(*) from public.pending_work_order_team_handoff_consents())<>0 then
+    raise exception 'Approved request still appears as a pending phone prompt';end if;
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisor_id,'session_id',supervisor_id,
+    'app_metadata',jsonb_build_object('role','SUPERVISOR','organization_id',org))::text,true);
+  preview:=public.preview_work_order_team_handoff(wo,dest_team,'TEST');
+  if preview->>'consent_status'<>'APPROVED' or preview->>'eligible'<>'false' then
+    raise exception 'Approved consent falsely enabled unimplemented handoff: %',preview;end if;
+  denied:=false;
+  begin perform public.handoff_work_order_team(gen_random_uuid(),wo,dest_team,fp,'Office continuity','TEST');
+  exception when insufficient_privilege then denied:=true;end;
+  if not denied or (select responsible_team_id from public.work_orders where id=wo)<>source_team then
+    raise exception 'Consent approval alone incorrectly moved the active job';end if;
+  if has_table_privilege('authenticated','private.work_order_team_handoff_consent_requests','SELECT')
+    or has_table_privilege('authenticated','private.work_order_team_handoff_consent_requests','UPDATE') then
+    raise exception 'Private team-handoff consent ledger exposed';end if;
+end;$active_consent$;
 rollback;
