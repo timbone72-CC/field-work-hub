@@ -21,6 +21,9 @@ BASE = 'http://127.0.0.1:3400'
 
 
 def connect():
+    settings = psycopg.conninfo.conninfo_to_dict(DSN)
+    assert settings.get('host') in ('localhost', '127.0.0.1')
+    assert settings.get('dbname') == 'fwh_test'
     connection = psycopg.connect(DSN)
     assert connection.info.host in ('localhost', '127.0.0.1')
     assert connection.execute('select current_database()').fetchone()[0] == 'fwh_test'
@@ -132,3 +135,4 @@ with connect() as connection:
         assert row[0] == expected and row[1] and 'search_path=""' in row[2]
         assert not row[3] and row[4] == client_execute and row[5]
 print('PASS conflict repair preserves all predicates, source parity, private engine grants and security configuration')
+
