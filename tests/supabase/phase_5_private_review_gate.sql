@@ -734,6 +734,8 @@ declare
   k private.client_packages%rowtype;
   g private.client_delivery_geography%rowtype;
   path jsonb;
+  county_path jsonb;
+  city_path jsonb;
 begin
   select * into k from private.client_packages
     where folder_address_key is not null
@@ -761,13 +763,40 @@ begin
     or length(path->>'city_key')<>64 then
     raise exception 'Frozen geographic path did not bind expected scope';
   end if;
+  county_path:=path;
+  -- The optional approved State -> City layout MUST parent City under
+  -- State, not County. Preserve the same company/destination, address,
+  -- geography revision and immutable State key; never infer an alternate
+  -- path from a folder display name or use an 'Unknown' county.
+  k.approved_manifest:=coalesce(k.approved_manifest,'{}'::jsonb)
+    ||jsonb_build_object('folder_layout','STATE_CITY_ADDRESS');
+  city_path:=private.phase_5_expected_geographic_path(k,g);
+  if city_path->>'layout'<>'STATE_CITY_ADDRESS'
+    or city_path->>'state_key' is distinct from county_path->>'state_key'
+    or city_path->>'county_key' is distinct from county_path->>'county_key'
+    or city_path->>'address_key' is distinct from county_path->>'address_key'
+    or city_path->>'destination_id' is distinct from county_path->>'destination_id'
+    or city_path->>'geography_revision' is distinct from county_path->>'geography_revision'
+    or city_path->>'city_key' is distinct from
+      private.geo_parent_path_key(city_path->>'state_key','CITY',g.normalized_city)
+    or city_path->>'city_key' is not distinct from county_path->>'city_key' then
+    raise exception 'State-City hierarchy reused County-City parent or changed frozen scope';
+  end if;
+  -- The original County layout is unchanged by a new company's explicit
+  -- alternate selection. Both routes retain independent exact City keys.
+  k.approved_manifest:=coalesce(k.approved_manifest,'{}'::jsonb)
+    ||jsonb_build_object('folder_layout','STATE_COUNTY_CITY_ADDRESS');
+  if (private.phase_5_expected_geographic_path(k,g))->>'city_key'
+      is distinct from county_path->>'city_key' then
+    raise exception 'Original State-County-City mapping was changed';
+  end if;
   g.company_id:=gen_random_uuid();
   begin
     perform private.phase_5_expected_geographic_path(k,g);
     raise exception 'Foreign-company geography accepted';
   exception when insufficient_privilege then null;
   end;
-  raise notice 'Geographic approved-manifest company/destination/key gate PASS';
+  raise notice 'Geographic approved-manifest company/destination/key and both State-City / State-County-City derivations PASS';
 end;
 $geo_manifest_gate$;
 -- Client layout configuration is scoped, revisioned, idempotent and never
