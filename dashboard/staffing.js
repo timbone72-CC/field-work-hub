@@ -838,15 +838,19 @@ async function staffingPreviewHandoff() {
     card.querySelector('#staffing-handoff-confirm').textContent='Confirm reviewed handoff';
     staffingHandoffPreview={request:req,fingerprint:review.review_fingerprint,mode:'MOVE'};
     const historical=review.handoff_kind==='FIELD_COMPLETE';
-    if(historical && (review.field_status!=='FIELD_COMPLETE'
+    const active=review.handoff_kind==='IN_PROGRESS';
+    if((historical||active) && ((historical && review.field_status!=='FIELD_COMPLETE')
+      ||(active && review.field_status!=='IN_PROGRESS')
       ||!Number.isSafeInteger(review.recovery_recipient_count)||review.recovery_recipient_count<0
-      ||!Number.isSafeInteger(review.protected_photo_count)||review.protected_photo_count<0)) {
+      ||!Number.isSafeInteger(review.protected_photo_count)||review.protected_photo_count<0
+      ||!review.original_run_id||!review.original_assignment_id||!review.original_assignee_id)) {
       staffingHandoffPreview=null;
-      throw new Error('Historical recovery summary is incomplete; reload before handoff.');
+      throw new Error('Exact old assignment or photo recovery changed; reload before handoff.');
     }
     card.querySelector('#staffing-handoff-review-text').textContent=
-      `Move ${historical?'field-complete':'unassigned'} job ${row.wo_number||row.work_order_id} from ${review.old_team_name} to ${review.new_team_name}? ${req.p_reason}`
-      +(historical?` Original Contractor and photo identities stay fixed. ${review.recovery_recipient_count} former office users retain recovery of ${review.protected_photo_count} existing photos.`:'');
+      `Move ${active?'in-progress':historical?'field-complete':'unassigned'} job ${row.wo_number||row.work_order_id} from ${review.old_team_name} to ${review.new_team_name}? ${req.p_reason}`
+      +(active?` Contractor approved this exact office-team change. Original assignment, run, protected photos and Contractor stay fixed; ${review.recovery_recipient_count} former office users retain exact recovery for ${review.protected_photo_count} existing photos.`
+       :historical?` Original Contractor and photo identities stay fixed. ${review.recovery_recipient_count} former office users retain recovery of ${review.protected_photo_count} existing photos.`:'');
     card.querySelector('#staffing-handoff-review').classList.remove('hidden');
     staffingHandoffMessage('Eligible now. Confirmation will recheck the same fingerprint under lock.');
   } catch(error) {
