@@ -1238,6 +1238,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
     largePackage=false;
     await page.locator('#cancel-edit').click();
+    // A headless click can resolve before the dialog's close transition.
+    // Require the real modal to be closed before a physical header sign-out;
+    // a still-open dialog is a test failure, not an excuse to force-click.
+    await wait(page,()=>!document.querySelector('#edit-work-order-section').open);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     await page.locator('#sign-out').click(); admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');
