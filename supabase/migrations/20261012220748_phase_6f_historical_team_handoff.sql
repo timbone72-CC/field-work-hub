@@ -557,3 +557,28 @@ begin
 end;$respond$;
 revoke all on function public.respond_work_order_team_handoff_consent(uuid,boolean) from public,anon;
 grant execute on function public.respond_work_order_team_handoff_consent(uuid,boolean) to authenticated;
+
+
+-- Tier-3-only preview of the separate consent state. This presentation never
+-- calls a Contractor's response endpoint or treats approval as a completed move.
+create or replace function public.preview_work_order_team_handoff(
+ p_work_order uuid,p_destination uuid,p_environment text
+) returns jsonb language plpgsql security definer set search_path='' as $preview$
+declare reviewed jsonb; v public.work_orders%rowtype; c private.work_order_team_handoff_consent_requests%rowtype;
+begin
+ reviewed:=private.work_order_team_handoff_review(p_work_order,p_destination,p_environment);
+ select * into v from public.work_orders where id=p_work_order;
+ select * into c from private.work_order_team_handoff_consent_requests
+   where work_order_id=p_work_order and source_team_id=v.responsible_team_id
+     and target_team_id=p_destination and decision in ('PENDING','APPROVED')
+   order by requested_at desc limit 1;
+ return reviewed || jsonb_build_object(
+   'consent_possible',v.field_status='IN_PROGRESS' and v.assigned_user_id is not null
+     and v.pending_assignee_user_id is null and v.current_run_id is not null
+     and v.started_at is not null and v.field_completed_at is null,
+   'consent_status',case when c.request_id is null then 'NOT_REQUESTED'
+     when c.expected_fingerprint is distinct from reviewed->>'review_fingerprint'
+       then 'STALE' else c.decision end);
+end;$preview$;
+revoke all on function public.preview_work_order_team_handoff(uuid,uuid,text) from public,anon;
+grant execute on function public.preview_work_order_team_handoff(uuid,uuid,text) to authenticated;
