@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {reconcileOnePreallocatedParent} from '../../supabase/functions/client-delivery/parent-one.mjs';
+import {continueTrustedGeographicLeaf} from '../../supabase/functions/client-delivery/worker-runtime.mjs';
+import {DriveUncertain} from '../../supabase/functions/client-delivery/drive-client.mjs';
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const org=uuid(1),company=uuid(2),dest=uuid(3),pkg=uuid(4),worker=uuid(5);
 const root='root_'+'a'.repeat(24),driveId='drive_'+'d'.repeat(24);
@@ -96,4 +98,59 @@ test('geographic folder metadata mismatch denies foreign company before POST',as
  const r=setup('STATE_COUNTY_CITY_ADDRESS',{wrongCompany:true});
  await assert.rejects(()=>reconcile(r,'CITY'));
  assert.equal(r.events.some(e=>e.startsWith('POST:')),false);
+});
+
+test('trusted geographic ADDRESS and WORK_ORDER continue with valid package UUIDs and scoped recheck',async()=>{
+ for(const kind of ['ADDRESS','WORK_ORDER']){
+  const r=setup('STATE_COUNTY_CITY_ADDRESS',{restart:true});
+  const seen=[];
+  const ledger={
+   ...r.ledger,
+   readGeographicLeaf:async(_p,_w,_g,requestedKind)=>{
+    seen.push('geographic:'+requestedKind);
+    if(requestedKind!==kind)throw Error('CROSS_KIND_LOOKUP');
+    return {exists:true,...r.maps.get(kind)};
+   },
+   readParent:async()=>{throw Error('LEGACY_PARENT_LOOKUP_FORBIDDEN');}
+  };
+  const token='private-backend-token-verified';
+  const fetcher=async(url,options)=>{
+   const u=new URL(url);
+   assert.equal(u.origin,'https://www.googleapis.com');
+   assert.equal(options.headers.Authorization,'Bearer '+token);
+   if(u.pathname==='/drive/v3/about')return Response.json({
+    user:{emailAddress:'office@example.invalid',me:true,permissionId:'perm_private'}});
+   if(u.pathname.startsWith('/drive/v3/files/')){
+    const id=u.pathname.slice('/drive/v3/files/'.length);
+    const file=r.objects.get(id);
+    assert.ok(file,'Only immutable preallocated remote ID may be read');
+    return Response.json({id:file.id,name:file.name,
+     mimeType:file.mime,parents:[file.parent],driveId:file.drive_id,
+     trashed:false,appProperties:file.appProperties});
+   }
+   throw Error('UNEXPECTED_PROVIDER_ENDPOINT');
+  };
+  const out=await continueTrustedGeographicLeaf({
+   tokenProvider:async()=>({accessToken:token,expiresInSeconds:3600}),
+   ledger,workerId:worker,generation:1,packageId:pkg,kind,
+   expectedEmail:'office@example.invalid',expectedDriveId:driveId,fetcher
+  });
+  assert.equal(out.state,'PARENT_VERIFIED');
+  assert.equal(out.kind,kind);
+  assert.deepEqual(seen,['geographic:'+kind,'geographic:'+kind]);
+  assert.equal(r.events.some(e=>e.startsWith('POST:')),false);
+  assert.ok(r.events.includes('CONFIRM:'+kind));
+ }
+});
+
+test('malformed package identity is denied before OAuth, SQL and provider read',async()=>{
+ let called=false;
+ await assert.rejects(()=>continueTrustedGeographicLeaf({
+  tokenProvider:async()=>{called=true;throw Error('must not run');},
+  ledger:{readGeographicLeaf:async()=>{called=true;},heartbeat:async()=>{}},
+  workerId:worker,generation:1,packageId:'not-a-uuid',kind:'ADDRESS',
+  expectedEmail:'office@example.invalid',expectedDriveId:driveId,
+  fetcher:async()=>{called=true;throw Error('must not run');}
+ }),error=>error instanceof DriveUncertain&&error.code==='TRUSTED_WORKER_NOT_CONFIGURED');
+ assert.equal(called,false);
 });
