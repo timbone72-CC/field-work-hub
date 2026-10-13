@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {verifyPhase5WorkspaceProvider,ProviderPreflightBlocked}
  from '../../ci/verify_phase5_workspace_provider.mjs';
 
@@ -89,4 +91,17 @@ test('missing refresh credential never reaches the provider',async()=>{
   env:{...env,FWH_TEST_WORKSPACE_REFRESH_TOKEN:''},fetcher:r.fetcher
  }));
  assert.deepEqual(r.events,[]);
+});
+
+test('operator CLI refusal prints only a fixed code, never env credentials',()=>{
+ const script=fileURLToPath(new URL('../../ci/verify_phase5_workspace_provider.mjs',import.meta.url));
+ const child=spawnSync(process.execPath,[script],{
+  env:{...process.env,...env,FWH_TEST_EVIDENCE_CLASS:'NOT_TEST'},
+  encoding:'utf8',timeout:5000
+ });
+ assert.equal(child.status,1);
+ assert.equal(child.stdout,'');
+ assert.equal(child.stderr.trim(),'BLOCKED: TEST_ONLY_EVIDENCE_REQUIRED');
+ assert.ok(!child.stderr.includes(env.FWH_TEST_WORKSPACE_CLIENT_SECRET)
+  &&!child.stderr.includes(env.FWH_TEST_WORKSPACE_REFRESH_TOKEN));
 });
