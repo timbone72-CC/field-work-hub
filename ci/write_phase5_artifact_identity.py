@@ -25,7 +25,6 @@ assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true
 room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
 room_version=5
 assert 'version = 5,' in room_source, 'Unexpected TeamDatabase schema; review the release gate'
-assert room_version==5, 'Unexpected TeamDatabase schema; review the release gate'
 for version in range(1,room_version+1):
     assert (Path('app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase')/f'{version}.json').is_file()
 permissions=subprocess.check_output([str(build_tools/'aapt'),'dump','permissions',str(apk)],text=True)
