@@ -13,8 +13,8 @@ android {
         applicationId 'com.inandout.fieldphotoprep.team.internal'
         minSdk 26
         targetSdk 36
-        versionCode (project.hasProperty("fwhRecovery") ? 21 : 20)
-        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-transfer-recovery-internal' : '0.5-phase5-transfer-internal')
+        versionCode (project.hasProperty("fwhRecovery") ? 23 : 22)
+        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-update-recovery-internal' : '0.5-phase5-update-internal')
         buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', project.hasProperty('fwhRecovery') ? 'false' : 'true'
 
         javaCompileOptions {
@@ -68,6 +68,7 @@ dependencies {
     implementation 'androidx.camera:camera-view:1.6.2'
     implementation 'androidx.work:work-runtime:2.12.0'
     implementation 'androidx.room:room-runtime:2.8.5'
+    implementation 'androidx.core:core:1.16.0'
     annotationProcessor 'androidx.room:room-compiler:2.8.5'
 
     testImplementation 'androidx.work:work-testing:2.12.0'
