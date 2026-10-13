@@ -23,12 +23,44 @@ cleanup() {
 }
 trap cleanup EXIT
 
+verify_live_preview() {
+  # Git fetch into FETCH_HEAD, because thin checkouts may have no origin/main ref.
+  git fetch --quiet origin refs/heads/main
+  git show FETCH_HEAD:dashboard/index.html > "$TMP/main.html"
+  local main_hash
+  main_hash="$(sha256sum "$TMP/main.html" | cut -d' ' -f1)"
+  local verified=0
+  for i in $(seq 1 12); do
+    if curl -fsSL --max-time 12 "$PREVIEW" -o "$TMP/preview.html" &&
+       grep -q 'id="job-photos"' "$TMP/preview.html" &&
+       grep -q 'private-review.js?v=' "$TMP/preview.html" &&
+       curl -fsSL --max-time 12 "$PREVIEW""private-review.js" -o "$TMP/private-review.js" &&
+       grep -q 'admin-private-photo' "$TMP/private-review.js" &&
+       curl -fsSL --max-time 12 "$ROOT" -o "$TMP/root.html"; then
+      local live_hash
+      live_hash="$(sha256sum "$TMP/root.html" | cut -d' ' -f1)"
+      if [[ "$live_hash" == "$main_hash" ]]; then verified=1; break; fi
+    fi
+    sleep 10
+  done
+  if [[ "$verified" == "1" ]]; then
+    echo "PASS: Private Admin preview is live at $PREVIEW"
+    echo "PASS: Normal Admin root index.html matches current main byte-for-byte."
+    echo "This path is test-only; do not press Send or delete photo evidence."
+  else
+    echo "BLOCKED: Site/CDN preview or unchanged main root cannot yet be confirmed." >&2
+    echo "Check $PREVIEW and $ROOT; do not dispatch another deployment merely to retry this read-only check." >&2
+    return 1
+  fi
+}
+
+
 if [[ "$#" -gt 1 ]]; then
-  echo "Usage: bash ci/stage_phase56_review_preview.sh [--restore]" >&2; exit 2
+  echo "Usage: bash ci/stage_phase56_review_preview.sh [--verify-only|--restore]" >&2; exit 2
 fi
 MODE_ARG=""
 if [[ "$#" -eq 1 ]]; then MODE_ARG="$1"; fi
-if [[ -n "$MODE_ARG" && "$MODE_ARG" != "--restore" ]]; then
+if [[ -n "$MODE_ARG" && "$MODE_ARG" != "--restore" && "$MODE_ARG" != "--verify-only" ]]; then
   echo "Invalid option." >&2; exit 2
 fi
 for cmd in gh git python3 curl; do
@@ -39,6 +71,11 @@ if [[ "$MODE_ARG" == "--restore" ]]; then
   gh workflow run pages.yml --repo "$REPO" --ref main
   echo "Main rollback requested. Confirm it completes at:"
   echo "https://github.com/$REPO/actions/workflows/pages.yml"
+  exit 0
+fi
+if [[ "$MODE_ARG" == "--verify-only" ]]; then
+  echo "Read-only check of the deployed preview. No workflow dispatch or permission changes."
+  verify_live_preview
   exit 0
 fi
 if [[ "$(git branch --show-current)" != "$BRANCH" ]]; then
@@ -134,26 +171,4 @@ if [[ "$(gh run view "$RUN" --repo "$REPO" --json conclusion --jq '.conclusion')
   echo "STOP: Pages deployment did not pass." >&2; exit 1
 fi
 
-git fetch --quiet origin main
-git show origin/main:dashboard/index.html > "$TMP/main.html"
-MAIN_HASH="$(sha256sum "$TMP/main.html" | cut -d' ' -f1)"
-VERIFIED=0
-for i in $(seq 1 12); do
-  if curl -fsSL --max-time 12 "$PREVIEW" -o "$TMP/preview.html" &&
-     grep -q 'id="job-photos"' "$TMP/preview.html" &&
-     grep -q 'private-review.js?v=' "$TMP/preview.html" &&
-     curl -fsSL --max-time 12 "$ROOT" -o "$TMP/root.html"; then
-    LIVE_HASH="$(sha256sum "$TMP/root.html" | cut -d' ' -f1)"
-    if [[ "$LIVE_HASH" == "$MAIN_HASH" ]]; then VERIFIED=1; break; fi
-  fi
-  sleep 10
-done
-if [[ "$VERIFIED" == "1" ]]; then
-  echo "PASS: Private Admin preview is live at $PREVIEW"
-  echo "PASS: The normal Admin root index.html matches main byte-for-byte."
-  echo "Do not press Send, enable client delivery or delete photo evidence."
-else
-  echo "BLOCKED: GitHub reported success but CDN preview or root parity is unverified." >&2
-  echo "Inspect $PREVIEW and $ROOT before using preview." >&2
-  exit 1
-fi
+verify_live_preview
