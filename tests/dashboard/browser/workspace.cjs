@@ -22,6 +22,7 @@ let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=tr
 let staffWorkNote='Read-only <script>not executable</script>';
 let staffWorkRevision='d'.repeat(32);
 let staffingAttempts=[],staffHandoffAttempts=[],staffHandoffFailOnce=true,staffHistoricalHandoff=false;
+let staffConsentAvailable=false,staffConsentStatus='NOT_REQUESTED',staffConsentRequests=[];
 let staffRosterTeam=null,staffRosterRevision=null,staffRosterFailOnce=true,staffRosterAttempts=[];
 let ownerPersonActive=true,ownerAccessRevision=uuid(9223),ownerAccessWrites=[];
 let ownerEnrolled=false,ownerEnrollWrites=[],ownerEnrolledGrantActive=true,ownerEnrolledGrantRevision=uuid(9234),ownerGrantWrites=[];
@@ -314,19 +315,38 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         const p=req.postDataJSON();
         assert.equal(p.p_destination,uuid(9222));
         assert.equal(p.p_environment,'TEST');
-        const eligible=p.p_work_order===uuid(9304);
+        const active=p.p_work_order===uuid(9305);
+        const eligible=active?staffConsentStatus==='APPROVED' : p.p_work_order===uuid(9304);
         return reply({organization_id:organization,work_order_id:p.p_work_order,
           old_team_id:uuid(9213),old_team_name:'West test team',
           new_team_id:uuid(9222),new_team_name:'East test team',
           eligible,block_reason:eligible?null:'Protected active work requires consent',
-          handoff_kind:staffHistoricalHandoff?'FIELD_COMPLETE':'UNDISPATCHED',
-          field_status:staffHistoricalHandoff?'FIELD_COMPLETE':'ASSIGNED',
-          recovery_recipient_count:staffHistoricalHandoff?2:0,protected_photo_count:staffHistoricalHandoff?7:0,
+          consent_possible:active&&staffConsentAvailable,
+          consent_status:active&&staffConsentAvailable?staffConsentStatus:'NOT_REQUESTED',
+          handoff_kind:active?'IN_PROGRESS':staffHistoricalHandoff?'FIELD_COMPLETE':'UNDISPATCHED',
+          field_status:active?'IN_PROGRESS':staffHistoricalHandoff?'FIELD_COMPLETE':'ASSIGNED',
+          original_run_id:active?uuid(9316):staffHistoricalHandoff?uuid(9317):null,
+          original_assignment_id:active?uuid(9318):staffHistoricalHandoff?uuid(9319):null,
+          original_assignee_id:active?uuid(9315):staffHistoricalHandoff?uuid(9315):null,
+          recovery_recipient_count:active?1:staffHistoricalHandoff?2:0,
+          protected_photo_count:active?0:staffHistoricalHandoff?7:0,
           review_fingerprint:'d'.repeat(32)});
+      }
+      if (url.pathname.endsWith('/request_work_order_team_handoff_consent')) {
+        const p=req.postDataJSON();
+        assert.equal(p.p_work_order,uuid(9305));
+        assert.equal(p.p_destination,uuid(9222));
+        assert.equal(p.p_environment,'TEST');
+        assert.equal(p.p_expected_fingerprint,'d'.repeat(32));
+        assert.equal(p.p_reason,'Reviewed test handoff');
+        assert.match(p.p_request,/^[a-f0-9-]{36}$/);
+        staffConsentRequests.push(p);
+        staffConsentStatus='PENDING';
+        return reply({request_id:p.p_request,work_order_id:p.p_work_order,status:'PENDING'});
       }
       if (url.pathname.endsWith('/handoff_work_order_team')) {
         const p=req.postDataJSON();
-        assert.equal(p.p_work_order,uuid(9304));
+        assert.ok([uuid(9304),uuid(9305)].includes(p.p_work_order));
         assert.equal(p.p_destination,uuid(9222));
         assert.equal(p.p_expected_fingerprint,'d'.repeat(32));
         assert.equal(p.p_reason,'Reviewed test handoff');
@@ -1655,6 +1675,47 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(staffHandoffAttempts[0].p_action,staffHandoffAttempts[1].p_action,
       'Ambiguous handoff must reuse exact action');
     assert.equal(await page.locator('#staffing-handoff-preview').isDisabled(),true);
+    await page.locator('#staffing-sign-out').click();
+
+    // A separate Tier-3 request asks the actual Contractor for exact consent;
+    // the browser cannot infer approval or automatically move the job.
+    staffConsentAvailable=true;
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-handoff-area:visible').waitFor();
+    await page.locator('#staffing-handoff-wo').selectOption(uuid(9305));
+    await page.locator('#staffing-handoff-team').selectOption(uuid(9222));
+    await page.locator('#staffing-handoff-reason').fill('Reviewed test handoff');
+    await page.locator('#staffing-handoff-preview').click();
+    await page.locator('#staffing-handoff-review:not(.hidden)').waitFor();
+    assert.equal(await page.locator('#staffing-handoff-confirm').textContent(),'Request Contractor consent');
+    await page.locator('#staffing-handoff-confirm').click();
+    await wait(page,()=>document.querySelector('#staffing-handoff-status')?.textContent
+      .includes('Consent request recorded'));
+    assert.equal(staffConsentRequests.length,1);
+    assert.equal(staffHandoffAttempts.length,2,'Consent must not silently move work');
+    await page.locator('#staffing-sign-out').click();
+
+    // Simulated explicit original-Contractor approval is a separate fixture
+    // fact. The manager must obtain a new review and confirm the same WO.
+    staffConsentStatus='APPROVED';
+    await page.locator('#email').fill('supervisor@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#staffing-handoff-area:visible').waitFor();
+    await page.locator('#staffing-handoff-wo').selectOption(uuid(9305));
+    await page.locator('#staffing-handoff-team').selectOption(uuid(9222));
+    await page.locator('#staffing-handoff-reason').fill('Reviewed test handoff');
+    await page.locator('#staffing-handoff-preview').click();
+    await page.locator('#staffing-handoff-review:not(.hidden)').waitFor();
+    assert.match(await page.locator('#staffing-handoff-review-text').textContent(),
+      /in-progress.*Original assignment, run, protected photos and Contractor stay fixed/);
+    await page.locator('#staffing-handoff-confirm').click();
+    await wait(page,()=>document.querySelector('#staffing-handoff-status')?.textContent
+      .includes('Server confirmed audited handoff'));
+    assert.equal(staffHandoffAttempts.length,3);
+    assert.equal(staffHandoffAttempts[2].p_work_order,uuid(9305));
     await page.locator('#staffing-sign-out').click();
     assert.equal(await page.locator('#staffing-work-rows tr').count(),0);
     assert.equal(await page.locator('#staffing-handoff-area:visible').count(),0);
