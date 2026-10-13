@@ -486,6 +486,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       if (url.pathname.endsWith('/admin_correction_state')) {
         const p=req.postDataJSON();assert.equal(p.p_wo,uuid(51));
         if (rows[50].field_status!=='FIELD_COMPLETE')return reply({message:'Not complete'},409);
+        if (!rows[50].client_company_id)
+          return reply({message:'Current completed client work required'},409);
         return reply({...correctionBase(),draft:correctionDraft});
       }
       if (url.pathname.endsWith('/admin_save_correction_draft_with_issues')) {
@@ -1104,6 +1106,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
     await page.locator('#cancel-edit').click();
     await page.locator('#job-discard').click();
+    // Phase 6C: a missing client company is a server eligibility refusal,
+    // not a missing feature. Explain it outside the hidden form before any
+    // unsafe Save/Dispatch, then proceed with a verified company fixture.
+    rows[50].field_status='FIELD_COMPLETE';
+    rows[50].client_company_id=null;
+    rows[50].current_run_id=correctiveOriginalRun;
+    await page.locator('.job-link').first().click();
+    await wait(page,()=>document.querySelector('dialog').open);
+    await page.locator('[data-job-tab="photos"]').click();
+    await wait(page,()=>document.querySelector('#correction-availability')
+      ?.textContent.includes('A client company is required'));
+    assert.equal(await page.locator('#correction-details').isVisible(),false);
+    assert.equal(await page.locator('#correction-availability').isVisible(),true);
+    assert.equal(correctionDispatchCount,0);
+    await page.locator('#cancel-edit').click();
     // Phase 6C: the existing Photos section, not a parallel dashboard,
     // hosts one saved, revisioned correction request. Preview does not dispatch.
     rows[50].field_status='FIELD_COMPLETE';
