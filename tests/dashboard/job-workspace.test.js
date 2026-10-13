@@ -183,3 +183,68 @@ test('connection timeout guidance never implies a rejected Admin password', () =
   assert.match(app,/does not mean your password is wrong/);
   assert.match(app,/setLoginStatus\(timedOut/);
 });
+
+function adminRestoreRig({errorStage='identity',errorType='TimeoutError'}={}) {
+  const code=fs.readFileSync(require.resolve('../../dashboard/session.js'),'utf8');
+  const future=Math.floor(Date.now()/1000)+3600;
+  let stored=JSON.stringify({access_token:'SYNTHETIC-ACCESS',refresh_token:'SYNTHETIC-REFRESH',
+    expires_at:future});
+  const statuses=[];
+  let refreshCalls=0,clears=0;
+  const issue=new Error(errorType==='TimeoutError'?'signal timed out':'Denied');
+  if(errorType==='TimeoutError')issue.name='TimeoutError';else issue.status=403;
+  const identity={id:'fixture-user',app_metadata:{organization_id:'fixture-org',role:'ADMIN'}};
+  const ctx={
+    signInWithPassword:async()=>({}),
+    renderSignedIn(){},signOutButton:{addEventListener(){},click(){}},
+    setLoginStatus:(message,bad)=>statuses.push({message,bad}),
+    sessionStorage:{
+      getItem:()=>stored,
+      setItem:(_name,data)=>{stored=data;},
+      removeItem:()=>{stored=null;clears++;}
+    },
+    accessToken:null,currentUser:null,assignableUsers:[],workOrderRows:[],
+    fetchCurrentUser:async()=>{if(errorStage==='identity')throw issue;return identity;},
+    fetchWorkOrders:async()=>{if(errorStage==='work')throw issue;return [];},
+    fetchAssignableUsers:async()=>[],
+    verifyAdminRls:()=>{},RecoveryGallery:{reset(){},async show(){throw Error('no grant');}},
+    SUPABASE_URL:'https://fixture.invalid',SUPABASE_PUBLISHABLE_KEY:'synthetic-publishable',
+    fetch:async()=>{refreshCalls++;throw Error('Refresh should not run on transport failure');},
+    AbortSignal
+  };
+  vm.createContext(ctx);
+  vm.runInContext(code,ctx,{filename:'dashboard/session.js'});
+  return {ctx,statuses,clears:()=>clears,stored:()=>stored,refreshCalls:()=>refreshCalls};
+}
+
+test('restore timeouts retain the saved tab identity but expose no stale operational data',async()=>{
+ for(const stage of ['identity','work']){
+  const rig=adminRestoreRig({errorStage:stage});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(rig.stored()?.includes('SYNTHETIC-REFRESH'),stage);
+  assert.equal(rig.clears(),0);
+  assert.equal(rig.refreshCalls(),0,'An offline response must not rotate refresh token');
+  assert.equal(rig.ctx.accessToken,null,'Do not retain a live work credential in view');
+  assert.equal(rig.ctx.currentUser,null);
+  assert.deepEqual(Array.from(rig.ctx.workOrderRows),[]);
+  assert.match(rig.statuses.at(-1).message,/session was preserved/);
+ }
+});
+
+test('denied identity restore still removes previously stored credentials',async()=>{
+ const rig=adminRestoreRig({errorType:'Denied'});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(rig.stored(),null);
+ assert.equal(rig.clears(),1);
+ assert.equal(rig.ctx.currentUser,null);
+ assert.match(rig.statuses.at(-1).message,/Sign in again/);
+});
+
+test('verified office identity may retain tab login if only first data page times out',()=>{
+ const source=fs.readFileSync(require.resolve('../../dashboard/app.js'),'utf8');
+ assert.match(source,/transientAdminConnectionError\(error\) && pendingAdminSession/);
+ assert.match(source,/currentUser\?\.app_metadata\?\.organization_id/);
+ assert.match(source,/storeAdminSession\(pendingAdminSession\)/);
+ assert.match(source,/pendingAdminSession=null/);
+ assert.match(source,/accessToken = null;/);
+});
