@@ -60,6 +60,9 @@ async function restoreAdminSession() {
     try {
       currentUser = await fetchCurrentUser();
     } catch (firstError) {
+      // A timeout / offline response is not an expired JWT. Rotating a
+      // refresh token on network uncertainty risks losing a usable session.
+      if (firstError?.status !== 401) throw firstError;
       session = await refreshAdminSession(session.refresh_token);
       if (epoch !== adminSessionEpoch) return;
       storeAdminSession(session);
@@ -102,14 +105,27 @@ async function restoreAdminSession() {
       }
     }
     RecoveryGallery.reset();
-    clearAdminSession();
+    const transient = transientAdminConnectionError(error);
+    // Fail closed for visible data, but do not destroy the protected tab
+    // refresh credential merely because an authorized read timed out.
+    if (!transient) clearAdminSession();
     pendingAdminSession = null;
     accessToken = null;
     currentUser = null;
     assignableUsers = [];
     workOrderRows = [];
-    setLoginStatus('Your dashboard session could not be restored. Sign in again.', false);
+    setLoginStatus(transient
+      ? 'The connection timed out while restoring your Admin session. Your saved session was preserved; no work data was opened. Try reloading after the connection recovers.'
+      : 'Your dashboard session could not be restored. Sign in again.', transient);
   }
+}
+
+function transientAdminConnectionError(error) {
+  // Only transport/transient HTTP failures are retryable. Invalid or
+  // forbidden credentials must still remove the stored operational session.
+  return error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    || error?.name === 'TypeError'
+    || [408, 429, 500, 502, 503, 504].includes(error?.status);
 }
 
 async function refreshAdminSession(refreshToken) {
