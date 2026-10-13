@@ -174,6 +174,12 @@ jobs:
           grep -q 'gh workflow run pages.yml' ci/stage_phase56_review_preview.sh
           grep -q 'protected-or-unknown' ci/stage_phase56_review_preview.sh
           grep -q 'gh api -X DELETE' ci/stage_phase56_review_preview.sh
+          grep -q -- '--verify-only' ci/stage_phase56_review_preview.sh
+          grep -q 'git show FETCH_HEAD:dashboard/index.html' ci/stage_phase56_review_preview.sh
+          if grep -q 'git show origin/main:dashboard/index.html' ci/stage_phase56_review_preview.sh; then
+            echo 'Do not require origin/main tracking ref in checkout' >&2
+            exit 1
+          fi
       - name: Check out published-main dashboard source for isolated preview packaging
         uses: actions/checkout@v4
         with:
