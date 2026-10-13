@@ -34,7 +34,7 @@ begin
  select (j->'requirement_snapshot'->>'revision')::uuid into old_revision from public.field_assignments() j where j->>'id'=wo::text;
  r:=public.admin_set_photo_requirements(wo,old_revision,jsonb_set(cfg,'{total,minimum}','6'));
  revision:=(r->>'revision')::uuid;
- denied:=false;begin perform public.admin_set_photo_requirements(wo,old_revision,cfg);exception when serialization_failure then denied:=true;end;
+ denied:=false;begin perform public.admin_set_photo_requirements(wo,old_revision,cfg);exception when sqlstate 'PT409' then denied:=true;end;
  if not denied then raise exception 'Stale requirement edit accepted';end if;
  r:=public.admin_set_photo_requirements(wo,revision,cfg);revision:=(r->>'revision')::uuid;
  t:=public.admin_save_photo_template(gen_random_uuid(),'TEST TEMPLATE','TEST',cfg,true,true,null);

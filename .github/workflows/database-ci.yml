@@ -85,3 +85,5 @@ jobs:
           python3 tests/supabase/phase_5_invitation_races.py
           python3 tests/supabase/phase_5_reviewed_access_races.py
           python3 tests/supabase/phase_5_verification_races.py
+      - name: Verify nonretryable conflicts through disposable PostgREST 14.5
+        run: python3 tests/supabase/phase_6_nonretryable_conflict_http.py

@@ -36,7 +36,7 @@ begin
  -- An unfinished job is not offered a persisted correction.
  denied:=false;
  begin perform public.admin_correction_state(wo);
- exception when serialization_failure then denied:=true;end;
+ exception when sqlstate 'PT409' then denied:=true;end;
  if not denied then raise exception 'Unfinished job offered correction';end if;
  perform set_config('request.jwt.claims',workerjwt,true);
  if public.accept_field_action_v4(gen_random_uuid(),wo,oldrun,oldinstance,
