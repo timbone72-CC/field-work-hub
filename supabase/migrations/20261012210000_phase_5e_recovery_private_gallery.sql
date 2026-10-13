@@ -17,7 +17,7 @@ begin
   end if;
   with eligible as (
     select distinct on(m.photo_id) m.photo_id,m.work_order_id,m.run_id,
-      p.captured_at,t.version as transfer_version,r.verified_at,r.observed_size
+      p.captured_at,t.version as transfer_version,r.verified_at,r.observed_size,r.observed_sha256
     from private.photo_recovery_members m
     join private.photo_recovery_grants g on g.action_id=m.grant_id
       and g.organization_id=m.organization_id and g.user_id=m.user_id
@@ -46,7 +46,8 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
     'photo_id',photo_id,'work_order_id',work_order_id,'run_id',run_id,
     'captured_at',captured_at,'transfer_version',transfer_version,
-    'verified_at',verified_at,'prepared_size',observed_size) order by photo_id)
+    'verified_at',verified_at,'prepared_size',observed_size,
+    'prepared_sha256',observed_sha256) order by photo_id)
     filter(where rn<=p_limit),'[]'::jsonb),
     (max(photo_id::text) filter(where rn<=p_limit))::uuid,count(*)
   into items,cursor,n from numbered;
