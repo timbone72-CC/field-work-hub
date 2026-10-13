@@ -30,9 +30,17 @@ jobs:
         run: |
           set -euo pipefail
           for migration in supabase/migrations/*.sql; do
+            if [[ "${migration##*/}" == "20261011190000_phase_6_corrective_run_foundation.sql" ]]; then
+              # Reproduce the hosted upgrade on populated work/run tables, not
+              # only an empty database (deferred FK events + same-file DDL).
+              psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/local_test_actors.sql
+              psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_corrective_migration_existing_work_seed.sql
+            fi
             psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$migration"
+            if [[ "${migration##*/}" == "20261011190000_phase_6_corrective_run_foundation.sql" ]]; then
+              psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_6_corrective_migration_existing_work_check.sql
+            fi
           done
-          psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/local_test_actors.sql
       - name: Run controlled authority, replay and projection gates
         run: |
           psql "$FWH_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/supabase/phase_3a_database_gate.sql
