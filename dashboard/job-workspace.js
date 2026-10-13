@@ -237,7 +237,7 @@ const JobWorkspace = (() => {
     if (name === 'photos' && selectedRow?.id) {
       PrivateReview.open(selectedRow.id,selectedRow.current_run_id);
       ClientRelease.open(selectedRow.id,name);
-      CorrectionDraft.open(selectedRow.id, selectedRow.field_status);
+      CorrectionDraft.open(selectedRow.id, selectedRow.field_status, selectedRow.client_company_id);
       FollowupManagement.open(selectedRow.id, selectedRow.field_status);
     }
     if (name === 'delivery' && selectedRow?.id) ClientRelease.open(selectedRow.id, name);
