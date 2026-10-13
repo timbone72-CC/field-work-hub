@@ -134,7 +134,7 @@ declare
   org uuid:=gen_random_uuid(); source_team uuid:=gen_random_uuid(); dest_team uuid:=gen_random_uuid();
   admin_id uuid:=gen_random_uuid(); supervisor_id uuid:=gen_random_uuid();
   contractor_id uuid:=gen_random_uuid(); actor uuid; wo uuid; run uuid; assignment_id uuid;
-  request_id uuid:=gen_random_uuid(); fp text; preview jsonb; receipt jsonb; req jsonb;
+  consent_request_id uuid:=gen_random_uuid(); fp text; preview jsonb; receipt jsonb; req jsonb;
   cfg jsonb; revision uuid; denied boolean; count_pending bigint;
 begin
   insert into public.organizations(id,name) values(org,'Active consent fixture');
@@ -179,12 +179,12 @@ begin
     or preview->>'consent_status'<>'NOT_REQUESTED' then
     raise exception 'Started job incorrectly eligible or unavailable for consent: %',preview;end if;
   fp:=preview->>'review_fingerprint';
-  req:=public.request_work_order_team_handoff_consent(request_id,wo,dest_team,fp,'Office continuity','TEST');
+  req:=public.request_work_order_team_handoff_consent(consent_request_id,wo,dest_team,fp,'Office continuity','TEST');
   if req->>'status'<>'PENDING'
     or (select responsible_team_id from public.work_orders where id=wo)<>source_team
     or (select assigned_user_id from public.work_orders where id=wo)<>contractor_id
     then raise exception 'Consent request changed live work or was not saved: %',req;end if;
-  if public.request_work_order_team_handoff_consent(request_id,wo,dest_team,fp,'Office continuity','TEST')
+  if public.request_work_order_team_handoff_consent(consent_request_id,wo,dest_team,fp,'Office continuity','TEST')
     is distinct from req then raise exception 'Same consent request not idempotent';end if;
   denied:=false;
   begin perform public.handoff_work_order_team(gen_random_uuid(),wo,dest_team,fp,'Office continuity','TEST');
@@ -193,14 +193,14 @@ begin
   perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor_id,'session_id',contractor_id,
     'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
   select count(*) into count_pending from public.pending_work_order_team_handoff_consents() j
-    where j->>'request_id'=request_id::text and j->>'work_order_id'=wo::text;
+    where j->>'request_id'=consent_request_id::text and j->>'work_order_id'=wo::text;
   if count_pending<>1 then raise exception 'Original Contractor did not receive exact consent request';end if;
-  receipt:=public.respond_work_order_team_handoff_consent(request_id,true);
+  receipt:=public.respond_work_order_team_handoff_consent(consent_request_id,true);
   if receipt->>'status'<>'APPROVED'
-    or public.respond_work_order_team_handoff_consent(request_id,true) is distinct from receipt
+    or public.respond_work_order_team_handoff_consent(consent_request_id,true) is distinct from receipt
     then raise exception 'Original Contractor approval not idempotent: %',receipt;end if;
   denied:=false;
-  begin perform public.respond_work_order_team_handoff_consent(request_id,false);
+  begin perform public.respond_work_order_team_handoff_consent(consent_request_id,false);
   exception when invalid_parameter_value then denied:=true;end;
   if not denied then raise exception 'Approved consent could be reversed';end if;
   if (select count(*) from public.pending_work_order_team_handoff_consents())<>0 then
@@ -224,8 +224,8 @@ begin
     or (select current_run_id from public.work_orders where id=wo)<>run
     or (select id from public.work_order_assignments where id=assignment_id
         and assignment_ended_at is null and assigned_user_id=contractor_id)<>assignment_id
-    or (select decision from private.work_order_team_handoff_consent_requests
-        where request_id=request_id)<>'CONSUMED'
+    or (select decision from private.work_order_team_handoff_consent_requests c
+        where c.request_id=consent_request_id)<>'CONSUMED'
     then raise exception 'Audited approved handoff broke original active assignment: %',receipt;end if;
   if not exists(select 1 from private.photo_recovery_grants g
     where g.scope_work_order_id=wo and g.user_id=admin_id and g.state='READY')
