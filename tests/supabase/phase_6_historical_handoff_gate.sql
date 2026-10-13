@@ -240,6 +240,12 @@ begin
     or not private.active_team_handoff_original_assignment(contractor_id,wo) then
     raise exception 'Original Contractor could not read unchanged active assignment';end if;
   perform private.guard_legacy_work_order(wo,'CONTRACTOR');
+  if public.respond_work_order_team_handoff_consent(consent_request_id,true)->>'status'<>'APPROVED' then
+    raise exception 'Committed office move lost original Contractor approval receipt';end if;
+  denied:=false;
+  begin perform public.respond_work_order_team_handoff_consent(consent_request_id,false);
+  exception when invalid_parameter_value then denied:=true;end;
+  if not denied then raise exception 'Consumed Contractor consent changed after office move';end if;
   if private.contractor_current_team(contractor_id,org)<>source_team then
     raise exception 'Handoff silently moved Contractor to another team';end if;
   if has_table_privilege('authenticated','private.work_order_team_handoff_consent_requests','SELECT')
