@@ -13,11 +13,15 @@ const CorrectionDraft=(()=>{
     return response.json();
   }
   function status(s,bad=false){el('correction-status').textContent=s;el('correction-status').classList.toggle('error',bad);}
+  function availability(message,bad=false){
+    const node=el('correction-availability');if(!node)return;
+    node.textContent=message;node.hidden=!message;node.classList.toggle('error',bad);
+  }
   function reset(){
     generation++;wo='';data=null;baseline=null;refs=new Set();maps=new Map();
     releaseRev='';preview=null;busy=false;uncertain=false;issues=[];
     if(el('correction-issue-list'))el('correction-issue-list').replaceChildren();
-    el('correction-details').hidden=true;el('correction-details').open=false;
+    availability('');el('correction-details').hidden=true;el('correction-details').open=false;
     el('correction-summary').hidden=true;el('correction-summary').textContent='';
     el('correction-references').textContent='';status('');
     if(editor)editor.load(null);
@@ -152,16 +156,17 @@ const CorrectionDraft=(()=>{
     el('correction-references').textContent=refs.size+' earlier photo reference(s) selected.';
     for(const node of document.querySelectorAll('[data-correction-photo-id]'))
       node.checked=refs.has(node.dataset.correctionPhotoId);
-    el('correction-details').hidden=false;
+    availability('');el('correction-details').hidden=false;
     baseline=fingerprint();preview=null;uncertain=false;buttons();
     status(d?'Saved server correction draft loaded.':'Set up this correction, then Save. No dispatch has happened.');
   }
-  async function open(id,fieldStatus){
+  async function open(id,fieldStatus,companyId){
     if(fieldStatus!=='FIELD_COMPLETE'||!UUID.test(id)){reset();return;}
     if(wo===id&&data&&dirty()){buttons();return;}
     const gen=++generation,token=accessToken;
     wo=id;data=null;baseline=null;preview=null;uncertain=false;
-    el('correction-details').hidden=true;status('Checking correction eligibility…');
+    el('correction-details').hidden=true;
+    availability('Checking follow-up eligibility…');status('Checking correction eligibility…');
     try{
       const source=await rpc('admin_correction_state',{p_wo:id},token);
       if(!valid(gen,id,token))return;
@@ -170,7 +175,10 @@ const CorrectionDraft=(()=>{
         !source.release_requirements)throw Error('Invalid server correction context.');
       fill(source);
     }catch(err){if(valid(gen,id,token)){data=null;el('correction-details').hidden=true;
-      status('Follow-up unavailable: '+err.message,true);}}
+      const next=!UUID.test(companyId||'')
+        ? 'A client company is required for this work order. Open Delivery, choose the TEST client company and save its assignment, then reload this work order before returning to Photos.'
+        : 'Follow-up unavailable: '+err.message;
+      availability(next,true);status(next,true);}}
   }
   async function save(){
     if(!data||busy||uncertain)return false;
@@ -264,6 +272,10 @@ const CorrectionDraft=(()=>{
     }finally{if(valid(gen,id,token)){busy=false;buttons();}}
   }
   function init(){
+    const hint=document.createElement('p');hint.id='correction-availability';
+    hint.className='status';hint.hidden=true;hint.setAttribute('role','status');
+    hint.setAttribute('aria-live','polite');
+    el('correction-details').before(hint);
     editor=new PhotoRequirementEditor(el('correction-photo-requirements'),
       ()=>editWorkTypeInput.value,null,false);
     const host=el('correction-photo-requirements');
