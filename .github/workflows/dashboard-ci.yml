@@ -166,6 +166,59 @@ jobs:
             exit 1
           fi
           grep -q 'deleteUser' supabase/functions/admin-invite-contractor/index.ts
+      - name: Check out published-main dashboard source for isolated preview packaging
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: preview-main
+      - name: Build NON-DEPLOYING main-preserving Phase 5C preview bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f preview-main/dashboard/index.html
+          test -f dashboard/private-review.js
+          test -f dashboard/index.html
+          mkdir -p phase56-preview-site
+          cp -a preview-main/dashboard/. phase56-preview-site/
+          mkdir -p phase56-preview-site/phase56-review
+          cp -a dashboard/. phase56-preview-site/phase56-review/
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import subprocess
+
+          baseline = Path("preview-main/dashboard")
+          staged = Path("phase56-preview-site")
+          candidate = staged / "phase56-review"
+          for original in baseline.rglob("*"):
+              if original.is_file():
+                  copy = staged / original.relative_to(baseline)
+                  assert copy.is_file()
+                  assert hashlib.sha256(original.read_bytes()).digest() == hashlib.sha256(copy.read_bytes()).digest(), original
+          assert "private-review.js" not in (staged / "index.html").read_text()
+          assert (candidate / "private-review.js").is_file()
+          html = (candidate / "index.html").read_text()
+          assert 'id="job-photos"' in html
+          assert 'private-review.js?v=' in html
+          assert 'id="private-review-status"' in html
+          assert "https://timbone72-cc.github.io" in (candidate / "private-review.js").read_text() or "https://timbone72-cc.github.io" in (candidate / "app.js").read_text() or "const ORIGIN" in (candidate / "app.js").read_text()
+          main_sha = subprocess.check_output(["git", "-C", "preview-main", "rev-parse", "HEAD"], text=True).strip()
+          candidate_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          (candidate / "PREVIEW-PROVENANCE.txt").write_text(
+              "NON-DEPLOYED TEST-ONLY PREVIEW BUNDLE.\n"
+              "Protected github-pages approval is separately required for any live browser test.\n"
+              f"Main dashboard baseline: {main_sha}\nPhase 5/6 draft candidate: {candidate_sha}\n"
+              "Public Admin root preserved byte-for-byte from main; draft UI under /phase56-review/.\n"
+              "Do not merge PR or publish this artifact as a production update.\n")
+          print("NON-DEPLOYED same-origin candidate prepared:", candidate_sha)
+          print("Main dashboard preserved byte-for-byte:", main_sha)
+          PY
+      - name: Preserve reversible, undeployed Admin preview bundle as CI evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: fwh-phase56-admin-preview-undeployed
+          path: phase56-preview-site/
+          if-no-files-found: error
       - name: Upload admin dashboard
         uses: actions/upload-artifact@v4
         with:
