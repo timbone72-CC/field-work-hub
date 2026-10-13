@@ -817,10 +817,26 @@ async function staffingPreviewHandoff() {
       throw new Error('Handoff review identity changed; reload before attempting transfer.');
     }
     if (!review.eligible) {
-      staffingHandoffMessage(review.block_reason||'This job has protected work and cannot be handed off.',true);
+      if (review.consent_possible && review.consent_status==='NOT_REQUESTED'
+        && /^[0-9a-f]{32}$/.test(review.review_fingerprint||'')) {
+        staffingHandoffPreview={request:req,fingerprint:review.review_fingerprint,mode:'CONSENT'};
+        card.querySelector('#staffing-handoff-confirm').textContent='Request Contractor consent';
+        card.querySelector('#staffing-handoff-review-text').textContent=
+          'Ask the original Contractor to approve changing the responsible office team for '
+          +(row.wo_number||row.work_order_id)+'. This does not reassign the job, release photos, or move work.';
+        card.querySelector('#staffing-handoff-review').classList.remove('hidden');
+        staffingHandoffMessage('Consent request is separate from a handoff. Contractor must approve online.');
+      } else {
+        staffingHandoffMessage(review.consent_status==='PENDING'
+          ? 'Contractor consent is pending. The original office still owns this job.'
+          : review.consent_status==='APPROVED'
+            ? 'Contractor consent was approved; active handoff remains gated until exact assignment continuity is verified.'
+            : review.block_reason||'This job has protected work and cannot be handed off.',true);
+      }
       return;
     }
-    staffingHandoffPreview={request:req,fingerprint:review.review_fingerprint};
+    card.querySelector('#staffing-handoff-confirm').textContent='Confirm reviewed handoff';
+    staffingHandoffPreview={request:req,fingerprint:review.review_fingerprint,mode:'MOVE'};
     const historical=review.handoff_kind==='FIELD_COMPLETE';
     if(historical && (review.field_status!=='FIELD_COMPLETE'
       ||!Number.isSafeInteger(review.recovery_recipient_count)||review.recovery_recipient_count<0
@@ -844,6 +860,8 @@ async function staffingConfirmHandoff() {
   const check=staffingIdentity(), card=staffingCard(), preview=staffingHandoffPreview;
   if (!staffingStillCurrent(check)||staffingWork?.tier!==3||staffingHandoffBusy
     ||staffingHandoffNeedsRefresh||(!preview&&!staffingHandoffPending)) return;
+  const consent=staffingHandoffPending?.mode==='CONSENT'
+    || (!staffingHandoffPending && preview?.mode==='CONSENT');
   const req=staffingHandoffPending?.request || (preview && {
     p_work_order:preview.request.p_work_order,
     p_destination:preview.request.p_destination,
@@ -856,27 +874,31 @@ async function staffingConfirmHandoff() {
   if (staffingHandoffPending && JSON.stringify(staffingHandoffPending.request)!==JSON.stringify(req)) {
     staffingHandoffMessage('An earlier handoff is unresolved. Retry only its original reviewed action.',true); return;
   }
-  staffingHandoffPending ||= {action:crypto.randomUUID(),request:req};
+  staffingHandoffPending ||= {action:crypto.randomUUID(),request:req,mode:consent?'CONSENT':'MOVE'};
   staffingHandoffBusy=true; staffingRenderHandoff();
-  staffingHandoffMessage('Confirming exact audited team handoff…');
+  staffingHandoffMessage(consent?'Requesting exact original-Contractor consent…':'Confirming exact audited team handoff…');
   try {
-    const response=await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/handoff_work_order_team`,{
+    const response=await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/${consent?'request_work_order_team_handoff_consent':'handoff_work_order_team'}`,{
       method:'POST',headers:authHeaders(true),
-      body:JSON.stringify({...req,p_action:staffingHandoffPending.action})
+      body:JSON.stringify({...req,[consent?'p_request':'p_action']:staffingHandoffPending.action})
     });
     const outcome=await response.json().catch(()=>({}));
     if (!staffingStillCurrent(check)) return;
-    if (!response.ok||outcome.status!=='HANDED_OFF'
-      ||outcome.action_id!==staffingHandoffPending.action
-      ||outcome.work_order_id!==req.p_work_order
-      ||outcome.new_team_id!==req.p_destination)
-      throw new Error(outcome.message||'Handoff outcome needs exact-action reconciliation.');
+    if (!response.ok
+      || (consent
+        ? (outcome.status!=='PENDING'||outcome.request_id!==staffingHandoffPending.action
+          ||outcome.work_order_id!==req.p_work_order)
+        : (outcome.status!=='HANDED_OFF'||outcome.action_id!==staffingHandoffPending.action
+          ||outcome.work_order_id!==req.p_work_order||outcome.new_team_id!==req.p_destination)))
+      throw new Error(outcome.message||'Exact handoff/consent outcome needs reconciliation.');
     staffingHandoffPending=null;
     staffingHandoffPreview=null;
     staffingHandoffNeedsRefresh=true;
     staffingClearWorkDetail();
     card.querySelector('#staffing-handoff-review').classList.add('hidden');
-    staffingHandoffMessage('Server confirmed audited handoff. Refresh work before another move.');
+    staffingHandoffMessage(consent
+      ? 'Consent request recorded. Original Contractor can approve or decline in the phone app; job remains unchanged.'
+      : 'Server confirmed audited handoff. Refresh work before another move.');
   } catch(error) {
     if (staffingStillCurrent(check)) staffingHandoffMessage(
       `${error.message} Retain the exact action for safe retry.`,true);
