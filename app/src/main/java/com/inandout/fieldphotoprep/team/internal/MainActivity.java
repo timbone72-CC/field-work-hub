@@ -2,6 +2,11 @@ package com.inandout.fieldphotoprep.team.internal;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+import androidx.core.content.FileProvider;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -18,6 +23,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.io.IOException;
+import java.io.File;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,6 +32,8 @@ public final class MainActivity extends Activity {
     private static final String RLS_CONTROL_WO = "TEST-0002-ADMIN-ONLY";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService updaterExecutor = Executors.newSingleThreadExecutor();
+    private final InternalAppUpdater updater = new InternalAppUpdater(this);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final SupabaseApi api = new SupabaseApi();
 
@@ -39,6 +47,11 @@ public final class MainActivity extends Activity {
     private Button signInButton;
     private Button signOutButton;
     private Button recoverPhotosButton;
+    private Button updateCheckButton;
+    private Button updateAppButton;
+    private TextView updateStatus;
+    private UpdateReleasePolicy.Candidate availableUpdate;
+    private File pendingInstallerApk;
     private Button refreshAssignmentsButton;
     private ProgressBar progress;
     private TextView statusText;
@@ -89,6 +102,7 @@ public final class MainActivity extends Activity {
         showSignedOutUi(getString(R.string.signed_out));
         TeamDatabase.getInstance(this).getInvalidationTracker().addObserver(evidenceObserver);
         restoreSavedSession();
+        checkForUpdates(false);
     }
 
     private View buildContent() {
@@ -168,6 +182,23 @@ public final class MainActivity extends Activity {
         recoverPhotosButton.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoRecoveryActivity.class)));
         recoverPhotosButton.setLayoutParams(matchWrap());
         root.addView(recoverPhotosButton);
+
+        updateCheckButton = new Button(this);
+        updateCheckButton.setText("Check for Update");
+        updateCheckButton.setOnClickListener(v -> checkForUpdates(true));
+        updateCheckButton.setLayoutParams(matchWrap());
+        root.addView(updateCheckButton);
+
+        updateAppButton = new Button(this);
+        updateAppButton.setText("Update App");
+        updateAppButton.setLayoutParams(matchWrap());
+        updateAppButton.setVisibility(View.GONE);
+        updateAppButton.setOnClickListener(v -> confirmUpdateDownload());
+        root.addView(updateAppButton);
+
+        updateStatus = text("", 13, false);
+        updateStatus.setVisibility(View.GONE);
+        root.addView(updateStatus);
 
         workOrdersHeading = text(getString(R.string.work_orders_heading), 20, true);
         workOrdersHeading.setPadding(0, dp(20), 0, dp(4));
@@ -845,6 +876,127 @@ public final class MainActivity extends Activity {
                 });
     }
 
+
+    private void checkForUpdates(boolean manual) {
+        long now = System.currentTimeMillis();
+        android.content.SharedPreferences prefs =
+                getSharedPreferences("internal_app_update_checks", MODE_PRIVATE);
+        long last = prefs.getLong("last_attempt", 0L);
+        if (!manual && last > 0 && now >= last && now - last < 6L * 60 * 60 * 1000) {
+            return;
+        }
+        prefs.edit().putLong("last_attempt", now).apply();
+        updateCheckButton.setEnabled(false);
+        if (manual) {
+            updateStatus.setVisibility(View.VISIBLE);
+            updateStatus.setText("Checking for an internal update…");
+        }
+        updaterExecutor.execute(() -> {
+            try {
+                UpdateReleasePolicy.Candidate candidate = updater.check();
+                mainHandler.post(() -> {
+                    if (isDestroyed()) return;
+                    availableUpdate = candidate;
+                    updateCheckButton.setEnabled(true);
+                    updateAppButton.setVisibility(candidate == null ? View.GONE : View.VISIBLE);
+                    if (candidate != null) {
+                        updateStatus.setVisibility(View.VISIBLE);
+                        updateStatus.setText("Internal update available — version " + candidate.versionCode);
+                    } else if (manual) {
+                        updateStatus.setVisibility(View.VISIBLE);
+                        updateStatus.setText("Field Work Hub Internal is up to date.");
+                    }
+                });
+            } catch (Exception error) {
+                mainHandler.post(() -> {
+                    if (isDestroyed()) return;
+                    availableUpdate = null;
+                    updateCheckButton.setEnabled(true);
+                    updateAppButton.setVisibility(View.GONE);
+                    if (manual) {
+                        updateStatus.setVisibility(View.VISIBLE);
+                        updateStatus.setText("Update check unavailable. Your current app and jobs are safe.");
+                    }
+                });
+            }
+        });
+    }
+
+    private void confirmUpdateDownload() {
+        UpdateReleasePolicy.Candidate candidate = availableUpdate;
+        if (candidate == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Update Field Work Hub Internal?")
+                .setMessage("Finish taking photos before installing. The app will verify the download "
+                        + "and Android will ask you to confirm the update. Your jobs and photos stay on this phone.")
+                .setNegativeButton("Not now", (dialog, which) -> {})
+                .setPositiveButton("Download update", (dialog, which) -> downloadUpdate(candidate))
+                .show();
+    }
+
+    private void downloadUpdate(UpdateReleasePolicy.Candidate candidate) {
+        updateAppButton.setEnabled(false);
+        updateStatus.setVisibility(View.VISIBLE);
+        updateStatus.setText("Downloading and verifying the update…");
+        updaterExecutor.execute(() -> {
+            try {
+                File verified = updater.downloadAndVerify(candidate);
+                mainHandler.post(() -> {
+                    if (isDestroyed()) return;
+                    pendingInstallerApk = verified;
+                    updateAppButton.setEnabled(true);
+                    continueInstaller();
+                });
+            } catch (Exception error) {
+                mainHandler.post(() -> {
+                    if (isDestroyed()) return;
+                    pendingInstallerApk = null;
+                    updateAppButton.setEnabled(true);
+                    updateStatus.setText("Update not installed: verification or download failed. "
+                            + "Existing jobs and photos are unchanged.");
+                });
+            }
+        });
+    }
+
+    private void continueInstaller() {
+        if (pendingInstallerApk == null) return;
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            updateStatus.setText("Allow this app to install updates in Android settings, then return. "
+                    + "Nothing has been uninstalled.");
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (Exception error) {
+                updateStatus.setText("Android did not open installer permissions. "
+                        + "Your existing app and data are safe.");
+            }
+            return;
+        }
+        File ready = pendingInstallerApk;
+        pendingInstallerApk = null; // A cancelled system installer must never reopen automatically.
+        try {
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".updates", ready);
+            Intent install = new Intent(Intent.ACTION_VIEW);
+            install.setDataAndType(uri, "application/vnd.android.package-archive");
+            install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(install);
+            updateStatus.setText("Android installer opened. Confirm Update there when ready.");
+        } catch (Exception error) {
+            updateStatus.setText("Android could not open the installer. "
+                    + "Your current Field Work Hub app was not changed.");
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pendingInstallerApk != null && Build.VERSION.SDK_INT >= 26
+                && getPackageManager().canRequestPackageInstalls()) {
+            continueInstaller();
+        }
+    }
+
     private void signOut() {
         sessionOperations.invalidate(runtime::signOut);
         showSignedOutUi(getString(R.string.signed_out));
@@ -931,6 +1083,7 @@ public final class MainActivity extends Activity {
         sessionOperations.invalidate(() -> {});
         mainHandler.removeCallbacksAndMessages(null);
         executor.shutdownNow();
+        updaterExecutor.shutdownNow();
         super.onDestroy();
     }
 }
