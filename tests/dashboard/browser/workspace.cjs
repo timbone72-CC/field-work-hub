@@ -13,7 +13,9 @@ let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevi
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
-let recoveryMode=false, recoveryGranted=true, recoveryPhotoRequests=0;
+let recoveryMode=false, recoveryGranted=true, recoveryPhotoRequests=0, recoveryCorruptBytes=false;
+const recoveryJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==','base64');
+const recoveryJpegSha256='9dacf9b93ef343cb1b10d45dcd84959c4448a68d0859d818cc3decfb7dbf619f';
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
 let staffingCandidateCalls=0,staffAssignmentWrites=[],staffAssignmentFailOnce=true;
@@ -403,7 +405,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         assert.equal(p.p_after_photo,null);
         return reply({photos:[{photo_id:reviewPhoto,transfer_version:reviewVersion,
           run_id:reviewRun,work_order_id:uuid(51),captured_at:'2026-10-01T12:00:00Z',
-          verified_at:'2026-10-01T12:02:00Z',prepared_size:128}],next_photo:null});
+          verified_at:'2026-10-01T12:02:00Z',prepared_size:recoveryJpeg.length,
+          prepared_sha256:recoveryJpegSha256}],next_photo:null});
       }
       if (url.pathname === '/functions/v1/recovery-private-photo') {
         assert.equal(recoveryMode,true); recoveryPhotoRequests++;
@@ -768,6 +771,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       }
       if (url.pathname.startsWith('/storage/v1/object/sign/fwh-review-private/')) {
         assert.equal(url.searchParams.get('token'), 'disposable-preview');
+        if (recoveryMode) return route.fulfill({status:200,
+          headers:{'Content-Type':'image/jpeg','Access-Control-Allow-Origin':'*'},
+          body:recoveryCorruptBytes?recoveryJpeg.subarray(0,recoveryJpeg.length-3):recoveryJpeg});
         const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jUlkAAAAASUVORK5CYII=', 'base64');
         return route.fulfill({ status: 200, headers: { 'Content-Type': 'image/png' }, body: png });
       }
@@ -1666,10 +1672,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#recovery-card button').filter({hasText:reviewPhoto.slice(0,8)}).click();
     await wait(page,()=>!document.querySelector('#recovery-card img').hidden);
     assert.equal(recoveryPhotoRequests,1);
+    recoveryCorruptBytes=true;
+    await page.locator('#recovery-card button').filter({hasText:'Download selected JPEG'}).click();
+    await wait(page,()=>document.querySelector('#recovery-card .status')
+      ?.textContent.includes('does not match its verified private receipt'));
+    assert.equal(recoveryPhotoRequests,2,'Mismatched bytes must not pass as recovery');
+    recoveryCorruptBytes=false;
     await page.locator('#recovery-card button').filter({hasText:'Download selected JPEG'}).click();
     await wait(page,()=>document.querySelector('#recovery-card .status')
       ?.textContent.includes('offered for download'));
-    assert.equal(recoveryPhotoRequests,2,'Download must renew exact short-lived authorization');
+    assert.equal(recoveryPhotoRequests,3,'Valid copy uses a fresh exact authorization');
     await page.locator('#recovery-card button').filter({hasText:'Sign Out'}).click();
     assert.equal(await page.locator('#recovery-card:visible').count(),0);
     assert.equal(await page.locator('#login-card:visible').count(),1);
@@ -1681,7 +1693,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#login-status')?.textContent.includes('Office work access disabled'));
     assert.equal(await page.locator('#recovery-card:visible').count(),0);
     assert.equal(await page.locator('#results-card:visible').count(),0);
-    assert.equal(recoveryPhotoRequests,2);
+    assert.equal(recoveryPhotoRequests,3);
     recoveryMode=false;recoveryGranted=true;
     assert.equal(errors.length,0,errors.join('\\n'));
     console.log('PASS: bounded job workspace and exact on-demand signed-in recovery after denied work. No live backend traffic.');
