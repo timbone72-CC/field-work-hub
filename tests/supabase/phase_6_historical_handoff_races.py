@@ -1,4 +1,4 @@
-"""Actual lock waits for completed-job handoff in disposable CI PostgreSQL only."""
+"""Actual lock waits for completed and consent-approved active team handoffs in disposable CI PostgreSQL only."""
 import json
 import os
 from pathlib import Path
@@ -14,15 +14,17 @@ FIXTURE = GATE[GATE.index('create function pg_temp.recovery_fixture_photo'):GATE
 CALL = 'select public.handoff_work_order_team(%s,%s,%s,%s,%s,%s)'
 
 
-def claims(c, actor, org):
+def claims(c, actor, org, role='SUPERVISOR'):
     c.execute("select set_config('request.jwt.claims',%s,true)", (json.dumps({
         'sub': str(actor), 'session_id': str(actor),
-        'app_metadata': {'role': 'SUPERVISOR', 'organization_id': str(org)},
+        'app_metadata': {'role': role, 'organization_id': str(org)},
     }),))
     c.execute('set local role authenticated')
 
 
 def run_case(kind):
+    active = kind.startswith('active-')
+    case = kind.removeprefix('active-')
     org, source, target, admin, contractor, supervisor, action, later = [uuid.uuid4() for _ in range(8)]
     with psycopg.connect(DSN) as c:
         assert c.info.dbname == 'fwh_test' and c.info.host in ('localhost', '127.0.0.1', '::1')
@@ -39,10 +41,27 @@ def run_case(kind):
         c.execute('insert into private.org_work_settings(organization_id,supervisor_work_ready) values(%s,true)', (org,))
         c.execute("insert into private.supervisor_grants(organization_id,user_id,tier,active,granted_by,reason) values(%s,%s,3,true,%s,'TEST')", (org, supervisor, admin))
         c.execute(FIXTURE)
-        photo = c.execute('select pg_temp.recovery_fixture_photo(%s,%s,%s,%s,true)', (admin, org, source, contractor)).fetchone()[0]
+        photo = c.execute('select pg_temp.recovery_fixture_photo(%s,%s,%s,%s,%s)',
+                          (admin, org, source, contractor, not active)).fetchone()[0]
         wo, run = c.execute('select work_order_id,run_id from public.photos where id=%s', (photo,)).fetchone()
         claims(c, supervisor, org)
-        fp = c.execute("select public.preview_work_order_team_handoff(%s,%s,'TEST')", (wo, target)).fetchone()[0]['review_fingerprint']
+        review = c.execute("select public.preview_work_order_team_handoff(%s,%s,'TEST')", (wo, target)).fetchone()[0]
+        fp = review['review_fingerprint']
+        if active:
+            assert review['eligible'] is False and review['field_status'] == 'IN_PROGRESS', review
+            request_id = uuid.uuid4()
+            outcome = c.execute(
+                "select public.request_work_order_team_handoff_consent(%s,%s,%s,%s,%s,'TEST')",
+                (request_id, wo, target, fp, 'TEST continuity')).fetchone()[0]
+            assert outcome['status'] == 'PENDING', outcome
+            claims(c, contractor, org, 'CONTRACTOR')
+            approved = c.execute(
+                "select public.respond_work_order_team_handoff_consent(%s,true)",
+                (request_id,)).fetchone()[0]
+            assert approved['status'] == 'APPROVED', approved
+            claims(c, supervisor, org)
+            assert c.execute("select public.preview_work_order_team_handoff(%s,%s,'TEST')",
+                             (wo, target)).fetchone()[0]['handoff_kind'] == 'IN_PROGRESS'
     args = (action, wo, target, fp, 'TEST continuity', 'TEST')
     ready, release, started = threading.Event(), threading.Event(), threading.Event()
     results, errors, pid = {}, [], []
@@ -50,7 +69,7 @@ def run_case(kind):
     def first():
         try:
             with psycopg.connect(DSN) as c:
-                if kind == 'same-action':
+                if case == 'same-action':
                     claims(c, supervisor, org)
                     results['first'] = c.execute(CALL, args).fetchone()[0]
                 elif kind == 'office-scope-first':
@@ -106,14 +125,15 @@ def run_case(kind):
     with psycopg.connect(DSN) as c:
         actual_team = c.execute('select responsible_team_id from public.work_orders where id=%s', (wo,)).fetchone()[0]
         grants = c.execute('select count(*) from private.photo_recovery_grants where scope_work_order_id=%s', (wo,)).fetchone()[0]
-        if kind == 'same-action':
+        if case == 'same-action':
             assert results['first'] == results['second'] and actual_team == target and grants == 1, results
             assert c.execute('select count(*) from private.work_order_team_handoff_actions where action_id=%s', (action,)).fetchone()[0] == 1
         else:
             assert results['second'] == '40001' and actual_team == source and grants == 0, results
             assert c.execute('select count(*) from private.work_order_team_handoff_actions where action_id=%s', (action,)).fetchone()[0] == 0
-    print(f'PASS Phase 6 historical handoff {kind}: real lock wait; exact cutoff and replay preserved')
+    print(f'PASS Phase 6 {kind} handoff: real lock wait; exact cutoff and replay preserved')
 
 
-for scenario in ('same-action', 'office-scope-first', 'photo-first'):
+for scenario in ('same-action', 'office-scope-first', 'photo-first',
+                 'active-same-action', 'active-office-scope-first', 'active-photo-first'):
     run_case(scenario)
