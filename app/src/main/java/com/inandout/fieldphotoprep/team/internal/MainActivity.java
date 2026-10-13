@@ -33,7 +33,7 @@ public final class MainActivity extends Activity {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ExecutorService updaterExecutor = Executors.newSingleThreadExecutor();
-    private final InternalAppUpdater updater = new InternalAppUpdater(this);
+    private InternalAppUpdater updater;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final SupabaseApi api = new SupabaseApi();
 
@@ -96,6 +96,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        updater = new InternalAppUpdater(this);
         runtime = TeamRuntime.get(this);
         assignmentRepository = runtime.assignments;
         setContentView(buildContent());
