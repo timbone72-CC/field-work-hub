@@ -38,4 +38,17 @@ identity={'runtime_head':head,'variant':variant,'file':filename,'sha256':hashlib
           'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':23 if recovery else 22,
           'room_version':room_version,'field_sync_enabled':not recovery,'private_photo_network_enabled':not recovery,'automatic_cleanup_enabled':False}
 (out/'identity.json').write_text(json.dumps(identity,indent=2)+'\n')
+if not recovery:
+    release_dir=Path('phase5-artifacts/internal-release')
+    release_dir.mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(apk,release_dir/'Field-Work-Hub-Internal.apk')
+    (release_dir/'internal-release-metadata.json').write_text(json.dumps({
+        'source_commit': head,
+        'package': identity['package'],
+        'version_code': identity['version_code'],
+        'signer_sha256': identity['signer_sha256'],
+        'sha256': identity['sha256'],
+        'room_version': identity['room_version'],
+        'note': 'CI artifact only. Publish publicly only after governed release approval.'
+    },indent=2)+'\n')
 print(json.dumps(identity,indent=2))
