@@ -55,7 +55,14 @@ begin
  -- Fixture-only superuser updates simulate an *existing* pre-upgrade row;
  -- the authenticated Admin still cannot modify frozen run evidence.
  execute 'reset role';
+ -- Native CI only: synthesize a pre-upgrade historical snapshot AFTER a
+ -- real completed Finish; production immutable trigger is never changed.
+ alter table public.work_order_runs disable trigger work_order_runs_protect_requirements;
  update public.work_order_runs set requirement_snapshot='{"schema":1}'::jsonb where id=oldrun;
+ alter table public.work_order_runs enable trigger work_order_runs_protect_requirements;
+ if not exists(select 1 from pg_trigger where tgrelid='public.work_order_runs'::regclass
+     and tgname='work_order_runs_protect_requirements' and tgenabled='O')
+ then raise exception 'Protected run requirements trigger not restored';end if;
  execute 'set local role authenticated';
  denied:=false;
  begin
@@ -64,7 +71,14 @@ begin
  end;
  if not denied then raise exception 'Malformed historical photo requirements bypassed validation';end if;
  execute 'reset role';
+ -- Native CI only: synthesize a pre-upgrade historical snapshot AFTER a
+ -- real completed Finish; production immutable trigger is never changed.
+ alter table public.work_order_runs disable trigger work_order_runs_protect_requirements;
  update public.work_order_runs set requirement_snapshot='{}'::jsonb where id=oldrun;
+ alter table public.work_order_runs enable trigger work_order_runs_protect_requirements;
+ if not exists(select 1 from pg_trigger where tgrelid='public.work_order_runs'::regclass
+     and tgname='work_order_runs_protect_requirements' and tgenabled='O')
+ then raise exception 'Protected run requirements trigger not restored';end if;
  execute 'set local role authenticated';
  state:=public.admin_correction_state(wo);
  if state->'release_requirements' is distinct from
