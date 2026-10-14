@@ -162,3 +162,12 @@ test('saved identity drift between client destinations fails before a write',asy
    journal:f.journal,mode:'execute'}),FolderProbeBlocked);
  assert.equal(f.postCount(),1);
 });
+
+test('journal reservation failure blocks BEFORE any remote folder POST',async()=>{
+ const f=fixture();
+ f.journal.reserve=async()=>{throw Error('simulated full disk before durable reservation');};
+ await assert.rejects(()=>runDisposableFolderProbe({env,fetcher:f.fetcher,
+   journal:f.journal,mode:'execute'}));
+ assert.equal(f.postCount(),0);
+ assert.equal(f.saved(),null);
+});
