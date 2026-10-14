@@ -113,10 +113,51 @@ test('wrong Workspace identity and foreign TEST Drive reject authorization befor
    throw Error();
   };
   const expected=mismatch==='email'?'WORKSPACE_ACCOUNT_NOT_VERIFIED'
-    :'TEST_DESTINATION_NOT_VERIFIED';
+    :mismatch==='drive'?'TEST_DESTINATION_WRONG_DRIVE'
+    :'TEST_DESTINATION_NOT_WRITABLE';
   await assert.rejects(()=>exchangeAndVerify({code:'synthetic-auth-code-0123456789',
    verifier,config:cfg,fetcher}),e=>e instanceof WorkspaceBootstrapBlocked
      &&e.code===expected);
+ }
+});
+
+test('TEST root provider failures return only bounded nonsecret causes without saving a refresh token',async()=>{
+ const config=validateBootstrapConfiguration(web,env);
+ const cases=[
+  [403,'TEST_DESTINATION_ACCESS_DENIED'],
+  [404,'TEST_DESTINATION_INACCESSIBLE'],
+  [503,'TEST_DESTINATION_CHECK_UNAVAILABLE'],
+  ['wrong-mime','TEST_DESTINATION_FOLDER_INVALID'],
+  ['network','TEST_DESTINATION_CHECK_UNAVAILABLE']
+ ];
+ for(const [failure,expected] of cases){
+  const calls=[];
+  const fetcher=async(url)=>{
+   const path=new URL(url).pathname;calls.push(path);
+   if(path==='/token')return Response.json({
+    access_token:'synthetic-access-token-0123456789',
+    refresh_token:'synthetic-refresh-token-0123456789',
+    token_type:'Bearer',expires_in:3600,scope:env.FWH_TEST_WORKSPACE_SCOPE
+   });
+   if(path==='/drive/v3/about')return Response.json({
+    user:{emailAddress:email,me:true,permissionId:'permission-123'}
+   });
+   if(path==='/drive/v3/files/'+root){
+    if(failure==='network')throw Error('untrusted response includes secret-like data');
+    if(typeof failure==='number')return Response.json({error:'private provider details'},
+      {status:failure});
+    return Response.json({id:root,driveId:drive,trashed:false,
+      mimeType:'image/jpeg',capabilities:{canAddChildren:true}});
+   }
+   throw Error('unexpected network request');
+  };
+  await assert.rejects(()=>exchangeAndVerify({
+   code:'synthetic-auth-code-0123456789',verifier,config,fetcher
+  }),e=>e instanceof WorkspaceBootstrapBlocked&&e.code===expected
+    &&!e.message.includes('private')&&!e.message.includes('secret'));
+  assert.deepEqual(calls,[
+   '/token','/drive/v3/about','/drive/v3/files/'+root
+  ],'Blocked destinations must not validate/persist a refresh credential');
  }
 });
 
