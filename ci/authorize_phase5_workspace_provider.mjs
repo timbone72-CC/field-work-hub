@@ -6,6 +6,8 @@ import {randomBytes,createHash} from 'node:crypto';
 import {readFile,mkdir,open,chmod,lstat} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {homedir} from 'node:os';
+import {setDefaultResultOrder} from 'node:dns';
+import {setDefaultAutoSelectFamily} from 'node:net';
 import {pathToFileURL} from 'node:url';
 import {createWorkspaceTokenProvider} from '../supabase/functions/client-delivery/workspace-oauth.mjs';
 import {createDriveClient} from '../supabase/functions/client-delivery/drive-client.mjs';
@@ -28,6 +30,14 @@ const CALLBACK_ERROR_CODES=new Set([
   'TOKEN_ENDPOINT_TLS_FAILURE','TOKEN_ENDPOINT_UNEXPECTED_RESPONSE'
 ]);
 const fail=code=>{throw new WorkspaceBootstrapBlocked(code);};
+// Node 20's default Happy Eyeballs family switching can time out on operator
+// networks with broken IPv6. Only the one-time, standalone CLI calls this.
+// Keep regular trusted server fetch, TLS checking and Drive identity owners
+// unchanged; do not force a provider-wide production transport preference.
+export function preferIPv4ForLocalWorkspaceBootstrap(){
+  setDefaultResultOrder('ipv4first');
+  setDefaultAutoSelectFamily(false);
+}
 // Map only stable transport codes; never print a Google response, request or exception.
 // The same transport classification is used for the credential-free preflight
 // and the real one-time authorization-code exchange.
@@ -116,7 +126,7 @@ export async function exchangeAndVerify({code,verifier,config,fetcher=fetch}){
   let response;
   try{response=await fetcher(TOKEN,{method:'POST',redirect:'error',
     headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},
-    body:body.toString()});}catch(error){fail(tokenTransportCode(error));}
+    body:body.toString(),signal:AbortSignal.timeout(20000)});}catch(error){fail(tokenTransportCode(error));}
   if(!response.ok){await response.body?.cancel().catch(()=>{});fail('GOOGLE_OAUTH_CONSENT_REQUIRED');}
   let token;
   try{const raw=await response.text();if(raw.length>12000)throw Error();token=JSON.parse(raw);}
@@ -241,6 +251,7 @@ export async function authorizeWorkspace({credentialsPath,env=process.env,
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+  preferIPv4ForLocalWorkspaceBootstrap();
   authorizeWorkspace({credentialsPath:process.argv[2]}).then(()=>{
     process.stdout.write('PASS: Workspace identity and separate writable TEST Drive verified. Protected credential file saved; no Send.\n');
   }).catch(error=>{
