@@ -23,9 +23,44 @@ const CALLBACK_ERROR_CODES=new Set([
   'INVALID_TOKEN_RESPONSE','OFFLINE_DRIVE_CONSENT_NOT_GRANTED',
   'GOOGLE_ACCESS_TOKEN_INVALID','WORKSPACE_ACCOUNT_NOT_VERIFIED',
   'TEST_DESTINATION_NOT_VERIFIED','OAUTH_REFRESH_VALIDATION_FAILED',
-  'WORKSPACE_OAUTH_UNCERTAIN'
+  'WORKSPACE_OAUTH_UNCERTAIN','TOKEN_ENDPOINT_DNS_FAILURE',
+  'TOKEN_ENDPOINT_TIMEOUT','TOKEN_ENDPOINT_CONNECTION_FAILURE',
+  'TOKEN_ENDPOINT_TLS_FAILURE','TOKEN_ENDPOINT_UNEXPECTED_RESPONSE'
 ]);
 const fail=code=>{throw new WorkspaceBootstrapBlocked(code);};
+// Map only stable transport codes; never print a Google response, request or exception.
+// The same transport classification is used for the credential-free preflight
+// and the real one-time authorization-code exchange.
+export function tokenTransportCode(error){
+  const code=error?.cause?.code??error?.code;
+  if(['ENOTFOUND','EAI_AGAIN'].includes(code))return 'TOKEN_ENDPOINT_DNS_FAILURE';
+  if(['ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(code)
+    ||error?.name==='TimeoutError')return 'TOKEN_ENDPOINT_TIMEOUT';
+  if(['ENETUNREACH','EHOSTUNREACH','ECONNREFUSED','ECONNRESET',
+    'UND_ERR_SOCKET'].includes(code))return 'TOKEN_ENDPOINT_CONNECTION_FAILURE';
+  if(['UNABLE_TO_VERIFY_LEAF_SIGNATURE','SELF_SIGNED_CERT_IN_CHAIN',
+    'DEPTH_ZERO_SELF_SIGNED_CERT','CERT_HAS_EXPIRED',
+    'ERR_TLS_CERT_ALTNAME_INVALID'].includes(code))return 'TOKEN_ENDPOINT_TLS_FAILURE';
+  return 'TOKEN_EXCHANGE_UNAVAILABLE';
+}
+// Check the exact HTTPS POST transport without submitting any credential,
+// Google account identity, user code, refresh token or local folder ID.
+// Google's invalid_grant response is EXPECTED; any HTTP response proves a
+// reachable token service. Never confuse that expected 400 with OAuth consent.
+export async function checkTokenEndpoint({fetcher=fetch}={}){
+  let response;
+  try{
+    response=await fetcher(TOKEN,{method:'POST',redirect:'error',
+      headers:{'Content-Type':'application/x-www-form-urlencoded',
+        Accept:'application/json'},
+      body:'grant_type=fwh_connectivity_probe',
+      signal:AbortSignal.timeout(12000)});
+  }catch(error){fail(tokenTransportCode(error));}
+  try{await response.body?.cancel();}catch{}
+  if(!Number.isInteger(response.status)||response.status<400||response.status>=500)
+    fail('TOKEN_ENDPOINT_UNEXPECTED_RESPONSE');
+  return true;
+}
 const b64=x=>Buffer.from(x).toString('base64url');
 
 export function validateBootstrapConfiguration(json,env){
@@ -81,7 +116,7 @@ export async function exchangeAndVerify({code,verifier,config,fetcher=fetch}){
   let response;
   try{response=await fetcher(TOKEN,{method:'POST',redirect:'error',
     headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},
-    body:body.toString()});}catch{fail('TOKEN_EXCHANGE_UNAVAILABLE');}
+    body:body.toString()});}catch(error){fail(tokenTransportCode(error));}
   if(!response.ok){await response.body?.cancel().catch(()=>{});fail('GOOGLE_OAUTH_CONSENT_REQUIRED');}
   let token;
   try{const raw=await response.text();if(raw.length>12000)throw Error();token=JSON.parse(raw);}
@@ -147,6 +182,8 @@ export async function authorizeWorkspace({credentialsPath,env=process.env,
   const config=validateBootstrapConfiguration(json,env);
   try{await lstat(config.output);fail('PRIVATE_OUTPUT_FILE_ALREADY_EXISTS');}
   catch(e){if(e?.code!=='ENOENT')fail('PRIVATE_OUTPUT_FILE_ALREADY_EXISTS');}
+  // Do not waste single-use consent codes when this laptop cannot reach Google.
+  await checkTokenEndpoint({fetcher});
   const state=b64(randomBytes(32)),verifier=b64(randomBytes(32));
   const url=makeAuthorizationUrl({clientId:config.clientId,email:config.email,
     state,verifier});
@@ -217,7 +254,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       'INVALID_TOKEN_RESPONSE','OFFLINE_DRIVE_CONSENT_NOT_GRANTED',
       'GOOGLE_ACCESS_TOKEN_INVALID','WORKSPACE_ACCOUNT_NOT_VERIFIED',
       'TEST_DESTINATION_NOT_VERIFIED','OAUTH_REFRESH_VALIDATION_FAILED',
-      'WORKSPACE_OAUTH_UNCERTAIN']);
+      'WORKSPACE_OAUTH_UNCERTAIN','TOKEN_ENDPOINT_DNS_FAILURE',
+      'TOKEN_ENDPOINT_TIMEOUT','TOKEN_ENDPOINT_CONNECTION_FAILURE',
+      'TOKEN_ENDPOINT_TLS_FAILURE','TOKEN_ENDPOINT_UNEXPECTED_RESPONSE']);
     process.stderr.write('BLOCKED: '+(allow.has(error?.code)?error.code:'WORKSPACE_OAUTH_UNCERTAIN')+'\n');
     process.exitCode=1;
   });
