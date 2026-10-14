@@ -110,7 +110,27 @@ test('wrong Workspace identity and foreign TEST Drive reject authorization befor
     capabilities:{canAddChildren:mismatch!=='write'}});
    throw Error();
   };
+  const expected=mismatch==='email'?'WORKSPACE_ACCOUNT_NOT_VERIFIED'
+    :'TEST_DESTINATION_NOT_VERIFIED';
   await assert.rejects(()=>exchangeAndVerify({code:'synthetic-auth-code-0123456789',
-   verifier,config:cfg,fetcher}),WorkspaceBootstrapBlocked);
+   verifier,config:cfg,fetcher}),e=>e instanceof WorkspaceBootstrapBlocked
+     &&e.code===expected);
+ }
+});
+
+test('token exchange errors remain distinct safe failures and never verify Drive',async()=>{
+ const config=validateBootstrapConfiguration(web,env);
+ for(const status of [400,500]){
+  const calls=[];
+  const fetcher=async(url,options)=>{
+   calls.push(new URL(url).pathname);
+   assert.equal(options.method,'POST');
+   return new Response('',{status});
+  };
+  await assert.rejects(()=>exchangeAndVerify({
+   code:'synthetic-auth-code-0123456789',verifier,config,fetcher
+  }),e=>e instanceof WorkspaceBootstrapBlocked
+    &&e.code==='GOOGLE_OAUTH_CONSENT_REQUIRED');
+  assert.deepEqual(calls,['/token']);
  }
 });
