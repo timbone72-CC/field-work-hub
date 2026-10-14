@@ -98,7 +98,7 @@ abstract class CachedWorkOrderDao {
     void replaceForOwner(String owner, String org, List<CachedWorkOrder> downloaded) {
         List<FieldAction> actions = actions(owner, org);
         List<CachedWorkOrder> existing = listForOwner(owner, org);
-        java.util.Set<String> protectedWos = new java.util.HashSet<>();
+        java.util.Set<String> protectedRuns = new java.util.HashSet<>();
         for (CachedWorkOrder old : existing) {
             CachedWorkOrder next = null;
             for (CachedWorkOrder row : downloaded)
@@ -116,22 +116,22 @@ abstract class CachedWorkOrderDao {
                 if (evidence) {
                     markRunConflict(
                             owner, org, old.workOrderId, old.runId, "ASSIGNMENT_UNAVAILABLE");
-                    protectedWos.add(old.workOrderId);
+                    protectedRuns.add(old.workOrderId + ":" + old.runId);
                 } else delete(owner, org, old.workOrderId, old.runId);
             } else if (evidence && !sameRequirements(old.requirementSnapshotJson, next.requirementSnapshotJson)) {
                 markRunConflict(owner, org, old.workOrderId, old.runId, "REQUIREMENTS_CHANGED");
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             } else if (!old.conflictReason.isEmpty()) {
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             } else if (evidence && isOlder(next.serverUpdatedAt, old.serverUpdatedAt)) {
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             } else if (evidence && statusRank(next.fieldStatus) < statusRank(old.fieldStatus)) {
                 markRunConflict(owner, org, old.workOrderId, old.runId, "STATE_CHANGED");
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             }
         }
         for (CachedWorkOrder row : downloaded)
-            if (!protectedWos.contains(row.workOrderId))
+            if (!protectedRuns.contains(row.workOrderId + ":" + row.runId))
                 insertAll(java.util.Collections.singletonList(row));
     }
 
