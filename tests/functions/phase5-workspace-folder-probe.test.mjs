@@ -45,8 +45,10 @@ function fixture({lostPost=false,wrongRoot=false,wrongDrive=false,
   assert.equal(opt.headers.Authorization,'Bearer '+token);
   if(u.pathname==='/drive/v3/about')
     return response({user:{emailAddress:email,me:true,permissionId:'permission-1'}});
-  if(u.pathname==='/drive/v3/files/'+root)
-    return response({id:root,mimeType:'application/vnd.google-apps.folder',
+  if(u.pathname==='/drive/v3/files/'+root
+    ||u.pathname==='/drive/v3/files/'+'root_'+'x'.repeat(24))
+    return response({id:u.pathname.slice('/drive/v3/files/'.length),
+      mimeType:'application/vnd.google-apps.folder',
       driveId:wrongRoot?internal:clientDrive,trashed:false,
       capabilities:{canAddChildren:true}});
   if(u.pathname==='/drive/v3/files/generateIds'){
