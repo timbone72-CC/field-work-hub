@@ -98,15 +98,21 @@ export function createDriveClient({accessToken,fetcher=fetch}){
         throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
       return {account:about.user.emailAddress.toLowerCase(),permission_id:about.user.permissionId};
     },
-    async verifyDestination({folderId,expectedDriveId=null}){
+    async verifyDestination({folderId,expectedDriveId=null,diagnosticCodes=false}){
       valid(folderId,PARENT,'DESTINATION_ID_REQUIRED');
       if(expectedDriveId!==null)valid(expectedDriveId,PARENT,'EXPECTED_SHARED_DRIVE_REQUIRED');
       const f=await get(folderId);
+      // The operator-only TEST bootstrap can distinguish bounded metadata failures.
+      // Default trusted callers retain the original fail-closed generic code.
+      let reason=null;
       if(f.id!==folderId||f.trashed!==false
-        ||f.mimeType!=='application/vnd.google-apps.folder'
-        ||f.capabilities?.canAddChildren!==true
-        ||(expectedDriveId!==null&&f.driveId!==expectedDriveId))
-        throw new DriveUncertain('DESTINATION_NOT_VERIFIED');
+        ||f.mimeType!=='application/vnd.google-apps.folder')
+        reason='DESTINATION_FOLDER_INVALID';
+      else if(expectedDriveId!==null&&f.driveId!==expectedDriveId)
+        reason='DESTINATION_DRIVE_MISMATCH';
+      else if(f.capabilities?.canAddChildren!==true)
+        reason='DESTINATION_NOT_WRITABLE';
+      if(reason)throw new DriveUncertain(diagnosticCodes?reason:'DESTINATION_NOT_VERIFIED');
       return {id:f.id,drive_id:f.driveId??null,can_add_children:true};
     },
     async generateIds(count){
