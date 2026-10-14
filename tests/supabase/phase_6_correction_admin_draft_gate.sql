@@ -49,7 +49,23 @@ begin
     'COMPLETE',finish_time,runrev,finish_id,digest)->>'outcome'<>'APPLIED'
  then raise exception 'Old job Finish failed';end if;
  perform set_config('request.jwt.claims',adminjwt,true);
+ -- Actual Phase 6 migration intentionally retained '{}' Run 1 snapshots.
+ -- Only that exact historical state may use the validated WO release backfill.
+ -- An arbitrary malformed non-empty snapshot must still fail closed.
+ update public.work_order_runs set requirement_snapshot='{"schema":1}'::jsonb where id=oldrun;
+ denied:=false;
+ begin
+   perform public.admin_correction_state(wo);
+ exception when sqlstate '22023' then denied:=true;
+ end;
+ if not denied then raise exception 'Malformed historical photo requirements bypassed validation';end if;
+ update public.work_order_runs set requirement_snapshot='{}'::jsonb where id=oldrun;
  state:=public.admin_correction_state(wo);
+ if state->'release_requirements' is distinct from
+       (select release_requirement_snapshot from public.work_orders where id=wo)
+    or state->>'kind'<>'INTERNAL_CORRECTION'
+    or (select requirement_snapshot from public.work_order_runs where id=oldrun)<>'{}'::jsonb
+ then raise exception 'Legacy Run 1 correction did not use canonical release backfill';end if;
  if state->>'kind'<>'INTERNAL_CORRECTION' or state->'draft'<>'null'::jsonb
    or state->>'origin_run_id'<>oldrun::text then
    raise exception 'Wrong server correction facts: %',state;end if;
