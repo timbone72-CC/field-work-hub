@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {homedir} from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {
  REDIRECT_URI,WorkspaceBootstrapBlocked,validateBootstrapConfiguration,
  makeAuthorizationUrl,exchangeAndVerify,checkTokenEndpoint,tokenTransportCode
@@ -174,4 +176,21 @@ test('unexpected token-preflight server outcome blocks before authorization',asy
   }}),e=>e instanceof WorkspaceBootstrapBlocked
    &&e.code==='TOKEN_ENDPOINT_UNEXPECTED_RESPONSE');
  }
+});
+
+test('one-time CLI forces deterministic IPv4 lookup without process-wide production changes',()=>{
+ const modulePath=fileURLToPath(new URL('../../ci/authorize_phase5_workspace_provider.mjs',import.meta.url));
+ const moduleUrl=pathToFileURL(modulePath).href;
+ const program=[
+  'import {preferIPv4ForLocalWorkspaceBootstrap} from '+JSON.stringify(moduleUrl)+';',
+  "import {getDefaultResultOrder} from 'node:dns';",
+  "import {getDefaultAutoSelectFamily} from 'node:net';",
+  'preferIPv4ForLocalWorkspaceBootstrap();',
+  "if(getDefaultResultOrder()!=='ipv4first'||getDefaultAutoSelectFamily()!==false)process.exit(18);"
+ ].join('\n');
+ const result=spawnSync(process.execPath,['--input-type=module','-e',program],{
+  encoding:'utf8',timeout:5000
+ });
+ assert.equal(result.status,0,result.stderr);
+ assert.equal(result.stdout,'','IPv4 preference must not log credentials or network info');
 });
