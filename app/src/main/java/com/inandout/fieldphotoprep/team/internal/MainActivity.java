@@ -488,14 +488,11 @@ public final class MainActivity extends Activity {
 
         int currentCount = 0;
         int completedCount = 0;
-        int protectedCompletedCount = 0;
         for (SupabaseApi.WorkOrder workOrder : workOrders) {
-            if (isProtectedCompletedWork(workOrder)) {
-                protectedCompletedCount++;
-            } else if (isCurrentAssignment(workOrder)) {
+            if (isCurrentAssignment(workOrder)) {
                 currentCount++;
-            } else if (workOrder.conflictReason.isEmpty()
-                    && isCompletedWork(workOrder.fieldStatus)) {
+            } else if ((workOrder.conflictReason.isEmpty()
+                    && isCompletedWork(workOrder.fieldStatus))) {
                 completedCount++;
             }
         }
@@ -509,22 +506,6 @@ public final class MainActivity extends Activity {
         } else {
             for (SupabaseApi.WorkOrder workOrder : workOrders) {
                 if (isCurrentAssignment(workOrder)) {
-                    addWorkOrderCard(workOrder);
-                }
-            }
-        }
-
-        if (protectedCompletedCount > 0) {
-            TextView previousHeading =
-                    text("Saved earlier visits — needs review", 20, true);
-            previousHeading.setPadding(0, dp(20), 0, dp(4));
-            workOrdersContainer.addView(previousHeading);
-            workOrdersContainer.addView(text(
-                    "Protected photo history is still on this phone."
-                            + " These completed visits are not current assignments.",
-                    14, false));
-            for (SupabaseApi.WorkOrder workOrder : workOrders) {
-                if (isProtectedCompletedWork(workOrder)) {
                     addWorkOrderCard(workOrder);
                 }
             }
@@ -724,16 +705,10 @@ public final class MainActivity extends Activity {
         workOrdersContainer.addView(card);
     }
 
-    static boolean isCurrentAssignment(SupabaseApi.WorkOrder workOrder) {
-        return !isProtectedCompletedWork(workOrder)
-                && (!workOrder.conflictReason.isEmpty()
-                        || "ASSIGNED".equals(workOrder.fieldStatus)
-                        || "IN_PROGRESS".equals(workOrder.fieldStatus));
-    }
-
-    static boolean isProtectedCompletedWork(SupabaseApi.WorkOrder workOrder) {
-        return "FIELD_COMPLETE".equals(workOrder.fieldStatus)
-                && !workOrder.conflictReason.isEmpty();
+    private boolean isCurrentAssignment(SupabaseApi.WorkOrder workOrder) {
+        return !workOrder.conflictReason.isEmpty()
+                || "ASSIGNED".equals(workOrder.fieldStatus)
+                || "IN_PROGRESS".equals(workOrder.fieldStatus);
     }
 
     private boolean isCompletedWork(String status) {
