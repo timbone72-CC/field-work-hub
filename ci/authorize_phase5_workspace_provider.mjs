@@ -18,6 +18,13 @@ const EMAIL=/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
 export class WorkspaceBootstrapBlocked extends Error {
   constructor(code){super(code);this.name='WorkspaceBootstrapBlocked';this.code=code;}
 }
+const CALLBACK_ERROR_CODES=new Set([
+  'GOOGLE_OAUTH_CONSENT_REQUIRED','TOKEN_EXCHANGE_UNAVAILABLE',
+  'INVALID_TOKEN_RESPONSE','OFFLINE_DRIVE_CONSENT_NOT_GRANTED',
+  'GOOGLE_ACCESS_TOKEN_INVALID','WORKSPACE_ACCOUNT_NOT_VERIFIED',
+  'TEST_DESTINATION_NOT_VERIFIED','OAUTH_REFRESH_VALIDATION_FAILED',
+  'WORKSPACE_OAUTH_UNCERTAIN'
+]);
 const fail=code=>{throw new WorkspaceBootstrapBlocked(code);};
 const b64=x=>Buffer.from(x).toString('base64url');
 
@@ -85,15 +92,20 @@ export async function exchangeAndVerify({code,verifier,config,fetcher=fetch}){
     ||typeof token.expires_in!=='number'||token.expires_in<60
     ||typeof token.scope!=='string'||!token.scope.split(' ').includes(SCOPE))
     fail('OFFLINE_DRIVE_CONSENT_NOT_GRANTED');
+  // Each boundary reports a fixed, non-sensitive checkpoint code.
+  // Never log Google response bodies, token details or provider URLs.
+  let drive;
+  try{drive=createDriveClient({accessToken:token.access_token,fetcher});}
+  catch{fail('GOOGLE_ACCESS_TOKEN_INVALID');}
+  try{await drive.verifyProviderIdentity(config.email);}
+  catch{fail('WORKSPACE_ACCOUNT_NOT_VERIFIED');}
   try{
-    const drive=createDriveClient({accessToken:token.access_token,fetcher});
-    await drive.verifyProviderIdentity(config.email);
     const folder=await drive.verifyDestination({
       folderId:config.root,expectedDriveId:config.clientDrive
     });
     if(folder.id!==config.root||folder.drive_id!==config.clientDrive)
-      fail('EXACT_TEST_CLIENT_DESTINATION_UNVERIFIED');
-  }catch{fail('WORKSPACE_IDENTITY_OR_TEST_ROOT_UNVERIFIED');}
+      fail('TEST_DESTINATION_NOT_VERIFIED');
+  }catch{fail('TEST_DESTINATION_NOT_VERIFIED');}
   try{
     const refresh=createWorkspaceTokenProvider({clientId:config.clientId,
       clientSecret:config.clientSecret,refreshToken:token.refresh_token,
@@ -171,9 +183,13 @@ export async function authorizeWorkspace({credentialsPath,env=process.env,
           await save(config.output,values);
           reply(200,'Field Work Hub TEST Workspace connection verified. You can close this tab.');
           done(null,true);
-        }catch{
-          reply(403,'Identity or TEST destination verification failed. No connection saved.');
-          done(new WorkspaceBootstrapBlocked('WORKSPACE_IDENTITY_OR_TEST_ROOT_UNVERIFIED'));
+        }catch(error){
+          const code=error instanceof WorkspaceBootstrapBlocked
+            && CALLBACK_ERROR_CODES.has(error.code)
+            ? error.code:'WORKSPACE_OAUTH_UNCERTAIN';
+          reply(403,'Field Work Hub TEST authorization blocked: '+code
+            +'. No connection saved. Return only this code to support.');
+          done(new WorkspaceBootstrapBlocked(code));
         }
       });
       server.once('error',()=>done(new WorkspaceBootstrapBlocked('LOCAL_CALLBACK_PORT_UNAVAILABLE')));
@@ -197,7 +213,11 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       'PRIVATE_CLIENT_JSON_PATH_REQUIRED','WEB_CLIENT_JSON_NOT_READABLE',
       'PRIVATE_OUTPUT_FILE_ALREADY_EXISTS','INVALID_OAUTH_REQUEST',
       'LOCAL_CALLBACK_PORT_UNAVAILABLE','GOOGLE_AUTHORIZATION_TIMED_OUT',
-      'WORKSPACE_IDENTITY_OR_TEST_ROOT_UNVERIFIED']);
+      'GOOGLE_OAUTH_CONSENT_REQUIRED','TOKEN_EXCHANGE_UNAVAILABLE',
+      'INVALID_TOKEN_RESPONSE','OFFLINE_DRIVE_CONSENT_NOT_GRANTED',
+      'GOOGLE_ACCESS_TOKEN_INVALID','WORKSPACE_ACCOUNT_NOT_VERIFIED',
+      'TEST_DESTINATION_NOT_VERIFIED','OAUTH_REFRESH_VALIDATION_FAILED',
+      'WORKSPACE_OAUTH_UNCERTAIN']);
     process.stderr.write('BLOCKED: '+(allow.has(error?.code)?error.code:'WORKSPACE_OAUTH_UNCERTAIN')+'\n');
     process.exitCode=1;
   });
