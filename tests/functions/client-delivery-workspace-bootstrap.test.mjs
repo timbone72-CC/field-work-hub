@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {homedir} from 'node:os';
 import {
  REDIRECT_URI,WorkspaceBootstrapBlocked,validateBootstrapConfiguration,
- makeAuthorizationUrl,exchangeAndVerify
+ makeAuthorizationUrl,exchangeAndVerify,checkTokenEndpoint,tokenTransportCode
 } from '../../ci/authorize_phase5_workspace_provider.mjs';
 
 const clientId='860765799656-synthetic-test.apps.googleusercontent.com';
@@ -132,5 +132,46 @@ test('token exchange errors remain distinct safe failures and never verify Drive
   }),e=>e instanceof WorkspaceBootstrapBlocked
     &&e.code==='GOOGLE_OAUTH_CONSENT_REQUIRED');
   assert.deepEqual(calls,['/token']);
+ }
+});
+
+test('no-credentials token transport preflight checks only fixed Google POST and treats HTTP 400 as reachable',async()=>{
+ const calls=[];
+ assert.equal(await checkTokenEndpoint({fetcher:async(url,options)=>{
+  calls.push({url,method:options.method,redirect:options.redirect,body:options.body,
+    hasSignal:!!options.signal});
+  return new Response('{"error":"unsupported_grant_type"}',{status:400});
+ }}),true);
+ assert.deepEqual(calls,[{url:'https://oauth2.googleapis.com/token',
+  method:'POST',redirect:'error',body:'grant_type=fwh_connectivity_probe',
+  hasSignal:true}]);
+ assert.ok(!JSON.stringify(calls).includes(web.web.client_secret));
+});
+test('pre-consent Google transport failures classify DNS, timeout, network, TLS without raw errors',async()=>{
+ const cases=[
+  ['ENOTFOUND','TOKEN_ENDPOINT_DNS_FAILURE'],
+  ['EAI_AGAIN','TOKEN_ENDPOINT_DNS_FAILURE'],
+  ['UND_ERR_CONNECT_TIMEOUT','TOKEN_ENDPOINT_TIMEOUT'],
+  ['ECONNRESET','TOKEN_ENDPOINT_CONNECTION_FAILURE'],
+  ['ENETUNREACH','TOKEN_ENDPOINT_CONNECTION_FAILURE'],
+  ['UNABLE_TO_VERIFY_LEAF_SIGNATURE','TOKEN_ENDPOINT_TLS_FAILURE'],
+  ['UNKNOWN','TOKEN_EXCHANGE_UNAVAILABLE']
+ ];
+ for(const [code,want] of cases){
+  const err=new Error('untrusted network diagnostic with token-like payload',{cause:{code}});
+  assert.equal(tokenTransportCode(err),want);
+  await assert.rejects(()=>checkTokenEndpoint({fetcher:async()=>{
+   throw err;
+  }}),e=>e instanceof WorkspaceBootstrapBlocked&&e.code===want
+   &&!e.message.includes('untrusted network diagnostic'));
+ }
+ assert.equal(tokenTransportCode({name:'TimeoutError'}),'TOKEN_ENDPOINT_TIMEOUT');
+});
+test('unexpected token-preflight server outcome blocks before authorization',async()=>{
+ for(const status of [200,302,500,503]){
+  await assert.rejects(()=>checkTokenEndpoint({fetcher:async()=>{
+   return new Response('',{status});
+  }}),e=>e instanceof WorkspaceBootstrapBlocked
+   &&e.code==='TOKEN_ENDPOINT_UNEXPECTED_RESPONSE');
  }
 });
