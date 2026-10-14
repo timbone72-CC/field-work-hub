@@ -5,6 +5,7 @@ import {createServer} from 'node:http';
 import {randomBytes,createHash} from 'node:crypto';
 import {readFile,mkdir,open,chmod,lstat} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
+import {homedir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {createWorkspaceTokenProvider} from '../supabase/functions/client-delivery/workspace-oauth.mjs';
 import {createDriveClient} from '../supabase/functions/client-delivery/drive-client.mjs';
@@ -42,7 +43,9 @@ export function validateBootstrapConfiguration(json,env){
     fail('DISTINCT_TEST_CLIENT_DESTINATION_REQUIRED');
   if(env.FWH_TEST_WORKSPACE_SCOPE!==SCOPE)fail('EXACT_DRIVE_SCOPE_REQUIRED');
   const output=env.FWH_TEST_CREDENTIALS_OUT;
-  if(typeof output!=='string'||!output.startsWith('/')||output.includes('\0'))
+  if(typeof output!=='string'||!output.startsWith(homedir()+'/.config/field-work-hub/')
+    ||output.includes('\0')||dirname(output)!==homedir()+'/.config/field-work-hub'
+    ||!/^[A-Za-z0-9_-]+\.json$/.test(output.split('/').at(-1)))
     fail('PRIVATE_OUTPUT_PATH_REQUIRED');
   return {email,domain,internal,clientDrive,root,output,
     clientId:web.client_id,clientSecret:web.client_secret};
