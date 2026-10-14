@@ -52,14 +52,20 @@ begin
  -- Actual Phase 6 migration intentionally retained '{}' Run 1 snapshots.
  -- Only that exact historical state may use the validated WO release backfill.
  -- An arbitrary malformed non-empty snapshot must still fail closed.
+ -- Fixture-only superuser updates simulate an *existing* pre-upgrade row;
+ -- the authenticated Admin still cannot modify frozen run evidence.
+ execute 'reset role';
  update public.work_order_runs set requirement_snapshot='{"schema":1}'::jsonb where id=oldrun;
+ execute 'set local role authenticated';
  denied:=false;
  begin
    perform public.admin_correction_state(wo);
  exception when sqlstate '22023' then denied:=true;
  end;
  if not denied then raise exception 'Malformed historical photo requirements bypassed validation';end if;
+ execute 'reset role';
  update public.work_order_runs set requirement_snapshot='{}'::jsonb where id=oldrun;
+ execute 'set local role authenticated';
  state:=public.admin_correction_state(wo);
  if state->'release_requirements' is distinct from
        (select release_requirement_snapshot from public.work_orders where id=wo)
