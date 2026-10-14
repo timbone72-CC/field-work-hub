@@ -5,7 +5,7 @@
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
-import {open,lstat,readFile} from 'node:fs/promises';
+import {open,lstat} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
@@ -163,7 +163,8 @@ const journal={
       if(!stat.isFile()||(stat.mode&0o077)!==0||stat.size>16384
         ||(process.getuid&&stat.uid!==process.getuid()))
         deny('PRIVATE_TEST_JOURNAL_REQUIRED');
-      raw=await readFile(JOURNAL,'utf8');
+      const fd=await open(JOURNAL,constants.O_RDONLY|constants.O_NOFOLLOW);
+      try{raw=await fd.readFile('utf8');}finally{await fd.close();}
     }catch(e){if(e.code==='ENOENT')return null;throw e;}
     try{return JSON.parse(raw);}catch{deny('PRIVATE_TEST_JOURNAL_REQUIRED');}
   },
@@ -171,6 +172,9 @@ const journal={
     const fd=await open(JOURNAL,'wx',0o600);
     try{await fd.writeFile(JSON.stringify(value)+'\n');await fd.sync();}
     finally{await fd.close();}
+    // Persist the directory entry too, before ANY remote create attempt.
+    const directory=await open(HOME,constants.O_RDONLY|constants.O_DIRECTORY);
+    try{await directory.sync();}finally{await directory.close();}
   }
 };
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
