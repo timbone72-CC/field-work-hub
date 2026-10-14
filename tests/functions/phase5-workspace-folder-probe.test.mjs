@@ -89,7 +89,7 @@ function fixture({lostPost=false,wrongRoot=false,wrongDrive=false,
 test('bad TEST marker, Workspace identity, or internal Drive alias blocks before network',async()=>{
  for(const changed of [
   {FWH_TEST_EVIDENCE_CLASS:'PRODUCTION'},
-  {FWH_TEST_WORKSPACE_EMAIL:'wrong@disposable.invalid'},
+  {FWH_TEST_WORKSPACE_EMAIL:'wrong@outside.invalid'},
   {FWH_TEST_CLIENT_SHARED_DRIVE_ID:internal},
   {FWH_TEST_CLIENT_ROOT_FOLDER_ID:clientDrive}
  ]){
