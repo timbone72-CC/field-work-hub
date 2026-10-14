@@ -120,18 +120,21 @@ finally:
         subprocess.run(['docker', 'stop', container], capture_output=True, timeout=20, check=True)
 
 with connect() as connection:
-    for signature, expected, client_execute in (
-        ('private.admin_correction_basis(uuid)', 'e8aa66ab1f48e9f30c053f715ec2c201', True),
+    # Exact-source parity for the legacy Run 1 compatibility function;
+    # preserve the original PT409-to-40001 provenance check on requirements.
+    for signature, expected, client_execute, undo_pt409 in (
+        ('private.admin_correction_basis(uuid)', 'd51474ff0e5b600f7ebfa5aeed8e4f62', True, False),
         ('private.admin_set_photo_requirements_phase4_engine(uuid,uuid,jsonb)',
-         'd91ff5f2b5eeda06129171ae057b715c', False),
+         'd91ff5f2b5eeda06129171ae057b715c', False, True),
     ):
         row = connection.execute('''
-            select md5(replace(prosrc,%s,%s)),prosecdef,proconfig,
+            select md5(case when %s then replace(prosrc,%s,%s) else prosrc end),
+              prosecdef,proconfig,
               has_function_privilege('anon',oid,'EXECUTE'),
               has_function_privilege('authenticated',oid,'EXECUTE'),
               has_function_privilege('service_role',oid,'EXECUTE')
             from pg_proc where oid=%s::regprocedure
-        ''', ("'PT409'", "'40001'", signature)).fetchone()
+        ''', (undo_pt409, "'PT409'", "'40001'", signature)).fetchone()
         assert row[0] == expected and row[1] and 'search_path=""' in row[2]
         assert not row[3] and row[4] == client_execute and row[5]
 print('PASS conflict repair preserves all predicates, source parity, private engine grants and security configuration')
