@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {homedir} from 'node:os';
 import {
  REDIRECT_URI,WorkspaceBootstrapBlocked,validateBootstrapConfiguration,
  makeAuthorizationUrl,exchangeAndVerify
@@ -19,7 +20,7 @@ const env={
  FWH_TEST_CLIENT_SHARED_DRIVE_ID:drive,
  FWH_TEST_CLIENT_ROOT_FOLDER_ID:root,
  FWH_TEST_WORKSPACE_SCOPE:'https://www.googleapis.com/auth/drive',
- FWH_TEST_CREDENTIALS_OUT:'/tmp/only-a-test-fwh-private-oauth.json'
+ FWH_TEST_CREDENTIALS_OUT:homedir()+'/.config/field-work-hub/only-a-test-fwh-private-oauth.json'
 };
 const verifier='v'.repeat(64);
 const state='s'.repeat(48);
