@@ -64,7 +64,9 @@ test('fresh authorization code verifies provider email and exactly separate writ
    const params=new URLSearchParams(options.body);
    assert.equal(options.redirect,'error');
    assert.equal(params.get('client_secret'),web.web.client_secret);
-   assert.equal(params.get('redirect_uri'),REDIRECT_URI);
+   if(params.get('grant_type')==='authorization_code')
+    assert.equal(params.get('redirect_uri'),REDIRECT_URI);
+   else assert.equal(params.get('redirect_uri'),null);
    assert.ok(params.has('code_verifier')||params.get('grant_type')==='refresh_token');
    return Response.json({access_token:accessToken,refresh_token:refreshToken,
     token_type:'Bearer',scope:env.FWH_TEST_WORKSPACE_SCOPE,expires_in:3600});
