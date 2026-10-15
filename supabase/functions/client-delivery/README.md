@@ -102,3 +102,24 @@ The operator supplied the successful actual hosted Supabase `client-delivery` TE
 **Operator credential handling decision (2026-10-15):** The Workspace OAuth TEST credentials and worker header secret were shared only in the operator's private ChatGPT conversation. There is **no observed public disclosure or unauthorized access**. The operator explicitly instructed that these saved credentials **stay unchanged**; do not force replacement merely because they appeared in that private chat. This supersedes the previous precautionary wording recommending automatic rotation because of chat exposure alone. Credentials remain in restricted local and Supabase secret storage, never in GitHub, logs, requests visible to ordinary users or the Android app. Any *new, evidenced* credential compromise would require separate safety triage; this is not evidence of one.
 
 **Release gates unchanged:** The governed Phase 5/6 source and exact Provider TEST, client-organization/role isolation, company-specific ACLs, interrupted delivery receipts, protected photo cleanup and explicit Level-3 premerge approval remain separate and **PENDING**. No scheduler, Send, photo upload or remote deletion was activated by the successful read-only preflight.
+
+## Phase 5D — disposable TEST JSON file / same-ID resumable probe (source only)
+
+The existing FWH CLIENT TEST Workspace OAuth receipt, Shared Drive, and independently verified disposable ADDRESS folder can be used for a **separate** genuine Google file-byte proof without any client/customer work. This is **not** a real Field Work Hub package, permission/ACL release, client delivery, Supabase photo Source Range GET, queue action or production rollout. Its only purpose is to exercise the existing `drive-client.mjs` Google resumable protocol with an original preallocated identity and independently verified SHA-256.
+
+New source-only files on the existing PR #40: `ci/phase5_disposable_file_core.mjs` provides the bounded, injected pure proof/state machine; `ci/probe_phase5_workspace_file.mjs` is an explicit **operator laptop CLI only**. It reuses `~/.config/field-work-hub/workspace-oauth-test.json` and `phase5-disposable-folder-proof.json` with ownership/mode checks, and stores a distinct original file journal at `~/.config/field-work-hub/phase5-disposable-file-proof.json` (exclusive 0600, fsync/atomic replace; no overwrite/new Google ID once reserved). Never paste its contents (bearer resumable session, remote IDs, credentials) into chat, GitHub or logs. Only fixed result codes are printed; Google errors are redacted.
+
+After exact branch/CI verification, optional operator-only commands in the existing PR checkout (not CI, no hosted deployment):
+
+```bash
+node ci/probe_phase5_workspace_file.mjs --prepare
+node ci/probe_phase5_workspace_file.mjs --begin
+node ci/probe_phase5_workspace_file.mjs --resume
+node ci/probe_phase5_workspace_file.mjs --verify
+```
+
+`--prepare`: separate TEST saved-folder and account check **only**; does not allocate an ID or write a file. `--begin`: requires no existing file journal, persist original generated ID then durable `START_ATTEMPTED` state before the **one** Google resumable initiation POST, save its protected session URL before sending the **first** 256-KiB disposable JSON chunk, require Google independent offset confirmation, and stop deliberately with bytes remaining. `--resume`: reuse only the saved original session/file ID, probe actual Drive offset and send only the missing final bytes; independent `files.get` must confirm SHA-256, size, exact parent, MIME, name, untrashed status, immutable `appProperties` and expected TEST Shared Drive before marking the test file verified. `--verify`: independently GET-check the same original saved remote file/metadata without any write. Never claim file confirmation from a `308` or upload `200` alone.
+
+A lost session initiation POST freezes `START_ATTEMPTED`: **no second POST/new ID** even if the remote GET fails/404s. A lost PUT is reconciled by the saved session's offset probe. A stale local test lock left by process crash is a **stop for manual journal reconciliation**; do not silently remove/retry the remote create. No deletion is performed automatically, preserving duplicate-prevention evidence and the accepted folder proof. All modes are explicit; absent/unknown mode fails before credentials are read. The pure harness tests use only fakes and do **not** establish an actual Google file PASS.
+
+This source is deliberately **not deployed** into the hosted `client-delivery` TEST-only function and cannot enable `FWH_CLIENT_DELIVERY_ACTIVE`, client `worker_ready`, customer Send, original cleanup or the separate provider/Storage readiness gates. A real operator run and recorded redacted outcome are still required.
