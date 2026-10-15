@@ -88,7 +88,15 @@ async function execute(mode){
      name:folder.name,mime:folder.mime,sha256:null,size:null,
      appProperties:folder.appProperties,expectedDriveId:config.driveId});
    const result=await runDisposableFileProof({config,drive,journal,mode});
-   process.stdout.write('PASS: '+result.status+'. TEST only; no customer photos or Send.\n');
+   if(result.verified===false){
+     // A missing/inaccessible object is NOT proof that a second create is safe.
+     process.stdout.write('BLOCKED: '+result.status+' ('+result.reason+
+       '). Original file ID retained; no Drive file write.\n');
+     process.exitCode=1;
+   }else{
+     process.stdout.write('PASS: '+result.status+
+       '. TEST only; no customer photos or Send.\n');
+   }
  }finally{
    // A retained lock after process crash intentionally requires operator
    // reconciliation; never auto-replay an ambiguous Google create.
@@ -102,7 +110,8 @@ async function execute(mode){
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  preferIPv4ForLocalWorkspaceBootstrap();
  const mode=({'--prepare':'prepare','--begin':'begin',
-   '--resume':'resume','--verify':'verify'})[process.argv[2]];
+   '--resume':'resume','--verify':'verify',
+   '--inspect':'inspect'})[process.argv[2]];
  if(process.argv.length!==3||!mode){
    process.stderr.write('BLOCKED: VALID_TEST_MODE_REQUIRED\n');
    process.exitCode=1;
