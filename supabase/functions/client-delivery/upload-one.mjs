@@ -31,6 +31,12 @@ export async function transferOnePreparedChunk({
     catch{throw new DriveUncertain('JOURNAL_DECRYPTION_FAILED');}
   }else{
     await auth();
+    // One durable start marker MUST commit before Google's session-start POST.
+    // If the POST or session persistence is uncertain, a second invocation
+    // cannot initiate another session for this same reserved remote file.
+    if(typeof ledger.beginSession!=='function')
+      throw new DriveUncertain('UPLOAD_SESSION_START_FENCE_REQUIRED');
+    await ledger.beginSession(plan.plan_id);
     const started=await drive.startResumable({id:plan.file_id,parent:plan.parent_id,
       name:plan.name,mime:plan.mime,appProperties:plan.appProperties},{size:plan.size});
     if(started.remote_id!==plan.file_id||started.total!==plan.size)

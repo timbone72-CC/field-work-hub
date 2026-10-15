@@ -9,7 +9,7 @@ const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_geographic_leaf','service_begin_delivery_parent_create',
  'service_confirm_delivery_parent','service_get_delivery_folder_plan',
  'service_begin_delivery_folder_create','service_confirm_delivery_folder',
- 'service_read_upload_session',
+ 'service_read_upload_session','service_begin_upload_session',
  'service_store_upload_session','service_record_upload_offset',
  'service_get_delivery_file_plan',
  'service_confirm_delivery_file','service_finish_delivery',
@@ -85,6 +85,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
           {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan});
         return result.exists===false?null:result;
       },
+      beginSession:plan=>rpc('service_begin_upload_session',
+        {p_package:pkg,p_worker:worker,p_generation:gen,p_plan:plan}),
       storeSession:(p,w,g,plan,encrypted)=>rpc('service_store_upload_session',
         {p_package:p,p_worker:w,p_generation:g,p_plan:plan,p_sealed:encrypted}),
       recordOffset:(p,w,g,plan,offset,complete)=>rpc('service_record_upload_offset',

@@ -9,8 +9,8 @@ const plan={package_id:uuid(1),plan_id:uuid(2),kind:'PHOTO',
  name:'001.jpg',mime:'image/jpeg',size:300000,sha256:'a'.repeat(64),
  appProperties:{fwh_package:uuid(1),fwh_manifest:'a'.repeat(64)}};
 const workerId=uuid(7),generation=2,expectedDriveId='client_drive_'+'c'.repeat(20);
-function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false}={}){
- let entry=null,offset=0,uploaded=0,receipts=0,read=0;
+function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false,failStart=false}={}){
+ let entry=null,offset=0,uploaded=0,receipts=0,read=0,started=false;
  const events=[];
  const vault={
   seal:async url=>{events.push('encrypt');return {version:1,nonce:'sealed',payload:'ciphertext'};},
@@ -18,7 +18,17 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
  };
  const ledger={
   heartbeat:async()=>{events.push('heartbeat');},
-  getSession:async()=>{events.push('get');return entry;},
+  getSession:async()=>{
+    events.push('get');
+    if(started&&!entry)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
+    return entry;
+  },
+  beginSession:async id=>{
+    events.push('begin');
+    assert.equal(id,plan.plan_id);
+    if(started)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
+    started=true;
+  },
   storeSession:async(pkg,worker,gen,id,encrypted)=>{
    events.push('store');if(failStore)throw Error('PERSISTENCE_BLOCKED');
    entry={package_id:pkg,plan_id:id,total_bytes:plan.size,encrypted};
@@ -29,7 +39,10 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
   confirmFile:async()=>{events.push('confirm');receipts++;}
  };
  const drive={
-  startResumable:async()=>{events.push('start');return {
+  startResumable:async()=>{
+    events.push('start');
+    if(failStart)throw new DriveUncertain('PROVIDER_OUTCOME_UNCERTAIN');
+    return {
     session_url:'sealed-url',remote_id:plan.file_id,total:plan.size};},
   probeResumable:async()=>{events.push('probe');return {
     offset,complete_candidate:offset===plan.size};},
@@ -61,6 +74,8 @@ test('persist ciphertext before any remote photo bytes; bounded resume finishes 
  const first=await invoke(r);
  assert.deepEqual(first,{state:'PROGRESS',plan_id:plan.plan_id,
   recorded_offset:262144,total:300000});
+ assert.ok(r.events.indexOf('begin')<r.events.indexOf('start'));
+ assert.ok(r.events.indexOf('start')<r.events.indexOf('store'));
  assert.ok(r.events.indexOf('store')<r.events.indexOf('read'));
  assert.ok(r.events.indexOf('encrypt')<r.events.indexOf('store'));
  assert.equal(r.counters.receipts,0);
@@ -77,6 +92,28 @@ test('failed session persistence prevents any prepared-byte read or upload',asyn
  await assert.rejects(()=>invoke(r),/PERSISTENCE_BLOCKED/);
  assert.equal(r.counters.read,0);assert.equal(r.counters.uploaded,0);
  assert.equal(r.counters.receipts,0);
+ await assert.rejects(()=>invoke(r),e=>
+   e instanceof DriveUncertain&&e.code==='UPLOAD_SESSION_START_UNCERTAIN');
+ assert.equal(r.events.filter(e=>e==='start').length,1);
+});
+test('uncertain Google session-start is durably fenced before any repeated POST',async()=>{
+ const r=rig({failStart:true});
+ await assert.rejects(()=>invoke(r),e=>
+   e instanceof DriveUncertain&&e.code==='PROVIDER_OUTCOME_UNCERTAIN');
+ await assert.rejects(()=>invoke(r),e=>
+   e instanceof DriveUncertain&&e.code==='UPLOAD_SESSION_START_UNCERTAIN');
+ assert.equal(r.events.filter(e=>e==='begin').length,1);
+ assert.equal(r.events.filter(e=>e==='start').length,1);
+ assert.equal(r.counters.uploaded,0);
+ assert.equal(r.counters.receipts,0);
+});
+test('missing durable start RPC refuses Google POST and prepared bytes',async()=>{
+ const r=rig();
+ delete r.ledger.beginSession;
+ await assert.rejects(()=>invoke(r),e=>
+   e instanceof DriveUncertain&&e.code==='UPLOAD_SESSION_START_FENCE_REQUIRED');
+ assert.equal(r.events.includes('start'),false);
+ assert.equal(r.counters.read,0);
 });
 test('unreadable session is protected UNCERTAIN, not replaced with a new ID or session',async()=>{
  const r=rig({corruptSession:true});
