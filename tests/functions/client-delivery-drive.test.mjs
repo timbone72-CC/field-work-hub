@@ -84,6 +84,26 @@ test('no missing, altered, trashed, foreign-parent, MIME or unknown-hash file ge
        :status===409?'REMOTE_ID_CONFLICT_RECONCILE':'PROVIDER_RETRY_REQUIRED');
   }
 });
+test('independent JPEG receipt cannot accept a renamed file or a different client Shared Drive',async()=>{
+ const driveId='client_drive_'+'z'.repeat(20);
+ const good={id:fileId,name:'001.jpg',mimeType:'image/jpeg',
+   parents:[parent],driveId,trashed:false,size:'250000',
+   sha256Checksum:hash,appProperties};
+ for(const wrong of [
+  {name:'someone-else.jpg'},
+  {driveId:'different_drive_'+'q'.repeat(20)},
+  {driveId:undefined}
+ ]){
+  const {client}=fixture(()=>json({...good,...wrong}));
+  await expectCode(()=>client.verifyFile({id:fileId,parent,
+   name:'001.jpg',expectedDriveId:driveId,mime:'image/jpeg',
+   sha256:hash,size:250000,appProperties}), 'REMOTE_FILE_IDENTITY_MISMATCH');
+ }
+ const {client}=fixture(()=>json(good));
+ await client.verifyFile({id:fileId,parent,name:'001.jpg',
+   expectedDriveId:driveId,mime:'image/jpeg',
+   sha256:hash,size:250000,appProperties});
+});
 test('independent PACKAGE folder GET requires explicit not-trashed and exact properties',async()=>{
   const driveId='client_drive_'+'k'.repeat(20),folderName='package-'+packageId;
   const good={id:fileId,mimeType:'application/vnd.google-apps.folder',
