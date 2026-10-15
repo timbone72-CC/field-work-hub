@@ -30,6 +30,14 @@ export async function transferOnePreparedChunk({
     try{session=await vault.open(entry.encrypted,ctx);}
     catch{throw new DriveUncertain('JOURNAL_DECRYPTION_FAILED');}
   }else{
+    // A new provider session is one-shot and unrecoverable if its Location is
+    // lost. First confirm that the exact private, lease-bound source is readable.
+    // This one-byte authenticated Range check is NOT an upload/content receipt;
+    // the actual chunk is still reread and revalidated before every PUT.
+    await auth();
+    const privateProbe=await readProtectedChunk(plan,0,1);
+    if(!(privateProbe instanceof Uint8Array)||privateProbe.length!==1)
+      throw new DriveUncertain('PROTECTED_SOURCE_CHUNK_UNAVAILABLE');
     await auth();
     // One durable start marker MUST commit before Google's session-start POST.
     // If the POST or session persistence is uncertain, a second invocation

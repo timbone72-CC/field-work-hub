@@ -170,16 +170,18 @@ test('revoked lease or mid-transfer changed file identity fails before sending b
   assert.equal(r.totals.confirmed,0);
   assert.equal(r.totals.offset,0);
   assert.equal(r.events.includes('private_range'),false);
-  // A changed plan can be detected only after one already-journaled session
-  // is created; it must not be "fixed" by allocating a second remote ID.
-  assert.equal(r.totals.posts,scenario.planChanged?1:0);
+  // Re-projecting the protected source before irreversible remote creation
+  // now catches changed plans without consuming even one session-start POST.
+  assert.equal(r.totals.posts,0);
  }
 });
-test('wrong private Storage byte range stops before any Google bytes or delivery receipt',async()=>{
+test('wrong private Storage byte range stops before one-shot Google start or delivery receipt',async()=>{
  const r=rig({shortRange:true});
  await assert.rejects(()=>r.run(),e=>
    e instanceof DriveUncertain&&e.code==='PROTECTED_SOURCE_CHUNK_UNAVAILABLE');
- assert.deepEqual(r.totals,{posts:1,uploads:0,confirmed:0,offset:0});
+ assert.deepEqual(r.totals,{posts:0,uploads:0,confirmed:0,offset:0});
+ assert.equal(r.events.includes('durable_start'),false);
+ assert.equal(r.events.includes('persist_session'),false);
 });
 
 test('uploaded bytes cannot yield a receipt after remote file rename or shared-drive move',async()=>{

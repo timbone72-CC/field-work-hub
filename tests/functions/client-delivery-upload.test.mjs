@@ -150,11 +150,31 @@ test('unreadable session is protected UNCERTAIN, not replaced with a new ID or s
  assert.equal(r.events.includes('start'),false);
  assert.equal(r.counters.read,0);
 });
-test('missing or altered prepared source bytes never leave original protected evidence',async()=>{
+test('missing private source fails before durable session start or any provider request',async()=>{
  const r=rig({failBytes:true});
  await assert.rejects(()=>invoke(r),e=>
    e instanceof DriveUncertain&&e.code==='PROTECTED_SOURCE_CHUNK_UNAVAILABLE');
+ assert.equal(r.events.includes('begin'),false);
+ assert.equal(r.events.includes('start'),false);
+ assert.equal(r.events.includes('store'),false);
  assert.equal(r.counters.uploaded,0);assert.equal(r.counters.receipts,0);
+});
+test('preflight never stands in for a later byte-read after start',async()=>{
+ const r=rig();
+ let reads=0;
+ const actual=r.readProtectedChunk;
+ r.readProtectedChunk=async(...args)=>{
+   reads++;
+   if(reads===2)throw new DriveUncertain('PROTECTED_SOURCE_CHUNK_UNAVAILABLE');
+   return actual(...args);
+ };
+ await assert.rejects(()=>invoke(r),e=>
+   e instanceof DriveUncertain&&e.code==='PROTECTED_SOURCE_CHUNK_UNAVAILABLE');
+ assert.equal(r.events.filter(x=>x==='begin').length,1);
+ assert.equal(r.events.filter(x=>x==='start').length,1);
+ assert.equal(r.events.includes('upload'),false);
+ assert.equal(r.events.includes('verify'),false);
+ assert.equal(r.counters.receipts,0);
 });
 test('a complete upload response is only a candidate until independent checksum GET',async()=>{
  const r=rig({failGet:true});
