@@ -140,7 +140,7 @@ test('read-only original-ID inspection reports bounded uncertainty and does not 
  });
  assert.equal(JSON.stringify(r.getSaved()),original);
  assert.deepEqual(r.events.slice(before),[
-  'account','destination:'+rootId,'destination:'+folderId,'GET:receipt'
+  'account','destination:'+rootId,'destination:'+folderId,'read','GET:receipt'
  ]);
  assert.equal(r.starts(),1);
 });
