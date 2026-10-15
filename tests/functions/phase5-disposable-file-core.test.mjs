@@ -121,6 +121,45 @@ test('independent exact original-ID GET can reconcile an uncertain start only if
  assert.equal(completed.starts(),0);
  assert.equal(completed.getSaved().state,'VERIFIED');
 });
+test('read-only original-ID inspection reports bounded uncertainty and does not change an attempted journal',async()=>{
+ const r=rig({failStart:true});
+ await assert.rejects(()=>run(r,'begin'));
+ const original=JSON.stringify(r.getSaved()),before=r.events.length;
+ r.drive.verifyFile=async expected=>{
+  r.events.push('GET:receipt');
+  assert.equal(expected.id,r.getSaved().file_id);
+  assert.equal(expected.parent,folderId);
+  assert.equal(expected.expectedDriveId,driveId);
+  const error=new Error('private Google error and credentials must never surface');
+  error.code='PROVIDER_IDENTITY_UNCERTAIN';
+  throw error;
+ };
+ assert.deepEqual(await run(r,'inspect'),{
+  status:'ORIGINAL_FILE_NOT_VERIFIED',reason:'PROVIDER_IDENTITY_UNCERTAIN',
+  writes:false,verified:false
+ });
+ assert.equal(JSON.stringify(r.getSaved()),original);
+ assert.deepEqual(r.events.slice(before),[
+  'account','destination:'+rootId,'destination:'+folderId,'GET:receipt'
+ ]);
+ assert.equal(r.starts(),1);
+});
+test('exact original GET can report verified without writing or marking journal',async()=>{
+ const r=rig({failStart:true});
+ await assert.rejects(()=>run(r,'begin'));
+ const original=JSON.stringify(r.getSaved());
+ r.drive.verifyFile=async expected=>{
+  r.events.push('GET:receipt');
+  assert.equal(expected.id,r.getSaved().file_id);
+  assert.equal(expected.sha256,r.getSaved().sha256);
+  return {id:expected.id};
+ };
+ assert.deepEqual(await run(r,'inspect'),{
+  status:'ORIGINAL_FILE_EXACT_GET_VERIFIED',writes:false,verified:true
+ });
+ assert.equal(JSON.stringify(r.getSaved()),original);
+ assert.equal(r.starts(),1);
+});
 test('wrong Workspace identity, wrong separate TEST folder, modified journal all fail closed',async()=>{
  const a=rig({wrongAccount:true});
  await assert.rejects(()=>run(a,'begin'),e=>
