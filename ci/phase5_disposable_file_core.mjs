@@ -16,11 +16,10 @@ const FORMAT='FWH_DISPOSABLE_FILE_PROOF_V1';
 
 function contentFor(key){
   if(!UUID.test(key))block('TEST_IDENTITY_INVALID');
-  const prefix=new TextEncoder().encode('FWH DISPOSABLE FILE PROOF '+key+'\n');
-  const content=new Uint8Array(SIZE);
-  content.fill(70);
-  content.set(prefix);
-  return content;
+  const fixture={format:'FWH_DISPOSABLE_FILE_V1',nonce:key,padding:''};
+  const overhead=new TextEncoder().encode(JSON.stringify(fixture)).length;
+  fixture.padding='F'.repeat(SIZE-overhead);
+  return new TextEncoder().encode(JSON.stringify(fixture));
 }
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const spec=r=>({id:r.file_id,parent:r.folder_id,
