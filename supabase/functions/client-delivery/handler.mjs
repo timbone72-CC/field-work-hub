@@ -36,6 +36,8 @@ export function createDeliveryHandler({
    return reply(401,'WORKER_UNAUTHORIZED');
   // Separate read-only TEST credential probe may run while Send is OFF.
   // No provider work is permitted when both capabilities are disabled.
+  if(enabled===true&&testPreflightEnabled===true)
+    return reply(503,'CONFLICTING_WORKER_MODES');
   if(enabled!==true&&testPreflightEnabled!==true)
     return reply(503,'WORKER_NOT_ACTIVATED');
   let payload;
