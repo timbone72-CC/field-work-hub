@@ -147,7 +147,8 @@ test('one worker resumes exact private bytes with same remote ID; only independe
  assert.ok(r.events.indexOf('account')<r.events.indexOf('projection'));
  assert.ok(r.events.indexOf('parent')<r.events.indexOf('create'));
  assert.ok(r.events.indexOf('durable_start')<r.events.indexOf('create'));
- assert.ok(r.events.indexOf('persist_session')<r.events.indexOf('private_range'));
+ assert.ok(r.events.indexOf('private_range')<r.events.indexOf('durable_start'));
+ assert.ok(r.events.indexOf('persist_session')<r.events.lastIndexOf('private_range'));
  assert.ok(r.events.lastIndexOf('projection')<r.events.indexOf('upload'));
  const second=await r.run();
  assert.equal(second.state,'FILE_VERIFIED');
