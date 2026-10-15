@@ -63,7 +63,11 @@ test('no missing, altered, trashed, foreign-parent, MIME or unknown-hash file ge
     {sha256Checksum:'0'.repeat(64),code:'REMOTE_CONTENT_UNVERIFIED'},
     {size:'249999',code:'REMOTE_CONTENT_UNVERIFIED'},
     {trashed:true,code:'REMOTE_FILE_IDENTITY_MISMATCH'},
+    {trashed:undefined,code:'REMOTE_FILE_IDENTITY_MISMATCH'},
     {appProperties:{...appProperties,fwh_manifest:'f'.repeat(64)},code:'REMOTE_FILE_IDENTITY_MISMATCH'},
+    {appProperties:{...appProperties,foreign_property:'unauthorized'},code:'REMOTE_FILE_IDENTITY_MISMATCH'},
+    {appProperties:{fwh_package:appProperties.fwh_package},code:'REMOTE_FILE_IDENTITY_MISMATCH'},
+    {appProperties:null,code:'REMOTE_FILE_IDENTITY_MISMATCH'},
   ];
   for(const {code,...bad} of broken){
     const {client}=fixture(()=>json({id:fileId,mimeType:'image/jpeg',parents:[parent],
