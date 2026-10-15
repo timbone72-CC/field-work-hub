@@ -46,7 +46,7 @@ async function proof(drive,config,record){
  * never initiate another session or generate a replacement Drive ID.
  */
 export async function runDisposableFileProof({config,drive,journal,mode}={}){
-  if(!['prepare','begin','resume','verify'].includes(mode)
+  if(!['prepare','begin','resume','verify','inspect'].includes(mode)
     ||!config||config.testOnly!==true||!ID.test(config.driveId??'')
     ||!ID.test(config.folderId??'')||!ID.test(config.rootId??'')
     ||new Set([config.driveId,config.folderId,config.rootId]).size!==3
@@ -85,6 +85,24 @@ export async function runDisposableFileProof({config,drive,journal,mode}={}){
   }
   if(r===null)block('TEST_FILE_NOT_RESERVED');
   const bytes=validate(r,config);
+  if(mode==='inspect'){
+    // Exact original-ID GET ONLY. A failed GET can NEVER authorize a new
+    // resumable session, replacement ID or journal transition.
+    if(r.state!=='START_ATTEMPTED'||r.session_url!==null)
+      block('ORIGINAL_TEST_ATTEMPT_REQUIRED');
+    try{
+      await proof(drive,config,r);
+      return {status:'ORIGINAL_FILE_EXACT_GET_VERIFIED',writes:false,verified:true};
+    }catch(error){
+      const accepted=new Set(['PROVIDER_IDENTITY_UNCERTAIN',
+        'PROVIDER_AUTH_DENIED','REMOTE_CONTENT_UNVERIFIED',
+        'REMOTE_FILE_IDENTITY_MISMATCH','PROVIDER_RETRY_REQUIRED',
+        'PROVIDER_OUTCOME_UNCERTAIN','PROVIDER_RESPONSE_UNCERTAIN']);
+      const code=accepted.has(error?.code)?error.code:'PROVIDER_CHECK_UNAVAILABLE';
+      return {status:'ORIGINAL_FILE_NOT_VERIFIED',reason:code,
+        writes:false,verified:false};
+    }
+  }
   if(r.state==='RESERVED')block('TEST_FILE_RESERVED_NO_CREATE');
   if(r.state==='START_ATTEMPTED'){
     // Lost session initiation is ambiguous. The only permitted recovery is
