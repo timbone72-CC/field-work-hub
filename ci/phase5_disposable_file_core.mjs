@@ -1,0 +1,109 @@
+// FWH Phase 5D source-only disposable Google TEST file proof.
+// No Google account, secrets, network or production worker in this module.
+// Execution requires an explicitly injected trusted Drive client and durable journal.
+import {createHash,randomUUID} from 'node:crypto';
+
+export class FileProofBlocked extends Error {
+  constructor(code){super(code);this.name='FileProofBlocked';this.code=code;}
+}
+const block=code=>{throw new FileProofBlocked(code);};
+const ID=/^[A-Za-z0-9_-]{10,160}$/;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SHA=/^[0-9a-f]{64}$/;
+const STEP=256*1024;
+const SIZE=STEP+37521;
+const FORMAT='FWH_DISPOSABLE_FILE_PROOF_V1';
+
+function contentFor(key){
+  if(!UUID.test(key))block('TEST_IDENTITY_INVALID');
+  const prefix=new TextEncoder().encode('FWH DISPOSABLE FILE PROOF '+key+'\n');
+  const content=new Uint8Array(SIZE);
+  content.fill(70);
+  content.set(prefix);
+  return content;
+}
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const spec=r=>({id:r.file_id,parent:r.folder_id,
+  name:'FWH_DISPOSABLE_'+r.test_id+'.json',mime:'application/json',
+  appProperties:{fwh_package:r.test_id,fwh_manifest:r.sha256}});
+function validate(record,config){
+  if(!record||record.format!==FORMAT||record.drive_id!==config.driveId
+    ||record.folder_id!==config.folderId||!ID.test(record.file_id??'')
+    ||record.file_id===record.folder_id||!UUID.test(record.test_id??'')
+    ||!SHA.test(record.sha256??'')||record.size!==SIZE
+    ||!['RESERVED','START_ATTEMPTED','SESSION_READY','CHUNK_SENT','VERIFIED'].includes(record.state)
+    ||(!record.session_url&&!['RESERVED','START_ATTEMPTED'].includes(record.state))
+    ||(record.session_url&&typeof record.session_url!=='string')
+    ||hash(contentFor(record.test_id))!==record.sha256)block('SAVED_TEST_FILE_UNCERTAIN');
+  return contentFor(record.test_id);
+}
+async function proof(drive,config,record){
+  return drive.verifyFile({...spec(record),expectedDriveId:config.driveId,
+    sha256:record.sha256,size:record.size});
+}
+
+/** All state updates must durably commit before returning.
+ * Fail/timeout after START_ATTEMPTED can only reconcile the ORIGINAL ID,
+ * never initiate another session or generate a replacement Drive ID.
+ */
+export async function runDisposableFileProof({config,drive,journal,mode}={}){
+  if(!['prepare','begin','resume','verify'].includes(mode)
+    ||!config||config.testOnly!==true||!ID.test(config.driveId??'')
+    ||!ID.test(config.folderId??'')||!ID.test(config.rootId??'')
+    ||new Set([config.driveId,config.folderId,config.rootId]).size!==3
+    ||typeof config.email!=='string'
+    ||!drive||!journal||!['read','reserve','update'].every(k=>typeof journal[k]==='function'))
+    block('DISPOSABLE_TEST_CONFIGURATION_REQUIRED');
+  const user=await drive.verifyProviderIdentity(config.email);
+  if(user.account!==config.email.toLowerCase())block('WORKSPACE_IDENTITY_UNCERTAIN');
+  await drive.verifyDestination({folderId:config.rootId,expectedDriveId:config.driveId});
+  await drive.verifyDestination({folderId:config.folderId,expectedDriveId:config.driveId});
+  if(mode==='prepare')return {status:'TEST_FILE_PARENT_VERIFIED',writes:false};
+  let r=await journal.read();
+  if(mode==='begin'){
+    if(r!==null)block('TEST_FILE_ALREADY_RESERVED');
+    const ids=await drive.generateIds(1);
+    if(!Array.isArray(ids)||ids.length!==1||!ID.test(ids[0])
+      ||ids[0]===config.rootId||ids[0]===config.folderId)block('TEST_FILE_ID_UNAVAILABLE');
+    const testId=randomUUID(),bytes=contentFor(testId);
+    r={format:FORMAT,drive_id:config.driveId,folder_id:config.folderId,
+      file_id:ids[0],test_id:testId,sha256:hash(bytes),size:bytes.length,
+      state:'RESERVED',session_url:null};
+    await journal.reserve(r); // persist original ID before provider POST
+    await journal.update({...r,state:'START_ATTEMPTED'}); // one-shot attempt
+    const start=await drive.startResumable(spec(r),{size:r.size});
+    if(start.remote_id!==r.file_id||start.total!==r.size)
+      block('TEST_SESSION_UNCERTAIN');
+    r={...r,state:'SESSION_READY',session_url:start.session_url};
+    await journal.update(r); // save session before sending bytes
+    const before=await drive.probeResumable(r.session_url,r.size);
+    if(before.complete_candidate||before.offset!==0)block('TEST_OFFSET_UNCERTAIN');
+    await drive.uploadChunk(r.session_url,r.size,0,bytes.subarray(0,STEP));
+    const after=await drive.probeResumable(r.session_url,r.size);
+    if(after.complete_candidate||after.offset!==STEP)block('TEST_OFFSET_UNCERTAIN');
+    await journal.update({...r,state:'CHUNK_SENT'});
+    return {status:'TEST_FIRST_CHUNK_CONFIRMED',writes:true};
+  }
+  if(r===null)block('TEST_FILE_NOT_RESERVED');
+  const bytes=validate(r,config);
+  if(r.state==='RESERVED'||r.state==='START_ATTEMPTED')
+    block('TEST_SESSION_UNCERTAIN_NO_RECREATE');
+  if(mode==='verify'||r.state==='VERIFIED'){
+    await proof(drive,config,r);
+    if(r.state!=='VERIFIED')await journal.update({...r,state:'VERIFIED'});
+    return {status:'SAME_TEST_FILE_VERIFIED',writes:false};
+  }
+  const before=await drive.probeResumable(r.session_url,r.size);
+  if(!before.complete_candidate){
+    const offset=before.offset;
+    if(!Number.isSafeInteger(offset)||offset<0||offset>=r.size)
+      block('TEST_OFFSET_UNCERTAIN');
+    const n=Math.min(STEP,r.size-offset);
+    await drive.uploadChunk(r.session_url,r.size,offset,bytes.subarray(offset,offset+n));
+    const after=await drive.probeResumable(r.session_url,r.size);
+    if(!after.complete_candidate)block('TEST_FILE_NOT_YET_COMPLETE');
+  }
+  await proof(drive,config,r);
+  await journal.update({...r,state:'VERIFIED'});
+  return {status:'TEST_FILE_SHA256_VERIFIED',writes:true};
+}
