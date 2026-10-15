@@ -149,3 +149,17 @@ test('non TEST configuration and duplicate internal/client root fail before netw
    e instanceof FileProofBlocked&&e.code==='DISPOSABLE_TEST_CONFIGURATION_REQUIRED');
  assert.deepEqual(r.events,[]);
 });
+
+test('CLI refuses missing/unknown mode without reading private receipts or invoking provider',async()=>{
+  const {spawnSync}=await import('node:child_process');
+  const {fileURLToPath}=await import('node:url');
+  const script=fileURLToPath(new URL('../../ci/probe_phase5_workspace_file.mjs',import.meta.url));
+  const result=spawnSync(process.execPath,[script,'--unrecognized'],{
+    encoding:'utf8',timeout:5000,env:{...process.env,
+      FWH_GOOGLE_OAUTH_REFRESH_TOKEN:'DO_NOT_PRINT_TEST_TOKEN'}
+  });
+  assert.equal(result.status,1);
+  assert.equal(result.stdout,'');
+  assert.equal(result.stderr.trim(),'BLOCKED: VALID_TEST_MODE_REQUIRED');
+  assert.equal(result.stderr.includes('DO_NOT_PRINT_TEST_TOKEN'),false);
+});
