@@ -80,7 +80,9 @@ test('persist ciphertext before any remote photo bytes; bounded resume finishes 
   recorded_offset:262144,total:300000});
  assert.ok(r.events.indexOf('begin')<r.events.indexOf('start'));
  assert.ok(r.events.indexOf('start')<r.events.indexOf('store'));
- assert.ok(r.events.indexOf('store')<r.events.indexOf('read'));
+ assert.ok(r.events.indexOf('read')<r.events.indexOf('begin'));
+ assert.ok(r.events.indexOf('store')<r.events.lastIndexOf('read'));
+ assert.ok(r.events.lastIndexOf('read')<r.events.indexOf('upload'));
  assert.ok(r.events.indexOf('encrypt')<r.events.indexOf('store'));
  assert.equal(r.counters.receipts,0);
  const second=await invoke(r);
@@ -91,10 +93,11 @@ test('persist ciphertext before any remote photo bytes; bounded resume finishes 
  assert.equal(r.events.filter(e=>e==='start').length,1);
  assert.ok(r.events.indexOf('verify')<r.events.indexOf('confirm'));
 });
-test('failed session persistence prevents any prepared-byte read or upload',async()=>{
+test('failed session persistence permits only source preflight, never remote bytes',async()=>{
  const r=rig({failStore:true});
  await assert.rejects(()=>invoke(r),/PERSISTENCE_BLOCKED/);
- assert.equal(r.counters.read,0);assert.equal(r.counters.uploaded,0);
+ assert.equal(r.counters.read,1);assert.equal(r.counters.uploaded,0);
+ assert.equal(r.events.filter(e=>e==='read').length,1);
  assert.equal(r.counters.receipts,0);
  await assert.rejects(()=>invoke(r),e=>
    e instanceof DriveUncertain&&e.code==='UPLOAD_SESSION_START_UNCERTAIN');
@@ -118,7 +121,8 @@ test('lost SQL begin response cannot start a Google session and stays frozen',as
  await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
    &&e.code==='UPLOAD_SESSION_START_UNCERTAIN');
  assert.equal(r.events.filter(x=>x==='start').length,0);
- assert.equal(r.counters.read,0);
+ assert.equal(r.counters.read,1);
+ assert.equal(r.counters.uploaded,0);
 });
 test('a successful HTTP code without exact committed SQL start acknowledgement cannot contact Google',async()=>{
  for(const beginReply of [null,{}, {plan_id:plan.plan_id,start_recorded:false},
@@ -133,13 +137,14 @@ test('a successful HTTP code without exact committed SQL start acknowledgement c
   assert.equal(r.counters.receipts,0);
  }
 });
-test('missing durable start RPC refuses Google POST and prepared bytes',async()=>{
+test('missing durable start RPC refuses Google POST despite safe source preflight',async()=>{
  const r=rig();
  delete r.ledger.beginSession;
  await assert.rejects(()=>invoke(r),e=>
    e instanceof DriveUncertain&&e.code==='UPLOAD_SESSION_START_FENCE_REQUIRED');
  assert.equal(r.events.includes('start'),false);
- assert.equal(r.counters.read,0);
+ assert.equal(r.counters.read,1);
+ assert.equal(r.counters.uploaded,0);
 });
 test('unreadable session is protected UNCERTAIN, not replaced with a new ID or session',async()=>{
  const r=rig({corruptSession:true});
