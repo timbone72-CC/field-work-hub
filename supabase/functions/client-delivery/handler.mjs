@@ -2,6 +2,7 @@
 // No browser CORS. No file writes, photo deletion, scheduler or client Send.
 // Real OAuth and destination must pass provider gate before ACTIVE may be true.
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
+import {createDriveClient} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
 import {prepareTrustedDelivery} from './worker-runtime.mjs';
 
@@ -21,6 +22,7 @@ function sameSecret(x,y){
 }
 export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
+  testPreflightEnabled=false,testEvidenceClass,testRootFolderId,internalDriveId,
   clientId,clientSecret,refreshToken,oauthScope,
   supabaseUrl,serviceRoleJwt,
   fetcher=fetch,makeWorkerId=()=>crypto.randomUUID()
@@ -31,7 +33,10 @@ export function createDeliveryHandler({
   if(!workerSecret||workerSecret.length<32
    ||!sameSecret(request.headers.get('x-fwh-delivery-secret'),workerSecret))
    return reply(401,'WORKER_UNAUTHORIZED');
-  if(enabled!==true)return reply(503,'WORKER_NOT_ACTIVATED');
+  // Separate read-only TEST credential probe may run while Send is OFF.
+  // No provider work is permitted when both capabilities are disabled.
+  if(enabled!==true&&testPreflightEnabled!==true)
+    return reply(503,'WORKER_NOT_ACTIVATED');
   let payload;
   try{
     if(request.headers.get('content-type')!=='application/json')
@@ -41,7 +46,42 @@ export function createDeliveryHandler({
     payload=JSON.parse(body);
   }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
   if(!payload||Array.isArray(payload)||Object.keys(payload).length!==1
-    ||payload.operation!=='preallocate')return reply(400,'EXACT_REQUEST_REQUIRED');
+    ||!['preallocate','verify_test_connection'].includes(payload.operation))
+    return reply(400,'EXACT_REQUEST_REQUIRED');
+  if(payload.operation==='verify_test_connection'){
+    // TEST probe and delivery must never be active together. The operator
+    // controls TEST-only roots in trusted server environment, not payload.
+    if(testPreflightEnabled!==true||enabled===true)
+      return reply(503,'TEST_PREFLIGHT_NOT_ENABLED');
+    const id=/^[A-Za-z0-9_-]{10,160}$/;
+    if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+      ||!id.test(testRootFolderId??'')||!id.test(expectedDriveId??'')
+      ||!id.test(internalDriveId??'')
+      ||testRootFolderId===expectedDriveId
+      ||internalDriveId===expectedDriveId
+      ||testRootFolderId===internalDriveId
+      ||typeof expectedAccount!=='string'
+      ||!expectedAccount.toLowerCase().endsWith('@inandoutinspectionsllc.com')
+      ||!clientId||!clientSecret||!refreshToken||!oauthScope)
+      return reply(503,'TEST_PROVIDER_NOT_CONFIGURED');
+    try{
+      const tokenProvider=createWorkspaceTokenProvider({
+        clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
+      const auth=await tokenProvider();
+      const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+      await drive.verifyProviderIdentity(expectedAccount);
+      const folder=await drive.verifyDestination({
+        folderId:testRootFolderId,expectedDriveId
+      });
+      if(folder.id!==testRootFolderId||folder.drive_id!==expectedDriveId
+        ||folder.can_add_children!==true)throw Error('TEST_ROOT_NOT_VERIFIED');
+      return reply(200,'TEST_PROVIDER_VERIFIED_READ_ONLY');
+    }catch{
+      // Never emit provider/token error details or configured object identity.
+      return reply(503,'TEST_PROVIDER_UNAVAILABLE');
+    }
+  }
+  if(enabled!==true)return reply(503,'WORKER_NOT_ACTIVATED');
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
     return reply(503,'BACKEND_NOT_CONFIGURED');
