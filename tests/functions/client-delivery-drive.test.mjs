@@ -84,6 +84,29 @@ test('no missing, altered, trashed, foreign-parent, MIME or unknown-hash file ge
        :status===409?'REMOTE_ID_CONFLICT_RECONCILE':'PROVIDER_RETRY_REQUIRED');
   }
 });
+test('independent PACKAGE folder GET requires explicit not-trashed and exact properties',async()=>{
+  const driveId='client_drive_'+'k'.repeat(20),folderName='package-'+packageId;
+  const good={id:fileId,mimeType:'application/vnd.google-apps.folder',
+    name:folderName,parents:[parent],driveId,trashed:false,appProperties};
+  for(const changed of [
+    {trashed:undefined},
+    {appProperties:{...appProperties,foreign:'unexpected'}},
+    {appProperties:{fwh_package:packageId}},
+    {appProperties:null}
+  ]){
+    const {client}=fixture(()=>json({...good,...changed}));
+    await expectCode(()=>client.verifyFile({id:fileId,parent,
+      mime:'application/vnd.google-apps.folder',name:folderName,
+      expectedDriveId:driveId,sha256:null,size:null,appProperties}),
+      'REMOTE_FILE_IDENTITY_MISMATCH');
+  }
+  const {client}=fixture(()=>json(good));
+  const verified=await client.verifyFile({id:fileId,parent,
+    mime:'application/vnd.google-apps.folder',name:folderName,
+    expectedDriveId:driveId,sha256:null,size:null,appProperties});
+  assert.equal(verified.trashed,false);
+  assert.equal(verified.drive_id,driveId);
+});
 test('resumable start pins metadata and rejects any redirected session host',async()=>{
   const good='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=disposableId';
   const {client,calls}=fixture((url,opts)=>{
