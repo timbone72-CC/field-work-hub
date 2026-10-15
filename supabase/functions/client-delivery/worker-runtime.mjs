@@ -82,7 +82,8 @@ export async function continueTrustedDeliveryFile({
   await drive.verifyDestination({folderId:plan.parent_id,expectedDriveId});
   await scoped.heartbeat(packageId,workerId,generation);
   return transferOnePreparedChunk({
-    plan,workerId,generation,drive,ledger:scoped,vault,readProtectedChunk
+    plan,workerId,generation,drive,ledger:scoped,vault,readProtectedChunk,
+    expectedDriveId
   });
 }
 
