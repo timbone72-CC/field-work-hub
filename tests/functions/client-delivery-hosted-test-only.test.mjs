@@ -92,7 +92,7 @@ test('private TEST configuration failure identifies names only; never credential
   testEvidenceClass:'WRONG_EVIDENCE_CLASS',
   clientRootId:'BAD_ROOT',
   expectedDriveId:'BAD_DRIVE',
-  internalDriveId:'BAD_INTERNAL',
+  internalDriveId:'BAD',
   workspaceDomain:'not a domain',
   expectedEmail:'test@not a domain',
   clientId:'',
