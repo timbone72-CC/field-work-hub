@@ -23,6 +23,7 @@ function sameSecret(x,y){
 export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
   testPreflightEnabled=false,testEvidenceClass,testRootFolderId,internalDriveId,
+  testWorkspaceDomain,
   clientId,clientSecret,refreshToken,oauthScope,
   supabaseUrl,serviceRoleJwt,
   fetcher=fetch,makeWorkerId=()=>crypto.randomUUID()
@@ -60,8 +61,10 @@ export function createDeliveryHandler({
       ||testRootFolderId===expectedDriveId
       ||internalDriveId===expectedDriveId
       ||testRootFolderId===internalDriveId
+      ||typeof testWorkspaceDomain!=='string'
+      ||!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(testWorkspaceDomain)
       ||typeof expectedAccount!=='string'
-      ||!expectedAccount.toLowerCase().endsWith('@inandoutinspectionsllc.com')
+      ||expectedAccount.toLowerCase().split('@')[1]!==testWorkspaceDomain
       ||!clientId||!clientSecret||!refreshToken||!oauthScope)
       return reply(503,'TEST_PROVIDER_NOT_CONFIGURED');
     try{
