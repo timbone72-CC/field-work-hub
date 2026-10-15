@@ -8,7 +8,7 @@ const plan={package_id:uuid(1),plan_id:uuid(2),kind:'PHOTO',
  file_id:'generated_'+'a'.repeat(24),parent_id:'folder_'+'b'.repeat(24),
  name:'001.jpg',mime:'image/jpeg',size:300000,sha256:'a'.repeat(64),
  appProperties:{fwh_package:uuid(1),fwh_manifest:'a'.repeat(64)}};
-const workerId=uuid(7),generation=2;
+const workerId=uuid(7),generation=2,expectedDriveId='client_drive_'+'c'.repeat(20);
 function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false}={}){
  let entry=null,offset=0,uploaded=0,receipts=0,read=0;
  const events=[];
@@ -38,7 +38,11 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
     assert.equal(chunk.length,Math.min(262144,plan.size-at));
     uploaded++;offset=at+chunk.length;
     return {complete_candidate:offset===plan.size};},
-  verifyFile:async()=>{events.push('verify');
+  verifyFile:async request=>{events.push('verify');
+    assert.equal(request.expectedDriveId,expectedDriveId);
+    assert.equal(request.name,plan.name);
+    assert.equal(request.id,plan.file_id);
+    assert.equal(request.parent,plan.parent_id);
     if(failGet)throw new DriveUncertain('REMOTE_CONTENT_UNVERIFIED');
     return {id:plan.file_id,parent:plan.parent_id,sha256:plan.sha256,size:plan.size};}
  };
@@ -50,7 +54,8 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
   get counters(){return {uploaded,receipts,read,offset};},set entry(v){entry=v;}};
 }
 const invoke=r=>transferOnePreparedChunk({plan,workerId,generation,
- drive:r.drive,ledger:r.ledger,vault:r.vault,readProtectedChunk:r.readProtectedChunk});
+ drive:r.drive,ledger:r.ledger,vault:r.vault,readProtectedChunk:r.readProtectedChunk,
+ expectedDriveId});
 test('persist ciphertext before any remote photo bytes; bounded resume finishes by independent GET',async()=>{
  const r=rig();
  const first=await invoke(r);
@@ -94,4 +99,29 @@ test('a complete upload response is only a candidate until independent checksum 
  await assert.rejects(()=>invoke(r),e=>
    e instanceof DriveUncertain&&e.code==='REMOTE_CONTENT_UNVERIFIED');
  assert.equal(r.counters.uploaded,2);assert.equal(r.counters.receipts,0);
+});
+
+test('no client Shared Drive binding refuses provider session/bytes and durable receipt',async()=>{
+ const r=rig();
+ await assert.rejects(()=>transferOnePreparedChunk({plan,workerId,generation,
+   drive:r.drive,ledger:r.ledger,vault:r.vault,readProtectedChunk:r.readProtectedChunk}),
+  e=>e instanceof DriveUncertain&&e.code==='EXACT_PREALLOCATED_FILE_REQUIRED');
+ assert.deepEqual(r.events,[]);
+ assert.equal(r.counters.uploaded,0);
+ assert.equal(r.counters.receipts,0);
+});
+test('Google moving or renaming an otherwise matching file cannot confirm delivery',async()=>{
+ for(const violation of ['foreign_drive','wrong_name']){
+  const r=rig();
+  r.drive.verifyFile=async params=>{
+    r.events.push('verify');
+    assert.equal(params.expectedDriveId,expectedDriveId);
+    assert.equal(params.name,plan.name);
+    throw new DriveUncertain('REMOTE_FILE_IDENTITY_MISMATCH');
+  };
+  await invoke(r);
+  await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
+    &&e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
+  assert.equal(r.counters.receipts,0,violation);
+ }
 });
