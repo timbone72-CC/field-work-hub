@@ -130,7 +130,7 @@ test('wrong Workspace identity, wrong separate TEST folder, modified journal all
  await assert.rejects(()=>run(b,'begin'),/foreign TEST parent/);
  assert.equal(b.events.includes('generate'),false);
  const c=rig();await run(c,'begin');
- c.setSaved({...c.getSaved(),file_id:'substituted_remote_file_1234567'});
+ c.setSaved({...c.getSaved(),file_id:'BAD'});
  await assert.rejects(()=>run(c,'resume'),e=>
    e instanceof FileProofBlocked&&e.code==='SAVED_TEST_FILE_UNCERTAIN');
 });
