@@ -25,7 +25,7 @@ const plan={
 function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
   planChanged=false,shortRange=false,remoteMoved=false,remoteRenamed=false}={}){
  const events=[],bytes=new Uint8Array(size);
- let offset=0,sessionStored=null,confirmed=0,posts=0,uploads=0,projections=0;
+ let offset=0,sessionStored=null,startAttempted=false,confirmed=0,posts=0,uploads=0,projections=0;
  const lease={
   heartbeat:async()=>{events.push('lease');if(leaseRevoked)throw Error('LEASE_EXPIRED');},
   getFilePlan:async id=>{
@@ -34,7 +34,16 @@ function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
    assert.equal(id,planId);
    return planChanged&&++projections>1?{...plan,file_id:'wrong_identity'}:plan;
   },
-  getSession:async()=>{events.push('load_session');return sessionStored;},
+  getSession:async()=>{
+   events.push('load_session');
+   if(startAttempted&&!sessionStored)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
+   return sessionStored;
+  },
+  beginSession:async id=>{
+   assert.equal(id,planId);events.push('durable_start');
+   if(startAttempted)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
+   startAttempted=true;
+  },
   storeSession:async(p,w,g,id,encrypted)=>{
    assert.deepEqual([p,w,g,id],[pkg,worker,gen,planId]);events.push('persist_session');
    sessionStored={package_id:pkg,plan_id:planId,total_bytes:size,encrypted};
@@ -136,6 +145,7 @@ test('one worker resumes exact private bytes with same remote ID; only independe
  assert.deepEqual(r.totals,{posts:1,uploads:1,confirmed:0,offset:262144});
  assert.ok(r.events.indexOf('account')<r.events.indexOf('projection'));
  assert.ok(r.events.indexOf('parent')<r.events.indexOf('create'));
+ assert.ok(r.events.indexOf('durable_start')<r.events.indexOf('create'));
  assert.ok(r.events.indexOf('persist_session')<r.events.indexOf('private_range'));
  assert.ok(r.events.lastIndexOf('projection')<r.events.indexOf('upload'));
  const second=await r.run();
