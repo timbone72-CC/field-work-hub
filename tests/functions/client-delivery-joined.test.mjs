@@ -23,7 +23,7 @@ const plan={
   transfer_version:uuid(10)}
 };
 function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
-  planChanged=false,shortRange=false}={}){
+  planChanged=false,shortRange=false,remoteMoved=false,remoteRenamed=false}={}){
  const events=[],bytes=new Uint8Array(size);
  let offset=0,sessionStored=null,confirmed=0,posts=0,uploads=0,projections=0;
  const lease={
@@ -99,6 +99,8 @@ function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
    if(u.pathname==='/drive/v3/files/'+file){
     events.push('remote_get');
     return Response.json({id:file,trashed:false,parents:[parent],
+      name:remoteRenamed?'foreign-photo.jpg':plan.name,
+      driveId:remoteMoved?'foreign-client-drive':expectedDriveId,
       mimeType:'image/jpeg',size:String(size),sha256Checksum:sha,
       appProperties:plan.appProperties});
    }
@@ -167,4 +169,16 @@ test('wrong private Storage byte range stops before any Google bytes or delivery
  await assert.rejects(()=>r.run(),e=>
    e instanceof DriveUncertain&&e.code==='PROTECTED_SOURCE_CHUNK_UNAVAILABLE');
  assert.deepEqual(r.totals,{posts:1,uploads:0,confirmed:0,offset:0});
+});
+
+test('uploaded bytes cannot yield a receipt after remote file rename or shared-drive move',async()=>{
+ for(const scenario of [{remoteMoved:true},{remoteRenamed:true}]){
+  const r=rig(scenario);
+  assert.equal((await r.run()).state,'PROGRESS');
+  await assert.rejects(()=>r.run(),e=>e instanceof DriveUncertain
+    &&e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
+  assert.equal(r.totals.posts,1);
+  assert.equal(r.totals.uploads,2);
+  assert.equal(r.totals.confirmed,0);
+ }
 });
