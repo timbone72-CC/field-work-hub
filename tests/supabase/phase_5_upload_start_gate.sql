@@ -72,15 +72,16 @@ begin
      jsonb_build_object('schema',1,'revision',gen_random_uuid(),
        'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb)) j;
   execute 'reset role';
+  -- A real frozen package gets its exact address from its already-bound WO.
+  -- The existing database trigger, not this test fixture, owns that snapshot.
+  update public.work_orders set client_company_id=company where id=work;
   select current_run_id into run_id from public.work_orders where id=work;
 
   insert into private.client_packages
     (id,organization_id,work_order_id,run_id,company_id,status,
-     approved_manifest,approved_sha256,approved_by,approved_at,
-     destination_id,folder_address_snapshot,folder_address_key)
+     approved_manifest,approved_sha256,approved_by,approved_at,destination_id)
    values(pkg,org,work,run_id,company,'DELIVERING','{}'::jsonb,
-     manifest_hash,admin_id,now(),destination,
-     'DISPOSABLE ADDRESS',repeat('b',64));
+     manifest_hash,admin_id,now(),destination);
   insert into private.client_package_actions
     (action_id,package_id,actor_user_id,action_kind,request_fingerprint,result)
    values(action_id,pkg,admin_id,'SEND',repeat('c',64),'{}'::jsonb);
