@@ -46,17 +46,31 @@ export function createReadOnlyTestHandler({
     if(!body||Array.isArray(body)||Object.keys(body).length!==1
        ||body.operation!=='verify_test_connection')
       return reply(400,'EXACT_REQUEST_REQUIRED');
-    if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
-      ||!ID.test(clientRootId)||!ID.test(expectedDriveId)
-      ||!ID.test(internalDriveId)
-      ||clientRootId===expectedDriveId||clientRootId===internalDriveId
-      ||expectedDriveId===internalDriveId
-      ||!DOMAIN.test(workspaceDomain)
-      ||typeof expectedEmail!=='string'
-      ||expectedEmail.toLowerCase().split('@')[1]!==workspaceDomain
-      ||!clientId||!clientSecret||!refreshToken
-      ||!['https://www.googleapis.com/auth/drive','https://www.googleapis.com/auth/drive.file'].includes(oauthScope))
-      return reply(503,'TEST_PROVIDER_NOT_CONFIGURED');
+    // Authenticated diagnostics disclose only the *names* of invalid host
+    // configuration keys. Never echo provider IDs, emails, credential values,
+    // lengths, token hashes, user-supplied fields, or Google error messages.
+    const invalid=[];
+    const requireConfig=(name,failed)=>{if(failed)invalid.push(name);};
+    requireConfig('FWH_TEST_EVIDENCE_CLASS',testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY');
+    requireConfig('FWH_CLIENT_TEST_ROOT_FOLDER_ID',!ID.test(clientRootId)
+      ||clientRootId===expectedDriveId||clientRootId===internalDriveId);
+    requireConfig('FWH_CLIENT_SHARED_DRIVE_ID',!ID.test(expectedDriveId)
+      ||expectedDriveId===clientRootId||expectedDriveId===internalDriveId);
+    requireConfig('FWH_INTERNAL_SHARED_DRIVE_ID',!ID.test(internalDriveId)
+      ||internalDriveId===clientRootId||internalDriveId===expectedDriveId);
+    requireConfig('FWH_TEST_WORKSPACE_DOMAIN',!DOMAIN.test(workspaceDomain));
+    requireConfig('FWH_CLIENT_DRIVE_ACCOUNT',typeof expectedEmail!=='string'
+      ||expectedEmail.toLowerCase().split('@')[1]!==workspaceDomain);
+    requireConfig('FWH_GOOGLE_OAUTH_CLIENT_ID',!clientId);
+    requireConfig('FWH_GOOGLE_OAUTH_CLIENT_SECRET',!clientSecret);
+    requireConfig('FWH_GOOGLE_OAUTH_REFRESH_TOKEN',!refreshToken);
+    requireConfig('FWH_GOOGLE_OAUTH_SCOPE',
+      !['https://www.googleapis.com/auth/drive','https://www.googleapis.com/auth/drive.file'].includes(oauthScope));
+    if(invalid.length!==0)
+      return new Response(JSON.stringify({status:'TEST_PROVIDER_NOT_CONFIGURED',
+        invalid_fields:invalid}),{status:503,headers:{
+          'Content-Type':'application/json','Cache-Control':'no-store, private'
+        }});
     try{
       const getToken=createWorkspaceTokenProvider({
         clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
