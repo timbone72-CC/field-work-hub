@@ -86,8 +86,16 @@ export async function runDisposableFileProof({config,drive,journal,mode}={}){
   }
   if(r===null)block('TEST_FILE_NOT_RESERVED');
   const bytes=validate(r,config);
-  if(r.state==='RESERVED'||r.state==='START_ATTEMPTED')
-    block('TEST_SESSION_UNCERTAIN_NO_RECREATE');
+  if(r.state==='RESERVED')block('TEST_FILE_RESERVED_NO_CREATE');
+  if(r.state==='START_ATTEMPTED'){
+    // Lost session initiation is ambiguous. The only permitted recovery is
+    // an independent GET of the original immutable ID, NEVER another POST.
+    // A 404/403 is uncertainty, not proof that recreating it is safe.
+    if(mode!=='verify')block('TEST_SESSION_UNCERTAIN_NO_RECREATE');
+    await proof(drive,config,r);
+    await journal.update({...r,state:'VERIFIED'});
+    return {status:'SAME_TEST_FILE_VERIFIED',writes:false};
+  }
   if(mode==='verify'||r.state==='VERIFIED'){
     await proof(drive,config,r);
     if(r.state!=='VERIFIED')await journal.update({...r,state:'VERIFIED'});
