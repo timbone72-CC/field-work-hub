@@ -36,7 +36,12 @@ export async function transferOnePreparedChunk({
     // cannot initiate another session for this same reserved remote file.
     if(typeof ledger.beginSession!=='function')
       throw new DriveUncertain('UPLOAD_SESSION_START_FENCE_REQUIRED');
-    await ledger.beginSession(plan.plan_id);
+    const startRecord=await ledger.beginSession(plan.plan_id);
+    // A successful HTTP response alone does not prove the one-shot marker
+    // committed for this plan. Never send a provider POST on a missing,
+    // denied, stale or malformed service acknowledgement.
+    if(startRecord?.start_recorded!==true||startRecord.plan_id!==plan.plan_id)
+      throw new DriveUncertain('UPLOAD_SESSION_START_UNCONFIRMED');
     const started=await drive.startResumable({id:plan.file_id,parent:plan.parent_id,
       name:plan.name,mime:plan.mime,appProperties:plan.appProperties},{size:plan.size});
     if(started.remote_id!==plan.file_id||started.total!==plan.size)

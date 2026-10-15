@@ -9,7 +9,8 @@ const plan={package_id:uuid(1),plan_id:uuid(2),kind:'PHOTO',
  name:'001.jpg',mime:'image/jpeg',size:300000,sha256:'a'.repeat(64),
  appProperties:{fwh_package:uuid(1),fwh_manifest:'a'.repeat(64)}};
 const workerId=uuid(7),generation=2,expectedDriveId='client_drive_'+'c'.repeat(20);
-function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false,failStart=false}={}){
+function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false,
+  failStart=false,failBegin=false,beginReply=undefined}={}){
  let entry=null,offset=0,uploaded=0,receipts=0,read=0,started=false;
  const events=[];
  const vault={
@@ -28,6 +29,9 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
     assert.equal(id,plan.plan_id);
     if(started)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
     started=true;
+    if(failBegin)throw new DriveUncertain('SERVICE_RPC_OUTCOME_UNCERTAIN');
+    return beginReply===undefined
+      ? {plan_id:plan.plan_id,start_recorded:true} : beginReply;
   },
   storeSession:async(pkg,worker,gen,id,encrypted)=>{
    events.push('store');if(failStore)throw Error('PERSISTENCE_BLOCKED');
@@ -106,6 +110,28 @@ test('uncertain Google session-start is durably fenced before any repeated POST'
  assert.equal(r.events.filter(e=>e==='start').length,1);
  assert.equal(r.counters.uploaded,0);
  assert.equal(r.counters.receipts,0);
+});
+test('lost SQL begin response cannot start a Google session and stays frozen',async()=>{
+ const r=rig({failBegin:true});
+ await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
+   &&e.code==='SERVICE_RPC_OUTCOME_UNCERTAIN');
+ await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
+   &&e.code==='UPLOAD_SESSION_START_UNCERTAIN');
+ assert.equal(r.events.filter(x=>x==='start').length,0);
+ assert.equal(r.counters.read,0);
+});
+test('a successful HTTP code without exact committed SQL start acknowledgement cannot contact Google',async()=>{
+ for(const beginReply of [null,{}, {plan_id:plan.plan_id,start_recorded:false},
+   {plan_id:uuid(98),start_recorded:true},{plan_id:plan.plan_id,start_recorded:'true'}]){
+  const r=rig({beginReply});
+  await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
+    &&e.code==='UPLOAD_SESSION_START_UNCONFIRMED');
+  await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
+    &&e.code==='UPLOAD_SESSION_START_UNCERTAIN');
+  assert.equal(r.events.filter(x=>x==='start').length,0);
+  assert.equal(r.counters.uploaded,0);
+  assert.equal(r.counters.receipts,0);
+ }
 });
 test('missing durable start RPC refuses Google POST and prepared bytes',async()=>{
  const r=rig();

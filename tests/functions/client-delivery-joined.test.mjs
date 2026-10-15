@@ -43,6 +43,7 @@ function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
    assert.equal(id,planId);events.push('durable_start');
    if(startAttempted)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
    startAttempted=true;
+   return {plan_id:planId,start_recorded:true};
   },
   storeSession:async(p,w,g,id,encrypted)=>{
    assert.deepEqual([p,w,g,id],[pkg,worker,gen,planId]);events.push('persist_session');

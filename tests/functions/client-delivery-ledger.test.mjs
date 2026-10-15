@@ -28,11 +28,13 @@ test('only current legacy service JWT can access allowlisted private worker RPCs
 });
 test('correct fenced lease identity is supplied for all upload session and delivery RPCs',async()=>{
  const pkg=uuid(1),worker=uuid(2),file=uuid(3),g=7;
- const {ledger,calls}=mock(()=>Response.json({exists:false}));
+ const {ledger,calls}=mock(url=>Response.json(
+   url.pathname.endsWith('/service_begin_upload_session')
+     ? {plan_id:file,start_recorded:true} : {exists:false}));
  const inner=ledger.forLease(pkg,worker,g);
  assert.equal(await inner.getSession(file),null);
  await inner.getFilePlan(file);
- await inner.beginSession(file);
+ assert.deepEqual(await inner.beginSession(file),{plan_id:file,start_recorded:true});
  await inner.storeSession(pkg,worker,g,file,{version:1,nonce:'none',payload:'encrypted'});
  await inner.recordOffset(pkg,worker,g,file,131072,false);
  await inner.confirmFile({package_id:pkg,kind:'PHOTO',photo_id:uuid(4),mime:'image/jpeg'},
