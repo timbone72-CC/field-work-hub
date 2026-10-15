@@ -85,6 +85,42 @@ test('full delivery switch, absent TEST flag, wrong roots or missing evidence st
   assert.equal(mock.calls.length,0,JSON.stringify(diff));
  }
 });
+
+test('private TEST configuration failure identifies names only; never credential values',async()=>{
+ const mock=provider();
+ const errors={
+  testEvidenceClass:'WRONG_EVIDENCE_CLASS',
+  clientRootId:'BAD_ROOT',
+  expectedDriveId:'BAD_DRIVE',
+  internalDriveId:'BAD_INTERNAL',
+  workspaceDomain:'not a domain',
+  expectedEmail:'test@not a domain',
+  clientId:'',
+  clientSecret:'',
+  refreshToken:'',
+  oauthScope:''
+ };
+ const response=await createReadOnlyTestHandler({...base,...errors,fetcher:mock.fetcher})(request());
+ assert.equal(response.status,503);
+ const report=await response.json();
+ assert.equal(report.status,'TEST_PROVIDER_NOT_CONFIGURED');
+ assert.deepEqual(report.invalid_fields,[
+  'FWH_TEST_EVIDENCE_CLASS','FWH_CLIENT_TEST_ROOT_FOLDER_ID',
+  'FWH_CLIENT_SHARED_DRIVE_ID','FWH_INTERNAL_SHARED_DRIVE_ID',
+  'FWH_TEST_WORKSPACE_DOMAIN','FWH_GOOGLE_OAUTH_CLIENT_ID',
+  'FWH_GOOGLE_OAUTH_CLIENT_SECRET','FWH_GOOGLE_OAUTH_REFRESH_TOKEN',
+  'FWH_GOOGLE_OAUTH_SCOPE'
+ ]);
+ const raw=JSON.stringify(report);
+ for(const privateValue of [KEY,ROOT,DRIVE,INTERNAL,ACCOUNT,base.clientId,
+    base.clientSecret,base.refreshToken,errors.clientRootId]){
+  assert.equal(raw.includes(privateValue),false,'no configured value may be echoed');
+ }
+ assert.equal(mock.calls.length,0);
+ const unauthorized=await createReadOnlyTestHandler({...base,...errors,fetcher:mock.fetcher})(request('verify_test_connection','wrong'));
+ assert.equal(unauthorized.status,401);
+ assert.deepEqual(await unauthorized.json(),{status:'WORKER_UNAUTHORIZED'});
+});
 test('non-TEST operations and altered payloads are denied without provider IO',async()=>{
  const mock=provider(),h=createReadOnlyTestHandler({...base,fetcher:mock.fetcher});
  for(const op of ['preallocate','send','upload','delete','list']){
