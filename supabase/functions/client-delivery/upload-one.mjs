@@ -5,9 +5,10 @@ import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
 const STEP=256*1024;
+const ID=/^[A-Za-z0-9_-]{10,160}$/;
 
 export async function transferOnePreparedChunk({
-  plan,workerId,generation,drive,ledger,vault,readProtectedChunk
+  plan,workerId,generation,drive,ledger,vault,readProtectedChunk,expectedDriveId
 }={}){
   if(!plan||!UUID.test(plan.package_id??'')||!UUID.test(workerId??'')
    ||!UUID.test(plan.plan_id??'')||!Number.isSafeInteger(generation)||generation<1
@@ -15,6 +16,7 @@ export async function transferOnePreparedChunk({
    ||!Number.isSafeInteger(plan.size)||plan.size<=0||plan.size>33554432
    ||typeof plan.file_id!=='string'||typeof plan.parent_id!=='string'
    ||!plan.appProperties||typeof readProtectedChunk!=='function'
+   ||!ID.test(expectedDriveId??'')||typeof plan.name!=='string'||!plan.name
    ||!ledger||!drive||!vault)throw new DriveUncertain('EXACT_PREALLOCATED_FILE_REQUIRED');
   const ctx={packageId:plan.package_id,fileId:plan.file_id};
   const auth=()=>ledger.heartbeat(plan.package_id,workerId,generation);
@@ -44,7 +46,8 @@ export async function transferOnePreparedChunk({
     await ledger.recordOffset(plan.package_id,workerId,generation,plan.plan_id,plan.size,true);
     await auth();
     const verified=await drive.verifyFile({id:plan.file_id,parent:plan.parent_id,
-      mime:plan.mime,sha256:plan.sha256,size:plan.size,appProperties:plan.appProperties});
+      mime:plan.mime,name:plan.name,expectedDriveId,
+      sha256:plan.sha256,size:plan.size,appProperties:plan.appProperties});
     await ledger.confirmFile(plan,workerId,generation,verified);
     return {state:'FILE_VERIFIED',plan_id:plan.plan_id,remote_id:plan.file_id};
   }
@@ -65,7 +68,8 @@ export async function transferOnePreparedChunk({
     await ledger.recordOffset(plan.package_id,workerId,generation,plan.plan_id,plan.size,true);
     await auth();
     const verified=await drive.verifyFile({id:plan.file_id,parent:plan.parent_id,
-      mime:plan.mime,sha256:plan.sha256,size:plan.size,appProperties:plan.appProperties});
+      mime:plan.mime,name:plan.name,expectedDriveId,
+      sha256:plan.sha256,size:plan.size,appProperties:plan.appProperties});
     await ledger.confirmFile(plan,workerId,generation,verified);
     return {state:'FILE_VERIFIED',plan_id:plan.plan_id,remote_id:plan.file_id};
   }
