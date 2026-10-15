@@ -128,12 +128,16 @@ export function createDriveClient({accessToken,fetcher=fetch}){
     async verifyFile({id,parent,mime,name=null,expectedDriveId=null,sha256,size,appProperties}){
       if(expectedDriveId!==null)valid(expectedDriveId,PARENT,'EXPECTED_SHARED_DRIVE_REQUIRED');
       const file=await get(id);
-      if(file.id!==valid(id,ID,'REMOTE_ID_REQUIRED')||file.trashed===true
+      if(file.id!==valid(id,ID,'REMOTE_ID_REQUIRED')||file.trashed!==false
         ||(expectedDriveId!==null&&file.driveId!==expectedDriveId)
         ||(name!==null&&file.name!==name)
         ||file.mimeType!==mime||!Array.isArray(file.parents)
         ||file.parents.length!==1||file.parents[0]!==parent
-        ||!appProperties||Object.keys(appProperties).some(k=>file.appProperties?.[k]!==appProperties[k]))
+        ||!appProperties||typeof appProperties!=='object'
+        ||!file.appProperties||typeof file.appProperties!=='object'
+        ||Object.keys(file.appProperties).sort().join(',')!==
+          Object.keys(appProperties).sort().join(',')
+        ||Object.keys(appProperties).some(k=>file.appProperties[k]!==appProperties[k]))
         throw new DriveUncertain('REMOTE_FILE_IDENTITY_MISMATCH');
       if(mime==='application/vnd.google-apps.folder'){
         if(sha256!=null||size!=null)throw new DriveUncertain('FOLDER_BYTES_UNEXPECTED');
