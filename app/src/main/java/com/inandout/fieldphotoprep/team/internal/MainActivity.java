@@ -62,6 +62,7 @@ public final class MainActivity extends Activity {
     private TextView workOrdersHeading;
     private TextView assignmentSummaryText;
     private LinearLayout workOrdersContainer;
+    private ScrollView mainScroll;
     private LinearLayout homePane;
     private LinearLayout workOrdersPane;
     private LinearLayout accountPane;
@@ -119,6 +120,7 @@ public final class MainActivity extends Activity {
         int padding = dp(20);
 
         ScrollView scroll = new ScrollView(this);
+        mainScroll = scroll;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(padding, padding, padding, padding);
@@ -1101,7 +1103,9 @@ public final class MainActivity extends Activity {
 
     private void showPage(String page) {
         if (currentSession == null) return;
+        boolean changedPage = !page.equals(selectedPage);
         selectedPage = page;
+        if (changedPage && mainScroll != null) mainScroll.scrollTo(0, 0);
         homePane.setVisibility(PAGE_HOME.equals(page) ? View.VISIBLE : View.GONE);
         workOrdersPane.setVisibility(PAGE_WORK_ORDERS.equals(page) ? View.VISIBLE : View.GONE);
         accountPane.setVisibility(PAGE_ACCOUNT.equals(page) ? View.VISIBLE : View.GONE);
