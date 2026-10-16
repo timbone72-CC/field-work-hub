@@ -213,6 +213,47 @@ jobs:
                   "but the PR changes non-Markdown files."
               )
 
+          # Reuse the existing PR handoff section; don't introduce a new form.
+          # This validates presence of a checkpoint, not truth of reported evidence.
+          if level in {"Level 2", "Level 3"}:
+              handoff_heading = re.search(
+                  r"(?im)^##[ \t]+Evidence[ \t]*/[ \t]*Remaining[ \t]+Gates[ \t]*$",
+                  body,
+              )
+              if not handoff_heading:
+                  errors.append(
+                      "Level 2/3 work requires the existing 'Evidence / Remaining Gates' "
+                      "PR section for durable handoff."
+                  )
+              else:
+                  handoff_tail = body[handoff_heading.end():]
+                  following_heading = re.search(r"(?m)^##[ \t]+", handoff_tail)
+                  handoff_text = handoff_tail[
+                      :following_heading.start() if following_heading else None
+                  ]
+                  handoff_text = re.sub(
+                      r"<!--.*?-->", "", handoff_text, flags=re.DOTALL
+                  ).strip()
+                  if not handoff_text:
+                      errors.append(
+                          "The 'Evidence / Remaining Gates' section is empty; "
+                          "preserve verified evidence and record the next checkpoint."
+                      )
+                  else:
+                      if not re.search(
+                          r"\b(?:pass|passed|success|verified|accepted|blocked|fail|failed|pending|not required|not run)\b",
+                          handoff_text, flags=re.IGNORECASE
+                      ):
+                          errors.append(
+                              "The handoff must identify actual PASS/BLOCKED/FAIL/PENDING "
+                              "evidence (or state that verification is not required)."
+                          )
+                      if not re.search(r"\bnext\b", handoff_text, flags=re.IGNORECASE):
+                          errors.append(
+                              "The handoff must state the next checkpoint so subsequent "
+                              "AI sessions can resume without restarting accepted work."
+                          )
+
           if errors:
               print("Governance check FAILED:")
               for error in errors:
