@@ -1317,8 +1317,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // a still-open dialog is a test failure, not an excuse to force-click.
     await wait(page,()=>!document.querySelector('#edit-work-order-section').open);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
-    layoutListDelayed=true;
+    // Open one authorized job to initiate the delayed request; account-level
+    // controls are inaccessible while this modal is open by design.
+    await page.locator('.job-link').first().click();
+    await wait(page,()=>document.querySelector('#edit-work-order-section').open);
     await page.locator('[data-job-tab="delivery"]').click();
+    layoutListDelayed=true;
     await Promise.all([
       page.waitForRequest(request=>request.url().includes('/admin_list_client_folder_destinations')),
       page.locator('#folder-layout-refresh').click()
@@ -1326,15 +1330,19 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     for(let tries=0;tries<30&&!resolveLayoutList;tries++)
       await new Promise(resolve=>setTimeout(resolve,10));
     assert.equal(typeof resolveLayoutList,'function',
-      'The original list response must still be in flight before sign-out.');
-    await page.locator('#sign-out').click();
+      'An original client-destination list must be in flight before leaving its job.');
+    await page.locator('#cancel-edit').click();
+    await wait(page,()=>!document.querySelector('#edit-work-order-section').open);
     assert.equal(await page.locator('#folder-layout-destination option').count(),1,
-      'Previous company destination choices must clear on sign-out.');
-    assert.equal(await page.locator('#folder-layout-status').innerText(),'');
-    resolveLayoutList(); layoutListDelayed=false; layoutListRequested=false;
+      'Closing a job must clear the prior job destination list.');
+    resolveLayoutList();layoutListDelayed=false;layoutListRequested=false;
     await page.waitForTimeout(150);
     assert.equal(await page.locator('#folder-layout-destination option').count(),1,
-      'Late old-account destination list must not reappear after sign-out.');
+      'Late previous-job destination data must never reappear.');
+    await page.locator('#sign-out').click();
+    assert.equal(await page.locator('#folder-layout-destination option').count(),1,
+      'Account sign-out cannot preserve another user’s destination choices.');
+    assert.equal(await page.locator('#folder-layout-status').innerText(),'');
     admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');
     assert.equal(await page.locator('#instructions').inputValue(), '', 'Repeat draft instructions must be cleared between accounts');
