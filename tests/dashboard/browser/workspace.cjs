@@ -1017,6 +1017,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'Unknown preference write cannot be edited or applied under a new ID.');
     assert.equal(await page.locator('#folder-layout-refresh').isDisabled(),true,
       'A refresh cannot hide unresolved preference revision.');
+    // Rotate the bearer string WITHOUT changing signed-in user or session epoch.
+    // An ordinary refresh must never strand an in-flight action.
+    await page.evaluate(()=>{window.__originalClientBearer=accessToken;
+      accessToken='synthetic-same-user-refreshed-bearer';});
     await page.locator('#folder-layout-save').click();
     await wait(page,()=>document.querySelector('#folder-layout-status')?.textContent.includes('preference saved'));
     assert.equal(layoutWrites.length,2);
@@ -1037,6 +1041,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'An uncertain proposal freezes exact folder and account.');
     await page.locator('#folder-proposal-submit').click();
     await wait(page,()=>document.querySelector('#folder-proposal-status')?.textContent.includes('INACTIVE and UNVERIFIED'));
+    await page.evaluate(()=>{accessToken=window.__originalClientBearer;
+      delete window.__originalClientBearer;});
     assert.equal(destinationAttempts.length,2);
     assert.equal(destinationAttempts[0].p_action,destinationAttempts[1].p_action,
       'Transport uncertainty must reuse the identical proposal UUID.');

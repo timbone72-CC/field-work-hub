@@ -20,8 +20,10 @@ const ClientFolderLayout = (() => {
   const choiceEl = $('folder-layout-choice');
   const saveEl = $('folder-layout-save');
   const refreshEl = $('folder-layout-refresh');
-  const currentLayout = (request, token, actor, job) =>
-    request === revision && !!token && token === accessToken
+  // Token values rotate during a normal refresh. The existing session epoch
+  // changes on sign-out/new sign-in, not on a same-user refresh.
+  const currentLayout = (request, session, actor, job) =>
+    request === revision && !!accessToken && session === adminSessionEpoch
     && actor === currentUser?.id && job === editWorkOrderIdInput.value;
   function selected() {
     return entries.find(x => x.destination_id === destinationEl.value);
@@ -54,15 +56,15 @@ const ClientFolderLayout = (() => {
   }
   async function load() {
     if (busy || layoutPending) return;
-    const token = accessToken, actor = currentUser?.id, job = editWorkOrderIdInput.value;
-    if (!token || !actor || !job) {
+    const session = adminSessionEpoch, actor = currentUser?.id, job = editWorkOrderIdInput.value;
+    if (!accessToken || !actor || !job) {
       clearVerified(); return;
     }
     const request = ++revision;
     busy = true; updateLayoutButtons(); message('Checking authorized client destinations…');
     try {
       const result = await rpc('admin_list_client_folder_destinations');
-      if (!currentLayout(request, token, actor, job)) return;
+      if (!currentLayout(request, session, actor, job)) return;
       if (!Array.isArray(result?.destinations)) throw Error('Destination response was incomplete.');
       const ids = new Set();
       const fresh = [];
@@ -82,20 +84,20 @@ const ClientFolderLayout = (() => {
         ...entries.map(e => new Option(e.company_name, e.destination_id)));
       renderSelection();
     } catch (error) {
-      if (currentLayout(request, token, actor, job)) {
+      if (currentLayout(request, session, actor, job)) {
         entries = []; destinationEl.replaceChildren(new Option('No verified destinations', ''));
         message(error.message);
       }
     } finally {
-      if (currentLayout(request, token, actor, job)) {
+      if (currentLayout(request, session, actor, job)) {
         busy = false; updateLayoutButtons();
       }
     }
   }
   async function save() {
-    const token = accessToken, actor = currentUser?.id, job = editWorkOrderIdInput.value;
+    const session = adminSessionEpoch, actor = currentUser?.id, job = editWorkOrderIdInput.value;
     const e = selected();
-    if (!e || busy || !token || !actor || !job) return;
+    if (!e || busy || !accessToken || !actor || !job) return;
     if (!layoutPending) {
       const chosen = choiceEl.value;
       if (!layouts.has(chosen) || chosen === e.layout) return;
@@ -110,11 +112,11 @@ const ClientFolderLayout = (() => {
       const response = await adminFetch(SUPABASE_URL + '/rest/v1/rpc/admin_set_client_folder_layout', {
         method: 'POST',
         headers: {apikey: SUPABASE_PUBLISHABLE_KEY,
-          Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'},
+          Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json'},
         body: JSON.stringify({p_action: frozen.action, p_destination: frozen.destination,
           p_expected_revision: frozen.expectedRevision, p_layout: frozen.layout})
       });
-      if (!currentLayout(request, token, actor, job)) return;
+      if (!currentLayout(request, session, actor, job)) return;
       if (!response.ok) {
         if ([408, 429, 500, 502, 503, 504].includes(response.status)) {
           message('Save outcome uncertain (HTTP ' + response.status
@@ -128,7 +130,7 @@ const ClientFolderLayout = (() => {
         return;
       }
       const result = await response.json();
-      if (!currentLayout(request, token, actor, job)) return;
+      if (!currentLayout(request, session, actor, job)) return;
       if (result?.destination_id !== frozen.destination || result?.company_id !== frozen.company
         || result?.layout !== frozen.layout || !UUID.test(result?.revision || '')) {
         message('Save confirmation is incomplete. Retry ONLY the same action to reconcile.');
@@ -138,10 +140,10 @@ const ClientFolderLayout = (() => {
       layoutPending = null;
       message('Folder preference saved. No photos or existing folders were moved.');
     } catch {
-      if (currentLayout(request, token, actor, job))
+      if (currentLayout(request, session, actor, job))
         message('Connection outcome uncertain. Retry ONLY the same preference action.');
     } finally {
-      if (currentLayout(request, token, actor, job)) {
+      if (currentLayout(request, session, actor, job)) {
         busy = false; updateLayoutButtons();
       }
     }
@@ -152,12 +154,12 @@ const ClientFolderLayout = (() => {
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const DRIVE=/^[A-Za-z0-9_-]{10,160}$/;
   const EMAIL=/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
-  let proposalJob='',proposalActor='',proposalToken='',proposalEpoch=0;
+  let proposalJob='',proposalActor='',proposalAuthEpoch=-1,proposalEpoch=0;
   let proposalCompanies=[],pending=null,confirmed=false,proposalBusy=false;
   const pe=name=>$('folder-proposal-'+name);
   const say=msg=>{pe('status').textContent=msg;};
   const sameSession=epoch=>epoch===proposalEpoch&&!!accessToken
-    &&proposalToken===accessToken&&proposalActor===currentUser?.id
+    &&proposalAuthEpoch===adminSessionEpoch&&proposalActor===currentUser?.id
     &&proposalJob===editWorkOrderIdInput.value;
   function buttons(){
     const frozen=proposalBusy||!!pending||confirmed||!proposalJob;
@@ -170,7 +172,7 @@ const ClientFolderLayout = (() => {
     pe('submit').textContent=pending?'Retry exact proposal':'Record inactive proposal';
   }
   function resetProposal(){
-    proposalEpoch++;proposalJob='';proposalActor='';proposalToken='';
+    proposalEpoch++;proposalJob='';proposalActor='';proposalAuthEpoch=-1;
     proposalCompanies=[];pending=null;confirmed=false;proposalBusy=false;
     pe('area').hidden=true;
     pe('company').replaceChildren(new Option('Choose authorized client',''));
@@ -179,9 +181,9 @@ const ClientFolderLayout = (() => {
   function bindProposal(choice,token){
     if(!UUID.test(choice?.work_order_id||'')||!Array.isArray(choice?.companies)
       ||!currentUser?.id||token!==accessToken){resetProposal();return;}
-    if(proposalJob!==choice.work_order_id||proposalActor!==currentUser.id||proposalToken!==token)
+    if(proposalJob!==choice.work_order_id||proposalActor!==currentUser.id||proposalAuthEpoch!==adminSessionEpoch)
       resetProposal();
-    proposalJob=choice.work_order_id;proposalActor=currentUser.id;proposalToken=token;
+    proposalJob=choice.work_order_id;proposalActor=currentUser.id;proposalAuthEpoch=adminSessionEpoch;
     proposalCompanies=choice.companies.filter(c=>UUID.test(c?.id||'')
       &&typeof c.name==='string'&&c.name.length<=320).slice(0,100);
     if(pending&&!proposalCompanies.some(c=>c.id===pending.company)){resetProposal();return;}
@@ -209,7 +211,7 @@ const ClientFolderLayout = (() => {
     try{
       const response=await adminFetch(SUPABASE_URL+'/rest/v1/rpc/admin_propose_client_delivery_destination',{
         method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,
-          Authorization:'Bearer '+proposalToken,'Content-Type':'application/json'},
+          Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
         body:JSON.stringify({p_action:request.action,p_company:request.company,
           p_workspace_email:request.email,p_root_folder_id:request.root})
       });
