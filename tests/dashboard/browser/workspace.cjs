@@ -37,6 +37,7 @@ let largeReview=false,maxPhotoPage=0;
 const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(9903);
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
+let destinationAttempts=[],destinationFailOnce=true;
 let largePackage=false,packagePageCalls=0,persistedPackagePhotoIds=[];
 const alertTypes=['READY_FOR_REVIEW','FOLLOWUP_READY_FOR_REVIEW','ASSIGNMENT_NEEDS_ACCEPT','ACCEPT_REMINDER',
   'OVERDUE','UPLOAD_PROBLEM','APP_OR_SYNC_PROBLEM','DELIVERY_PROBLEM','CLIENT_DELIVERED'];
@@ -607,6 +608,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply({organization_id:organization,timezone:p.p_timezone,revision:uuid(9753)});
       }
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
+      if (url.pathname.endsWith('/admin_propose_client_delivery_destination')) {
+        const p=req.postDataJSON();destinationAttempts.push(p);
+        assert.equal(p.p_company,uuid(9981));
+        assert.equal(p.p_workspace_email,'operator@disposable.invalid');
+        assert.equal(p.p_root_folder_id,'disposable_client_root_12345678');
+        assert.ok(/^[a-f0-9-]{36}$/.test(p.p_action));
+        if(destinationFailOnce){destinationFailOnce=false;return reply({code:'synthetic_transport_uncertain'},503);}
+        return reply({destination_id:uuid(9890),company_id:p.p_company,
+          verified:false,active:false,revision:uuid(9891),replayed:true});
+      }
       if (url.pathname.endsWith('/admin_client_choices')) {
         const p=req.postDataJSON();
         return reply({work_order_id:p.p_wo,client_company_id:selectedCompany,review_required:reviewRequired,
@@ -971,6 +982,29 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page,()=>document.querySelector('#private-review-list strong')?.textContent.includes('APPROVED'));
     await page.locator('[data-job-tab="delivery"]').click();
     await wait(page, () => document.querySelector('#release-status').textContent.includes('No package saved'));
+
+    await page.locator('#client-folder-settings > summary').click();
+    await page.locator('#folder-proposal-company').selectOption(uuid(9981));
+    await page.locator('#folder-proposal-email').fill('operator@disposable.invalid');
+    await page.locator('#folder-proposal-root').fill('invalid url!');
+    assert.equal(await page.locator('#folder-proposal-submit').isDisabled(),true,
+      'Invalid candidate root cannot be submitted.');
+    await page.locator('#folder-proposal-root').fill('disposable_client_root_12345678');
+    await page.locator('#folder-proposal-submit').click();
+    await wait(page,()=>document.querySelector('#folder-proposal-status')?.textContent.includes('Result uncertain'));
+    assert.equal(destinationAttempts.length,1);
+    assert.equal(await page.locator('#folder-proposal-root').isDisabled(),true,
+      'An uncertain proposal freezes exact folder and account.');
+    await page.locator('#folder-proposal-submit').click();
+    await wait(page,()=>document.querySelector('#folder-proposal-status')?.textContent.includes('INACTIVE and UNVERIFIED'));
+    assert.equal(destinationAttempts.length,2);
+    assert.equal(destinationAttempts[0].p_action,destinationAttempts[1].p_action,
+      'Transport uncertainty must reuse the identical proposal UUID.');
+    assert.equal(await page.locator('#folder-proposal-submit').isDisabled(),true);
+    assert.equal(await page.locator('#release-send').isDisabled(),true,
+      'Unverified storage proposal can never turn on Send.');
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false,
+      'Destination proposal must not implicitly queue client delivery.');
     assert.equal(await page.locator('#release-send').isDisabled(), true, 'No verified destination or approved package: no Send');
     assert.equal(await page.locator('#release-approve').isDisabled(), true, 'No draft: no Approve');
     assert.equal(requests.some(x => x.includes('admin_queue_package')), false, 'Preview/navigation cannot Send');

@@ -324,6 +324,17 @@
                 <button id="folder-layout-save" type="button" disabled>Save folder preference</button>
               </div>
               <p id="folder-layout-status" class="status" aria-live="polite" role="status"></p>
+              <div id="folder-proposal-area" hidden>
+                <h4>Propose client storage (inactive)</h4>
+                <p class="muted">Save an unverified candidate for this client. Use the client's designated Google Drive folder ID, NOT Field Work Hub's internal company Shared Drive. This does not create a folder, authorize uploads, or enable Send.</p>
+                <label>Client company <select id="folder-proposal-company" disabled><option value="">Choose authorized client</option></select></label>
+                <div class="form-grid">
+                  <label>Authorized Workspace account <input id="folder-proposal-email" type="email" maxlength="254" autocomplete="off" placeholder="user@company.example" disabled></label>
+                  <label>Client folder ID (not a URL) <input id="folder-proposal-root" type="text" maxlength="160" spellcheck="false" autocomplete="off" placeholder="Exact Drive folder ID" disabled></label>
+                </div>
+                <button id="folder-proposal-submit" type="button" class="secondary" disabled>Record inactive proposal</button>
+                <p id="folder-proposal-status" class="status" role="status" aria-live="polite"></p>
+              </div>
             </details>
             <label>Client company <select id="release-company" disabled><option value="">Not assigned</option></select></label>
             <div class="workspace-navigation"><button id="release-new-company" type="button" class="secondary" disabled>Add client company</button>

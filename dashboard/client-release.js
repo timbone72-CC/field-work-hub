@@ -19,6 +19,7 @@ const ClientRelease = (() => {
   };
   function reset() {
     seq++; wo=''; config=null; pkg=null; chosen.clear(); photoFacts=[];
+    ClientFolderLayout.resetProposal();
     busy=false; loaded=false; savedNotes=''; savedPhotoIds=[]; previewedHash=null; tooMany=false;
     paged=false;photoCursor=null;paging=false;
     el('release-photos-more').hidden=true;el('release-photo-count').textContent='No photos selected.';
@@ -73,6 +74,7 @@ const ClientRelease = (() => {
       if(!valid(n,id,token))return;
       if(choice.work_order_id!==id || !Array.isArray(choice.companies)) throw Error('Client scope mismatch');
       config=choice;
+      ClientFolderLayout.bindProposal(choice,token);
       status('review-policy-status',choice.review_required ? 'Individual photo review is required.' : 'Individual photo review is optional; package approval and Send are still required.');
       const options=el('release-company');options.replaceChildren(new Option('Choose company',''));
       for(const company of choice.companies)options.add(new Option(company.name,company.id));
