@@ -14,6 +14,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,6 +29,9 @@ import android.widget.TextView;
 import java.io.IOException;
 import java.io.File;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -62,6 +67,16 @@ public final class MainActivity extends Activity {
     private TextView workOrdersHeading;
     private TextView assignmentSummaryText;
     private LinearLayout workOrdersContainer;
+    private ScrollView workOrdersScroll;
+    private EditText workOrderSearch;
+    private LinearLayout detailPane;
+    private LinearLayout detailContainer;
+    private TextView detailHeading;
+    private ScrollView detailScroll;
+    private List<SupabaseApi.WorkOrder> downloadedWorkOrders = Collections.emptyList();
+    private String selectedWorkOrderId = "";
+    private String selectedRunId = "";
+    private String selectedAssignmentInstanceId = "";
     private ScrollView mainScroll;
     private LinearLayout homePane;
     private LinearLayout workOrdersPane;
@@ -69,6 +84,7 @@ public final class MainActivity extends Activity {
     private static final String PAGE_HOME = "HOME";
     private static final String PAGE_WORK_ORDERS = "WORK_ORDERS";
     private static final String PAGE_ACCOUNT = "ACCOUNT";
+    private static final String PAGE_DETAIL = "WORK_ORDER_DETAIL";
     private String selectedPage = PAGE_HOME;
     private SupabaseApi.AuthSession currentSession;
     private final androidx.room.InvalidationTracker.Observer evidenceObserver =
@@ -118,23 +134,37 @@ public final class MainActivity extends Activity {
 
     private View buildContent() {
         int padding = dp(20);
-
-        ScrollView scroll = new ScrollView(this);
-        mainScroll = scroll;
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(padding, padding, padding, padding);
-        root.setBackgroundColor(Color.rgb(246, 248, 251));
-        root.setLayoutParams(
-                new ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        scroll.addView(root);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(Color.rgb(246, 248, 251));
+        shell.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         TextView appName = text(getString(R.string.app_name), 14, false);
         appName.setBackgroundColor(Color.rgb(23, 42, 64));
         appName.setTextColor(Color.WHITE);
-        appName.setPadding(dp(14), dp(15), dp(14), dp(15));
-        root.addView(appName);
+        appName.setPadding(dp(20), dp(14), dp(20), dp(14));
+        shell.addView(appName);
+
+        progress = new ProgressBar(this);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        progressParams.gravity = Gravity.CENTER_HORIZONTAL;
+        progress.setLayoutParams(progressParams);
+        shell.addView(progress);
+
+        statusText = text("", 14, false);
+        statusText.setPadding(dp(20), dp(4), dp(20), dp(4));
+        shell.addView(statusText);
+
+        mainScroll = new ScrollView(this);
+        mainScroll.setFillViewport(true);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(padding, padding, padding, padding);
+        mainScroll.addView(root);
+        shell.addView(mainScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         screenTitle = text(getString(R.string.phase1_title), 26, true);
         screenTitle.setPadding(0, dp(8), 0, dp(6));
@@ -149,48 +179,30 @@ public final class MainActivity extends Activity {
         emailInput.setInputType(
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         emailInput.setSingleLine(true);
-        emailInput.setLayoutParams(matchWrap());
-        root.addView(emailInput);
+        root.addView(emailInput, matchWrap());
 
         passwordInput = new EditText(this);
         passwordInput.setHint(R.string.password_hint);
         passwordInput.setInputType(
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         passwordInput.setSingleLine(true);
-        passwordInput.setLayoutParams(matchWrap());
-        root.addView(passwordInput);
+        root.addView(passwordInput, matchWrap());
 
         signInButton = new Button(this);
         signInButton.setText(R.string.sign_in);
         signInButton.setOnClickListener(v -> beginSignIn());
-        signInButton.setLayoutParams(matchWrap());
-        root.addView(signInButton);
-
-        progress = new ProgressBar(this);
-        LinearLayout.LayoutParams progressParams =
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        progressParams.gravity = Gravity.CENTER_HORIZONTAL;
-        progressParams.topMargin = dp(12);
-        progress.setLayoutParams(progressParams);
-        root.addView(progress);
-
-        statusText = text("", 15, false);
-        statusText.setPadding(0, dp(12), 0, 0);
-        root.addView(statusText);
+        root.addView(signInButton, matchWrap());
 
         identityText = text("", 15, false);
         identityText.setPadding(0, dp(12), 0, 0);
-        // Placed in accountPane after that page has been initialized.
-
         rlsText = text("", 15, true);
         rlsText.setPadding(0, dp(12), 0, dp(12));
-        root.addView(rlsText);
 
         homePane = new LinearLayout(this);
         homePane.setOrientation(LinearLayout.VERTICAL);
         homePane.setPadding(0, dp(8), 0, dp(8));
         root.addView(homePane, matchWrap());
+
         TextView homeLabel = text("YOUR WORKSPACE", 12, true);
         homeLabel.setTextColor(Color.rgb(80, 101, 124));
         homeLabel.setPadding(dp(4), dp(6), 0, dp(14));
@@ -207,65 +219,101 @@ public final class MainActivity extends Activity {
         accountPane.addView(navigationButton("← Home", false,
                 () -> showPage(PAGE_HOME)), matchWrap());
         accountPane.addView(identityText);
-
-        workOrdersPane = new LinearLayout(this);
-        workOrdersPane.setOrientation(LinearLayout.VERTICAL);
-        workOrdersPane.setPadding(0, dp(8), 0, 0);
-        root.addView(workOrdersPane, matchWrap());
-        workOrdersPane.addView(navigationButton("← Home", false,
-                () -> showPage(PAGE_HOME)), matchWrap());
+        accountPane.addView(rlsText);
 
         signOutButton = new Button(this);
         signOutButton.setText(R.string.sign_out);
         signOutButton.setOnClickListener(v -> signOut());
-        signOutButton.setLayoutParams(matchWrap());
-        accountPane.addView(signOutButton);
+        accountPane.addView(signOutButton, matchWrap());
 
         recoverPhotosButton = new Button(this);
         recoverPhotosButton.setText("Recover my photos");
-        recoverPhotosButton.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoRecoveryActivity.class)));
-        recoverPhotosButton.setLayoutParams(matchWrap());
-        homePane.addView(recoverPhotosButton);
+        recoverPhotosButton.setOnClickListener(v ->
+                startActivity(new Intent(this, PhotoRecoveryActivity.class)));
+        homePane.addView(recoverPhotosButton, matchWrap());
 
         updateCheckButton = new Button(this);
         updateCheckButton.setText("Check for Update");
         updateCheckButton.setOnClickListener(v -> checkForUpdates(true));
-        updateCheckButton.setLayoutParams(matchWrap());
-        accountPane.addView(updateCheckButton);
+        accountPane.addView(updateCheckButton, matchWrap());
 
         updateAppButton = new Button(this);
         updateAppButton.setText("Update App");
-        updateAppButton.setLayoutParams(matchWrap());
         updateAppButton.setVisibility(View.GONE);
         updateAppButton.setOnClickListener(v -> confirmUpdateDownload());
-        accountPane.addView(updateAppButton);
+        accountPane.addView(updateAppButton, matchWrap());
 
         updateStatus = text("", 13, false);
         updateStatus.setVisibility(View.GONE);
         accountPane.addView(updateStatus);
 
-        workOrdersHeading = text(getString(R.string.work_orders_heading), 20, true);
-        workOrdersHeading.setPadding(0, dp(20), 0, dp(4));
+        // Work Orders has one scroll owner: search/refresh/navigation stay above the list.
+        workOrdersPane = new LinearLayout(this);
+        workOrdersPane.setOrientation(LinearLayout.VERTICAL);
+        workOrdersPane.setPadding(padding, dp(10), padding, dp(10));
+        shell.addView(workOrdersPane, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        workOrdersPane.addView(navigationButton("← Home", false,
+                () -> showPage(PAGE_HOME)), matchWrap());
+
+        workOrdersHeading = text(getString(R.string.work_orders_heading), 22, true);
+        workOrdersHeading.setPadding(0, dp(6), 0, dp(4));
         workOrdersPane.addView(workOrdersHeading);
 
         assignmentSummaryText = text("", 14, false);
-        assignmentSummaryText.setPadding(0, 0, 0, dp(8));
+        assignmentSummaryText.setPadding(0, 0, 0, dp(6));
         workOrdersPane.addView(assignmentSummaryText);
+
+        workOrderSearch = new EditText(this);
+        workOrderSearch.setSingleLine(true);
+        workOrderSearch.setTextSize(16);
+        workOrderSearch.setHint("Search address or work order");
+        workOrderSearch.setInputType(InputType.TYPE_CLASS_TEXT);
+        workOrderSearch.setContentDescription("Search assigned work orders");
+        workOrderSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                renderVisibleWorkOrders();
+                if (workOrdersScroll != null) workOrdersScroll.scrollTo(0, 0);
+            }
+            @Override public void afterTextChanged(Editable e) {}
+        });
+        workOrdersPane.addView(workOrderSearch, matchWrap());
 
         refreshAssignmentsButton = new Button(this);
         refreshAssignmentsButton.setText(R.string.refresh_assignments);
         refreshAssignmentsButton.setOnClickListener(v -> refreshAssignments());
-        refreshAssignmentsButton.setLayoutParams(matchWrap());
-        workOrdersPane.addView(refreshAssignmentsButton);
+        workOrdersPane.addView(refreshAssignmentsButton, matchWrap());
 
+        workOrdersScroll = new ScrollView(this);
+        workOrdersScroll.setFillViewport(true);
+        workOrdersScroll.setSmoothScrollingEnabled(true);
         workOrdersContainer = new LinearLayout(this);
         workOrdersContainer.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams workOrderParams = matchWrap();
-        workOrderParams.topMargin = dp(12);
-        workOrdersContainer.setLayoutParams(workOrderParams);
-        workOrdersPane.addView(workOrdersContainer);
+        workOrdersContainer.setPadding(0, dp(8), 0, dp(10));
+        workOrdersScroll.addView(workOrdersContainer);
+        workOrdersPane.addView(workOrdersScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        return scroll;
+        // A detail view uses the already-tested job card and existing action handlers.
+        detailPane = new LinearLayout(this);
+        detailPane.setOrientation(LinearLayout.VERTICAL);
+        detailPane.setPadding(padding, dp(10), padding, dp(10));
+        shell.addView(detailPane, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        detailPane.addView(navigationButton("← Work Orders", false,
+                () -> showPage(PAGE_WORK_ORDERS)), matchWrap());
+        detailHeading = text("Work Order", 22, true);
+        detailHeading.setPadding(0, dp(6), 0, dp(4));
+        detailPane.addView(detailHeading);
+        detailScroll = new ScrollView(this);
+        detailContainer = new LinearLayout(this);
+        detailContainer.setOrientation(LinearLayout.VERTICAL);
+        detailScroll.addView(detailContainer);
+        detailPane.addView(detailScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        return shell;
     }
 
     private void restoreSavedSession() {
