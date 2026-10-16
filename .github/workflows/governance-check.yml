@@ -185,6 +185,34 @@ jobs:
                   "Signing-keystore changes require Level 3 governance."
               )
 
+          # Match declared PR scope against objective file ownership boundaries.
+          # This does not prove that edits within a boundary were approved.
+          declared_surfaces = (values.get("Affected surfaces") or "").casefold()
+          guarded_surfaces = (
+              ("app/", "Android client", ("android", "mobile", "room", "camera", "contractor client")),
+              ("dashboard/", "Admin dashboard", ("dashboard", "admin", "browser", "web")),
+              ("supabase/", "Supabase backend", ("supabase", "sql", "database", "auth", "rls", "rpc", "storage", "edge")),
+              (".github/workflows/", "GitHub Actions", ("github actions", "ci", "workflow", "pipeline", "governance")),
+          )
+          for prefix, label, aliases in guarded_surfaces:
+              if any(path.startswith(prefix) for path in changed_files) and not any(
+                  re.search(r"\b" + re.escape(alias) + r"\b", declared_surfaces)
+                  for alias in aliases
+              ):
+                  errors.append(
+                      f"{label} files changed under {prefix!r}, but 'Affected surfaces' "
+                      "does not declare that component. Reconcile the scope before proceeding."
+                  )
+
+          verification = (values.get("Verification boundary") or "").strip().casefold()
+          if re.match(r"^(?:docs?|documentation|markdown)[ -]only\b", verification) and any(
+              not path.endswith(".md") for path in changed_files
+          ):
+              errors.append(
+                  "Verification boundary claims documentation-only review, "
+                  "but the PR changes non-Markdown files."
+              )
+
           if errors:
               print("Governance check FAILED:")
               for error in errors:
