@@ -1111,8 +1111,14 @@ public final class MainActivity extends Activity {
         accountPane.setVisibility(PAGE_ACCOUNT.equals(page) ? View.VISIBLE : View.GONE);
         accountPane.getChildAt(0).setVisibility(View.VISIBLE);
         if (PAGE_WORK_ORDERS.equals(page)) {
-            screenTitle.setText(R.string.assignments_title);
-            screenIntro.setText(R.string.assignments_intro);
+            if ("CONTRACTOR".equals(currentSession.role)) {
+                screenTitle.setText(R.string.assignments_title);
+                screenIntro.setText(R.string.assignments_intro);
+            } else {
+                // Keep the existing non-contractor presentation unchanged.
+                screenTitle.setText(R.string.phase1_title);
+                screenIntro.setText(R.string.phase1_intro);
+            }
         } else if (PAGE_ACCOUNT.equals(page)) {
             screenTitle.setText("Account & Updates");
             screenIntro.setText("");
