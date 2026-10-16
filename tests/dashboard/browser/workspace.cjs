@@ -1319,8 +1319,14 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
     layoutListDelayed=true;
     await page.locator('[data-job-tab="delivery"]').click();
-    await page.locator('#folder-layout-refresh').click();
-    await wait(page,()=>layoutListRequested);
+    await Promise.all([
+      page.waitForRequest(request=>request.url().includes('/admin_list_client_folder_destinations')),
+      page.locator('#folder-layout-refresh').click()
+    ]);
+    for(let tries=0;tries<30&&!resolveLayoutList;tries++)
+      await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(typeof resolveLayoutList,'function',
+      'The original list response must still be in flight before sign-out.');
     await page.locator('#sign-out').click();
     assert.equal(await page.locator('#folder-layout-destination option').count(),1,
       'Previous company destination choices must clear on sign-out.');
