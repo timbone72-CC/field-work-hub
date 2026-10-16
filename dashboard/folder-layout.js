@@ -15,50 +15,136 @@ const ClientFolderLayout = (() => {
     return res.json();
   }
   const message = m => { $('folder-layout-status').textContent = m; };
-  function selected() {return entries.find(x=>x.destination_id===$('folder-layout-destination').value);}
+  let layoutPending = null;
+  const destinationEl = $('folder-layout-destination');
+  const choiceEl = $('folder-layout-choice');
+  const saveEl = $('folder-layout-save');
+  const refreshEl = $('folder-layout-refresh');
+  const currentLayout = (request, token, actor, job) =>
+    request === revision && !!token && token === accessToken
+    && actor === currentUser?.id && job === editWorkOrderIdInput.value;
+  function selected() {
+    return entries.find(x => x.destination_id === destinationEl.value);
+  }
+  function updateLayoutButtons() {
+    const e = selected();
+    destinationEl.disabled = busy || !!layoutPending || !entries.length;
+    choiceEl.disabled = !e || busy || !!layoutPending;
+    saveEl.disabled = !e || busy || (!layoutPending && choiceEl.value === e.layout);
+    saveEl.textContent = layoutPending ? 'Retry exact preference save' : 'Save folder preference';
+    refreshEl.disabled = busy || !!layoutPending;
+  }
   function renderSelection() {
-    const e=selected();
-    $('folder-layout-choice').value=e?.layout||'ADDRESS_WORK_ORDER';
-    $('folder-layout-choice').disabled=!e||busy;
-    $('folder-layout-save').disabled=!e||busy;
+    const e = selected();
+    if (!layoutPending) choiceEl.value = e?.layout || 'ADDRESS_WORK_ORDER';
+    updateLayoutButtons();
     message(e ? 'Applies to new packages only. Existing deliveries will not move.'
       : 'No verified client storage destinations are available.');
   }
+  function clearVerified() {
+    revision++; busy = false; layoutPending = null; entries = [];
+    destinationEl.replaceChildren(new Option('Load verified destinations', ''));
+    choiceEl.value = 'ADDRESS_WORK_ORDER';
+    message('');
+    updateLayoutButtons();
+  }
+  function reset() {
+    clearVerified();
+    resetProposal();
+  }
   async function load() {
-    const current=++revision;busy=true;$('folder-layout-refresh').disabled=true;
-    $('folder-layout-save').disabled=true;message('Checking authorized client destinations…');
+    if (busy || layoutPending) return;
+    const token = accessToken, actor = currentUser?.id, job = editWorkOrderIdInput.value;
+    if (!token || !actor || !job) {
+      clearVerified(); return;
+    }
+    const request = ++revision;
+    busy = true; updateLayoutButtons(); message('Checking authorized client destinations…');
     try {
-      const result=await rpc('admin_list_client_folder_destinations');
-      if(current!==revision)return;
-      if(!Array.isArray(result?.destinations))throw Error('Destination response was incomplete.');
-      entries=result.destinations.filter(e=>e.destination_id&&layouts.has(e.layout));
-      $('folder-layout-destination').replaceChildren(
-        new Option('Choose a verified client destination',''),
-        ...entries.map(e=>new Option(e.company_name||'Client destination',e.destination_id)));
-      $('folder-layout-destination').disabled=false;
-    } catch(e) {if(current===revision){entries=[];$('folder-layout-destination').replaceChildren(
-      new Option('No verified destinations',''));message(e.message);}}
-    finally {if(current===revision){busy=false;$('folder-layout-refresh').disabled=false;
-      if(entries.length)renderSelection();}}
+      const result = await rpc('admin_list_client_folder_destinations');
+      if (!currentLayout(request, token, actor, job)) return;
+      if (!Array.isArray(result?.destinations)) throw Error('Destination response was incomplete.');
+      const ids = new Set();
+      const fresh = [];
+      for (const e of result.destinations) {
+        if (!UUID.test(e?.destination_id || '') || !UUID.test(e?.company_id || '')
+          || typeof e.company_name !== 'string' || !layouts.has(e.layout)
+          || (e.revision !== null && e.revision !== undefined && !UUID.test(e.revision))
+          || ids.has(e.destination_id)) {
+          throw Error('Authorized destination list was invalid; no settings were opened.');
+        }
+        ids.add(e.destination_id);
+        fresh.push(e);
+      }
+      entries = fresh;
+      destinationEl.replaceChildren(
+        new Option('Choose a verified client destination', ''),
+        ...entries.map(e => new Option(e.company_name, e.destination_id)));
+      renderSelection();
+    } catch (error) {
+      if (currentLayout(request, token, actor, job)) {
+        entries = []; destinationEl.replaceChildren(new Option('No verified destinations', ''));
+        message(error.message);
+      }
+    } finally {
+      if (currentLayout(request, token, actor, job)) {
+        busy = false; updateLayoutButtons();
+      }
+    }
   }
   async function save() {
-    const e=selected(),chosen=$('folder-layout-choice').value;
-    if(!e||busy||!layouts.has(chosen)||chosen===e.layout)return;
-    if(!confirm('Change this client’s folder layout for future approved packages? Existing deliveries stay in place.'))return;
-    busy=true;$('folder-layout-save').disabled=true;message('Saving client folder preference…');
-    const token=accessToken,request=++revision;
+    const token = accessToken, actor = currentUser?.id, job = editWorkOrderIdInput.value;
+    const e = selected();
+    if (!e || busy || !token || !actor || !job) return;
+    if (!layoutPending) {
+      const chosen = choiceEl.value;
+      if (!layouts.has(chosen) || chosen === e.layout) return;
+      if (!confirm('Change this client’s folder layout for future approved packages? Existing deliveries stay in place.')) return;
+      layoutPending = {action: crypto.randomUUID(), destination: e.destination_id,
+        company: e.company_id, expectedRevision: e.revision || null, layout: chosen};
+    }
+    const frozen = layoutPending;
+    const request = ++revision;
+    busy = true; updateLayoutButtons(); message('Saving exact client folder preference…');
     try {
-      const result=await rpc('admin_set_client_folder_layout',{
-        p_action:crypto.randomUUID(),p_destination:e.destination_id,
-        p_expected_revision:e.revision||null,p_layout:chosen
+      const response = await adminFetch(SUPABASE_URL + '/rest/v1/rpc/admin_set_client_folder_layout', {
+        method: 'POST',
+        headers: {apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: 'Bearer ' + token, 'Content-Type': 'application/json'},
+        body: JSON.stringify({p_action: frozen.action, p_destination: frozen.destination,
+          p_expected_revision: frozen.expectedRevision, p_layout: frozen.layout})
       });
-      if(request!==revision||token!==accessToken)return;
-      if(result.destination_id!==e.destination_id||result.layout!==chosen||!result.revision)
-        throw Error('Folder layout confirmation was incomplete.');
-      e.layout=result.layout;e.revision=result.revision;
+      if (!currentLayout(request, token, actor, job)) return;
+      if (!response.ok) {
+        if ([408, 429, 500, 502, 503, 504].includes(response.status)) {
+          message('Save outcome uncertain (HTTP ' + response.status
+            + '). Retry the SAME preference action; existing folders were not moved.');
+        } else {
+          layoutPending = null;
+          entries = []; destinationEl.replaceChildren(new Option('Reload verified clients', ''));
+          message('Folder preference was rejected or conflicted (HTTP ' + response.status
+            + '). Reload authorized destinations before another change.');
+        }
+        return;
+      }
+      const result = await response.json();
+      if (!currentLayout(request, token, actor, job)) return;
+      if (result?.destination_id !== frozen.destination || result?.company_id !== frozen.company
+        || result?.layout !== frozen.layout || !UUID.test(result?.revision || '')) {
+        message('Save confirmation is incomplete. Retry ONLY the same action to reconcile.');
+        return;
+      }
+      e.layout = result.layout; e.revision = result.revision;
+      layoutPending = null;
       message('Folder preference saved. No photos or existing folders were moved.');
-    } catch(err){if(request===revision)message(err.message+' Refresh before trying again.');}
-    finally{if(request===revision){busy=false;$('folder-layout-save').disabled=false;}}
+    } catch {
+      if (currentLayout(request, token, actor, job))
+        message('Connection outcome uncertain. Retry ONLY the same preference action.');
+    } finally {
+      if (currentLayout(request, token, actor, job)) {
+        busy = false; updateLayoutButtons();
+      }
+    }
   }
 
   // Authorized company suggestions come from the selected job's scoped RPC.
@@ -160,15 +246,12 @@ const ClientFolderLayout = (() => {
     pe('submit')?.addEventListener('click',()=>{void submitProposal();});
     for(const key of ['company','email','root'])
       pe(key)?.addEventListener(key==='company'?'change':'input',buttons);
-    resetProposal();
+    reset();
     $('folder-layout-destination')?.addEventListener('change',renderSelection);
     $('folder-layout-save')?.addEventListener('click',save);
-    $('folder-layout-choice')?.addEventListener('change',()=>{
-      $('folder-layout-save').disabled=busy||!selected()||
-        selected().layout===$('folder-layout-choice').value;
-    });
+    $('folder-layout-choice')?.addEventListener('change', updateLayoutButtons);
   }
-  return {init,load,bindProposal,resetProposal};
+  return {init,load,bindProposal,resetProposal,reset};
 })();
 if(typeof document!=='undefined') ClientFolderLayout.init();
 if(typeof module!=='undefined'&&module.exports)module.exports=ClientFolderLayout;

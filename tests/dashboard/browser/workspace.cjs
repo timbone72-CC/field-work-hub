@@ -38,6 +38,8 @@ const reviewPhoto = uuid(9901), reviewVersion = uuid(9902), reviewRun = uuid(990
 const reviewPackageId=uuid(9991), approvedHash='a'.repeat(64);
 let selectedCompany=null, reviewRequired=true, reviewPolicyRevision=uuid(9980), simulatedPackage=null;
 let destinationAttempts=[],destinationFailOnce=true;
+let layoutWrites=[],layoutFailOnce=true,layoutListDelayed=false,resolveLayoutList=null,layoutListRequested=false;
+
 let largePackage=false,packagePageCalls=0,persistedPackagePhotoIds=[];
 const alertTypes=['READY_FOR_REVIEW','FOLLOWUP_READY_FOR_REVIEW','ASSIGNMENT_NEEDS_ACCEPT','ACCEPT_REMINDER',
   'OVERDUE','UPLOAD_PROBLEM','APP_OR_SYNC_PROBLEM','DELIVERY_PROBLEM','CLIENT_DELIVERED'];
@@ -608,6 +610,23 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply({organization_id:organization,timezone:p.p_timezone,revision:uuid(9753)});
       }
       if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
+      if (url.pathname.endsWith('/admin_list_client_folder_destinations')) {
+        if(layoutListDelayed){
+          layoutListRequested=true;
+          await new Promise(resolve => {resolveLayoutList=resolve;});
+        }
+        return reply({destinations:[{destination_id:uuid(9892),company_id:uuid(9981),
+          company_name:'DISPOSABLE VERIFIED CLIENT',layout:'ADDRESS_WORK_ORDER',revision:null}]});
+      }
+      if (url.pathname.endsWith('/admin_set_client_folder_layout')) {
+        const p=req.postDataJSON();layoutWrites.push(p);
+        assert.equal(p.p_destination,uuid(9892));
+        assert.equal(p.p_expected_revision,null);
+        assert.equal(p.p_layout,'STATE_CITY_ADDRESS');
+        if(layoutFailOnce){layoutFailOnce=false;return reply({code:'synthetic_lost_result'},503);}
+        return reply({destination_id:uuid(9892),company_id:uuid(9981),
+          layout:p.p_layout,revision:uuid(9893),replayed:true});
+      }
       if (url.pathname.endsWith('/admin_propose_client_delivery_destination')) {
         const p=req.postDataJSON();destinationAttempts.push(p);
         assert.equal(p.p_company,uuid(9981));
@@ -984,6 +1003,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('#release-status').textContent.includes('No package saved'));
 
     await page.locator('#client-folder-settings > summary').click();
+    await page.locator('#folder-layout-refresh').click();
+    await wait(page,()=>document.querySelector('#folder-layout-destination option:nth-child(2)'));
+    await page.locator('#folder-layout-destination').selectOption(uuid(9892));
+    await page.locator('#folder-layout-choice').selectOption('STATE_CITY_ADDRESS');
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.accept()),
+      page.locator('#folder-layout-save').click()
+    ]);
+    await wait(page,()=>document.querySelector('#folder-layout-status')?.textContent.includes('outcome uncertain'));
+    assert.equal(layoutWrites.length,1);
+    assert.equal(await page.locator('#folder-layout-choice').isDisabled(),true,
+      'Unknown preference write cannot be edited or applied under a new ID.');
+    assert.equal(await page.locator('#folder-layout-refresh').isDisabled(),true,
+      'A refresh cannot hide unresolved preference revision.');
+    await page.locator('#folder-layout-save').click();
+    await wait(page,()=>document.querySelector('#folder-layout-status')?.textContent.includes('preference saved'));
+    assert.equal(layoutWrites.length,2);
+    assert.equal(layoutWrites[0].p_action,layoutWrites[1].p_action,
+      'An ambiguous save must replay the exact server action.');
+    assert.equal(await page.locator('#folder-layout-save').isDisabled(),true);
+    assert.equal(await page.locator('#folder-layout-choice').inputValue(),'STATE_CITY_ADDRESS');
     await page.locator('#folder-proposal-company').selectOption(uuid(9981));
     await page.locator('#folder-proposal-email').fill('operator@disposable.invalid');
     await page.locator('#folder-proposal-root').fill('invalid url!');
@@ -1277,7 +1317,19 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // a still-open dialog is a test failure, not an excuse to force-click.
     await wait(page,()=>!document.querySelector('#edit-work-order-section').open);
     // Account switch clears searches, selected work, and visible edits; only whitelisted preferences remain.
-    await page.locator('#sign-out').click(); admin = uuid(9010); await login();
+    layoutListDelayed=true;
+    await page.locator('[data-job-tab="delivery"]').click();
+    await page.locator('#folder-layout-refresh').click();
+    await wait(page,()=>layoutListRequested);
+    await page.locator('#sign-out').click();
+    assert.equal(await page.locator('#folder-layout-destination option').count(),1,
+      'Previous company destination choices must clear on sign-out.');
+    assert.equal(await page.locator('#folder-layout-status').innerText(),'');
+    resolveLayoutList(); layoutListDelayed=false; layoutListRequested=false;
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator('#folder-layout-destination option').count(),1,
+      'Late old-account destination list must not reappear after sign-out.');
+    admin = uuid(9010); await login();
     assert.equal(await page.locator('#property-address').inputValue(), '', 'Repeat draft address must be cleared between accounts');
     assert.equal(await page.locator('#instructions').inputValue(), '', 'Repeat draft instructions must be cleared between accounts');
     assert.equal(await page.locator('#due-date').inputValue(), '', 'Repeat draft due date must be cleared between accounts');

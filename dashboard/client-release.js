@@ -19,7 +19,7 @@ const ClientRelease = (() => {
   };
   function reset() {
     seq++; wo=''; config=null; pkg=null; chosen.clear(); photoFacts=[];
-    ClientFolderLayout.resetProposal();
+    ClientFolderLayout.reset();
     busy=false; loaded=false; savedNotes=''; savedPhotoIds=[]; previewedHash=null; tooMany=false;
     paged=false;photoCursor=null;paging=false;
     el('release-photos-more').hidden=true;el('release-photo-count').textContent='No photos selected.';
