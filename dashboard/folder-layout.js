@@ -65,7 +65,7 @@ const ClientFolderLayout = (() => {
   // This submits only an inactive, unverified candidate; no provider operation.
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const DRIVE=/^[A-Za-z0-9_-]{10,160}$/;
-  const EMAIL=/^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$/;
+  const EMAIL=/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
   let proposalJob='',proposalActor='',proposalToken='',proposalEpoch=0;
   let proposalCompanies=[],pending=null,confirmed=false,proposalBusy=false;
   const pe=name=>$('folder-proposal-'+name);
