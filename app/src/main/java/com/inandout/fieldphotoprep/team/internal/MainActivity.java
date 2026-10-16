@@ -8,6 +8,8 @@ import android.os.Build;
 import android.provider.Settings;
 import androidx.core.content.FileProvider;
 import android.graphics.Typeface;
+import android.graphics.Color;
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -60,6 +62,13 @@ public final class MainActivity extends Activity {
     private TextView workOrdersHeading;
     private TextView assignmentSummaryText;
     private LinearLayout workOrdersContainer;
+    private LinearLayout homePane;
+    private LinearLayout workOrdersPane;
+    private LinearLayout accountPane;
+    private static final String PAGE_HOME = "HOME";
+    private static final String PAGE_WORK_ORDERS = "WORK_ORDERS";
+    private static final String PAGE_ACCOUNT = "ACCOUNT";
+    private String selectedPage = PAGE_HOME;
     private SupabaseApi.AuthSession currentSession;
     private final androidx.room.InvalidationTracker.Observer evidenceObserver =
             new androidx.room.InvalidationTracker.Observer("cached_work_orders", "field_actions", "protected_photos") {
@@ -113,12 +122,16 @@ public final class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(padding, padding, padding, padding);
+        root.setBackgroundColor(Color.rgb(246, 248, 251));
         root.setLayoutParams(
                 new ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scroll.addView(root);
 
         TextView appName = text(getString(R.string.app_name), 14, false);
+        appName.setBackgroundColor(Color.rgb(23, 42, 64));
+        appName.setTextColor(Color.WHITE);
+        appName.setPadding(dp(14), dp(15), dp(14), dp(15));
         root.addView(appName);
 
         screenTitle = text(getString(R.string.phase1_title), 26, true);
@@ -166,61 +179,88 @@ public final class MainActivity extends Activity {
 
         identityText = text("", 15, false);
         identityText.setPadding(0, dp(12), 0, 0);
-        root.addView(identityText);
+        accountPane.addView(identityText);
 
         rlsText = text("", 15, true);
         rlsText.setPadding(0, dp(12), 0, dp(12));
         root.addView(rlsText);
 
+        homePane = new LinearLayout(this);
+        homePane.setOrientation(LinearLayout.VERTICAL);
+        homePane.setPadding(0, dp(8), 0, dp(8));
+        root.addView(homePane, matchWrap());
+        TextView homeLabel = text("YOUR WORKSPACE", 12, true);
+        homeLabel.setTextColor(Color.rgb(80, 101, 124));
+        homeLabel.setPadding(dp(4), dp(6), 0, dp(14));
+        homePane.addView(homeLabel);
+        homePane.addView(navigationButton("Work Orders", true,
+                () -> showPage(PAGE_WORK_ORDERS)), matchWrap());
+        homePane.addView(navigationButton("Account & Updates", false,
+                () -> showPage(PAGE_ACCOUNT)), matchWrap());
+
+        accountPane = new LinearLayout(this);
+        accountPane.setOrientation(LinearLayout.VERTICAL);
+        accountPane.setPadding(0, dp(8), 0, dp(8));
+        root.addView(accountPane, matchWrap());
+        accountPane.addView(navigationButton("← Home", false,
+                () -> showPage(PAGE_HOME)), matchWrap());
+
+        workOrdersPane = new LinearLayout(this);
+        workOrdersPane.setOrientation(LinearLayout.VERTICAL);
+        workOrdersPane.setPadding(0, dp(8), 0, 0);
+        root.addView(workOrdersPane, matchWrap());
+        workOrdersPane.addView(navigationButton("← Home", false,
+                () -> showPage(PAGE_HOME)), matchWrap());
+
         signOutButton = new Button(this);
         signOutButton.setText(R.string.sign_out);
         signOutButton.setOnClickListener(v -> signOut());
         signOutButton.setLayoutParams(matchWrap());
-        root.addView(signOutButton);
+        accountPane.addView(signOutButton);
 
         recoverPhotosButton = new Button(this);
         recoverPhotosButton.setText("Recover my photos");
         recoverPhotosButton.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoRecoveryActivity.class)));
         recoverPhotosButton.setLayoutParams(matchWrap());
-        root.addView(recoverPhotosButton);
+        homePane.addView(recoverPhotosButton);
 
         updateCheckButton = new Button(this);
         updateCheckButton.setText("Check for Update");
         updateCheckButton.setOnClickListener(v -> checkForUpdates(true));
         updateCheckButton.setLayoutParams(matchWrap());
-        root.addView(updateCheckButton);
+        accountPane.addView(updateCheckButton);
 
         updateAppButton = new Button(this);
         updateAppButton.setText("Update App");
         updateAppButton.setLayoutParams(matchWrap());
         updateAppButton.setVisibility(View.GONE);
         updateAppButton.setOnClickListener(v -> confirmUpdateDownload());
-        root.addView(updateAppButton);
+        accountPane.addView(updateAppButton);
 
         updateStatus = text("", 13, false);
         updateStatus.setVisibility(View.GONE);
-        root.addView(updateStatus);
+        accountPane.addView(updateStatus);
 
         workOrdersHeading = text(getString(R.string.work_orders_heading), 20, true);
         workOrdersHeading.setPadding(0, dp(20), 0, dp(4));
-        root.addView(workOrdersHeading);
+        workOrdersPane.addView(workOrdersHeading);
 
         assignmentSummaryText = text("", 14, false);
         assignmentSummaryText.setPadding(0, 0, 0, dp(8));
-        root.addView(assignmentSummaryText);
+        workOrdersPane.addView(assignmentSummaryText);
 
         refreshAssignmentsButton = new Button(this);
         refreshAssignmentsButton.setText(R.string.refresh_assignments);
         refreshAssignmentsButton.setOnClickListener(v -> refreshAssignments());
         refreshAssignmentsButton.setLayoutParams(matchWrap());
-        root.addView(refreshAssignmentsButton);
+        workOrdersPane.addView(refreshAssignmentsButton);
 
         workOrdersContainer = new LinearLayout(this);
         workOrdersContainer.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams workOrderParams = matchWrap();
         workOrderParams.topMargin = dp(12);
         workOrdersContainer.setLayoutParams(workOrderParams);
-        root.addView(workOrdersContainer);
+        workOrdersPane.addView(workOrdersContainer);
 
         return scroll;
     }
@@ -334,6 +374,11 @@ public final class MainActivity extends Activity {
             List<SupabaseApi.WorkOrder> workOrders,
             boolean serverVerified,
             String message) {
+        if (currentSession == null
+                || !currentSession.userId.equals(session.userId)
+                || !currentSession.organizationId.equals(session.organizationId)) {
+            selectedPage = PAGE_HOME;
+        }
         currentSession = session;
         setLoading(false, message);
         passwordInput.setText("");
@@ -366,6 +411,7 @@ public final class MainActivity extends Activity {
             rlsText.setVisibility(View.GONE);
         }
         renderWorkOrders(workOrders);
+        showPage(selectedPage);
     }
 
     private void refreshAssignments() {
@@ -1005,6 +1051,12 @@ public final class MainActivity extends Activity {
 
     private void showSignedOutUi(String message) {
         currentSession = null;
+        selectedPage = PAGE_HOME;
+        homePane.setVisibility(View.GONE);
+        workOrdersPane.setVisibility(View.GONE);
+        accountPane.setVisibility(View.VISIBLE);
+        // Updates remain reachable even before sign-in; Hide only the account's Home link.
+        accountPane.getChildAt(0).setVisibility(View.GONE);
         passwordInput.setText("");
         screenTitle.setText(R.string.phase1_title);
         screenIntro.setText(R.string.phase1_intro);
@@ -1028,6 +1080,51 @@ public final class MainActivity extends Activity {
         assignmentSummaryText.setVisibility(View.GONE);
         workOrdersContainer.removeAllViews();
         workOrdersContainer.setVisibility(View.GONE);
+    }
+
+    private Button navigationButton(String label, boolean primary, Runnable action) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(16);
+        button.setMinHeight(dp(56));
+        button.setTextColor(primary ? Color.WHITE : Color.rgb(23, 42, 64));
+        button.setBackgroundTintList(ColorStateList.valueOf(
+                primary ? Color.rgb(23, 91, 118) : Color.rgb(225, 233, 240)));
+        LinearLayout.LayoutParams layout = matchWrap();
+        layout.bottomMargin = dp(10);
+        button.setLayoutParams(layout);
+        button.setOnClickListener(v -> action.run());
+        return button;
+    }
+
+    private void showPage(String page) {
+        if (currentSession == null) return;
+        selectedPage = page;
+        homePane.setVisibility(PAGE_HOME.equals(page) ? View.VISIBLE : View.GONE);
+        workOrdersPane.setVisibility(PAGE_WORK_ORDERS.equals(page) ? View.VISIBLE : View.GONE);
+        accountPane.setVisibility(PAGE_ACCOUNT.equals(page) ? View.VISIBLE : View.GONE);
+        accountPane.getChildAt(0).setVisibility(View.VISIBLE);
+        if (PAGE_WORK_ORDERS.equals(page)) {
+            screenTitle.setText(R.string.assignments_title);
+            screenIntro.setText(R.string.assignments_intro);
+        } else if (PAGE_ACCOUNT.equals(page)) {
+            screenTitle.setText("Account & Updates");
+            screenIntro.setText("");
+        } else {
+            screenTitle.setText("Home");
+            screenIntro.setText("");
+        }
+    }
+
+    @Override
+    @Deprecated
+    public void onBackPressed() {
+        if (currentSession != null && !PAGE_HOME.equals(selectedPage)) {
+            showPage(PAGE_HOME);
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private void setLoading(boolean loading, String message) {
