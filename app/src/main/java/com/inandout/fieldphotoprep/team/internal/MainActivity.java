@@ -179,7 +179,7 @@ public final class MainActivity extends Activity {
 
         identityText = text("", 15, false);
         identityText.setPadding(0, dp(12), 0, 0);
-        accountPane.addView(identityText);
+        // Placed in accountPane after that page has been initialized.
 
         rlsText = text("", 15, true);
         rlsText.setPadding(0, dp(12), 0, dp(12));
@@ -204,6 +204,7 @@ public final class MainActivity extends Activity {
         root.addView(accountPane, matchWrap());
         accountPane.addView(navigationButton("← Home", false,
                 () -> showPage(PAGE_HOME)), matchWrap());
+        accountPane.addView(identityText);
 
         workOrdersPane = new LinearLayout(this);
         workOrdersPane.setOrientation(LinearLayout.VERTICAL);
