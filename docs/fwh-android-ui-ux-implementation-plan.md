@@ -1,9 +1,9 @@
 # Field Work Hub — Android UI/UX implementation plan
 
-Plan ID: `fwh-android-ui-ux-implementation-plan`  
-Revision: **0.2 — approved scope and repository handoff, 2026-10-16**  
-Classification: **Level 1 documentation only**; Package A runtime at least Level 2, Package B provisionally Level 3.  
-Operator approval: **“Approved.” — 2026-10-16**, in the FWH UI/UX Design conversation, following review of the Android implementation plan v0.1.  
+Plan ID: `fwh-android-ui-ux-implementation-plan`
+Revision: **0.2 — approved scope and repository handoff, 2026-10-16**
+Classification: **Level 1 documentation only**; Package A runtime at least Level 2, Package B provisionally Level 3.
+Operator approval: **“Approved.” — 2026-10-16**, in the FWH UI/UX Design conversation, following review of the Android implementation plan v0.1.
 Status: **Approved product/layout direction; runtime NOT STARTED.** Do not interpret document approval as Level 3 runtime pre-merge approval, installation, or provider verification.
 
 ## Purpose and accepted interaction
