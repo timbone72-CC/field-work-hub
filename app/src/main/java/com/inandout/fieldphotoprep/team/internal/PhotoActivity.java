@@ -103,14 +103,17 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         if (session == null || wo == null || run == null) { finish(); return; }
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(12), dp(12), dp(12), dp(12));
+        root.setBackgroundColor(FwhVisualStyle.CANVAS);
+        root.setPadding(dp(16), dp(12), dp(16), dp(12));
         root.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(dp(12), insets.getSystemWindowInsetTop() + dp(12), dp(12),
+            view.setPadding(dp(16), insets.getSystemWindowInsetTop() + dp(12), dp(16),
                     insets.getSystemWindowInsetBottom() + dp(12));
             return insets;
         });
         message = new TextView(this);
-        message.setTextSize(15);
+        message.setTextSize(21);
+        FwhVisualStyle.heading(message);
+        message.setPadding(dp(2), dp(6), dp(2), dp(12));
         root.addView(message);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -155,16 +158,19 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     private Button button(String label, LinearLayout target, Runnable work) {
         Button b = new Button(this);
         b.setText(label);
-        b.setAllCaps(false);
-        target.addView(b);
+        FwhVisualStyle.button(b, false);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(8);
+        target.addView(b, params);
         b.setOnClickListener(v -> work.run());
         return b;
     }
     private TextView text(String value, LinearLayout target) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(17);
-        t.setPadding(0, dp(5), 0, dp(5));
+        t.setTextSize(15);
+        FwhVisualStyle.body(t);
+        t.setPadding(dp(4), dp(7), dp(4), dp(9));
         target.addView(t);
         return t;
     }
@@ -197,6 +203,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(2), dp(4), dp(2), dp(14));
         scroll.addView(list);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         text(req.summary(), list);
@@ -225,11 +232,18 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         for (ProtectedPhoto p : photos) if (!"DISCARDED".equals(p.state)) {
             LinearLayout rowView = new LinearLayout(this);
             rowView.setOrientation(LinearLayout.HORIZONTAL);
-            list.addView(rowView);
+            rowView.setGravity(Gravity.CENTER_VERTICAL);
+            rowView.setPadding(dp(8), dp(6), dp(8), dp(6));
+            FwhVisualStyle.panel(rowView);
+            LinearLayout.LayoutParams photoRowParams = new LinearLayout.LayoutParams(-1, -2);
+            photoRowParams.bottomMargin = dp(8);
+            list.addView(rowView, photoRowParams);
             ImageView thumbnail = new ImageView(this);
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = 16;
             thumbnail.setImageBitmap(BitmapFactory.decodeFile(p.originalPath, options));
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumbnail.setContentDescription("Saved job photo preview");
             rowView.addView(thumbnail, new LinearLayout.LayoutParams(dp(64), dp(64)));
             PhotoRequirements.Item i = req.enabledItem(p.itemId);
             Button review = button((i == null ? "Extra" : i.label) + " · " + ("WAITING".equals(p.state) ? "Saved" : p.state), rowView, () -> review(p, editable));
@@ -291,7 +305,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.VERTICAL);
         top.setPadding(dp(10), dp(6), dp(10), dp(6));
-        top.setBackgroundColor(Color.argb(165, 0, 0, 0));
+        top.setBackgroundColor(Color.argb(215, 26, 43, 65));
         itemPicker = compactButton("Select photo item");
         itemPicker.setTextSize(14);
         itemPicker.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
@@ -299,6 +313,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         itemPicker.setEllipsize(android.text.TextUtils.TruncateAt.END);
         itemPicker.setContentDescription("Choose a required photo item or Extra photos");
         itemPicker.setOnClickListener(v -> showCameraItemPicker());
+        itemPicker.setBackground(rounded(FwhVisualStyle.TEAL, 12));
         top.addView(itemPicker, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout controls = new LinearLayout(this);
@@ -369,7 +384,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(10), dp(7), dp(10), dp(8));
-        panel.setBackgroundColor(Color.argb(175, 0, 0, 0));
+        panel.setBackgroundColor(Color.argb(205, 26, 43, 65));
         panel.addView(makeZoomPresets(false), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -393,7 +408,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         rail.setOrientation(LinearLayout.VERTICAL);
         rail.setGravity(Gravity.CENTER_HORIZONTAL);
         rail.setPadding(dp(7), dp(7), dp(7), dp(7));
-        rail.setBackgroundColor(Color.argb(180, 0, 0, 0));
+        rail.setBackgroundColor(Color.argb(215, 26, 43, 65));
         rail.addView(makeZoomPresets(true), new LinearLayout.LayoutParams(-1, 0, 1));
         shutter = makeShutter();
         rail.addView(shutter, new LinearLayout.LayoutParams(dp(68), dp(68)));
