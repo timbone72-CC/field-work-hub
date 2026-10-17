@@ -453,7 +453,7 @@ test('Modern Premium Stage 8 preserves real invite setup controls and role-bound
   const html=fs.readFileSync(require.resolve('../../dashboard/'+file),'utf8');
   const js=fs.readFileSync(require.resolve('../../dashboard/'+jsFile),'utf8');
   assert.match(html,/<body class="fwh-setup-page">/);
-  assert.match(html,/styles\.css\?v=modern-premium-stage9-recovery-20261017/);
+  assert.match(html,/styles\.css\?v=modern-premium-stage8-setup-20261017/);
   for(const id of ['invite-check','password-form','invite-identity','new-password',
    'confirm-password','set-password','setup-status']){
    assert.equal((html.match(new RegExp('id="' + id + '"','g'))||[]).length,1,
