@@ -208,7 +208,8 @@ public final class MainActivity extends Activity {
 
         homePane = new LinearLayout(this);
         homePane.setOrientation(LinearLayout.VERTICAL);
-        homePane.setPadding(0, dp(8), 0, dp(8));
+        homePane.setPadding(dp(16), dp(14), dp(16), dp(18));
+        FwhVisualStyle.panel(homePane);
         root.addView(homePane, matchWrap());
 
         TextView homeLabel = text("YOUR WORKSPACE", 12, true);
@@ -222,7 +223,8 @@ public final class MainActivity extends Activity {
 
         accountPane = new LinearLayout(this);
         accountPane.setOrientation(LinearLayout.VERTICAL);
-        accountPane.setPadding(0, dp(8), 0, dp(8));
+        accountPane.setPadding(dp(16), dp(14), dp(16), dp(18));
+        FwhVisualStyle.panel(accountPane);
         root.addView(accountPane, matchWrap());
         accountPane.addView(navigationButton("← Home", false,
                 () -> showPage(PAGE_HOME)), matchWrap());
@@ -811,7 +813,7 @@ public final class MainActivity extends Activity {
         Button photos = new Button(this); photos.setText("Photos");
         photos.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoActivity.class)
                 .putExtra("wo",workOrder.id).putExtra("run",workOrder.currentRunId)));
-        FwhVisualStyle.button(photos, false);
+        styleWorkAction(photos, false);
         card.addView(photos);
 
         if (!workOrder.conflictReason.isEmpty()) {
@@ -840,7 +842,7 @@ public final class MainActivity extends Activity {
                     accept.setEnabled(false);
                     queueFieldAction(workOrder, "ACK");
                 });
-                FwhVisualStyle.button(accept, false);
+                styleWorkAction(accept, false);
                 card.addView(accept);
             }
             boolean start =
@@ -858,7 +860,7 @@ public final class MainActivity extends Activity {
                             action.setEnabled(false);
                             queueFieldAction(workOrder, start ? "START" : "COMPLETE");
                         });
-                FwhVisualStyle.button(action, true);
+                styleWorkAction(action, true);
                 card.addView(action);
                 if (workOrder.assignmentInstanceId.isEmpty())
                     card.addView(
@@ -907,7 +909,7 @@ public final class MainActivity extends Activity {
                                 true));
             }
             approve.setLayoutParams(matchWrap());
-            FwhVisualStyle.button(approve, false);
+            styleWorkAction(approve, false);
             card.addView(approve);
 
             Button decline = new Button(this);
@@ -916,7 +918,7 @@ public final class MainActivity extends Activity {
             LinearLayout.LayoutParams declineParams = matchWrap();
             declineParams.topMargin = dp(6);
             decline.setLayoutParams(declineParams);
-            FwhVisualStyle.button(decline, false);
+            styleWorkAction(decline, false);
             card.addView(decline);
         }
 
@@ -935,7 +937,7 @@ public final class MainActivity extends Activity {
                     && workOrder.conflictReason.isEmpty());
             approveTeam.setOnClickListener(v -> respondToTeamHandoff(
                     workOrder.id, workOrder.teamHandoffRequestId, true));
-            FwhVisualStyle.button(approveTeam, false);
+            styleWorkAction(approveTeam, false);
             card.addView(approveTeam);
             if (!approveTeam.isEnabled())
                 card.addView(text("Sync pending work and protect saved photos"
@@ -945,7 +947,7 @@ public final class MainActivity extends Activity {
             declineTeam.setLayoutParams(matchWrap());
             declineTeam.setOnClickListener(v -> respondToTeamHandoff(
                     workOrder.id, workOrder.teamHandoffRequestId, false));
-            FwhVisualStyle.button(declineTeam, false);
+            styleWorkAction(declineTeam, false);
             card.addView(declineTeam);
         }
 
@@ -1292,6 +1294,16 @@ public final class MainActivity extends Activity {
         assignmentSummaryText.setVisibility(View.GONE);
         workOrdersContainer.removeAllViews();
         workOrdersContainer.setVisibility(View.GONE);
+    }
+
+    private void styleWorkAction(Button button, boolean primary) {
+        FwhVisualStyle.button(button, primary);
+        LinearLayout.LayoutParams params =
+                button.getLayoutParams() instanceof LinearLayout.LayoutParams
+                        ? (LinearLayout.LayoutParams) button.getLayoutParams() : matchWrap();
+        params.topMargin = Math.max(params.topMargin, dp(6));
+        params.bottomMargin = Math.max(params.bottomMargin, dp(5));
+        button.setLayoutParams(params);
     }
 
     private Button navigationButton(String label, boolean primary, Runnable action) {
