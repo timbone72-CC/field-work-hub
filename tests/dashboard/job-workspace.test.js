@@ -324,6 +324,10 @@ test('Modern Premium Stage 3 visually prioritizes actual job status without chan
     assert.match(html, new RegExp('data-job-panel="' + panel + '"'), 'Missing panel: ' + panel);
   }
   assert.equal((html.match(/data-job-tab="/g) || []).length, 6);
+  assert.ok(html.indexOf('id="job-address-context"') > html.indexOf('id="cancel-edit"'),
+    'The unchanged secondary exact-address controls follow primary job details and actions');
+  assert.match(stage, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/,
+    'Mobile tabs must stay readable and visible');
   assert.match(js, /el\('job-next-action-open'\)\.addEventListener\('click'/);
   assert.match(js, /editSection\.addEventListener\('cancel'/);
 });
