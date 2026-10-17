@@ -111,9 +111,9 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
             return insets;
         });
         message = new TextView(this);
-        message.setTextSize(21);
+        message.setTextSize(20);
         FwhVisualStyle.heading(message);
-        message.setPadding(dp(2), dp(6), dp(2), dp(12));
+        message.setPadding(dp(2), dp(4), dp(2), dp(8));
         root.addView(message);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -168,9 +168,9 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     private TextView text(String value, LinearLayout target) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(15);
+        t.setTextSize(14);
         FwhVisualStyle.body(t);
-        t.setPadding(dp(4), dp(7), dp(4), dp(9));
+        t.setPadding(dp(4), dp(3), dp(4), dp(5));
         target.addView(t);
         return t;
     }
@@ -199,26 +199,38 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     private void renderItems(CachedWorkOrder row, PhotoRequirements req, List<ProtectedPhoto> photos, List<FieldAction> actions) {
         requirements = req;
         content.removeAllViews();
-        message.setText(row.woNumber + " · Photos");
+        message.setText("Photos");
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(dp(2), dp(4), dp(2), dp(14));
         scroll.addView(list);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        text(req.summary(), list);
+        LinearLayout summaryPanel = new LinearLayout(this);
+        summaryPanel.setOrientation(LinearLayout.VERTICAL);
+        summaryPanel.setPadding(dp(12), dp(10), dp(12), dp(10));
+        FwhVisualStyle.panel(summaryPanel);
+        LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(-1, -2);
+        summaryParams.bottomMargin = dp(12);
+        list.addView(summaryPanel, summaryParams);
+        TextView jobNumber = text("WO " + row.woNumber, summaryPanel);
+        jobNumber.setTextColor(FwhVisualStyle.TEAL);
+        text(req.summary(), summaryPanel);
         int total = 0;
         for (ProtectedPhoto p : photos) if (p.readable()) total++;
-        text("Saved photos: " + total + " · Delivery pending", list);
+        text("Saved photos: " + total + " · Delivery pending", summaryPanel);
         boolean started = !row.startedAt.isEmpty(), complete = false;
         for (FieldAction a : actions) if (a.workOrderId.equals(wo) && a.runId.equals(run)) {
             if ("START".equals(a.kind)) started = true;
             if ("COMPLETE".equals(a.kind)) complete = true;
         }
         boolean frozen = complete || photos.stream().anyMatch(p -> !p.finishSetId.isEmpty());
-        if (frozen) text("Finish saved. Originals are protected while delivery is pending.", list);
-        if (!row.conflictReason.isEmpty()) text("Needs review. Your photos are preserved. Contact Admin.", list);
-        if (!BuildConfig.FIELD_SYNC_ENABLED) text("Recovery mode: saved evidence is read only.", list);
+        if (frozen) text("Finish saved. Originals are protected while delivery is pending.", summaryPanel);
+        if (!row.conflictReason.isEmpty()) {
+            TextView warning = text("Needs review. Your photos are preserved. Contact Admin.", summaryPanel);
+            warning.setTextColor(FwhVisualStyle.WARN);
+        }
+        if (!BuildConfig.FIELD_SYNC_ENABLED) text("Recovery mode: saved evidence is read only.", summaryPanel);
         boolean editable = started && BuildConfig.FIELD_SYNC_ENABLED && !frozen && row.conflictReason.isEmpty()
                 && !"FIELD_COMPLETE".equals(row.fieldStatus) && !"CANCELLED".equals(row.fieldStatus);
         for (PhotoRequirements.Item i : req.items) if (i.enabled) {
