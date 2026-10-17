@@ -52,6 +52,9 @@ public class MainActivityHomeNavigationTest {
         LinearLayout account = (LinearLayout) field(activity, "accountPane");
 
         invoke(activity, "showPage", "HOME");
+        // Empty introduction no longer consumes permanent space in the Home layout.
+        assertEquals(View.GONE, ((android.widget.TextView)
+                field(activity, "screenIntro")).getVisibility());
         assertEquals(View.VISIBLE, home.getVisibility());
         assertEquals(View.GONE, orders.getVisibility());
         assertEquals(View.GONE, account.getVisibility());
@@ -76,6 +79,8 @@ public class MainActivityHomeNavigationTest {
         invoke(activity, "showSignedOutUi", "Signed out");
         // Original unauthenticated update check remains visible.
         assertEquals(View.VISIBLE, account.getVisibility());
+        assertEquals(View.VISIBLE, ((android.widget.TextView)
+                field(activity, "screenIntro")).getVisibility());
         assertEquals(View.VISIBLE, ((Button) field(activity, "updateCheckButton")).getVisibility());
         assertEquals(View.GONE, ((Button) field(activity, "signOutButton")).getVisibility());
     }
