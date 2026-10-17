@@ -975,6 +975,25 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('details.admin-action[open]').count(), 0);
     await page.screenshot({ path: path.join(output, 'dashboard-desktop.png'), fullPage: true });
     await page.locator('.job-link').first().click(); await wait(page, () => document.querySelector('dialog').open);
+    // Stage 3: actual selected-job screenshot and reachability at both sizes.
+    assert.equal(await page.locator('.fwh-job-identity #edit-heading').isVisible(), true);
+    assert.equal(await page.locator('#job-address').isVisible(), true);
+    assert.equal(await page.locator('#job-facts').isVisible(), true);
+    assert.equal(await page.locator('#job-next-action-open').isVisible(), true);
+    assert.equal(await page.locator('.workspace-tabs [data-job-tab]').count(), 6);
+    await page.screenshot({path:path.join(output,'stage3-job-details-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await wait(page, () => document.querySelector('#edit-work-order-section').clientWidth < 400);
+    assert.equal(await page.locator('#edit-work-order-section').evaluate(el =>
+      el.scrollWidth <= el.clientWidth+1), true, 'Stage 3 mobile job dialog must not overflow');
+    for(const selector of ['#job-previous','#job-next','#prepare-repeat-work',
+      '#prepare-custom-work','#job-next-action-open','#cancel-edit',
+      '[data-job-tab="photos"]','[data-job-tab="delivery"]','[data-job-tab="history"]']) {
+      assert.equal(await page.locator(selector).isVisible(),true,
+        'Stage 3 must preserve access to '+selector);
+    }
+    await page.screenshot({path:path.join(output,'stage3-job-details-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     const first = await page.locator('#edit-work-order-id').inputValue();
     await page.locator('#edit-instructions').fill('Unsaved office instruction');
     await page.keyboard.press('Escape'); assert.equal(await page.locator('dialog').evaluate(el => el.open), true);
