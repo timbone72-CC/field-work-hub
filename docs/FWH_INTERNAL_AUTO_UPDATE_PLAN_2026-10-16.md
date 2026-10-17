@@ -1,6 +1,6 @@
 # Field Work Hub Internal — Streamlined Automatic UI Test Updates
 
-**Status:** PROPOSED, needs one-time operator approval of the public internal-test release automation. **No automation enabled, no APK published, no Android updater runtime changed by this document.**
+**Status:** Standing auto-publication policy **APPROVED 2026-10-16** (operator: **“approve automatic publication of verified internal TEST builds”**). Implementation is staged in separate **draft PR #47** for the privileged main-branch publisher and **draft PR #40** for the Android foreground update notice; neither PR is merged. **Automatic publication remains inactive until PR #47 separately receives explicit Level 3 pre-merge approval and is merged to main.** Android continues to require user confirmation before installation.
 **Date:** 2026-10-16  
 **Scope key:** `fwh-internal-auto-update-ui-preview`  
 **Governance:** Level 3 for changing who may publish publicly downloadable APKs and the release/trust boundary; any Android updater UI-only improvements may be Level 2 but remain part of this coordinated, explicitly reviewed release change. PR #40 is the single authoritative pending Android/Phase 5–6 runtime branch; this plan alone does not grant its merge approval or expand photo delivery.
@@ -42,4 +42,4 @@ Publish **one** latest completed UI batch, not an unfinished commit or a series 
 
 **Recommended:** Authorize **automatic publicly downloadable TEST APK releases only for explicitly designated, fully verified UI-review checkpoints** on the existing internal package. Do *not* auto-publish every PR commit, auto-merge code, silently install or interrupt field work. This would replace the repetitive manual laptop `PUBLISH` step. Android installer confirmation still remains necessary.
 
-**Approval needed:** Operator confirmation of this release/distribution policy. The current user request expresses a desire for automatic updates, but does not settle whether public TEST APK publication without a separate prompt is acceptable. Until approved, existing manual publish remains in force.
+**Approval received:** The operator explicitly approved automatic publication of verified internal TEST builds on 2026-10-16. Public TEST distribution is accepted under this plan; PR #47's separate required Level 3 pre-merge approval and actual trusted-workflow activation remain **PENDING**. Until the trusted workflow is merged, manual publication remains the existing fallback. No Android package is silently installed.
