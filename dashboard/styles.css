@@ -545,3 +545,97 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 @media (prefers-reduced-motion: reduce) {
   button { transition: none; }
 }
+
+/* Modern Premium Stage 2: real, contextual Admin destinations.
+   No existing action, native details state, role authority, or modal is replaced. */
+.fwh-primary-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 20px 0 6px;
+  padding: 8px;
+  background: #eef4f8;
+  border: 1px solid var(--fwh-border);
+  border-radius: 14px;
+}
+.fwh-primary-nav button {
+  color: var(--fwh-navy);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 9px 17px;
+  font-weight: 700;
+}
+.fwh-primary-nav button[aria-current="page"] {
+  color: #fff;
+  background: var(--fwh-navy);
+  box-shadow: 0 2px 8px rgba(15, 35, 54, .15);
+}
+@media (hover: hover) {
+  .fwh-primary-nav button:not([aria-current="page"]):hover {
+    background: #deeaef;
+  }
+  .fwh-primary-nav button[aria-current="page"]:hover {
+    background: var(--fwh-navy-deep);
+  }
+}
+/* Only the contextual top-level view changes. A selected-job dialog stays
+   mounted and modal, and does not have its own visibility overwritten here. */
+#results-card[data-fwh-view]:not([data-fwh-view="home"]) > #fwh-home-panel,
+#results-card[data-fwh-view]:not([data-fwh-view="work"]) > #fwh-work-page,
+#results-card[data-fwh-view]:not([data-fwh-view="create"]) > #create-wo-details,
+#results-card[data-fwh-view]:not([data-fwh-view="alerts"]) > #notification-center,
+#results-card[data-fwh-view]:not([data-fwh-view="team"]) > #owner-office-console {
+  display: none;
+}
+.fwh-home-panel {
+  padding: clamp(18px, 3vw, 28px) 4px 12px;
+}
+.fwh-home-panel h2 { margin: 4px 0 8px; }
+.fwh-home-panel > .muted { max-width: 65ch; margin: 0 0 24px; }
+.fwh-home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.fwh-home-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(17, 40, 61, .045);
+}
+.fwh-home-tile h3 { margin: 0; }
+.fwh-home-tile p {
+  flex: 1;
+  margin: 0 0 8px;
+  color: var(--fwh-muted);
+  line-height: 1.55;
+}
+.fwh-home-tile button {
+  align-self: flex-start;
+  background: var(--fwh-teal);
+}
+@media (hover: hover) {
+  .fwh-home-tile button:hover { background: #0a5e60; }
+}
+#fwh-work-page { min-width: 0; padding-top: 12px; }
+#fwh-work-page > h2 { margin-top: 20px; }
+#results-card[data-fwh-view="create"] > #create-wo-details,
+#results-card[data-fwh-view="alerts"] > #notification-center,
+#results-card[data-fwh-view="team"] > #owner-office-console {
+  margin-top: 20px;
+}
+@media (max-width: 900px) {
+  .fwh-home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .fwh-primary-nav { gap: 4px; }
+  .fwh-primary-nav button { flex: 1 1 auto; padding: 9px 12px; }
+  .fwh-home-grid { grid-template-columns: minmax(0, 1fr); }
+  .fwh-home-tile { padding: 18px; }
+}
