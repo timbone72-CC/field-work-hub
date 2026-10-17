@@ -131,6 +131,18 @@ class AutoPublisherPolicyTests(unittest.TestCase):
             with self.assertRaises(pub.NotEligible):
                 pub.check_previous_release(30, SHA)
 
+    def test_only_eligible_publisher_job_has_release_concurrency(self):
+        workflow = (Path(__file__).resolve().parents[2]
+                    / ".github/workflows/internal-ui-test-auto-release.yml").read_text()
+        pre_jobs, jobs = workflow.split("\njobs:", 1)
+        self.assertNotIn("\nconcurrency:", pre_jobs)
+        policy, publish = jobs.split("\n  publish:", 1)
+        self.assertNotIn("concurrency:", policy)
+        self.assertIn("    concurrency:\n      group: fwh-internal-ui-test-publication\n"
+                      "      cancel-in-progress: false", publish)
+        self.assertIn("github.event.workflow_run.event == 'pull_request'", publish)
+        self.assertIn("github.event.workflow_run.head_branch == 'feat/phase-5-6-dashboard-workflow'", publish)
+
     def test_kill_switch_keeps_publisher_off_without_api_or_files(self):
         with patch.dict("os.environ", {"FWH_UI_AUTO_RELEASE_ENABLED": "false"}):
             with patch.object(pub, "api", side_effect=AssertionError("network forbidden")):
