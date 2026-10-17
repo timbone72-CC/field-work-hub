@@ -36,9 +36,11 @@ ALLOWED_FILES = {
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/MainActivity.java",
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/PhotoActivity.java",
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/PhotoRecoveryActivity.java",
+    "app/src/main/java/com/inandout/fieldphotoprep/team/internal/FwhImmersiveNavigation.java",
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/FwhVisualStyle.java",
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/UpdateCheckCadence.java",
     "docs/PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md",
+    "docs/ROADMAP.md",
     "docs/FWH_INTERNAL_AUTO_UPDATE_PLAN_2026-10-16.md",
 }
 TEST_PREFIX = "app/src/test/java/com/inandout/fieldphotoprep/team/internal/"

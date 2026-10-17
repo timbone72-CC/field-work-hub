@@ -96,6 +96,31 @@ class AutoPublisherPolicyTests(unittest.TestCase):
             pub.validate_diff(dict(status="ahead", ahead_by=1,
                                    files=[dict(filename="app/build.gradle")]))
 
+    def test_only_two_new_immersive_navigation_paths_are_allowed(self):
+        helper = "app/src/main/java/com/inandout/fieldphotoprep/team/internal/FwhImmersiveNavigation.java"
+        roadmap = "docs/ROADMAP.md"
+        self.assertTrue(pub.allowed_path(helper))
+        self.assertTrue(pub.allowed_path(roadmap))
+        comparison = valid_comparison()
+        comparison["files"].extend([dict(filename=helper), dict(filename=roadmap)])
+        allowed_names = pub.validate_diff(comparison)
+        self.assertIn(helper, allowed_names)
+        self.assertIn(roadmap, allowed_names)
+        for forbidden in [
+            "app/src/main/java/com/inandout/fieldphotoprep/team/internal/FwhImmersiveNavigationV2.java",
+            "app/src/main/java/com/inandout/fieldphotoprep/team/internal/FwhImmersiveNavigation.java.backup",
+            "app/src/main/java/com/inandout/fieldphotoprep/team/internal/UnsafeNavigation.java",
+            "app/src/main/java/com/inandout/fieldphotoprep/team/internal/PhotoOwner.java",
+            "docs/ROADMAP_DRAFT.md",
+            "docs/PHASE_STAGING_DOCTRINE.md",
+            "docs/ROADMAP.md/../GOVERNANCE.md",
+            ".github/workflows/internal-ui-test-auto-release.yml",
+            "ci/auto_publish_verified_ui.py",
+            "supabase/migrations/example.sql",
+        ]:
+            with self.subTest(path=forbidden), self.assertRaises(pub.NotEligible):
+                pub.validate_diff(valid_comparison(extra=forbidden))
+
     def test_frozen_release_bytes_and_identity_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
             apk = Path(d) / pub.ASSET
