@@ -87,7 +87,8 @@ public final class PhotoRecoveryActivity extends Activity {
                                 + ("PROBLEM".equals(p.state)?"\nOriginal may need recovery; copied as stored.":""));
                         row.setTextColor(FwhVisualStyle.INK);
                         row.setTextSize(14);
-                        row.setPadding(pad / 2, pad / 2, pad / 2, pad / 2);
+                        row.setPadding(FwhVisualStyle.dp(this, 10), FwhVisualStyle.dp(this, 10),
+                                FwhVisualStyle.dp(this, 10), FwhVisualStyle.dp(this, 10));
                         FwhVisualStyle.panel(row);
                         LinearLayout.LayoutParams photoParams = new LinearLayout.LayoutParams(-1, -2);
                         photoParams.bottomMargin = FwhVisualStyle.dp(this, 8);
