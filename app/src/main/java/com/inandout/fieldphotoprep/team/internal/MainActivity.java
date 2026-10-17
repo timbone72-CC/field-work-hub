@@ -163,26 +163,26 @@ public final class MainActivity extends Activity {
         progress.setLayoutParams(progressParams);
         shell.addView(progress);
 
-        statusText = text("", 14, false);
-        statusText.setPadding(dp(20), dp(4), dp(20), dp(4));
+        statusText = text("", 12, false);
+        statusText.setPadding(dp(20), dp(3), dp(20), dp(3));
         shell.addView(statusText);
 
         mainScroll = new ScrollView(this);
         mainScroll.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(padding, padding, padding, padding);
+        root.setPadding(padding, dp(10), padding, padding);
         mainScroll.addView(root);
         shell.addView(mainScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        screenTitle = text(getString(R.string.phase1_title), 26, true);
-        screenTitle.setPadding(0, dp(8), 0, dp(6));
+        screenTitle = text(getString(R.string.phase1_title), 22, true);
+        screenTitle.setPadding(0, dp(6), 0, dp(5));
         FwhVisualStyle.heading(screenTitle);
         root.addView(screenTitle);
 
         screenIntro = text(getString(R.string.phase1_intro), 15, false);
-        screenIntro.setPadding(0, 0, 0, dp(18));
+        screenIntro.setPadding(0, 0, 0, dp(12));
         FwhVisualStyle.body(screenIntro);
         root.addView(screenIntro);
 
@@ -217,26 +217,26 @@ public final class MainActivity extends Activity {
 
         homePane = new LinearLayout(this);
         homePane.setOrientation(LinearLayout.VERTICAL);
-        homePane.setPadding(dp(16), dp(14), dp(16), dp(18));
+        homePane.setPadding(dp(14), dp(12), dp(14), dp(12));
         FwhVisualStyle.panel(homePane);
         root.addView(homePane, matchWrap());
 
         TextView homeLabel = text("YOUR WORKSPACE", 12, true);
         homeLabel.setTextColor(FwhVisualStyle.TEAL);
-        homeLabel.setPadding(dp(4), dp(6), 0, dp(14));
+        homeLabel.setPadding(dp(4), dp(3), 0, dp(8));
         homePane.addView(homeLabel);
         homePane.addView(navigationButton("Work Orders", true,
-                () -> showPage(PAGE_WORK_ORDERS)), matchWrap());
+                () -> showPage(PAGE_WORK_ORDERS)));
         homePane.addView(navigationButton("Account & Updates", false,
-                () -> showPage(PAGE_ACCOUNT)), matchWrap());
+                () -> showPage(PAGE_ACCOUNT)));
 
         accountPane = new LinearLayout(this);
         accountPane.setOrientation(LinearLayout.VERTICAL);
-        accountPane.setPadding(dp(16), dp(14), dp(16), dp(18));
+        accountPane.setPadding(dp(14), dp(12), dp(14), dp(12));
         FwhVisualStyle.panel(accountPane);
         root.addView(accountPane, matchWrap());
         accountPane.addView(navigationButton("← Home", false,
-                () -> showPage(PAGE_HOME)), matchWrap());
+                () -> showPage(PAGE_HOME)));
         accountPane.addView(identityText);
         accountPane.addView(rlsText);
 
@@ -253,8 +253,8 @@ public final class MainActivity extends Activity {
         FwhVisualStyle.button(recoverPhotosButton, false);
         homePane.addView(recoverPhotosButton, matchWrap());
 
-        homeSummary = text("", 14, false);
-        homeSummary.setPadding(dp(5), dp(14), dp(5), dp(6));
+        homeSummary = text("", 13, false);
+        homeSummary.setPadding(dp(5), dp(8), dp(5), dp(4));
         FwhVisualStyle.body(homeSummary);
         homePane.addView(homeSummary);
 
@@ -283,14 +283,14 @@ public final class MainActivity extends Activity {
         shell.addView(workOrdersPane, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         workOrdersPane.addView(navigationButton("← Home", false,
-                () -> showPage(PAGE_HOME)), matchWrap());
+                () -> showPage(PAGE_HOME)));
 
-        workOrdersHeading = text(getString(R.string.work_orders_heading), 22, true);
+        workOrdersHeading = text(getString(R.string.work_orders_heading), 20, true);
         workOrdersHeading.setPadding(0, dp(6), 0, dp(4));
         FwhVisualStyle.heading(workOrdersHeading);
         workOrdersPane.addView(workOrdersHeading);
 
-        assignmentSummaryText = text("", 14, false);
+        assignmentSummaryText = text("", 13, false);
         assignmentSummaryText.setPadding(0, 0, 0, dp(6));
         FwhVisualStyle.body(assignmentSummaryText);
         workOrdersPane.addView(assignmentSummaryText);
@@ -298,7 +298,7 @@ public final class MainActivity extends Activity {
         workOrderSearch = new EditText(this);
         workOrderSearch.setSingleLine(true);
         workOrderSearch.setTextSize(16);
-        workOrderSearch.setHint("Search address or work order");
+        workOrderSearch.setHint("Search address or WO");
         workOrderSearch.setInputType(InputType.TYPE_CLASS_TEXT);
         workOrderSearch.setContentDescription("Search assigned work orders");
         FwhVisualStyle.input(workOrderSearch);
@@ -315,7 +315,8 @@ public final class MainActivity extends Activity {
         workOrdersPane.addView(workOrderSearch, searchParams);
 
         refreshAssignmentsButton = new Button(this);
-        refreshAssignmentsButton.setText(R.string.refresh_assignments);
+        refreshAssignmentsButton.setText("Refresh");
+        refreshAssignmentsButton.setContentDescription(getString(R.string.refresh_assignments));
         refreshAssignmentsButton.setOnClickListener(v -> refreshAssignments());
         FwhVisualStyle.button(refreshAssignmentsButton, false);
         LinearLayout.LayoutParams refreshParams = matchWrap();
@@ -339,8 +340,8 @@ public final class MainActivity extends Activity {
         shell.addView(detailPane, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         detailPane.addView(navigationButton("← Work Orders", false,
-                () -> showPage(PAGE_WORK_ORDERS)), matchWrap());
-        detailHeading = text("Work Order", 22, true);
+                () -> showPage(PAGE_WORK_ORDERS)));
+        detailHeading = text("Work Order", 20, true);
         detailHeading.setPadding(0, dp(6), 0, dp(4));
         FwhVisualStyle.heading(detailHeading);
         detailPane.addView(detailHeading);
@@ -684,8 +685,9 @@ public final class MainActivity extends Activity {
             summary += " · " + (matchedCurrent + matchedCompleted) + " matching";
         }
         assignmentSummaryText.setText(summary);
-        homeSummary.setText(currentAssignmentCountText(totalCurrent)
-                + " · " + completedCountText(totalCompleted));
+        homeSummary.setText(totalCurrent + " current · " + totalCompleted + " completed");
+        homeSummary.setContentDescription(currentAssignmentCountText(totalCurrent)
+                + ", " + completedCountText(totalCompleted));
 
         if (matchedCurrent == 0 && search.trim().isEmpty()) {
             workOrdersContainer.addView(text(getString(R.string.no_assignments), 15, false));
@@ -733,7 +735,7 @@ public final class MainActivity extends Activity {
         SpannableString styledRow = new SpannableString(rowText);
         styledRow.setSpan(new StyleSpan(Typeface.BOLD), 0, address.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        styledRow.setSpan(new RelativeSizeSpan(1.12f), 0, address.length(),
+        styledRow.setSpan(new RelativeSizeSpan(1.08f), 0, address.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         styledRow.setSpan(new ForegroundColorSpan(FwhVisualStyle.SUBTLE),
                 address.length() + 1, rowText.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -745,12 +747,12 @@ public final class MainActivity extends Activity {
         }
         row.setText(styledRow);
         row.setAllCaps(false);
-        row.setTextSize(15);
-        row.setMinHeight(dp(94));
+        row.setTextSize(14);
+        row.setMinHeight(dp(88));
         row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), dp(10), dp(14), dp(10));
         FwhVisualStyle.button(row, false);
-        row.setTextSize(15);
+        row.setTextSize(14);
         row.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
         row.setContentDescription("Open " + address + ", " + jobLine
                 + ", " + status + ", due " + due);
@@ -818,13 +820,18 @@ public final class MainActivity extends Activity {
         TextView propertyLabel = text("PROPERTY", 12, true);
         propertyLabel.setTextColor(FwhVisualStyle.TEAL);
         card.addView(propertyLabel);
-        card.addView(text(address, 20, true));
+        card.addView(text(address, 18, true));
+        TextView workOrderLabel = text("WORK ORDER", 12, true);
+        workOrderLabel.setTextColor(FwhVisualStyle.TEAL);
+        workOrderLabel.setPadding(0, dp(8), 0, 0);
+        card.addView(workOrderLabel);
         card.addView(text(workOrder.currentRunSequence > 1
-                ? "Follow-up — client " + woNumber : woNumber, 14, true));
+                ? "Follow-up · " + woNumber
+                : (workOrder.woNumber.isEmpty() ? "Not provided" : workOrder.woNumber), 14, true));
         if (workOrder.currentRunSequence > 1 && !workOrder.reopenReason.isEmpty())
             card.addView(text("Follow-up reason: " + workOrder.reopenReason, 14, false));
-        card.addView(text("Work type: " + workType, 14, false));
-        card.addView(text("Due: " + dueDate, 14, false));
+        card.addView(text("Work type: " + workType, 13, false));
+        card.addView(text("Due: " + dueDate, 13, false));
         String status =
                 !workOrder.conflictReason.isEmpty()
                         ? "Needs review"
@@ -833,7 +840,7 @@ public final class MainActivity extends Activity {
                                 : "START".equals(workOrder.pendingKind)
                                         ? "Started — waiting to sync"
                                         : displayStatus(workOrder.fieldStatus);
-        TextView jobStatus = text("Status: " + status, 14, true);
+        TextView jobStatus = text("Status: " + status, 13, true);
         if (!workOrder.conflictReason.isEmpty())
             jobStatus.setTextColor(FwhVisualStyle.WARN);
         card.addView(jobStatus);
@@ -841,7 +848,7 @@ public final class MainActivity extends Activity {
             card.addView(text("Accepted — pending sync", 14, true));
         else if (!workOrder.acknowledgmentReceivedAt.isEmpty())
             card.addView(text("Accepted — confirmed by office", 14, true));
-        try { card.addView(text(PhotoRequirements.parse(workOrder.requirementSnapshotJson).summary(), 14, false)); }
+        try { card.addView(text(PhotoRequirements.parse(workOrder.requirementSnapshotJson).summary(), 13, false)); }
         catch (Exception e) { card.addView(text(e.getMessage(),14,true)); }
         Button photos = new Button(this); photos.setText("Photos");
         photos.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoActivity.class)
@@ -1307,6 +1314,7 @@ public final class MainActivity extends Activity {
         passwordInput.setText("");
         screenTitle.setText(R.string.phase1_title);
         screenIntro.setText(R.string.phase1_intro);
+        screenIntro.setVisibility(View.VISIBLE);
         emailInput.setVisibility(View.VISIBLE);
         passwordInput.setVisibility(View.VISIBLE);
         signInButton.setVisibility(View.VISIBLE);
@@ -1343,11 +1351,12 @@ public final class MainActivity extends Activity {
         Button button = new Button(this);
         button.setText(label);
         button.setAllCaps(false);
-        button.setTextSize(16);
-        button.setMinHeight(dp(56));
+        button.setTextSize(15);
         FwhVisualStyle.button(button, primary);
+        button.setMinHeight(dp(48));
+        button.setMinimumHeight(dp(48));
         LinearLayout.LayoutParams layout = matchWrap();
-        layout.bottomMargin = dp(10);
+        layout.bottomMargin = dp(6);
         button.setLayoutParams(layout);
         button.setOnClickListener(v -> action.run());
         return button;
@@ -1366,6 +1375,7 @@ public final class MainActivity extends Activity {
         workOrdersPane.setVisibility(PAGE_WORK_ORDERS.equals(page) ? View.VISIBLE : View.GONE);
         accountPane.setVisibility(PAGE_ACCOUNT.equals(page) ? View.VISIBLE : View.GONE);
         accountPane.getChildAt(0).setVisibility(View.VISIBLE);
+        screenIntro.setVisibility(View.GONE);
         if (PAGE_WORK_ORDERS.equals(page)) {
             if ("CONTRACTOR".equals(currentSession.role)) {
                 screenTitle.setText(R.string.assignments_title);
