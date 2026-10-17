@@ -891,7 +891,6 @@ public final class MainActivity extends Activity {
             card.addView(declineTeam);
         }
 
-        card.setBackgroundTintList(null);
         card.setBackgroundColor(Color.WHITE);
         detailContainer.addView(card);
     }
