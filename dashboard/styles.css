@@ -640,3 +640,200 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .fwh-home-grid { grid-template-columns: minmax(0, 1fr); }
   .fwh-home-tile { padding: 18px; }
 }
+
+/* Modern Premium Stage 3: hierarchy of the real selected work order only.
+   Status, six tabs, Save/Close, safety warnings, and secondary job actions remain. */
+#edit-work-order-section.job-workspace {
+  width: min(980px, calc(100vw - 34px));
+  max-height: 94dvh;
+  padding: clamp(16px, 2.6vw, 28px);
+  overflow-x: hidden;
+}
+#edit-work-order-section .workspace-header {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+#edit-work-order-section .fwh-job-identity {
+  min-width: 0;
+  padding: clamp(18px, 3vw, 26px);
+  border-radius: 14px;
+  background: linear-gradient(118deg, var(--fwh-navy-deep), #254d69);
+  color: #fff;
+}
+#edit-work-order-section .fwh-job-identity .eyebrow {
+  color: #a8e2dd;
+  margin: 0 0 5px;
+}
+#edit-work-order-section #edit-heading {
+  color: #fff;
+  margin: 0;
+  font-size: clamp(1.45rem, 2.8vw, 2.1rem);
+  line-height: 1.24;
+  overflow-wrap: anywhere;
+}
+#edit-work-order-section #job-address {
+  color: #fff;
+  font-size: clamp(1.02rem, 1.7vw, 1.22rem);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  margin: 8px 0 6px;
+}
+#edit-work-order-section #job-facts,
+#edit-work-order-section #job-receipt {
+  color: #d9e8f1;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  margin: 4px 0;
+}
+#edit-work-order-section .fwh-job-guidance {
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid #b4dfd9;
+  border-left: 4px solid var(--fwh-teal);
+  border-radius: 12px;
+  background: #eaf7f5;
+}
+#edit-work-order-section .fwh-job-guidance-text {
+  flex: 1 1 230px;
+  min-width: 0;
+}
+#edit-work-order-section .fwh-job-guidance-label {
+  margin: 0 0 4px;
+  color: #315e61;
+  font-size: .74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+#edit-work-order-section #job-next-action {
+  margin: 0;
+  color: var(--fwh-navy-deep);
+  line-height: 1.5;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+#edit-work-order-section #job-next-action-open {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  color: #fff;
+  background: var(--fwh-teal);
+  border-color: var(--fwh-teal);
+}
+@media (hover: hover) {
+  #edit-work-order-section #job-next-action-open:not(:disabled):hover {
+    background: #0a5d61;
+  }
+}
+#edit-work-order-section .fwh-job-pager {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+#edit-work-order-section .fwh-job-pager button {
+  width: auto;
+  margin: 0;
+  font-size: .88rem;
+  min-height: 40px;
+}
+#edit-work-order-section #job-context {
+  font-size: .88rem;
+  line-height: 1.45;
+  margin: -5px 0 0;
+}
+#edit-work-order-section #job-context:empty { display: none; }
+#edit-work-order-section .fwh-job-repeat {
+  gap: 9px;
+  align-items: center;
+  padding: 12px 14px;
+  background: #f5f8fa;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+}
+#edit-work-order-section .fwh-job-repeat button {
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  font-size: .88rem;
+}
+#edit-work-order-section #job-address-context {
+  padding: 14px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+  min-width: 0;
+}
+#edit-work-order-section .workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 10px 0 14px;
+}
+#edit-work-order-section .workspace-tabs button {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 6px;
+  margin: 0;
+  text-align: center;
+  overflow-wrap: break-word;
+  line-height: 1.25;
+}
+#edit-work-order-section .workspace-tabs button[aria-pressed="true"] {
+  box-shadow: inset 0 -3px 0 rgba(255,255,255,.38);
+}
+#edit-work-order-section #edit-wo-form {
+  margin-top: 4px;
+  min-width: 0;
+}
+#edit-work-order-section [data-job-panel] {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+  padding: clamp(14px, 2.5vw, 24px);
+}
+#edit-work-order-section [data-job-panel] h3 { margin: 0 0 12px; }
+#edit-work-order-section .unsaved-choice {
+  border-left: 4px solid #c68c21;
+  line-height: 1.5;
+}
+#edit-work-order-section .edit-actions {
+  gap: 10px;
+  z-index: 2;
+}
+@media (max-width: 760px) {
+  #edit-work-order-section .workspace-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  #edit-work-order-section.job-workspace {
+    width: calc(100vw - 12px);
+    max-height: 97dvh;
+    padding: 12px;
+  }
+  #edit-work-order-section .fwh-job-guidance { align-items: stretch; }
+  #edit-work-order-section #job-next-action-open {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+  #edit-work-order-section .fwh-job-pager,
+  #edit-work-order-section .fwh-job-repeat { display: flex; }
+  #edit-work-order-section .fwh-job-pager button,
+  #edit-work-order-section .fwh-job-repeat button {
+    flex: 1 1 135px;
+    min-width: 0;
+    white-space: normal;
+  }
+  #edit-work-order-section .edit-actions { bottom: -12px; }
+}
+@media (max-width: 345px) {
+  #edit-work-order-section .workspace-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
