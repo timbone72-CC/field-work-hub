@@ -58,6 +58,7 @@ final class FwhVisualStyle {
         button.setMinimumHeight(dp(context, 52));
         button.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10));
         // A real RippleDrawable retains Android's press feedback; it never changes enable/click logic.
+        button.setBackgroundTintList(null);
         button.setBackground(new RippleDrawable(
                 ColorStateList.valueOf(primary ? Color.argb(55, 255, 255, 255)
                         : Color.argb(32, 23, 105, 116)),
