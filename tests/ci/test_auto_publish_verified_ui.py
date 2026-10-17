@@ -134,11 +134,11 @@ class AutoPublisherPolicyTests(unittest.TestCase):
     def test_only_eligible_publisher_job_has_release_concurrency(self):
         workflow = (Path(__file__).resolve().parents[2]
                     / ".github/workflows/internal-ui-test-auto-release.yml").read_text()
-        pre_jobs, jobs = workflow.split("\\njobs:", 1)
-        self.assertNotIn("\\nconcurrency:", pre_jobs)
-        policy, publish = jobs.split("\\n  publish:", 1)
+        pre_jobs, jobs = workflow.split("\njobs:", 1)
+        self.assertNotIn("\nconcurrency:", pre_jobs)
+        policy, publish = jobs.split("\n  publish:", 1)
         self.assertNotIn("concurrency:", policy)
-        self.assertIn("    concurrency:\\n      group: fwh-internal-ui-test-publication\\n"
+        self.assertIn("    concurrency:\n      group: fwh-internal-ui-test-publication\n"
                       "      cancel-in-progress: false", publish)
         self.assertIn("github.event.workflow_run.event == 'pull_request'", publish)
         self.assertIn("github.event.workflow_run.head_branch == 'feat/phase-5-6-dashboard-workflow'", publish)
