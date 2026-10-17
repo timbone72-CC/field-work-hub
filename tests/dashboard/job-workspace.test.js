@@ -254,7 +254,7 @@ test('Modern Premium Stage 1 does not hide actions or change the existing job wo
   const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
   const premium = css.split('/* Modern Premium foundation — Stage 1')[1]?.split('/* Modern Premium Stage 2:')[0];
   assert.ok(premium, 'The visual refinement must remain isolated and reviewable');
-  assert.match(html, /styles\.css\?v=modern-premium-stage2-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage2b-20261017/);
   // Preserve each established functional destination and the same data-driven tab owners.
   for (const id of [
     'login-form', 'sign-out', 'notification-center', 'create-wo-details',
@@ -284,11 +284,13 @@ test('Modern Premium Stage 2 routes existing work without replacing roles or act
     'notification-center', 'edit-work-order-section', 'sign-out']) {
     assert.match(html, new RegExp('id="' + id + '"'), id + ' missing');
   }
-  assert.match(html, /navigation\.js\?v=modern-premium-stage2-20261017/);
-  assert.match(html, /styles\.css\?v=modern-premium-stage2-20261017/);
+  assert.match(html, /navigation\.js\?v=modern-premium-stage2b-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage2b-20261017/);
   assert.match(css, /#results-card\[data-fwh-view\]:not\(\[data-fwh-view="work"\]\) > #fwh-work-page/);
   assert.match(nav, /new MutationObserver\(syncTeam\)/);
   assert.match(nav, /button\.hidden = !available/);
+  assert.match(nav, /ownerConsole\(\) \|\| contractorConsole\(\)/);
+  assert.match(css, /#contractor-management-section/);
   assert.match(nav, /if \(view === 'create'\) create\.open = true/);
   assert.match(nav, /if \(view === 'alerts'\) alerts\.open = true/);
   assert.match(nav, /create\.addEventListener\('toggle'/);
