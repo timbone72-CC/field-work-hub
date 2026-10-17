@@ -928,6 +928,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       document.getElementById('results-card').removeAttribute('data-fwh-view');
       document.getElementById('notification-center').open = false;
       document.getElementById('create-wo-details').open = false;
+      // Stage 2 Team intentionally opened its real details; return this
+      // disposable fixture to the original closed-controls baseline.
+      document.getElementById('contractor-management-section').open = false;
     });
     assert.equal(await page.locator('#job-filters').isVisible(), true);
     assert.equal(await page.locator('#create-wo-details').isVisible(), true);
