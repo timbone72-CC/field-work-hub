@@ -360,6 +360,7 @@ public final class MainActivity extends Activity {
         detailPane.addView(detailScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
+        FwhImmersiveNavigation.protect(this, shell, 0, 0, 0, 0);
         return shell;
     }
 
@@ -1307,6 +1308,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        FwhImmersiveNavigation.enter(this);
         if (pendingInstallerApk != null && Build.VERSION.SDK_INT >= 26
                 && getPackageManager().canRequestPackageInstalls()) {
             continueInstaller();
