@@ -254,7 +254,7 @@ test('Modern Premium Stage 1 does not hide actions or change the existing job wo
   const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
   const premium = css.split('/* Modern Premium foundation — Stage 1')[1]?.split('/* Modern Premium Stage 2:')[0];
   assert.ok(premium, 'The visual refinement must remain isolated and reviewable');
-  assert.match(html, /styles\.css\?v=modern-premium-stage3-lookup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage3-20261017/);
   // Preserve each established functional destination and the same data-driven tab owners.
   for (const id of [
     'login-form', 'sign-out', 'notification-center', 'create-wo-details',
@@ -285,7 +285,7 @@ test('Modern Premium Stage 2 routes existing work without replacing roles or act
     assert.match(html, new RegExp('id="' + id + '"'), id + ' missing');
   }
   assert.match(html, /navigation\.js\?v=modern-premium-stage2b-20261017/);
-  assert.match(html, /styles\.css\?v=modern-premium-stage3-lookup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage3-20261017/);
   assert.match(css, /#results-card\[data-fwh-view\]:not\(\[data-fwh-view="work"\]\) > #fwh-work-page/);
   assert.match(nav, /new MutationObserver\(syncTeam\)/);
   assert.match(nav, /button\.hidden = !available/);
@@ -305,7 +305,7 @@ test('Modern Premium Stage 3 visually prioritizes actual job status without chan
   const js = fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'), 'utf8');
   const stage = css.split('/* Modern Premium Stage 3:')[1];
   assert.ok(stage, 'Stage 3 overrides must be isolated');
-  assert.match(html, /styles\.css\?v=modern-premium-stage3-lookup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage3-20261017/);
   assert.match(html, /class="fwh-job-identity"/);
   assert.match(html, /class="workspace-navigation fwh-job-guidance"/);
   assert.match(html, /id="job-next-action"/);
@@ -324,20 +324,8 @@ test('Modern Premium Stage 3 visually prioritizes actual job status without chan
     assert.match(html, new RegExp('data-job-panel="' + panel + '"'), 'Missing panel: ' + panel);
   }
   assert.equal((html.match(/data-job-tab="/g) || []).length, 6);
-  assert.ok(html.indexOf('id="job-lookup-popover"') < html.indexOf('class="workspace-navigation fwh-job-guidance"'),
-    'Related-job magnifier must be in the job identity header, not below the form');
-  assert.ok(html.indexOf('id="job-address-context"') < html.indexOf('class="workspace-navigation fwh-job-guidance"'),
-    'The unchanged related-jobs lookup must be inside the header overlay');
-  assert.equal((html.match(/id="job-address-context"/g) || []).length, 1);
-  assert.match(html, /id="job-lookup-toggle" aria-label="Look up work orders at this address"/);
-  assert.match(html, /id="job-lookup-close" type="button"/);
-  assert.match(html, /job-workspace\.js\?v=phase6c-lookup-20261017/);
-  assert.match(css, /\.fwh-job-lookup-surface/);
-  assert.match(css, /max-height: min\(62dvh, 510px\)/);
-  assert.match(js, /document\.addEventListener\('pointerdown', lookupOutsidePointer\)/);
-  assert.match(js, /document\.addEventListener\('keydown', lookupEscape, true\)/);
-  assert.match(js, /event\.stopImmediatePropagation\(\)/);
-  assert.match(js, /el\('job-lookup-close'\)\.addEventListener\('click'/);
+  assert.ok(html.indexOf('id="job-address-context"') > html.indexOf('id="cancel-edit"'),
+    'The unchanged secondary exact-address controls follow primary job details and actions');
   assert.match(stage, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/,
     'Mobile tabs must stay readable and visible');
   assert.match(js, /el\('job-next-action-open'\)\.addEventListener\('click'/);

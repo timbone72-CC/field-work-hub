@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Field Work Hub Admin</title>
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
-  <link rel="stylesheet" href="styles.css?v=modern-premium-stage3-lookup-20261017">
+  <link rel="stylesheet" href="styles.css?v=modern-premium-stage3-20261017">
 </head>
 <body>
   <main class="shell">
@@ -166,30 +166,6 @@
             <p id="job-address"></p>
             <p id="job-facts" class="muted"></p>
             <p id="job-receipt" class="muted"></p>
-            <details id="job-lookup-popover" class="fwh-job-lookup">
-              <summary id="job-lookup-toggle" aria-label="Look up work orders at this address" title="Related work orders at this address">
-                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-                  <circle cx="10.8" cy="10.8" r="6.6" fill="none" stroke="currentColor" stroke-width="2"></circle>
-                  <path d="M15.8 15.8L21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-                </svg>
-              </summary>
-              <div class="fwh-job-lookup-surface" aria-label="Related work orders at this address">
-                <div class="fwh-job-lookup-heading">
-                  <h3>Related jobs at this address</h3>
-                  <button id="job-lookup-close" type="button" class="secondary" aria-label="Close related jobs lookup">×</button>
-                </div>
-            <div id="job-address-context" hidden>
-              <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
-              <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>
-              <div class="workspace-navigation">
-                <button id="job-address-load" type="button" class="secondary">Load address jobs</button>
-                <button id="job-address-previous" type="button" class="secondary" disabled>Previous address page</button>
-                <button id="job-address-next" type="button" class="secondary" disabled>Next address page</button>
-              </div>
-              <div id="job-address-work-orders" class="workspace-navigation" aria-label="Work orders at this address"></div>
-            </div>
-              </div>
-            </details>
           </div>
           <div class="workspace-navigation fwh-job-guidance" aria-label="Current operational guidance">
             <div class="fwh-job-guidance-text">
@@ -422,6 +398,16 @@
           </div>
           <p id="edit-status" class="status" role="status" aria-live="polite"></p>
         </form>
+          <div id="job-address-context" hidden>
+            <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
+            <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>
+            <div class="workspace-navigation">
+              <button id="job-address-load" type="button" class="secondary">Load address jobs</button>
+              <button id="job-address-previous" type="button" class="secondary" disabled>Previous address page</button>
+              <button id="job-address-next" type="button" class="secondary" disabled>Next address page</button>
+            </div>
+            <div id="job-address-work-orders" class="workspace-navigation" aria-label="Work orders at this address"></div>
+          </div>
       </dialog>
 
       <section id="fwh-work-page" aria-labelledby="fwh-work-heading">
@@ -458,7 +444,7 @@
   <script src="push-device.js?v=phase6e-20261011" defer></script>
   <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
-  <script src="job-workspace.js?v=phase6c-lookup-20261017" defer></script>
+  <script src="job-workspace.js?v=phase6c-20261013-eligibility" defer></script>
   <script src="app.js?v=phase56-20261013-request-stage" defer></script>
   <script src="recovery.js?v=phase5e-recovery-20261012" defer></script>
   <script src="session.js?v=phase56-20261013-request-stage" defer></script>
