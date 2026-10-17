@@ -1727,6 +1727,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#staffing-roster-person option').count(),2);
      assert.match(await page.locator('#staffing-work-status').innerText(),/Tier 2 · 1 authorized jobs/);
      assert.equal(await page.locator('#staffing-work-rows tr').count(),1);
+    // Stage 7: existing Supervisor view before any staffing mutations.
+    for(const id of ['staffing-capacity','staffing-refresh','staffing-invite-form',
+      'staffing-operation','staffing-team-name','staffing-name','staffing-email',
+      'staffing-reason','staffing-submit','staffing-roster-area',
+      'staffing-roster-person','staffing-roster-team','staffing-work-area',
+      'staffing-work-rows']) {
+      assert.equal(await page.locator('#'+id).isVisible(),true,
+        'Stage 7 must preserve Supervisor control: '+id);
+    }
+    await page.screenshot({path:path.join(output,'stage7-supervisor-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#staffing-card').evaluate(el=>
+      el.scrollWidth<=el.clientWidth+2),true,'Supervisor page must not overflow phone width');
+    await page.screenshot({path:path.join(output,'stage7-supervisor-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     await page.locator('#staffing-work-rows .staffing-view-detail').first().click();
     await wait(page,()=>document.querySelector('#staffing-work-detail-status')?.textContent
       .includes('Current team authorization confirmed'));

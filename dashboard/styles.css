@@ -1436,3 +1436,60 @@ button:disabled { cursor: not-allowed; opacity: .58; }
     width: 100%;
   }
 }
+
+
+/* Modern Premium Stage 7 — existing Supervisor work presentation only. */
+#staffing-card { min-width:0; border-top:5px solid var(--fwh-teal); border-radius:18px;
+  background:linear-gradient(180deg,#f3f9fb,#fff 240px); }
+#staffing-card > .row.between.gap { display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+  margin:0 0 18px; padding:clamp(16px,3vw,25px); border-radius:13px;
+  background:linear-gradient(120deg,var(--fwh-navy-deep),#244d66); }
+#staffing-card > .row.between.gap > div { flex:1 1 240px; min-width:0; }
+#staffing-card > .row.between.gap .eyebrow { color:#a8e2dd; }
+#staffing-card > .row.between.gap h2 { color:#fff; margin:0 0 7px;
+  font-size:clamp(1.35rem,2.8vw,1.9rem); line-height:1.25; }
+#staffing-card > .row.between.gap #staffing-account { color:#d9e8f1; overflow-wrap:anywhere; }
+#staffing-card #staffing-sign-out { width:auto; margin:0; border:1px solid #8cb9c3; background:#e9f3f6; }
+#staffing-card > .muted, #staffing-card .subsection > .muted { max-width:82ch; line-height:1.55; }
+#staffing-card > #staffing-capacity { padding:13px 16px; margin:18px 0 14px;
+  border:1px solid #b4dfd9; border-radius:11px; background:var(--fwh-teal-soft);
+  color:var(--fwh-navy-deep); font-weight:750; line-height:1.5; }
+#staffing-card > #staffing-refresh { width:auto; min-height:42px; margin:0 0 12px; }
+#staffing-card > #staffing-invite-form, #staffing-card #staffing-roster-form,
+#staffing-card #staffing-work-edit-form, #staffing-card #staffing-handoff-form {
+  width:100%; max-width:none; min-width:0; gap:16px; padding:clamp(16px,2.3vw,23px);
+  background:#f8fbfc; border:1px solid var(--fwh-border); border-radius:13px; }
+#staffing-card > #staffing-invite-form { margin:20px 0; }
+#staffing-card input, #staffing-card textarea, #staffing-card select { min-width:0; max-width:100%; }
+#staffing-card #staffing-invite-form > button, #staffing-card #staffing-roster-submit,
+#staffing-card #staffing-work-edit-submit { justify-self:start; width:auto; min-width:220px;
+  background:var(--fwh-teal); color:#fff; }
+#staffing-card > .subsection { min-width:0; margin:22px 0; padding:clamp(16px,2.7vw,24px);
+  border:1px solid var(--fwh-border); border-radius:15px; background:#fff; }
+#staffing-card > .subsection > h3 { margin:0 0 12px; color:var(--fwh-navy-deep); }
+#staffing-card .table-scroll { max-width:100%; min-width:0; overflow-x:auto;
+  border:1px solid var(--fwh-border); border-radius:12px; }
+#staffing-card .table-scroll table { min-width:640px; width:100%;
+  border-collapse:collapse; text-align:left; font-size:.9rem; }
+#staffing-card .table-scroll th { padding:12px; background:#eaf1f6; color:var(--fwh-navy-deep); font-weight:750; }
+#staffing-card .table-scroll td { padding:12px; border-top:1px solid var(--fwh-border); overflow-wrap:anywhere; }
+#staffing-card .table-scroll tbody tr:nth-child(even) { background:#f8fbfc; }
+#staffing-card #staffing-work-more { width:auto; margin-top:12px; }
+#staffing-card #staffing-work-detail { min-width:0; padding:clamp(14px,2.5vw,22px); margin-top:18px;
+  border:1px solid #b4dfd9; border-radius:12px; background:#f3faf9; }
+#staffing-card #staffing-work-detail > .row.between.gap { display:flex; flex-wrap:wrap; align-items:center; }
+#staffing-card #staffing-work-detail-fields { min-width:0; overflow-wrap:anywhere; line-height:1.55; }
+#staffing-card #staffing-handoff-review, #staffing-card #staffing-link-result {
+  min-width:0; padding:14px; border:1px solid #b4dfd9; border-radius:11px; background:#eaf7f5; }
+#staffing-card .status, #staffing-card [role="status"] { overflow-wrap:anywhere; line-height:1.5; }
+@media (max-width:680px) {
+  #staffing-card > .row.between.gap { align-items:stretch; }
+  #staffing-card #staffing-sign-out, #staffing-card > #staffing-refresh,
+  #staffing-card #staffing-invite-form > button, #staffing-card #staffing-roster-submit,
+  #staffing-card #staffing-work-edit-submit, #staffing-card #staffing-handoff-form > button,
+  #staffing-card #staffing-handoff-confirm, #staffing-card #staffing-work-more,
+  #staffing-card #staffing-work-detail-close, #staffing-card #staffing-link-result > button {
+    width:100%; min-width:0; margin:0;
+  }
+  #staffing-card #staffing-work-detail > .row.between.gap { display:flex; flex-wrap:wrap; gap:8px; }
+}
