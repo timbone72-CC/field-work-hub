@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Field Work Hub Admin</title>
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
-  <link rel="stylesheet" href="styles.css?v=modern-premium-stage1-20261016">
+  <link rel="stylesheet" href="styles.css?v=modern-premium-stage2-20261017">
 </head>
 <body>
   <main class="shell">
@@ -34,7 +34,42 @@
         <button id="sign-out" class="secondary" type="button">Sign Out</button>
       </div>
 
+      <nav id="fwh-primary-nav" class="fwh-primary-nav" aria-label="Admin destinations">
+        <button type="button" data-fwh-go="home" aria-current="page">Home</button>
+        <button type="button" data-fwh-go="work">Work Orders</button>
+        <button type="button" data-fwh-go="create">Create &amp; Assign</button>
+        <button type="button" data-fwh-go="alerts">Alerts</button>
+        <button type="button" data-fwh-go="team" hidden>Team &amp; Access</button>
+      </nav>
+
       <div id="rls-result" class="check" role="status" aria-live="polite"></div>
+      <section id="fwh-home-panel" class="fwh-home-panel" aria-labelledby="fwh-home-heading">
+        <p class="eyebrow">Workspace</p>
+        <h2 id="fwh-home-heading">What would you like to work on?</h2>
+        <p class="muted">Choose an area. Your existing work orders and saved drafts stay in place.</p>
+        <div class="fwh-home-grid">
+          <article class="fwh-home-tile">
+            <h3>Work Orders</h3>
+            <p>Find assignments, open a job, review its photos and delivery history.</p>
+            <button type="button" data-fwh-go="work">Open Work Orders</button>
+          </article>
+          <article class="fwh-home-tile">
+            <h3>Create &amp; Assign</h3>
+            <p>Prepare a new work order and assign it to an authorized contractor.</p>
+            <button type="button" data-fwh-go="create">Create Work Order</button>
+          </article>
+          <article class="fwh-home-tile">
+            <h3>Alerts</h3>
+            <p>Review job alerts and the notification settings already available.</p>
+            <button type="button" data-fwh-go="alerts">Open Alerts</button>
+          </article>
+          <article class="fwh-home-tile" id="fwh-team-tile" hidden>
+            <h3>Team &amp; Access</h3>
+            <p>Open your authorized office access and seat controls.</p>
+            <button type="button" data-fwh-go="team" hidden>Open Team &amp; Access</button>
+          </article>
+        </div>
+      </section>
       <details id="notification-center" class="admin-action">
         <summary>Alerts and notification settings</summary>
         <p class="muted">Job problems remain visible regardless of alert switches. Dashboard alerts are enabled by default. Phone and computer notifications are optional and require separate enrollment.</p>
@@ -370,7 +405,8 @@
         </form>
       </dialog>
 
-      <h2>Work Orders</h2>
+      <section id="fwh-work-page" aria-labelledby="fwh-work-heading">
+      <h2 id="fwh-work-heading">Work Orders</h2>
       <p class="muted">Select a job to view its details and manage the work.</p>
       <form id="job-filters" class="job-filters" autocomplete="off">
         <label>Find by<select id="job-search-field"><option value="property_address">Address</option><option value="wo_number">WO number</option></select></label>
@@ -390,8 +426,10 @@
       </div>
       <p id="job-list-status" class="status" role="status" aria-live="polite"></p>
       <div id="work-orders" class="work-orders"></div>
+      </section>
     </section>
   </main>
+  <script src="navigation.js?v=modern-premium-stage2-20261017" defer></script>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
   <script src="correction-draft.js?v=phase6c-20261013-eligibility" defer></script>
   <script src="followup-management.js?v=phase6c-20261011" defer></script>
