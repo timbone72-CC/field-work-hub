@@ -961,6 +961,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // rendered preference row. CI may still be processing the final read.
     await wait(page,()=>document.querySelector('#notification-status')?.textContent
       .startsWith('Loaded current server facts.'));
+    // Stage 5: real Alert destination, populated with disposable server facts.
+    await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
+    for(const id of ['notification-refresh','notification-count','notification-list',
+      'notification-org-timezone','notification-timezone-save','notification-push-status',
+      'notification-device-class','notification-push-enable','notification-push-disable',
+      'notification-settings']) {
+      assert.equal(await page.locator('#'+id).isVisible(),true,
+        'Alerts must retain original control: '+id);
+    }
+    assert.equal(await page.locator('.notification-preference').count(),9);
+    assert.equal(await page.locator('#notification-list .notification-item').count()>0,true);
+    await page.screenshot({path:path.join(output,'stage5-alerts-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#notification-center').evaluate(el=>
+      el.scrollWidth<=el.clientWidth+1),true,
+      'Alerts screen must not require sideways scrolling on a phone');
+    assert.equal(await page.locator('.notification-preference').first().isVisible(),true);
+    await page.screenshot({path:path.join(output,'stage5-alerts-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(()=>document.getElementById('results-card').removeAttribute('data-fwh-view'));
+
     await Promise.all([
       page.waitForResponse(response=>response.url().includes('/admin_set_notification_preferences')
         && response.request().method()==='POST'),

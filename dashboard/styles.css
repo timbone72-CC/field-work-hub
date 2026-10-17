@@ -973,3 +973,238 @@ button:disabled { cursor: not-allowed; opacity: .58; }
     justify-self: stretch;
   }
 }
+
+
+/* Modern Premium Stage 5: presentation of existing, server-owned Alerts.
+   Keep every alert action, notification preference, device gate and status. */
+#results-card > #notification-center {
+  min-width: 0;
+  border-top: 4px solid var(--fwh-teal);
+  padding: clamp(18px, 3vw, 30px);
+  background: linear-gradient(180deg, #f3f9fb, #fff 190px);
+}
+#results-card > #notification-center > summary {
+  color: var(--fwh-navy-deep);
+  font-size: clamp(1.12rem, 2vw, 1.42rem);
+  font-weight: 800;
+}
+#results-card > #notification-center > .muted {
+  line-height: 1.6;
+  max-width: 78ch;
+}
+#notification-center > .workspace-navigation {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 12px;
+}
+#notification-center > .workspace-navigation > button {
+  width: auto;
+  margin: 0;
+}
+#notification-center #notification-count {
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #eaf3f6;
+  color: var(--fwh-navy-deep);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+#notification-center #notification-status {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#notification-center #notification-list {
+  min-width: 0;
+  margin: 14px 0 25px;
+}
+#notification-center #notification-list > ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#notification-center .notification-item {
+  min-width: 0;
+  padding: 17px 19px;
+  border: 1px solid var(--fwh-border);
+  border-left: 4px solid var(--fwh-teal);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgb(19 47 69 / 4%);
+}
+#notification-center .notification-item > strong {
+  display: block;
+  color: var(--fwh-navy-deep);
+  font-size: 1.04rem;
+}
+#notification-center .notification-item > p {
+  margin: 8px 0 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+#notification-center .notification-item .workspace-navigation {
+  gap: 9px;
+  align-items: stretch;
+}
+#notification-center .notification-item .workspace-navigation > button {
+  width: auto;
+  margin: 0;
+  min-height: 42px;
+}
+#notification-center > .form-grid {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 12px;
+  background: #f8fbfc;
+}
+#notification-center > .form-grid > button {
+  width: auto;
+  margin: 0;
+}
+#notification-center #notification-push-status {
+  margin: 20px 0 8px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#notification-center > .workspace-navigation > label {
+  min-width: min(245px, 100%);
+}
+#notification-center #notification-settings {
+  min-width: 0;
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--fwh-border);
+}
+#notification-center #notification-settings > h3 {
+  margin: 0 0 18px;
+  color: var(--fwh-navy-deep);
+}
+#notification-center #notification-settings > .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px;
+  margin: 0 0 20px;
+  background: #f8fbfc;
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+}
+#notification-center .notification-preference {
+  display: grid;
+  grid-template-columns: minmax(145px, 1.1fr) minmax(240px, 2fr) minmax(90px, 112px) minmax(135px, auto);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 10px;
+  padding: 16px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 12px;
+  background: #fff;
+}
+#notification-center .notification-preference > strong {
+  min-width: 0;
+  grid-column: 1;
+  color: var(--fwh-navy);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+#notification-center .notification-preference > .workspace-navigation {
+  grid-column: 2;
+  gap: 8px;
+}
+#notification-center .notification-preference .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  min-width: 0;
+  border: 1px solid #d8e4eb;
+  background: #f4f8fa;
+  color: var(--fwh-ink);
+  font-size: .86rem;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: normal;
+}
+#notification-center .notification-preference .check > input {
+  flex: none;
+  margin: 0;
+}
+#notification-center .notification-preference > input[type="number"] {
+  grid-column: 3;
+  width: 100%;
+  min-width: 0;
+}
+#notification-center .notification-preference > button {
+  grid-column: 4;
+  margin: 0;
+  width: auto;
+  line-height: 1.35;
+  white-space: normal;
+}
+@media (max-width: 980px) {
+  #notification-center .notification-preference {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  #notification-center .notification-preference > strong {
+    grid-column: 1 / -1;
+  }
+  #notification-center .notification-preference > .workspace-navigation {
+    grid-column: 1 / -1;
+  }
+  #notification-center .notification-preference > input[type="number"] {
+    grid-column: 1;
+    max-width: 160px;
+  }
+  #notification-center .notification-preference > button {
+    grid-column: 2;
+  }
+}
+@media (max-width: 620px) {
+  #notification-center > .workspace-navigation,
+  #notification-center .notification-item .workspace-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  #notification-center > .workspace-navigation > button,
+  #notification-center .notification-item .workspace-navigation > button {
+    flex: 1 1 145px;
+    width: auto;
+    margin: 0;
+  }
+  #notification-center > .form-grid,
+  #notification-center #notification-settings > .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #notification-center > .form-grid > button {
+    width: 100%;
+  }
+  #notification-center .notification-preference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #notification-center .notification-preference > strong,
+  #notification-center .notification-preference > .workspace-navigation,
+  #notification-center .notification-preference > input[type="number"],
+  #notification-center .notification-preference > button {
+    grid-column: 1;
+  }
+  #notification-center .notification-preference > button {
+    width: 100%;
+  }
+  #notification-center .notification-preference > .workspace-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  #notification-center .notification-item {
+    padding: 14px;
+  }
+}
