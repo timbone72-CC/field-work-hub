@@ -113,6 +113,7 @@ const JobWorkspace = (() => {
   function detailsDirty() { return baseline !== null && fingerprint() !== baseline; }
   function dirty() { return detailsDirty() || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
   function reset() {
+    closeLookup();
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
