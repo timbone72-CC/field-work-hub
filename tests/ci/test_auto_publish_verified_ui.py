@@ -62,6 +62,15 @@ class AutoPublisherPolicyTests(unittest.TestCase):
             pub.validate_ci([run(n, sha="b" * 40) for n in pub.NAMES], SHA)
         with self.assertRaises(pub.NotEligible):
             pub.validate_ci([run(n, branch="feat/fake") for n in pub.NAMES], SHA)
+        older = [run(n) for n in pub.NAMES]
+        newer_failure = run("Android Team Client CI", conclusion="failure")
+        newer_failure["id"] = 1000
+        with self.assertRaises(pub.NotEligible):
+            pub.validate_ci(older + [newer_failure], SHA)
+        newer_pending = run("Android Team Client CI")
+        newer_pending.update(id=1001, status="in_progress", conclusion=None)
+        with self.assertRaises(pub.NotEligible):
+            pub.validate_ci(older + [newer_pending], SHA)
 
     def test_bounded_source_diff_refuses_high_risk_changes(self):
         self.assertIn("app/build.gradle", pub.validate_diff(valid_comparison()))
