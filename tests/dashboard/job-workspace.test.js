@@ -252,7 +252,7 @@ test('verified office identity may retain tab login if only first data page time
 test('Modern Premium Stage 1 does not hide actions or change the existing job workspace', () => {
   const html = fs.readFileSync(require.resolve('../../dashboard/index.html'), 'utf8');
   const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
-  const premium = css.split('/* Modern Premium foundation — Stage 1')[1];
+  const premium = css.split('/* Modern Premium foundation — Stage 1')[1]?.split('/* Modern Premium Stage 2:')[0];
   assert.ok(premium, 'The visual refinement must remain isolated and reviewable');
   assert.match(html, /styles\.css\?v=modern-premium-stage2-20261017/);
   // Preserve each established functional destination and the same data-driven tab owners.
