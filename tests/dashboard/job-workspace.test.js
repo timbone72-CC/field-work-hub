@@ -248,3 +248,27 @@ test('verified office identity may retain tab login if only first data page time
  assert.match(source,/pendingAdminSession=null/);
  assert.match(source,/accessToken = null;/);
 });
+
+test('Modern Premium Stage 1 does not hide actions or change the existing job workspace', () => {
+  const html = fs.readFileSync(require.resolve('../../dashboard/index.html'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
+  const premium = css.split('/* Modern Premium foundation — Stage 1')[1];
+  assert.ok(premium, 'The visual refinement must remain isolated and reviewable');
+  assert.match(html, /styles\.css\?v=modern-premium-stage1-20261016/);
+  // Preserve each established functional destination and the same data-driven tab owners.
+  for (const id of [
+    'login-form', 'sign-out', 'notification-center', 'create-wo-details',
+    'job-filters', 'work-orders', 'edit-work-order-section',
+    'job-photos', 'job-delivery', 'job-history', 'job-unsaved',
+    'job-next-action-open', 'save-edit', 'cancel-edit'
+  ]) {
+    assert.match(html, new RegExp('id="' + id + '"'), 'Missing existing control: ' + id);
+  }
+  assert.equal((html.match(/data-job-tab="/g) || []).length, 6);
+  assert.match(premium, /#results-card\s+>\s+\.row\.between\.gap/);
+  assert.match(premium, /\.workspace-tabs button\[aria-pressed="true"\]/);
+  assert.match(premium, /:focus-visible/);
+  assert.match(premium, /max-width:\s*440px/);
+  // This package may restyle visible controls, never take ownership of visibility.
+  assert.doesNotMatch(premium, /(?:display:\s*none|visibility:\s*hidden|pointer-events:\s*none)/i);
+});
