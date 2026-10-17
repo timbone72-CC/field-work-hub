@@ -254,7 +254,7 @@ test('Modern Premium Stage 1 does not hide actions or change the existing job wo
   const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
   const premium = css.split('/* Modern Premium foundation — Stage 1')[1]?.split('/* Modern Premium Stage 2:')[0];
   assert.ok(premium, 'The visual refinement must remain isolated and reviewable');
-  assert.match(html, /styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   // Preserve each established functional destination and the same data-driven tab owners.
   for (const id of [
     'login-form', 'sign-out', 'notification-center', 'create-wo-details',
@@ -285,7 +285,7 @@ test('Modern Premium Stage 2 routes existing work without replacing roles or act
     assert.match(html, new RegExp('id="' + id + '"'), id + ' missing');
   }
   assert.match(html, /navigation\.js\?v=modern-premium-stage2b-20261017/);
-  assert.match(html, /styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   assert.match(css, /#results-card\[data-fwh-view\]:not\(\[data-fwh-view="work"\]\) > #fwh-work-page/);
   assert.match(nav, /new MutationObserver\(syncTeam\)/);
   assert.match(nav, /button\.hidden = !available/);
@@ -305,7 +305,7 @@ test('Modern Premium Stage 3 visually prioritizes actual job status without chan
   const js = fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'), 'utf8');
   const stage = css.split('/* Modern Premium Stage 3:')[1];
   assert.ok(stage, 'Stage 3 overrides must be isolated');
-  assert.match(html, /styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   assert.match(html, /class="fwh-job-identity"/);
   assert.match(html, /class="workspace-navigation fwh-job-guidance"/);
   assert.match(html, /id="job-next-action"/);
@@ -338,7 +338,7 @@ test('Modern Premium Stage 4 keeps the original Create & Assign controls usable'
   const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
   const stage = css.split('/* Modern Premium Stage 4:')[1];
   assert.ok(stage, 'Create & Assign presentation must be independently scoped');
-  assert.match(html, /styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   for (const id of ['create-wo-details','create-wo-form','wo-number-mode-auto',
     'wo-number-mode-custom','custom-wo-number-field','wo-number',
     'remember-wo-number-mode','property-address','work-type-choice','work-type',
@@ -361,7 +361,7 @@ test('Modern Premium Stage 5 preserves original alert actions, preferences and p
   const js=fs.readFileSync(require.resolve('../../dashboard/notifications.js'),'utf8');
   const stage=css.split('/* Modern Premium Stage 5:')[1];
   assert.ok(stage,'Alerts styling must be isolated');
-  assert.match(html,/styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html,/styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   for (const id of ['notification-center','notification-refresh','notification-count',
     'notification-status','notification-list','notification-org-timezone',
     'notification-timezone-save','notification-push-status',
@@ -391,7 +391,7 @@ test('Modern Premium Stage 6 keeps Team & Access owner and Admin controls intact
   const owner=fs.readFileSync(require.resolve('../../dashboard/owner-management.js'),'utf8');
   const stage=css.split('/* Modern Premium Stage 6')[1];
   assert.ok(stage, 'Team styling must remain isolated to the existing panels');
-  assert.match(html, /styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   assert.match(nav, /ownerConsole\(\) \|\| contractorConsole\(\)/);
   assert.match(nav, /button\.hidden = !available/);
   assert.match(stage, /#contractor-management-section/);
@@ -423,7 +423,7 @@ test('Modern Premium Stage 7 preserves Supervisor-only controls and scope', () =
  const js=fs.readFileSync(require.resolve('../../dashboard/staffing.js'),'utf8');
  const stage=css.split('/* Modern Premium Stage 7')[1];
  assert.ok(stage,'Supervisor styling must be isolated');
- assert.match(html,/styles\.css\?v=modern-premium-stage8-setup-20261017/);
+ assert.match(html,/styles\.css\?v=modern-premium-stage9-recovery-20261017/);
  assert.match(js,/card\.id = 'staffing-card'/);
  assert.match(js,/currentUser\?\.app_metadata\?\.role === 'SUPERVISOR'/);
  for(const id of ['staffing-invite-form','staffing-operation','staffing-team-choice',
@@ -445,7 +445,7 @@ test('Modern Premium Stage 8 preserves real invite setup controls and role-bound
  const main=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
  const stage=css.split('/* Modern Premium Stage 8:')[1];
  assert.ok(stage,'Setup styling must be scoped');
- assert.match(main,/styles\.css\?v=modern-premium-stage8-setup-20261017/);
+ assert.match(main,/styles\.css\?v=modern-premium-stage9-recovery-20261017/);
  assert.match(stage,/body\.fwh-setup-page #invite-check/);
  assert.match(stage,/body\.fwh-setup-page #password-form/);
  assert.match(stage,/@media \(max-width:620px\)/);
@@ -453,7 +453,7 @@ test('Modern Premium Stage 8 preserves real invite setup controls and role-bound
   const html=fs.readFileSync(require.resolve('../../dashboard/'+file),'utf8');
   const js=fs.readFileSync(require.resolve('../../dashboard/'+jsFile),'utf8');
   assert.match(html,/<body class="fwh-setup-page">/);
-  assert.match(html,/styles\.css\?v=modern-premium-stage8-setup-20261017/);
+  assert.match(html,/styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   for(const id of ['invite-check','password-form','invite-identity','new-password',
    'confirm-password','set-password','setup-status']){
    assert.equal((html.match(new RegExp('id="' + id + '"','g'))||[]).length,1,
@@ -464,4 +464,31 @@ test('Modern Premium Stage 8 preserves real invite setup controls and role-bound
   assert.match(js,/history\.replaceState/);
   assert.match(js,/password/);
  }
+});
+
+
+test('Modern Premium Stage 9 visually isolates restricted photo recovery without changing access',()=>{
+ const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
+ const css=fs.readFileSync(require.resolve('../../dashboard/styles.css'),'utf8');
+ const js=fs.readFileSync(require.resolve('../../dashboard/recovery.js'),'utf8');
+ const stage=css.split('/* Modern Premium Stage 9:')[1];
+ assert.ok(stage,'Recovery styling must be isolated from the work dashboard');
+ assert.match(html,/styles\.css\?v=modern-premium-stage9-recovery-20261017/);
+ assert.match(js,/card\.id = 'recovery-card'/);
+ assert.match(js,/card\.className = 'card hidden'/);
+ assert.match(js,/photo_recovery_page/);
+ assert.match(js,/recovery-private-photo/);
+ assert.match(js,/SHA-256/);
+ assert.match(js,/adminFetch/);
+ assert.match(js,/new URL\(answer\?\.url/);
+ assert.match(js,/more\.hidden = !next/);
+ assert.match(js,/download\.disabled = true/);
+ assert.match(js,/document\.createElement\('button'\)/);
+ assert.match(js,/download\.textContent = 'Download selected JPEG'/);
+ assert.match(js,/signOut\.textContent = 'Sign Out'/);
+ assert.match(stage,/#recovery-card > div:first-of-type/);
+ assert.match(stage,/#recovery-card > \.workspace-navigation/);
+ assert.match(stage,/@media \(max-width:680px\)/);
+ assert.doesNotMatch(stage,/#recovery-card\s*\{[^}]*display\s*:/);
+ assert.doesNotMatch(stage,/(?:display:\s*none|visibility:\s*hidden|pointer-events:\s*none)/i);
 });

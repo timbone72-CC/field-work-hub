@@ -1527,3 +1527,129 @@ body.fwh-setup-page #setup-status { margin:0; line-height:1.6; overflow-wrap:any
   body.fwh-setup-page #password-form:not(.hidden) { padding:17px 14px; }
   body.fwh-setup-page #set-password { width:100%; }
 }
+
+
+/* Modern Premium Stage 9: restricted photo recovery presentation only.
+   The original recovery.js still owns every auth guard, preview and download. */
+#recovery-card {
+  min-width:0;
+  border-top:5px solid var(--fwh-teal);
+  border-radius:18px;
+  padding:clamp(20px,3vw,34px);
+  background:linear-gradient(180deg,#f2f9fb,#fff 220px);
+}
+#recovery-card > h2 {
+  margin:0 0 12px;
+  color:var(--fwh-navy-deep);
+  font-size:clamp(1.5rem,3vw,2rem);
+  line-height:1.2;
+}
+#recovery-card > h2::before {
+  content:"FIELD WORK HUB · EVIDENCE RECOVERY";
+  display:block;
+  margin:0 0 11px;
+  color:var(--fwh-teal);
+  font-size:.7rem;
+  font-weight:800;
+  letter-spacing:.11em;
+}
+#recovery-card > p:not(.status) {
+  max-width:75ch;
+  line-height:1.65;
+  color:var(--fwh-muted);
+  overflow-wrap:anywhere;
+}
+#recovery-card > .status {
+  padding:13px 16px;
+  margin:20px 0 17px;
+  background:#eef7f7;
+  border:1px solid #b8dcd9;
+  border-radius:11px;
+  color:var(--fwh-navy-deep);
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+#recovery-card > .status.error {
+  border-color:#e1b3b3;
+  background:#fff3f3;
+}
+#recovery-card > div:first-of-type {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  min-width:0;
+  max-height:310px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:14px;
+  border:1px solid var(--fwh-border);
+  border-radius:13px;
+  background:#f8fbfc;
+}
+#recovery-card > div:first-of-type > button {
+  min-width:0;
+  width:100%;
+  margin:0;
+  padding:13px 14px;
+  min-height:48px;
+  text-align:left;
+  border:1px solid #c9dce4;
+  border-left:4px solid var(--fwh-teal);
+  background:#fff;
+  color:var(--fwh-navy);
+  font-weight:700;
+  line-height:1.4;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+#recovery-card > div:first-of-type > button:focus-visible {
+  outline:3px solid var(--fwh-teal);
+  outline-offset:2px;
+}
+#recovery-card > img:not([hidden]) {
+  max-width:100%;
+  max-height:370px;
+  width:auto;
+  height:auto;
+  margin:20px auto;
+  object-fit:contain;
+  border:1px solid var(--fwh-border);
+  border-radius:12px;
+  box-shadow:0 3px 14px rgb(17 40 61 / 8%);
+}
+#recovery-card > .workspace-navigation {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:stretch;
+  margin-top:18px;
+  padding:16px;
+  background:#f8fbfc;
+  border:1px solid var(--fwh-border);
+  border-radius:13px;
+}
+#recovery-card > .workspace-navigation > button {
+  flex:1 1 155px;
+  width:auto;
+  min-width:0;
+  min-height:46px;
+  margin:0;
+  padding:10px 14px;
+  line-height:1.4;
+  white-space:normal;
+}
+@media (max-width:680px) {
+  #recovery-card > div:first-of-type {
+    grid-template-columns:minmax(0,1fr);
+    max-height:290px;
+    padding:10px;
+  }
+  #recovery-card > .workspace-navigation {
+    flex-direction:column;
+    padding:12px;
+  }
+  #recovery-card > .workspace-navigation > button {
+    flex:0 0 auto;
+    width:100%;
+  }
+}

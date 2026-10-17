@@ -2069,6 +2069,22 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#recovery-card button').filter({hasText:reviewPhoto.slice(0,8)}).click();
     await wait(page,()=>!document.querySelector('#recovery-card img').hidden);
     assert.equal(recoveryPhotoRequests,1);
+    // Stage 9 uses only real, server-checked synthetic recovery facts.
+    // A recovery-only user must never acquire Admin or Supervisor screens.
+    assert.equal(await page.locator('#recovery-card h2').innerText(),'Recover my photos');
+    assert.equal(await page.locator('#recovery-card > div:first-of-type button').count()>0,true);
+    assert.equal(await page.locator('#recovery-card > img').isVisible(),true);
+    assert.equal(await page.locator('#recovery-card .workspace-navigation').isVisible(),true);
+    assert.equal(await page.locator('#recovery-card button').filter({hasText:'Download selected JPEG'}).isEnabled(),true);
+    assert.equal(await page.locator('#results-card:visible').count(),0);
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    await page.screenshot({path:path.join(output,'stage9-recovery-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#recovery-card').evaluate(el=>el.scrollWidth<=el.clientWidth+2),
+      true,'Stage 9 recovery must fit phone width without sideways scrolling');
+    assert.equal(await page.locator('#recovery-card button').filter({hasText:'Sign Out'}).isVisible(),true);
+    await page.screenshot({path:path.join(output,'stage9-recovery-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     recoveryCorruptBytes='SHORT';
     await page.locator('#recovery-card button').filter({hasText:'Download selected JPEG'}).click();
     await wait(page,()=>document.querySelector('#recovery-card .status')
