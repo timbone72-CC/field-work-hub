@@ -4,28 +4,21 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-/** Pure safe-area calculations: transient bars may overlay without fresh insets. */
+/** Safe-area calculations must not react to a transient navigation reveal. */
 public class FwhImmersiveNavigationTest {
-    @Test public void retainsStableNavigationClearanceWhenNavigationIsHidden() {
-        assertEquals(48, FwhImmersiveNavigation.safeBottom(12, 48, 16,
-                0, false, 6));
-        assertEquals(24, FwhImmersiveNavigation.safeBottom(12, 0, 24,
-                0, false, 6));
+    @Test public void keepsClearanceForHiddenOrOverlaidNavigation() {
+        assertEquals(48, FwhImmersiveNavigation.safeBottom(12, 48, 16));
+        assertEquals(24, FwhImmersiveNavigation.safeBottom(12, 0, 24));
     }
 
-    @Test public void movesBottomGroupWhenNavigationVisibilityIsActuallyReported() {
-        assertEquals(54, FwhImmersiveNavigation.safeBottom(12, 48, 16,
-                48, true, 6));
-        assertEquals(62, FwhImmersiveNavigation.safeBottom(12, 48, 16,
-                56, true, 6));
-        assertEquals(48, FwhImmersiveNavigation.safeBottom(12, 48, 16,
-                0, false, 6));
+    @Test public void retainsMinimumPaddingWithoutSystemInsets() {
+        assertEquals(16, FwhImmersiveNavigation.safeBottom(16, 0, 0));
+        assertEquals(12, FwhImmersiveNavigation.safeBottom(12, 0, 0));
     }
 
-    @Test public void neverSubtractsSafetyWhenNavigationSignalsAreSmallOrMissing() {
-        assertEquals(16, FwhImmersiveNavigation.safeBottom(16, 0, 0,
-                0, false, 6));
-        assertEquals(54, FwhImmersiveNavigation.safeBottom(12, 48, 16,
-                0, true, 6));
+    @Test public void alwaysUsesLargestStableProtectionWithoutExtraLift() {
+        assertEquals(48, FwhImmersiveNavigation.safeBottom(12, 48, 16));
+        assertEquals(56, FwhImmersiveNavigation.safeBottom(12, 56, 16));
+        assertEquals(32, FwhImmersiveNavigation.safeBottom(12, 0, 32));
     }
 }
