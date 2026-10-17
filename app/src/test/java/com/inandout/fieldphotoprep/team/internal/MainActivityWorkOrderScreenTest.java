@@ -94,6 +94,13 @@ public class MainActivityWorkOrderScreenTest {
         assertTrue(containsText(list, "Completed Work"));
 
         EditText search = (EditText) field(a, "workOrderSearch");
+        assertEquals("Search address or WO", search.getHint().toString());
+        Button refresh = (Button) field(a, "refreshAssignmentsButton");
+        assertEquals("Refresh", refresh.getText().toString());
+        assertEquals(a.getString(R.string.refresh_assignments),
+                refresh.getContentDescription().toString());
+        assertEquals("2 current · 1 completed",
+                ((TextView) field(a, "homeSummary")).getText().toString());
         search.setText("oak");
         assertEquals(2, list.getChildCount());
         assertTrue(containsText(list, "WO 100"));
@@ -121,6 +128,8 @@ public class MainActivityWorkOrderScreenTest {
         assertEquals("assign-a", field(a, "selectedAssignmentInstanceId"));
 
         LinearLayout detail = (LinearLayout) field(a, "detailContainer");
+        assertTrue(containsText(detail, "WORK ORDER"));
+        assertTrue(containsText(detail, "Work type: Inspection"));
         assertTrue(containsText(detail, "Photos"));
         assertTrue(containsText(detail, "Start Work"));
         assertTrue(containsText(detail, "Accept"));
