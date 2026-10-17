@@ -876,6 +876,33 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       await page.evaluate(() => stopAdminAutoRefresh());
     }
     await login();
+    // Stage 2: exercise real contextual navigation before the existing broad
+    // workflow fixture runs in its legacy all-sections-visible baseline mode.
+    assert.equal(await page.locator('#fwh-home-panel').isVisible(), true);
+    assert.equal(await page.locator('#job-filters').isVisible(), false);
+    assert.equal(await page.locator('[data-fwh-go="team"]').first().isVisible(), false,
+      'Ordinary Admin must not see owner navigation.');
+    await page.locator('#fwh-primary-nav [data-fwh-go="work"]').click();
+    assert.equal(await page.locator('#job-filters').isVisible(), true);
+    assert.equal(await page.locator('#create-wo-details').isVisible(), false);
+    await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
+    assert.equal(await page.locator('#create-wo-form').isVisible(), true);
+    assert.equal(await page.locator('#job-filters').isVisible(), false);
+    await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
+    assert.equal(await page.locator('#notification-center').isVisible(), true);
+    assert.equal(await page.locator('#job-filters').isVisible(), false);
+    await page.locator('#fwh-primary-nav [data-fwh-go="home"]').click();
+    assert.equal(await page.locator('#fwh-home-panel').isVisible(), true);
+    assert.equal(await page.locator('#notification-center').isVisible(), false);
+    await page.evaluate(() => {
+      // Existing exhaustive interaction fixtures were written for the older,
+      // all-sections-visible page. Keep their coverage while nav is tested above.
+      document.getElementById('results-card').removeAttribute('data-fwh-view');
+      document.getElementById('notification-center').open = false;
+      document.getElementById('create-wo-details').open = false;
+    });
+    assert.equal(await page.locator('#job-filters').isVisible(), true);
+    assert.equal(await page.locator('#create-wo-details').isVisible(), true);
     assert.equal(await page.locator('#owner-office-console').count(),0,
       'Ordinary Admin must not see owner-only office controls.');
     assert.equal(await page.evaluate(()=>window.__permissionRequestCount),0,
