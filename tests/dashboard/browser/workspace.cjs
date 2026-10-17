@@ -884,11 +884,21 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // workflow fixture runs in its legacy all-sections-visible baseline mode.
     assert.equal(await page.locator('#fwh-home-panel').isVisible(), true);
     assert.equal(await page.locator('#job-filters').isVisible(), false);
+    // Visual evidence must be taken while the actual Stage 2 view is active;
+    // do not confuse the historical all-sections-visible test layout with it.
+    await page.screenshot({path:path.join(output,'stage2-home-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await page.screenshot({path:path.join(output,'stage2-home-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     assert.equal(await page.locator('[data-fwh-go="team"]').first().isVisible(), false,
       'Ordinary Admin must not see owner navigation.');
     await page.locator('#fwh-primary-nav [data-fwh-go="work"]').click();
     assert.equal(await page.locator('#job-filters').isVisible(), true);
     assert.equal(await page.locator('#create-wo-details').isVisible(), false);
+    await page.screenshot({path:path.join(output,'stage2-work-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await page.screenshot({path:path.join(output,'stage2-work-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
     assert.equal(await page.locator('#create-wo-form').isVisible(), true);
     assert.equal(await page.locator('#job-filters').isVisible(), false);
