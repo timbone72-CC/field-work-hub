@@ -13,6 +13,8 @@
   function syncTeam() {
     const available = Boolean(ownerConsole());
     for (const button of teamLinks) button.hidden = !available;
+    const tile = document.getElementById('fwh-team-tile');
+    if (tile) tile.hidden = !available;
     if (!available && root.dataset.fwhView === 'team') select('home', false);
   }
   function select(view, scroll = true) {
@@ -35,7 +37,7 @@
   // Existing "Prepare repeat/custom work" opens Create programmatically after
   // its own guarded work-order read; route to the revealed draft without replacing it.
   create.addEventListener('toggle', () => {
-    if (create.open && root.dataset.fwhView !== 'create') select('create', false);
+    if (create.open && root.dataset.fwhView && root.dataset.fwhView !== 'create') select('create', false);
   });
   document.getElementById('sign-out').addEventListener('click', () => select('home', false));
 
