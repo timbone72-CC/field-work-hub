@@ -398,13 +398,15 @@ test('Modern Premium Stage 6 keeps Team & Access owner and Admin controls intact
   assert.match(stage, /#owner-office-console/);
   assert.match(stage, /@media \(max-width: 680px\)/);
   assert.doesNotMatch(stage, /(?:display:\s*none|visibility:\s*hidden|pointer-events:\s*none)/i);
-  for (const id of ['contractor-management-section','contractor-invite-form',
+  assert.match(contractors, /section\.id = 'contractor-management-section'/);
+  for (const id of ['contractor-invite-form',
     'contractor-seat-summary','contractor-invite-name','contractor-invite-email',
     'contractor-invite-button','contractor-refresh-button','contractor-invite-status',
     'contractor-setup-link-result','contractor-setup-link',
     'contractor-copy-setup-link','pending-contractor-invitations'])
     assert.match(contractors, new RegExp('id="' + id + '"'), 'Missing original Admin control: '+id);
-  for (const id of ['owner-office-console','owner-office-limit-form',
+  assert.match(owner, /section\.id = 'owner-office-console'/);
+  for (const id of ['owner-office-limit-form',
     'owner-office-reason','owner-admin-limit','owner-supervisor-limit',
     'owner-office-limit-save','owner-enrollment','owner-enrollment-form',
     'owner-supervisor-list','owner-admin-invite-form','owner-admin-invite-submit',
