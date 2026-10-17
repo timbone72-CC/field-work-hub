@@ -10,15 +10,17 @@
   const alerts = document.getElementById('notification-center');
 
   function ownerConsole() { return document.getElementById('owner-office-console'); }
+  function contractorConsole() { return document.getElementById('contractor-management-section'); }
+  function teamAvailable() { return Boolean(ownerConsole() || contractorConsole()); }
   function syncTeam() {
-    const available = Boolean(ownerConsole());
+    const available = teamAvailable();
     for (const button of teamLinks) button.hidden = !available;
     const tile = document.getElementById('fwh-team-tile');
     if (tile) tile.hidden = !available;
     if (!available && root.dataset.fwhView === 'team') select('home', false);
   }
   function select(view, scroll = true) {
-    if (!views.has(view) || (view === 'team' && !ownerConsole())) return;
+    if (!views.has(view) || (view === 'team' && !teamAvailable())) return;
     root.dataset.fwhView = view;
     for (const button of links) {
       if (button.dataset.fwhGo === view) button.setAttribute('aria-current', 'page');
@@ -27,7 +29,10 @@
     // The existing native details own their content/loading and remain mounted.
     if (view === 'alerts') alerts.open = true;
     if (view === 'create') create.open = true;
-    if (view === 'team') ownerConsole().open = true;
+    if (view === 'team') {
+      if (ownerConsole()) ownerConsole().open = true;
+      if (contractorConsole()) contractorConsole().open = true;
+    }
     if (scroll) root.querySelector('#fwh-primary-nav')?.scrollIntoView({ block: 'start' });
   }
 
@@ -41,8 +46,8 @@
   });
   document.getElementById('sign-out').addEventListener('click', () => select('home', false));
 
-  // Product Owner controls are inserted/removed by the existing authorized owner
-  // module. Navigation only observes their presence; it never grants access.
+  // Contractor management and Product Owner controls are inserted/removed by
+  // their own authorized modules. Navigation only observes actual DOM presence.
   new MutationObserver(syncTeam).observe(root, { childList: true });
   syncTeam();
   select('home', false);
