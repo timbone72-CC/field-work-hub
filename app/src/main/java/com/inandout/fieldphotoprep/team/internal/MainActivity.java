@@ -87,6 +87,7 @@ public final class MainActivity extends Activity {
     private ScrollView mainScroll;
     private LinearLayout homePane;
     private TextView homeSummary;
+    private Button homeUpdateNotice;
     private LinearLayout workOrdersPane;
     private LinearLayout accountPane;
     private static final String PAGE_HOME = "HOME";
@@ -257,6 +258,13 @@ public final class MainActivity extends Activity {
         homeSummary.setPadding(dp(5), dp(8), dp(5), dp(4));
         FwhVisualStyle.body(homeSummary);
         homePane.addView(homeSummary);
+
+        homeUpdateNotice = new Button(this);
+        homeUpdateNotice.setVisibility(View.GONE);
+        FwhVisualStyle.button(homeUpdateNotice, false);
+        homeUpdateNotice.setOnClickListener(v -> showPage(PAGE_ACCOUNT));
+        homeUpdateNotice.setContentDescription("Open Account and Updates to install a verified update");
+        homePane.addView(homeUpdateNotice, matchWrap());
 
         updateCheckButton = new Button(this);
         updateCheckButton.setText("Check for Update");
@@ -1173,7 +1181,7 @@ public final class MainActivity extends Activity {
         android.content.SharedPreferences prefs =
                 getSharedPreferences("internal_app_update_checks", MODE_PRIVATE);
         long last = prefs.getLong("last_attempt", 0L);
-        if (!manual && last > 0 && now >= last && now - last < 6L * 60 * 60 * 1000) {
+        if (!UpdateCheckCadence.shouldCheck(manual, now, last)) {
             return;
         }
         prefs.edit().putLong("last_attempt", now).apply();
@@ -1190,7 +1198,10 @@ public final class MainActivity extends Activity {
                     availableUpdate = candidate;
                     updateCheckButton.setEnabled(true);
                     updateAppButton.setVisibility(candidate == null ? View.GONE : View.VISIBLE);
+                    homeUpdateNotice.setVisibility(candidate == null ? View.GONE : View.VISIBLE);
                     if (candidate != null) {
+                        homeUpdateNotice.setText("Verified update v" + candidate.versionCode
+                                + " available · Review and install");
                         updateStatus.setVisibility(View.VISIBLE);
                         updateStatus.setText("Internal update available — version " + candidate.versionCode);
                     } else if (manual) {
@@ -1204,6 +1215,7 @@ public final class MainActivity extends Activity {
                     availableUpdate = null;
                     updateCheckButton.setEnabled(true);
                     updateAppButton.setVisibility(View.GONE);
+                    homeUpdateNotice.setVisibility(View.GONE);
                     if (manual) {
                         updateStatus.setVisibility(View.VISIBLE);
                         updateStatus.setText("Update check unavailable. Your current app and jobs are safe.");
@@ -1285,6 +1297,9 @@ public final class MainActivity extends Activity {
         if (pendingInstallerApk != null && Build.VERSION.SDK_INT >= 26
                 && getPackageManager().canRequestPackageInstalls()) {
             continueInstaller();
+        } else if (pendingInstallerApk == null) {
+            // Foreground discovery only; never interrupts CameraX or starts an installer.
+            checkForUpdates(false);
         }
     }
 
@@ -1300,6 +1315,7 @@ public final class MainActivity extends Activity {
         selectedRunId = "";
         selectedAssignmentInstanceId = "";
         downloadedWorkOrders = Collections.emptyList();
+        if (homeUpdateNotice != null) homeUpdateNotice.setVisibility(View.GONE);
         savedListScrollY = -1;
         restoredNavigation = null;
         workOrderSearch.setText("");
