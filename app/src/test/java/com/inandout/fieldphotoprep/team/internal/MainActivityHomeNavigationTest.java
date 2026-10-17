@@ -60,6 +60,15 @@ public class MainActivityHomeNavigationTest {
         assertEquals(View.GONE, account.getVisibility());
         // The existing recovery button is still attached to the Home screen.
         assertNotNull(field(activity, "recoverPhotosButton"));
+        Button updateNotice = (Button) field(activity, "homeUpdateNotice");
+        assertEquals(View.GONE, updateNotice.getVisibility());
+        updateNotice.setText("Verified update v30 available");
+        updateNotice.setVisibility(View.VISIBLE);
+        updateNotice.performClick();
+        assertEquals(View.VISIBLE, account.getVisibility());
+        // The notice navigates to existing controls; it does not start an installer.
+        assertEquals(View.VISIBLE, ((Button) field(activity, "updateCheckButton")).getVisibility());
+        invoke(activity, "showPage", "HOME");
 
         ((Button) home.getChildAt(1)).performClick(); // Work Orders
         assertEquals(View.GONE, home.getVisibility());
