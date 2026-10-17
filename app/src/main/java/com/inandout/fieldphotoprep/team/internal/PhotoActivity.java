@@ -104,12 +104,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(FwhVisualStyle.CANVAS);
-        root.setPadding(dp(16), dp(12), dp(16), dp(12));
-        root.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(dp(16), insets.getSystemWindowInsetTop() + dp(12), dp(16),
-                    insets.getSystemWindowInsetBottom() + dp(12));
-            return insets;
-        });
+        FwhImmersiveNavigation.protect(this, root, dp(16), dp(12), dp(16), dp(12));
         message = new TextView(this);
         message.setTextSize(20);
         FwhVisualStyle.heading(message);
@@ -124,7 +119,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     }
 
     @Override protected void onStart() { super.onStart(); lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START); }
-    @Override protected void onResume() { super.onResume(); lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME); if (content != null && !cameraScreen) showItems(); }
+    @Override protected void onResume() { super.onResume(); FwhImmersiveNavigation.enter(this); lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME); if (content != null && !cameraScreen) showItems(); }
     @Override protected void onPause() { lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE); super.onPause(); }
     @Override protected void onStop() { lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP); super.onStop(); }
     @Override protected void onDestroy() {
@@ -352,11 +347,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         cameraRoot.addView(top, topParams);
         buildZoomSlider(landscape);
         if (landscape) buildLandscapeControls(); else buildPortraitControls();
-        cameraRoot.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
-                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
-            return insets;
-        });
+        FwhImmersiveNavigation.protect(this, cameraRoot, 0, 0, 0, 0);
         setContentView(cameraRoot);
         zoomGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) { return applyPinchZoom(detector.getScaleFactor()); }
