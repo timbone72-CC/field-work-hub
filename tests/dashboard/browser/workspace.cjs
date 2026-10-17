@@ -870,10 +870,14 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    let firstLogin = true;
     async function login() {
       await page.locator('#email').fill('admin@example.invalid'); await page.locator('#password').fill('disposable');
       await page.locator('#sign-in').click(); await wait(page, () => document.querySelectorAll('.job-table tbody tr').length === 25);
       await page.evaluate(() => stopAdminAutoRefresh());
+      if (!firstLogin) await page.evaluate(() =>
+        document.getElementById('results-card').removeAttribute('data-fwh-view'));
+      firstLogin = false;
     }
     await login();
     // Stage 2: exercise real contextual navigation before the existing broad
