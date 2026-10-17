@@ -38,10 +38,13 @@ public final class PhotoRecoveryActivity extends Activity {
             pending = saved.getStringArrayList("pending");
         }
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        content.setBackgroundColor(FwhVisualStyle.CANVAS);
         int pad = (int)(20 * getResources().getDisplayMetrics().density); content.setPadding(pad,pad,pad,pad);
-        TextView title = new TextView(this); title.setText("Recover my photos"); title.setTextSize(24); content.addView(title);
+        TextView title = new TextView(this); title.setText("Recover my photos"); title.setTextSize(24);
+        FwhVisualStyle.heading(title); title.setPadding(0, 0, 0, pad / 2); content.addView(title);
         status = new TextView(this);
-        status.setText("Copy protected originals from this phone. This does not finish or deliver work. Choose up to 25 photos per export; save the ZIP to a location you control."); content.addView(status);
+        status.setText("Copy protected originals from this phone. This does not finish or deliver work. Choose up to 25 photos per export; save the ZIP to a location you control.");
+        FwhVisualStyle.body(status); status.setTextSize(14); status.setPadding(0, 0, 0, pad / 2); content.addView(status);
         rows = new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this); scroll.addView(rows);
         content.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -53,7 +56,14 @@ public final class PhotoRecoveryActivity extends Activity {
         setContentView(content); load();
     }
     private Button button(LinearLayout parent,String label,Runnable action) {
-        Button b=new Button(this); b.setText(label); b.setOnClickListener(v->action.run());parent.addView(b);return b;
+        Button b=new Button(this);
+        b.setText(label);
+        FwhVisualStyle.button(b, "Export selected originals".equals(label));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = FwhVisualStyle.dp(this, 6);
+        b.setOnClickListener(v->action.run());
+        parent.addView(b, params);
+        return b;
     }
     private boolean current() { return runtime.sessions.matches(generation,owner.userId,owner.organizationId); }
     private void load() {
@@ -75,10 +85,16 @@ public final class PhotoRecoveryActivity extends Activity {
                         CheckBox row=new CheckBox(this);
                         row.setText(labels.get(p.id)+"\n"+p.capturedAt+" · Photo "+p.id.substring(0,8)
                                 + ("PROBLEM".equals(p.state)?"\nOriginal may need recovery; copied as stored.":""));
+                        row.setTextColor(FwhVisualStyle.INK);
+                        row.setTextSize(14);
+                        row.setPadding(pad / 2, pad / 2, pad / 2, pad / 2);
+                        FwhVisualStyle.panel(row);
+                        LinearLayout.LayoutParams photoParams = new LinearLayout.LayoutParams(-1, -2);
+                        photoParams.bottomMargin = FwhVisualStyle.dp(this, 8);
                         row.setOnCheckedChangeListener((button,checked)->{
                             if(checked)selected.add(p.id);else selected.remove(p.id);
                             export.setEnabled(!selected.isEmpty()&&!busy&&pending==null);
-                        }); rows.addView(row);
+                        }); rows.addView(row, photoParams);
                     }
                     if(page.isEmpty())status.setText("No retained originals on this page. Cloud recovery is separate; unsynchronized photos can only be recovered from their original phone.");
                     if(pending!=null||exporting)setBusy(true);
