@@ -37,6 +37,7 @@ ALLOWED_FILES = {
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/PhotoActivity.java",
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/PhotoRecoveryActivity.java",
     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/FwhVisualStyle.java",
+    "app/src/main/java/com/inandout/fieldphotoprep/team/internal/UpdateCheckCadence.java",
     "docs/PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md",
     "docs/FWH_INTERNAL_AUTO_UPDATE_PLAN_2026-10-16.md",
 }
