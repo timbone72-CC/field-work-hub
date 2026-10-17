@@ -726,8 +726,10 @@ public final class MainActivity extends Activity {
                 : "START".equals(workOrder.pendingKind) ? "Started — waiting to sync"
                 : displayStatus(workOrder.fieldStatus);
         String due = workOrder.dueDate.isEmpty() ? "Not set" : workOrder.dueDate;
+        String type = workOrder.workType == null ? "" : workOrder.workType.trim();
         Button row = new Button(this);
-        String rowText = address + "\n" + number + " · " + status + " · Due " + due;
+        String jobLine = type.isEmpty() ? number : number + " · " + type;
+        String rowText = address + "\n" + jobLine + "\n" + status + " · Due " + due;
         SpannableString styledRow = new SpannableString(rowText);
         styledRow.setSpan(new StyleSpan(Typeface.BOLD), 0, address.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -744,7 +746,7 @@ public final class MainActivity extends Activity {
         row.setText(styledRow);
         row.setAllCaps(false);
         row.setTextSize(15);
-        row.setMinHeight(dp(82));
+        row.setMinHeight(dp(94));
         row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), dp(10), dp(14), dp(10));
         FwhVisualStyle.button(row, false);
