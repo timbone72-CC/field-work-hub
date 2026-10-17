@@ -1208,3 +1208,231 @@ button:disabled { cursor: not-allowed; opacity: .58; }
     padding: 14px;
   }
 }
+
+
+/* Modern Premium Stage 6 — Team & Access presentation only.
+   Existing owner/ordinary-Admin modules own DOM, permission gates, and actions. */
+#results-card[data-fwh-view="team"] > #contractor-management-section,
+#results-card[data-fwh-view="team"] > #owner-office-console {
+  min-width: 0;
+  border-top: 4px solid var(--fwh-teal);
+  background: linear-gradient(180deg, #f3f9fb, #fff 205px);
+  padding: clamp(18px, 3vw, 30px);
+  overflow-wrap: anywhere;
+}
+#results-card #contractor-management-section > summary,
+#results-card #owner-office-console > summary {
+  font-size: clamp(1.12rem, 2vw, 1.42rem);
+  font-weight: 800;
+  color: var(--fwh-navy-deep);
+  line-height: 1.4;
+}
+#results-card #contractor-management-section > .muted,
+#results-card #owner-office-console > .muted {
+  max-width: 80ch;
+  line-height: 1.6;
+}
+#results-card #contractor-seat-summary {
+  padding: 12px 16px;
+  margin: 18px 0;
+  color: var(--fwh-navy-deep);
+  font-weight: 750;
+  background: var(--fwh-teal-soft);
+  border: 1px solid #b4dfd9;
+  border-radius: 11px;
+  line-height: 1.55;
+}
+#results-card #contractor-invite-form,
+#results-card #owner-office-console .admin-form {
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+  gap: 16px;
+  padding: clamp(16px, 2.5vw, 22px);
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+  background: #f8fbfc;
+}
+#results-card #contractor-invite-form > label,
+#results-card #owner-office-console form > label {
+  min-width: 0;
+}
+#results-card #contractor-invite-form .edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin: 4px 0 0;
+}
+#results-card #contractor-invite-form .edit-actions > button {
+  width: auto;
+  min-width: 180px;
+  flex: 1 1 210px;
+  margin: 0;
+}
+#results-card #contractor-invite-button,
+#results-card #owner-office-limit-save,
+#results-card #owner-admin-invite-submit {
+  color: #fff;
+  background: var(--fwh-teal);
+}
+#results-card #contractor-setup-link-result,
+#results-card #owner-admin-invite-link-result {
+  min-width: 0;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid #b4dfd9;
+  border-radius: 12px;
+  background: #edf7f6;
+}
+#results-card #contractor-setup-link,
+#results-card #owner-admin-invite-link {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+#results-card #pending-contractor-invitations {
+  display: grid;
+  gap: 12px;
+  max-height: none;
+  overflow: visible;
+  margin-top: 20px;
+  padding: 0;
+}
+#results-card #pending-contractor-invitations > h3 {
+  margin: 0 0 2px;
+  color: var(--fwh-navy-deep);
+}
+#results-card #pending-contractor-invitations .work-order {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--fwh-border);
+  border-left: 4px solid var(--fwh-teal);
+  border-radius: 12px;
+}
+#results-card #pending-contractor-invitations .work-order button {
+  width: auto;
+  margin: 10px 0 0;
+}
+#results-card #owner-office-console > h3 {
+  margin: 28px 0 10px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid var(--fwh-border);
+  color: var(--fwh-navy-deep);
+  font-size: 1.12rem;
+}
+#results-card #owner-office-console > #owner-office-refresh {
+  width: auto;
+  margin: 9px 0 13px;
+}
+#results-card #owner-office-capacity {
+  min-width: 0;
+  padding: 15px;
+  margin: 12px 0 18px;
+  color: var(--fwh-navy-deep);
+  border: 1px solid #b4dfd9;
+  border-radius: 12px;
+  background: var(--fwh-teal-soft);
+  line-height: 1.55;
+}
+#results-card #owner-office-console > #owner-enrollment {
+  margin: 16px 0 20px;
+  background: #f8fbfc;
+  border-color: var(--fwh-border);
+  border-radius: 12px;
+}
+#results-card #owner-office-console > #owner-enrollment > summary {
+  color: var(--fwh-navy);
+}
+#results-card #owner-office-console #owner-enrollment-team-field,
+#results-card #owner-office-console #owner-supervisor-team-panel,
+#results-card #owner-office-console #owner-access-review-panel {
+  max-width: 100%;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+  background: #fff;
+}
+#results-card #owner-supervisor-list,
+#results-card #owner-contractor-roster,
+#results-card #owner-office-people {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  margin: 15px 0 22px;
+}
+#results-card #owner-supervisor-list > .row,
+#results-card #owner-contractor-roster > .row,
+#results-card #owner-office-people > .row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+  background: #fff;
+}
+#results-card #owner-supervisor-list .row > span,
+#results-card #owner-contractor-roster .row > span,
+#results-card #owner-office-people .row > span {
+  flex: 1 1 215px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+#results-card #owner-supervisor-list .row > button,
+#results-card #owner-contractor-roster .row > button,
+#results-card #owner-office-people .row > button {
+  width: auto;
+  margin: 0;
+}
+#results-card #owner-office-console input,
+#results-card #owner-office-console select,
+#results-card #owner-office-console textarea,
+#results-card #contractor-management-section input,
+#results-card #contractor-management-section textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+#results-card #owner-office-console .status,
+#results-card #contractor-management-section .status {
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+@media (max-width: 680px) {
+  #results-card #owner-office-console .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #results-card #owner-supervisor-list > .row,
+  #results-card #owner-contractor-roster > .row,
+  #results-card #owner-office-people > .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #results-card #owner-supervisor-list > .row > button,
+  #results-card #owner-contractor-roster > .row > button,
+  #results-card #owner-office-people > .row > button,
+  #results-card #owner-supervisor-list > .row > select,
+  #results-card #owner-contractor-roster > .row > select {
+    width: 100%;
+    min-width: 0;
+  }
+  #results-card #owner-office-console .admin-form > button,
+  #results-card #contractor-invite-form .edit-actions > button,
+  #results-card #pending-contractor-invitations .work-order button {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+  #results-card #pending-contractor-invitations .work-order button {
+    margin-top: 10px;
+  }
+  #results-card #owner-office-console > #owner-office-refresh {
+    width: 100%;
+  }
+}

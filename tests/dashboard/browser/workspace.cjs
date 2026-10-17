@@ -897,6 +897,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'Contractor controls belong to Team, not Home.');
     await page.locator('#fwh-primary-nav [data-fwh-go="team"]').click();
     assert.equal(await page.locator('#contractor-management-section').isVisible(), true);
+    // Stage 6: ordinary Admin has the unchanged contractor manager, never Owner controls.
+    for(const id of ['contractor-seat-summary','contractor-invite-name',
+      'contractor-invite-email','contractor-invite-button','contractor-refresh-button',
+      'pending-contractor-invitations']) {
+      assert.equal(await page.locator('#'+id).isVisible(),true,'Stage 6 missing Admin control: '+id);
+    }
+    await page.screenshot({path:path.join(output,'stage6-team-admin-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#contractor-management-section').evaluate(el=>
+      el.scrollWidth<=el.clientWidth+2),true,'Stage 6 contractor management must not overflow phone width');
+    await page.screenshot({path:path.join(output,'stage6-team-admin-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     assert.equal(await page.locator('#owner-office-console').count(), 0,
       'Ordinary Admin must never acquire Product Owner controls by switching pages.');
     await page.screenshot({path:path.join(output,'stage2-team-desktop.png'),fullPage:true});
@@ -1497,6 +1509,22 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await login();
     await page.locator('#owner-office-console').waitFor({state:'attached'});
     await page.locator('#owner-office-console > summary').click();
+    // Stage 6: verified owner gets the existing owner-only controls, no new permissions.
+    await page.evaluate(()=>document.querySelector('#fwh-primary-nav [data-fwh-go="team"]').click());
+    for(const id of ['owner-office-status','owner-office-refresh','owner-office-capacity',
+      'owner-office-limit-form','owner-admin-limit','owner-supervisor-limit',
+      'owner-office-reason','owner-office-limit-save','owner-enrollment',
+      'owner-admin-invite-form','owner-admin-invite-submit',
+      'owner-contractor-roster','owner-office-people']) {
+      assert.equal(await page.locator('#'+id).isVisible(),true,'Stage 6 missing Owner control: '+id);
+    }
+    await page.screenshot({path:path.join(output,'stage6-team-owner-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#owner-office-console').evaluate(el=>
+      el.scrollWidth<=el.clientWidth+2),true,'Stage 6 owner console must not overflow phone width');
+    await page.screenshot({path:path.join(output,'stage6-team-owner-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(()=>document.getElementById('results-card').removeAttribute('data-fwh-view'));
     await page.locator('#owner-office-reason').fill('Synthetic office access review');
     await page.locator('#owner-admin-limit').fill('5');
     await Promise.all([
