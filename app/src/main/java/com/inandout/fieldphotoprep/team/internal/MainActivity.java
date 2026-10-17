@@ -858,10 +858,21 @@ public final class MainActivity extends Activity {
             card.addView(text("Accepted — confirmed by office", 14, true));
         try { card.addView(text(PhotoRequirements.parse(workOrder.requirementSnapshotJson).summary(), 13, false)); }
         catch (Exception e) { card.addView(text(e.getMessage(),14,true)); }
-        Button photos = new Button(this); photos.setText("Photos");
+        // An active field visit normally continues in Photos; Finish stays visible
+        // without becoming a premature-looking primary action. No authorization changes.
+        boolean photosNext = workOrder.conflictReason.isEmpty()
+                && currentSession != null
+                && "CONTRACTOR".equals(currentSession.role)
+                && BuildConfig.FIELD_SYNC_ENABLED
+                && !workOrder.assignmentInstanceId.isEmpty()
+                && !"COMPLETE".equals(workOrder.pendingKind)
+                && ("IN_PROGRESS".equals(workOrder.fieldStatus)
+                        || "START".equals(workOrder.pendingKind));
+        Button photos = new Button(this);
+        photos.setText(photosNext ? "Continue Photos" : "Photos");
         photos.setOnClickListener(v -> startActivity(new android.content.Intent(this, PhotoActivity.class)
                 .putExtra("wo",workOrder.id).putExtra("run",workOrder.currentRunId)));
-        styleWorkAction(photos, false);
+        styleWorkAction(photos, photosNext);
         card.addView(photos);
 
         if (!workOrder.conflictReason.isEmpty()) {
@@ -908,7 +919,9 @@ public final class MainActivity extends Activity {
                             action.setEnabled(false);
                             queueFieldAction(workOrder, start ? "START" : "COMPLETE");
                         });
-                styleWorkAction(action, true);
+                // Start Work remains primary on a new assignment; Finish is a
+                // separate, reachable secondary action during photo collection.
+                styleWorkAction(action, start && action.isEnabled());
                 card.addView(action);
                 if (workOrder.assignmentInstanceId.isEmpty())
                     card.addView(
