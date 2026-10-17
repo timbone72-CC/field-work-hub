@@ -760,6 +760,7 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   font-size: .88rem;
 }
 #edit-work-order-section #job-address-context {
+  margin-top: 18px;
   padding: 14px;
   border: 1px solid var(--fwh-border);
   border-radius: 11px;
@@ -811,6 +812,9 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   }
 }
 @media (max-width: 620px) {
+  #edit-work-order-section .workspace-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   #edit-work-order-section.job-workspace {
     width: calc(100vw - 12px);
     max-height: 97dvh;
