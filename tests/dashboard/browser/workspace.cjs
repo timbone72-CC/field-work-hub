@@ -988,10 +988,12 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#job-lookup-toggle').click();
     assert.equal(await page.locator('#job-lookup-popover').evaluate(el=>el.open), true);
     for (const id of ['job-address-load','job-address-previous','job-address-next',
-      'job-address-status','job-address-work-orders']) {
+      'job-address-status']) {
       assert.equal(await page.locator('#'+id).isVisible(), true,
         'Original lookup control remains visible in popup: '+id);
     }
+    assert.equal(await page.locator('#job-address-work-orders').count(),1,
+      'Existing results container is present before any explicit address load');
     assert.match(await page.locator('#job-address-status').innerText(),/Load this address/);
     await page.screenshot({path:path.join(output,'stage3-job-lookup-desktop.png'),fullPage:false});
     await page.setViewportSize({width:390,height:844});
