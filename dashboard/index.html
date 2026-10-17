@@ -184,16 +184,6 @@
             <button id="prepare-repeat-work" class="secondary" type="button">Prepare repeat work</button>
             <button id="prepare-custom-work" class="secondary" type="button">Prepare custom work at this address</button>
           </div>
-          <div id="job-address-context" hidden>
-            <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
-            <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>
-            <div class="workspace-navigation">
-              <button id="job-address-load" type="button" class="secondary">Load address jobs</button>
-              <button id="job-address-previous" type="button" class="secondary" disabled>Previous address page</button>
-              <button id="job-address-next" type="button" class="secondary" disabled>Next address page</button>
-            </div>
-            <div id="job-address-work-orders" class="workspace-navigation" aria-label="Work orders at this address"></div>
-          </div>
           <nav class="workspace-tabs" aria-label="Job sections">
             <button type="button" data-job-tab="details" aria-pressed="true" aria-controls="job-details">Details</button>
             <button type="button" data-job-tab="assignment" aria-pressed="false" aria-controls="job-assignment">Assignment</button>
@@ -408,6 +398,16 @@
           </div>
           <p id="edit-status" class="status" role="status" aria-live="polite"></p>
         </form>
+          <div id="job-address-context" hidden>
+            <p class="muted">Other work orders at this exact address and company, loaded in pages of 50:</p>
+            <p id="job-address-status" class="muted" role="status" aria-live="polite"></p>
+            <div class="workspace-navigation">
+              <button id="job-address-load" type="button" class="secondary">Load address jobs</button>
+              <button id="job-address-previous" type="button" class="secondary" disabled>Previous address page</button>
+              <button id="job-address-next" type="button" class="secondary" disabled>Next address page</button>
+            </div>
+            <div id="job-address-work-orders" class="workspace-navigation" aria-label="Work orders at this address"></div>
+          </div>
       </dialog>
 
       <section id="fwh-work-page" aria-labelledby="fwh-work-heading">
