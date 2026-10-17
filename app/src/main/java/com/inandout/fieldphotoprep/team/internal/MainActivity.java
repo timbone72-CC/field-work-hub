@@ -429,6 +429,11 @@ public final class MainActivity extends Activity {
                 || !currentSession.userId.equals(session.userId)
                 || !currentSession.organizationId.equals(session.organizationId)) {
             selectedPage = PAGE_HOME;
+            downloadedWorkOrders = Collections.emptyList();
+            selectedWorkOrderId = "";
+            selectedRunId = "";
+            selectedAssignmentInstanceId = "";
+            workOrderSearch.setText("");
         }
         currentSession = session;
         setLoading(false, message);
@@ -581,49 +586,136 @@ public final class MainActivity extends Activity {
     }
 
     private void renderWorkOrders(List<SupabaseApi.WorkOrder> workOrders) {
+        // Only the authenticated account's existing cached/server-authorized work is shown.
+        downloadedWorkOrders = new ArrayList<>(workOrders);
+        int previousScroll = workOrdersScroll.getScrollY();
+        renderVisibleWorkOrders();
+        if (PAGE_WORK_ORDERS.equals(selectedPage)) {
+            workOrdersScroll.post(() -> workOrdersScroll.scrollTo(0, previousScroll));
+        }
+        if (PAGE_DETAIL.equals(selectedPage)) renderSelectedWorkOrder();
+    }
+
+    private static boolean matchesWorkOrderSearch(
+            SupabaseApi.WorkOrder workOrder, String search) {
+        if (search == null || search.trim().isEmpty()) return true;
+        String needle = search.trim().toLowerCase(Locale.ROOT);
+        return workOrder.propertyAddress.toLowerCase(Locale.ROOT).contains(needle)
+                || workOrder.woNumber.toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private void renderVisibleWorkOrders() {
+        if (workOrdersContainer == null) return;
         workOrdersContainer.removeAllViews();
-
-        int currentCount = 0;
-        int completedCount = 0;
-        for (SupabaseApi.WorkOrder workOrder : workOrders) {
+        String search = workOrderSearch == null ? "" : workOrderSearch.getText().toString();
+        int totalCurrent = 0, totalCompleted = 0, matchedCurrent = 0, matchedCompleted = 0;
+        for (SupabaseApi.WorkOrder workOrder : downloadedWorkOrders) {
             if (isCurrentAssignment(workOrder)) {
-                currentCount++;
-            } else if ((workOrder.conflictReason.isEmpty()
-                    && isCompletedWork(workOrder.fieldStatus))) {
-                completedCount++;
+                totalCurrent++;
+                if (matchesWorkOrderSearch(workOrder, search)) matchedCurrent++;
+            } else if (workOrder.conflictReason.isEmpty()
+                    && isCompletedWork(workOrder.fieldStatus)) {
+                totalCompleted++;
+                if (matchesWorkOrderSearch(workOrder, search)) matchedCompleted++;
             }
         }
+        String summary = currentAssignmentCountText(totalCurrent);
+        if (!search.trim().isEmpty()) {
+            summary += " · " + (matchedCurrent + matchedCompleted) + " matching";
+        }
+        assignmentSummaryText.setText(summary);
 
-        assignmentSummaryText.setText(currentAssignmentCountText(currentCount));
-
-        if (currentCount == 0) {
-            TextView empty = text(getString(R.string.no_assignments), 15, false);
-            empty.setPadding(0, dp(10), 0, dp(10));
-            workOrdersContainer.addView(empty);
-        } else {
-            for (SupabaseApi.WorkOrder workOrder : workOrders) {
-                if (isCurrentAssignment(workOrder)) {
-                    addWorkOrderCard(workOrder);
-                }
+        if (matchedCurrent == 0 && search.trim().isEmpty()) {
+            workOrdersContainer.addView(text(getString(R.string.no_assignments), 15, false));
+        }
+        for (SupabaseApi.WorkOrder workOrder : downloadedWorkOrders) {
+            if (isCurrentAssignment(workOrder) && matchesWorkOrderSearch(workOrder, search)) {
+                addWorkOrderListEntry(workOrder);
             }
         }
-
-        if (completedCount > 0) {
-            TextView completedHeading = text(getString(R.string.completed_work_heading), 20, true);
-            completedHeading.setPadding(0, dp(20), 0, dp(4));
+        if (matchedCompleted > 0) {
+            TextView completedHeading = text(getString(R.string.completed_work_heading), 19, true);
+            completedHeading.setPadding(0, dp(14), 0, dp(6));
             workOrdersContainer.addView(completedHeading);
-
-            TextView completedSummary = text(completedCountText(completedCount), 14, false);
-            completedSummary.setPadding(0, 0, 0, dp(8));
-            workOrdersContainer.addView(completedSummary);
-
-            for (SupabaseApi.WorkOrder workOrder : workOrders) {
-                if ((workOrder.conflictReason.isEmpty()
-                        && isCompletedWork(workOrder.fieldStatus))) {
-                    addWorkOrderCard(workOrder);
+            workOrdersContainer.addView(text(
+                    completedCountText(totalCompleted), 13, false));
+            for (SupabaseApi.WorkOrder workOrder : downloadedWorkOrders) {
+                if (workOrder.conflictReason.isEmpty()
+                        && isCompletedWork(workOrder.fieldStatus)
+                        && matchesWorkOrderSearch(workOrder, search)) {
+                    addWorkOrderListEntry(workOrder);
                 }
             }
         }
+        if (matchedCurrent + matchedCompleted == 0 && !search.trim().isEmpty()) {
+            TextView empty = text("No matching work orders.", 15, false);
+            empty.setPadding(0, dp(16), 0, dp(12));
+            workOrdersContainer.addView(empty);
+        }
+    }
+
+    private void addWorkOrderListEntry(SupabaseApi.WorkOrder workOrder) {
+        String address = workOrder.propertyAddress.isEmpty()
+                ? "Address not provided" : workOrder.propertyAddress;
+        String number = workOrder.woNumber.isEmpty() ? "Work order" : "WO " + workOrder.woNumber;
+        if (workOrder.currentRunSequence > 1) number += " · Follow-up";
+        String status = !workOrder.conflictReason.isEmpty() ? "Needs review"
+                : "COMPLETE".equals(workOrder.pendingKind) ? "Field complete — waiting to sync"
+                : "START".equals(workOrder.pendingKind) ? "Started — waiting to sync"
+                : displayStatus(workOrder.fieldStatus);
+        String due = workOrder.dueDate.isEmpty() ? "Not set" : workOrder.dueDate;
+        Button row = new Button(this);
+        row.setText(address + "\n" + number + " · " + status + " · Due " + due);
+        row.setAllCaps(false);
+        row.setTextSize(15);
+        row.setMinHeight(dp(82));
+        row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        row.setTextColor(Color.rgb(23, 42, 64));
+        row.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
+        row.setContentDescription("Open " + address + ", " + number);
+        LinearLayout.LayoutParams params = matchWrap();
+        params.bottomMargin = dp(8);
+        row.setLayoutParams(params);
+        row.setOnClickListener(v -> selectWorkOrder(workOrder));
+        workOrdersContainer.addView(row);
+    }
+
+    private void selectWorkOrder(SupabaseApi.WorkOrder workOrder) {
+        if (currentSession == null || !downloadedWorkOrders.contains(workOrder)) return;
+        selectedWorkOrderId = workOrder.id;
+        selectedRunId = workOrder.currentRunId;
+        selectedAssignmentInstanceId = workOrder.assignmentInstanceId;
+        renderSelectedWorkOrder();
+        showPage(PAGE_DETAIL);
+        detailScroll.scrollTo(0, 0);
+    }
+
+    private void renderSelectedWorkOrder() {
+        detailContainer.removeAllViews();
+        // No fallback to an earlier or later run of the same WO after a refresh.
+        SupabaseApi.WorkOrder selected = null;
+        for (SupabaseApi.WorkOrder candidate : downloadedWorkOrders) {
+            if (candidate.id.equals(selectedWorkOrderId)
+                    && candidate.currentRunId.equals(selectedRunId)
+                    && candidate.assignmentInstanceId.equals(selectedAssignmentInstanceId)
+                    && (isCurrentAssignment(candidate)
+                        || (candidate.conflictReason.isEmpty()
+                            && isCompletedWork(candidate.fieldStatus)))) {
+                selected = candidate;
+                break;
+            }
+        }
+        if (selected == null) {
+            detailHeading.setText("Work Order Unavailable");
+            detailContainer.addView(text(
+                    "This exact assignment is no longer available in your downloaded work."
+                    + " Your saved evidence has not been deleted. Return to Work Orders"
+                    + " or refresh online; do not continue using an older assignment.", 15, false));
+            return;
+        }
+        detailHeading.setText("Work Order Details");
+        addWorkOrderCard(selected);
     }
 
     private void addWorkOrderCard(SupabaseApi.WorkOrder workOrder) {
@@ -799,7 +891,9 @@ public final class MainActivity extends Activity {
             card.addView(declineTeam);
         }
 
-        workOrdersContainer.addView(card);
+        card.setBackgroundTintList(null);
+        card.setBackgroundColor(Color.WHITE);
+        detailContainer.addView(card);
     }
 
     private boolean isCurrentAssignment(SupabaseApi.WorkOrder workOrder) {
@@ -1103,6 +1197,14 @@ public final class MainActivity extends Activity {
     private void showSignedOutUi(String message) {
         currentSession = null;
         selectedPage = PAGE_HOME;
+        selectedWorkOrderId = "";
+        selectedRunId = "";
+        selectedAssignmentInstanceId = "";
+        downloadedWorkOrders = Collections.emptyList();
+        workOrderSearch.setText("");
+        detailContainer.removeAllViews();
+        mainScroll.setVisibility(View.VISIBLE);
+        detailPane.setVisibility(View.GONE);
         homePane.setVisibility(View.GONE);
         workOrdersPane.setVisibility(View.GONE);
         accountPane.setVisibility(View.VISIBLE);
@@ -1154,6 +1256,10 @@ public final class MainActivity extends Activity {
         boolean changedPage = !page.equals(selectedPage);
         selectedPage = page;
         if (changedPage && mainScroll != null) mainScroll.scrollTo(0, 0);
+        mainScroll.setVisibility(
+                PAGE_WORK_ORDERS.equals(page) || PAGE_DETAIL.equals(page)
+                        ? View.GONE : View.VISIBLE);
+        detailPane.setVisibility(PAGE_DETAIL.equals(page) ? View.VISIBLE : View.GONE);
         homePane.setVisibility(PAGE_HOME.equals(page) ? View.VISIBLE : View.GONE);
         workOrdersPane.setVisibility(PAGE_WORK_ORDERS.equals(page) ? View.VISIBLE : View.GONE);
         accountPane.setVisibility(PAGE_ACCOUNT.equals(page) ? View.VISIBLE : View.GONE);
@@ -1179,7 +1285,9 @@ public final class MainActivity extends Activity {
     @Override
     @Deprecated
     public void onBackPressed() {
-        if (currentSession != null && !PAGE_HOME.equals(selectedPage)) {
+        if (currentSession != null && PAGE_DETAIL.equals(selectedPage)) {
+            showPage(PAGE_WORK_ORDERS);
+        } else if (currentSession != null && !PAGE_HOME.equals(selectedPage)) {
             showPage(PAGE_HOME);
         } else {
             super.onBackPressed();
