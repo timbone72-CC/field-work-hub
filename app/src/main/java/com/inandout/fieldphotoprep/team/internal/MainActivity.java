@@ -15,6 +15,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.StyleSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.ForegroundColorSpan;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
@@ -186,14 +191,18 @@ public final class MainActivity extends Activity {
         emailInput.setInputType(
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         FwhVisualStyle.input(emailInput);
-        root.addView(emailInput, matchWrap());
+        LinearLayout.LayoutParams emailParams = matchWrap();
+        emailParams.bottomMargin = dp(9);
+        root.addView(emailInput, emailParams);
 
         passwordInput = new EditText(this);
         passwordInput.setHint(R.string.password_hint);
         passwordInput.setInputType(
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         FwhVisualStyle.input(passwordInput);
-        root.addView(passwordInput, matchWrap());
+        LinearLayout.LayoutParams passwordParams = matchWrap();
+        passwordParams.bottomMargin = dp(12);
+        root.addView(passwordInput, passwordParams);
 
         signInButton = new Button(this);
         signInButton.setText(R.string.sign_in);
@@ -301,13 +310,17 @@ public final class MainActivity extends Activity {
             }
             @Override public void afterTextChanged(Editable e) {}
         });
-        workOrdersPane.addView(workOrderSearch, matchWrap());
+        LinearLayout.LayoutParams searchParams = matchWrap();
+        searchParams.bottomMargin = dp(8);
+        workOrdersPane.addView(workOrderSearch, searchParams);
 
         refreshAssignmentsButton = new Button(this);
         refreshAssignmentsButton.setText(R.string.refresh_assignments);
         refreshAssignmentsButton.setOnClickListener(v -> refreshAssignments());
         FwhVisualStyle.button(refreshAssignmentsButton, false);
-        workOrdersPane.addView(refreshAssignmentsButton, matchWrap());
+        LinearLayout.LayoutParams refreshParams = matchWrap();
+        refreshParams.bottomMargin = dp(6);
+        workOrdersPane.addView(refreshAssignmentsButton, refreshParams);
 
         workOrdersScroll = new ScrollView(this);
         workOrdersScroll.setFillViewport(true);
@@ -714,7 +727,21 @@ public final class MainActivity extends Activity {
                 : displayStatus(workOrder.fieldStatus);
         String due = workOrder.dueDate.isEmpty() ? "Not set" : workOrder.dueDate;
         Button row = new Button(this);
-        row.setText(address + "\n" + number + " · " + status + " · Due " + due);
+        String rowText = address + "\n" + number + " · " + status + " · Due " + due;
+        SpannableString styledRow = new SpannableString(rowText);
+        styledRow.setSpan(new StyleSpan(Typeface.BOLD), 0, address.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        styledRow.setSpan(new RelativeSizeSpan(1.12f), 0, address.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        styledRow.setSpan(new ForegroundColorSpan(FwhVisualStyle.SUBTLE),
+                address.length() + 1, rowText.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (!workOrder.conflictReason.isEmpty()) {
+            int issueStart = rowText.indexOf(status, address.length() + 1);
+            if (issueStart >= 0) styledRow.setSpan(
+                    new ForegroundColorSpan(FwhVisualStyle.WARN),
+                    issueStart, issueStart + status.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        row.setText(styledRow);
         row.setAllCaps(false);
         row.setTextSize(15);
         row.setMinHeight(dp(82));
@@ -723,7 +750,8 @@ public final class MainActivity extends Activity {
         FwhVisualStyle.button(row, false);
         row.setTextSize(15);
         row.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
-        row.setContentDescription("Open " + address + ", " + number);
+        row.setContentDescription("Open " + address + ", " + number
+                + ", " + status + ", due " + due);
         LinearLayout.LayoutParams params = matchWrap();
         params.bottomMargin = dp(8);
         row.setLayoutParams(params);
@@ -803,7 +831,10 @@ public final class MainActivity extends Activity {
                                 : "START".equals(workOrder.pendingKind)
                                         ? "Started — waiting to sync"
                                         : displayStatus(workOrder.fieldStatus);
-        card.addView(text("Status: " + status, 14, false));
+        TextView jobStatus = text("Status: " + status, 14, true);
+        if (!workOrder.conflictReason.isEmpty())
+            jobStatus.setTextColor(FwhVisualStyle.WARN);
+        card.addView(jobStatus);
         if (workOrder.acknowledgmentReceivedAt.isEmpty() && workOrder.acceptPending)
             card.addView(text("Accepted — pending sync", 14, true));
         else if (!workOrder.acknowledgmentReceivedAt.isEmpty())
