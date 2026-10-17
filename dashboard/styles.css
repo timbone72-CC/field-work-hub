@@ -585,7 +585,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 #results-card[data-fwh-view]:not([data-fwh-view="work"]) > #fwh-work-page,
 #results-card[data-fwh-view]:not([data-fwh-view="create"]) > #create-wo-details,
 #results-card[data-fwh-view]:not([data-fwh-view="alerts"]) > #notification-center,
-#results-card[data-fwh-view]:not([data-fwh-view="team"]) > #owner-office-console {
+#results-card[data-fwh-view]:not([data-fwh-view="team"]) > #owner-office-console,
+#results-card[data-fwh-view]:not([data-fwh-view="team"]) > #contractor-management-section {
   display: none;
 }
 .fwh-home-panel {
