@@ -254,7 +254,7 @@ test('Modern Premium Stage 1 does not hide actions or change the existing job wo
   const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
   const premium = css.split('/* Modern Premium foundation — Stage 1')[1];
   assert.ok(premium, 'The visual refinement must remain isolated and reviewable');
-  assert.match(html, /styles\.css\?v=modern-premium-stage1-20261016/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage2-20261017/);
   // Preserve each established functional destination and the same data-driven tab owners.
   for (const id of [
     'login-form', 'sign-out', 'notification-center', 'create-wo-details',
