@@ -916,6 +916,20 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
     assert.equal(await page.locator('#create-wo-form').isVisible(), true);
     assert.equal(await page.locator('#job-filters').isVisible(), false);
+    // Stage 4: capture the actual Create & Assign controls on both viewport sizes.
+    for(const id of ['wo-number-mode-auto','wo-number-mode-custom','property-address',
+      'work-type-choice','work-type','due-date','instructions','assignee',
+      'create-photo-requirements','create-wo','create-status']) {
+      assert.equal(await page.locator('#'+id).isVisible(),true,
+        'Stage 4 must keep original Create & Assign control: '+id);
+    }
+    await page.screenshot({path:path.join(output,'stage4-create-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#create-wo-details').evaluate(el=>
+      el.scrollWidth<=el.clientWidth+1),true,
+      'Stage 4 Create & Assign must not require horizontal scrolling on a phone');
+    await page.screenshot({path:path.join(output,'stage4-create-mobile.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:900});
     await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
     assert.equal(await page.locator('#notification-center').isVisible(), true);
     assert.equal(await page.locator('#job-filters').isVisible(), false);

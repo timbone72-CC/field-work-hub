@@ -840,3 +840,125 @@ button:disabled { cursor: not-allowed; opacity: .58; }
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Modern Premium Stage 4: presentation-only Create & Assign screen.
+   Reuse the exact existing fields, requirements editor, and submit handler. */
+#results-card > #create-wo-details {
+  min-width: 0;
+  border-top: 4px solid var(--fwh-teal);
+  background: linear-gradient(180deg, #f3f9fb, #fff 185px);
+  padding: clamp(18px, 3vw, 30px);
+}
+#results-card > #create-wo-details > summary {
+  color: var(--fwh-navy-deep);
+  font-weight: 800;
+  font-size: clamp(1.12rem, 2vw, 1.42rem);
+}
+#results-card > #create-wo-details > .muted {
+  max-width: 72ch;
+  line-height: 1.55;
+}
+#results-card #create-wo-form {
+  max-width: none;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 19px;
+  margin-top: 22px;
+}
+#results-card #create-wo-form > .choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: #f1f7fa;
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+}
+#results-card #create-wo-form > .choice-group legend {
+  color: var(--fwh-navy);
+  padding: 0 8px;
+}
+#results-card #create-wo-form > .choice-group .choice-row {
+  min-width: 0;
+  padding: 13px;
+  align-items: flex-start;
+  border: 1px solid #cbdae3;
+  border-radius: 11px;
+  background: #fff;
+  line-height: 1.45;
+}
+#results-card #create-wo-form .choice-row input {
+  flex: 0 0 auto;
+}
+#results-card #create-wo-form .choice-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#results-card #create-wo-form > .remember-choice {
+  font-size: .89rem;
+  line-height: 1.4;
+}
+#results-card #create-wo-form > .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+#results-card #create-wo-form label,
+#results-card #create-wo-form .form-grid,
+#results-card #create-wo-form input,
+#results-card #create-wo-form textarea,
+#results-card #create-wo-form select {
+  min-width: 0;
+  max-width: 100%;
+}
+#results-card #create-wo-form > #create-photo-requirements {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: clamp(16px, 2.5vw, 24px);
+  border: 1px solid var(--fwh-border);
+  border-radius: 14px;
+  background: #f8fbfc;
+}
+#results-card #create-photo-requirements > h3 {
+  margin: 0;
+  color: var(--fwh-navy-deep);
+}
+#results-card #create-photo-requirements .photo-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+#results-card #create-photo-requirements .photo-item {
+  min-width: 0;
+  background: #fff;
+  border-color: var(--fwh-border);
+}
+#results-card #create-wo-form > #create-wo {
+  justify-self: end;
+  width: auto;
+  min-width: 220px;
+  margin: 0;
+  padding: 13px 24px;
+  color: #fff;
+  background: var(--fwh-teal);
+}
+#results-card #create-wo-form > #create-status {
+  margin-top: -10px;
+  line-height: 1.5;
+}
+@media (max-width: 680px) {
+  #results-card #create-wo-form > .choice-group,
+  #results-card #create-wo-form > .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #results-card #create-photo-requirements .photo-total {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #results-card #create-wo-form > #create-wo {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+}
