@@ -146,4 +146,25 @@ public class MainActivityWorkOrderScreenTest {
         assertEquals(View.GONE, ((LinearLayout) field(a, "detailPane")).getVisibility());
         assertEquals(0, ((LinearLayout) field(a, "detailContainer")).getChildCount());
     }
+
+    @Test
+    public void activeJobKeepsFinishAndBothTypesOfHandoffConsentControls() throws Exception {
+        MainActivity a = ui();
+        SupabaseApi.WorkOrder work = new SupabaseApi.WorkOrder(
+                "wo-d", "org-a", "run-d", 1, "500", "44 Pine St",
+                "Inspection", "Field instructions", "2026-10-22", "IN_PROGRESS",
+                "user-a", "user-b", "", "2026-10-16T00:00:00Z", "", "", "");
+        work.assignmentInstanceId = "assign-d";
+        work.teamHandoffRequestId = "office-change-d";
+        call(a, "renderWorkOrders", List.class, List.of(work));
+        firstButton((LinearLayout) field(a, "workOrdersContainer")).performClick();
+
+        LinearLayout detail = (LinearLayout) field(a, "detailContainer");
+        assertTrue(containsText(detail, "Photos"));
+        assertTrue(containsText(detail, "Finish Field Work"));
+        assertTrue(containsText(detail, "Approve Reassignment"));
+        assertTrue(containsText(detail, "Decline Reassignment"));
+        assertTrue(containsText(detail, "Approve Office-Team Change"));
+        assertTrue(containsText(detail, "Decline Office-Team Change"));
+    }
 }
