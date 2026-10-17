@@ -39,8 +39,9 @@ final class FwhImmersiveNavigation {
             int safeBottom = safeBottom(minimum, stableNav.bottom, gesture.bottom,
                     visibleNav.bottom, navShown, visibleLift);
             int topInset = Math.max(status.top, cutout.top);
-            int leftInset = Math.max(cutout.left, gesture.left);
-            int rightInset = Math.max(cutout.right, gesture.right);
+            // Avoid pushing the entire form inward for back-edge gesture strips.
+            int leftInset = cutout.left;
+            int rightInset = cutout.right;
             int newLeft = left + leftInset;
             int newTop = top + topInset;
             int newRight = right + rightInset;
