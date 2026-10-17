@@ -463,6 +463,12 @@ test('Modern Premium Stage 8 preserves real invite setup controls and role-bound
   assert.equal((html.match(/minlength="10"/g)||[]).length,2);
   assert.match(js,/history\.replaceState/);
   assert.match(js,/password/);
+  if(file==='contractor-invite.html'){
+   assert.ok(html.includes('contractor-invite.js?v=modern-premium-stage10-copy-20261017'));
+   assert.match(js,/Open the Field Work Hub app and sign in/);
+   assert.match(js,/not a valid Field Work Hub Contractor setup link/);
+   assert.doesNotMatch(js,/Field Photo Prep Team/);
+  }
  }
 });
 
