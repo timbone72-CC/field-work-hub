@@ -90,6 +90,7 @@ public class MainActivityWorkOrderScreenTest {
         assertTrue(containsText(list, "WO 100"));
         assertTrue(containsText(list, "WO 200"));
         assertTrue(containsText(list, "Inspection"));
+        assertTrue(firstButton(list).getContentDescription().toString().contains("Inspection"));
         assertTrue(containsText(list, "Completed Work"));
 
         EditText search = (EditText) field(a, "workOrderSearch");
