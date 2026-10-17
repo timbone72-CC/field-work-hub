@@ -890,13 +890,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.setViewportSize({width:390,height:844});
     await page.screenshot({path:path.join(output,'stage2-home-mobile.png'),fullPage:true});
     await page.setViewportSize({width:1280,height:900});
-    assert.equal(await page.locator('[data-fwh-go="team"]').first().isVisible(), false,
-      'Ordinary Admin must not see owner navigation.');
+    await wait(page, () => Boolean(document.getElementById('contractor-management-section')));
+    assert.equal(await page.locator('#fwh-primary-nav [data-fwh-go="team"]').isVisible(), true,
+      'Existing authorized contractor management must remain reachable.');
+    assert.equal(await page.locator('#contractor-management-section').isVisible(), false,
+      'Contractor controls belong to Team, not Home.');
+    await page.locator('#fwh-primary-nav [data-fwh-go="team"]').click();
+    assert.equal(await page.locator('#contractor-management-section').isVisible(), true);
+    assert.equal(await page.locator('#owner-office-console').count(), 0,
+      'Ordinary Admin must never acquire Product Owner controls by switching pages.');
+    await page.screenshot({path:path.join(output,'stage2-team-desktop.png'),fullPage:true});
     await page.locator('#fwh-primary-nav [data-fwh-go="work"]').click();
     assert.equal(await page.locator('#job-filters').isVisible(), true);
     assert.equal(await page.locator('#create-wo-details').isVisible(), false);
+    assert.equal(await page.locator('#contractor-management-section').isVisible(), false,
+      'Team controls cannot leak into Work Orders presentation.');
     await page.screenshot({path:path.join(output,'stage2-work-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
+    await page.evaluate(() => new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('.job-link').first().isVisible(), true,
+      'Mobile jobs must remain visible within the bounded scroller');
     await page.screenshot({path:path.join(output,'stage2-work-mobile.png'),fullPage:true});
     await page.setViewportSize({width:1280,height:900});
     await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
