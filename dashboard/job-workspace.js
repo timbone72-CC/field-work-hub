@@ -212,7 +212,29 @@ const JobWorkspace = (() => {
     el('job-context').textContent = selectedRow && index < 0 ? 'This job is outside the current page or filter. Your workspace remains open.' : '';
     addressContext();
   }
+  // The lookup is navigation only. Closing it never changes selected job,
+  // unsaved edits, exact-address results, or the currently requested page.
+  function closeLookup(returnFocus = false) {
+    const lookup = el('job-lookup-popover');
+    if (!lookup.open) return;
+    lookup.open = false;
+    if (returnFocus && editSection.open) el('job-lookup-toggle').focus();
+  }
+  function lookupOutsidePointer(event) {
+    const lookup = el('job-lookup-popover');
+    if (editSection.open && lookup.open && !lookup.contains(event.target)) closeLookup();
+  }
+  function lookupEscape(event) {
+    const lookup = el('job-lookup-popover');
+    if (event.key !== 'Escape' || !editSection.open || !lookup.open) return;
+    // One Escape closes only the lookup. A subsequent Escape still goes through
+    // the existing selected-job dirty guard; do not dismiss unsaved work.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeLookup(true);
+  }
   function opened(row) {
+    closeLookup();
     selectedRow = row; needsReload = false; pending = null; baseline = fingerprint();
     addressLookupEpoch++; addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
@@ -247,6 +269,7 @@ const JobWorkspace = (() => {
     });
   }
   function closed() {
+    closeLookup();
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
@@ -277,6 +300,9 @@ const JobWorkspace = (() => {
     }
   }
   function init() {
+    el('job-lookup-close').addEventListener('click', () => closeLookup(true));
+    document.addEventListener('pointerdown', lookupOutsidePointer);
+    document.addEventListener('keydown', lookupEscape, true);
     CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init(); ReleaseHistory.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
     el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));
