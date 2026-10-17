@@ -981,7 +981,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#job-facts').isVisible(), true);
     assert.equal(await page.locator('#job-next-action-open').isVisible(), true);
     assert.equal(await page.locator('.workspace-tabs [data-job-tab]').count(), 6);
-    await page.screenshot({path:path.join(output,'stage3-job-details-desktop.png'),fullPage:true});
+    // Capture a real viewport with the Stage 2 Work Orders destination active.
+    // The preexisting exhaustive browser test runs without a top-level view,
+    // so route context here for screenshot only, then restore that fixture.
+    await page.evaluate(() => document.querySelector('#fwh-primary-nav [data-fwh-go="work"]').click());
+    await page.screenshot({path:path.join(output,'stage3-job-details-desktop.png'),fullPage:false});
     await page.setViewportSize({width:390,height:844});
     await wait(page, () => document.querySelector('#edit-work-order-section').clientWidth < 400);
     assert.equal(await page.locator('#edit-work-order-section').evaluate(el =>
@@ -992,8 +996,14 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       assert.equal(await page.locator(selector).isVisible(),true,
         'Stage 3 must preserve access to '+selector);
     }
-    await page.screenshot({path:path.join(output,'stage3-job-details-mobile.png'),fullPage:true});
+    await page.screenshot({path:path.join(output,'stage3-job-details-mobile.png'),fullPage:false});
+    await page.locator('#edit-work-order-section .workspace-tabs').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(output,'stage3-job-tabs-mobile.png'),fullPage:false});
     await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(() => {
+      document.getElementById('results-card').removeAttribute('data-fwh-view');
+      document.getElementById('edit-work-order-section').scrollTop = 0;
+    });
     const first = await page.locator('#edit-work-order-id').inputValue();
     await page.locator('#edit-instructions').fill('Unsaved office instruction');
     await page.keyboard.press('Escape'); assert.equal(await page.locator('dialog').evaluate(el => el.open), true);
