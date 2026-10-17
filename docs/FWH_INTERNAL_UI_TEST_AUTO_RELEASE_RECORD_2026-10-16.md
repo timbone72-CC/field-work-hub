@@ -4,7 +4,7 @@
 **Classification:** Level 3 — automatically granting a trusted GitHub Actions workflow the authority to create **publicly downloadable** signed internal TEST APK releases.  
 **Operator authorization:** 2026-10-16, explicit: **“approve automatic publication of verified internal TEST builds.”** This approves the proposed governed distribution behavior, **not** unattended Android installation, photo/delivery deployment, or automatic merge of draft PR #40.  
 **Source-of-truth branch:** `feat/verified-internal-test-auto-release`, independent from the app runtime owner, draft PR #40 (`feat/phase-5-6-dashboard-workflow`). No shared modified files and no competing MainActivity implementation.  
-**Current status:** proposed implementation / automated verification and separately required Level-3 **pre-merge approval pending**. Until this release PR is approved and merged to `main`, GitHub does **not** execute this privileged publisher. No APK has been published by this new workflow.
+**Current status:** Implementation and verification complete; **separate explicit Level 3 merge approval granted by the operator on 2026-10-16**, specifically for **PR #47 only**: “approve merging PR #47 only to enable automatic publication of verified internal TEST builds.” Trusted-workflow activation still requires that exact PR to merge into `main`; no APK has been published by this new workflow at this checkpoint.
 
 ## Approved user-facing result
 
@@ -33,7 +33,7 @@ FWH Android continues to use its existing updater to find the **latest higher ve
 
 **Focused tests** in `tests/ci/test_auto_publish_verified_ui.py`: multiple/invalid markers, odd/stale versions, wrong PR/branch/origin, missing/failed/pending or superseded success, restricted changed files, missing UI change, invalid signer/package/Room/APK/hash, old/duplicate version tag, and kill switch. Python standard library only.
 
-**Mandatory final gate**: new publisher workflow PR policy-test CI pass; inspect exact diff and permissions; separately **explicit operator approval before this Level 3 release-automation PR merges**; then verify actual workflow is active on `main`. Finally, mark the approved latest complete UI candidate in PR #40 and observe one successful automatic TEST release without manual publish command. Test Android updater and user-confirmed installation at a narrow phone gate.
+**Mandatory final gate**: new publisher workflow PR policy-test CI pass; inspect exact diff and permissions; **separate Level 3 approval of PR #47 was explicitly granted 2026-10-16**; verify merge result and actual trusted workflow active on `main`. Finally, mark the approved latest complete UI candidate in PR #40 and observe one successful automatic TEST release without manual publish command. Test Android updater and user-confirmed installation at a narrow phone gate.
 
 **Rollback**: disable via repository variable `FWH_UI_AUTO_RELEASE_ENABLED=false` (immediate publication freeze) then revert the isolated workflow + policy + tests on `main`. Leave previously published immutable TEST tags and working phone data untouched; if an APK is already installed, publish a newer fixed version rather than downgrading/mutating Room.
 
