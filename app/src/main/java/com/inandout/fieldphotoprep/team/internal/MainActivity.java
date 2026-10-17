@@ -77,6 +77,8 @@ public final class MainActivity extends Activity {
     private String selectedWorkOrderId = "";
     private String selectedRunId = "";
     private String selectedAssignmentInstanceId = "";
+    private Bundle restoredNavigation;
+    private int savedListScrollY = -1;
     private ScrollView mainScroll;
     private LinearLayout homePane;
     private LinearLayout workOrdersPane;
@@ -127,6 +129,8 @@ public final class MainActivity extends Activity {
         assignmentRepository = runtime.assignments;
         setContentView(buildContent());
         showSignedOutUi(getString(R.string.signed_out));
+        // Only restore display state after the same authenticated owner is re-established.
+        if (savedInstanceState != null) restoredNavigation = new Bundle(savedInstanceState);
         TeamDatabase.getInstance(this).getInvalidationTracker().addObserver(evidenceObserver);
         restoreSavedSession();
         checkForUpdates(false);
@@ -434,6 +438,23 @@ public final class MainActivity extends Activity {
             selectedRunId = "";
             selectedAssignmentInstanceId = "";
             workOrderSearch.setText("");
+            if (restoredNavigation != null) {
+                if (session.userId.equals(restoredNavigation.getString("ui.owner", ""))
+                        && session.organizationId.equals(
+                                restoredNavigation.getString("ui.org", ""))) {
+                    String savedPage = restoredNavigation.getString("ui.page", PAGE_HOME);
+                    if (PAGE_HOME.equals(savedPage) || PAGE_WORK_ORDERS.equals(savedPage)
+                            || PAGE_DETAIL.equals(savedPage) || PAGE_ACCOUNT.equals(savedPage)) {
+                        selectedPage = savedPage;
+                    }
+                    selectedWorkOrderId = restoredNavigation.getString("ui.wo", "");
+                    selectedRunId = restoredNavigation.getString("ui.run", "");
+                    selectedAssignmentInstanceId = restoredNavigation.getString("ui.instance", "");
+                    workOrderSearch.setText(restoredNavigation.getString("ui.search", ""));
+                    savedListScrollY = restoredNavigation.getInt("ui.list_y", -1);
+                }
+                restoredNavigation = null;
+            }
         }
         currentSession = session;
         setLoading(false, message);
@@ -468,6 +489,11 @@ public final class MainActivity extends Activity {
         }
         renderWorkOrders(workOrders);
         showPage(selectedPage);
+        if (savedListScrollY >= 0 && PAGE_WORK_ORDERS.equals(selectedPage)) {
+            int offset = savedListScrollY;
+            savedListScrollY = -1;
+            workOrdersScroll.post(() -> workOrdersScroll.scrollTo(0, offset));
+        }
     }
 
     private void refreshAssignments() {
@@ -1200,6 +1226,8 @@ public final class MainActivity extends Activity {
         selectedRunId = "";
         selectedAssignmentInstanceId = "";
         downloadedWorkOrders = Collections.emptyList();
+        savedListScrollY = -1;
+        restoredNavigation = null;
         workOrderSearch.setText("");
         detailContainer.removeAllViews();
         mainScroll.setVisibility(View.VISIBLE);
@@ -1279,6 +1307,21 @@ public final class MainActivity extends Activity {
             screenTitle.setText("Home");
             screenIntro.setText("");
         }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        if (currentSession != null) {
+            outState.putString("ui.owner", currentSession.userId);
+            outState.putString("ui.org", currentSession.organizationId);
+            outState.putString("ui.page", selectedPage);
+            outState.putString("ui.wo", selectedWorkOrderId);
+            outState.putString("ui.run", selectedRunId);
+            outState.putString("ui.instance", selectedAssignmentInstanceId);
+            outState.putString("ui.search", workOrderSearch.getText().toString());
+            outState.putInt("ui.list_y", workOrdersScroll.getScrollY());
+        }
+        super.onSaveInstanceState(outState);
     }
 
     @Override
