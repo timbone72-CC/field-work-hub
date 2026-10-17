@@ -229,10 +229,10 @@ def main():
         )
         result = api("releases/tags/" + tag)
         assets = result.get("assets", [])
-        require(result.get("target_commitish") == sha and len(assets) == 1
+        if not (result.get("target_commitish") == sha and len(assets) == 1
                 and assets[0].get("name") == ASSET
-                and assets[0].get("digest") == "sha256:" + digest,
-                "Public release identity could not be reconciled: STOP")
+                and assets[0].get("digest") == "sha256:" + digest):
+            raise RuntimeError("Public release identity could not be reconciled: STOP")
         print(f"PUBLISHED {tag}, exact artifact digest confirmed")
 
     return 0
