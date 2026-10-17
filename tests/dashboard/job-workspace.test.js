@@ -272,3 +272,27 @@ test('Modern Premium Stage 1 does not hide actions or change the existing job wo
   // This package may restyle visible controls, never take ownership of visibility.
   assert.doesNotMatch(premium, /(?:display:\s*none|visibility:\s*hidden|pointer-events:\s*none)/i);
 });
+
+test('Modern Premium Stage 2 routes existing work without replacing roles or actions', () => {
+  const html = fs.readFileSync(require.resolve('../../dashboard/index.html'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
+  const nav = fs.readFileSync(require.resolve('../../dashboard/navigation.js'), 'utf8');
+  for (const target of ['home', 'work', 'create', 'alerts', 'team']) {
+    assert.match(html, new RegExp('data-fwh-go="' + target + '"'), target + ' entry missing');
+  }
+  for (const id of ['fwh-home-panel', 'fwh-work-page', 'job-filters', 'create-wo-details',
+    'notification-center', 'edit-work-order-section', 'sign-out']) {
+    assert.match(html, new RegExp('id="' + id + '"'), id + ' missing');
+  }
+  assert.match(html, /navigation\.js\?v=modern-premium-stage2-20261017/);
+  assert.match(html, /styles\.css\?v=modern-premium-stage2-20261017/);
+  assert.match(css, /#results-card\[data-fwh-view\]:not\(\[data-fwh-view="work"\]\) > #fwh-work-page/);
+  assert.match(nav, /new MutationObserver\(syncTeam\)/);
+  assert.match(nav, /button\.hidden = !available/);
+  assert.match(nav, /if \(view === 'create'\) create\.open = true/);
+  assert.match(nav, /if \(view === 'alerts'\) alerts\.open = true/);
+  assert.match(nav, /create\.addEventListener\('toggle'/);
+  assert.doesNotMatch(nav, /fetch\(|localStorage|sessionStorage|accessToken|adminFetch|showModal|innerHTML/);
+  assert.equal((html.match(/data-job-tab="/g) || []).length, 6,
+    'Selected-job tabs remain unchanged');
+});
