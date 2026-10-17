@@ -2674,3 +2674,13 @@ After that separately authorized operation, verify installed definition/source-o
 **Bounded styling:** Only append scoped `#staffing-card` styles in `dashboard/styles.css`, change `dashboard/index.html` CSS cache token, update existing structural tests and add real desktop/mobile browser screenshots of authorized Supervisor screen before existing behavior/retry checks. Authorized-job table scrolls only in its native table container; mobile outer panel must fit 390px without sideways scrolling.
 
 **Required gates:** exact-head Admin Dashboard, Database, Android and Governance CI with actual screenshot review and operator acceptance; no PR merge, production deploy or external role activation. Narrow rollback to Stage 6 SHA above on a scoped failure.
+
+## Modern Premium UI — Stage 8 account invitation setup (2026-10-17)
+
+**Approval lineage:** User accepted Stage 7 Supervisor screen by selecting **"Next"** after the latest actual desktop/phone screenshots and passing CI. The next existing UI is the Admin and Contractor invitation-setup pages. Scope is Level 2, visual only, reusing already-approved Phase 6F Auth/onboarding owner in draft PR #40. Rollback baseline `278baccfe4e07a933f4863d3291289dedd1a055d`.
+
+**Protected existing behavior:** Both actual `dashboard/admin-invite.js` and `dashboard/contractor-invite.js` are unchanged: setup bearer removed from URL, Auth invitation role/org/marker required, 10-character matching passwords, fail-closed remote activation, never treating password save alone as account activation, truthful status. No links created, permissions granted, real credentials used, network providers enabled, or user accounts changed. Prior Stage 1–7 designs remain accepted. The discarded header magnifier remains absent.
+
+**Scope:** Add only `fwh-setup-page` class on the existing `body` elements, cache token updates in existing three HTML documents, isolated new CSS block for the pre-existing verification/status and password controls. No new form controls/handlers or navigation. Exact original Auth JS script references remain. Tests assert markup and real CSS selector scope. Separate Playwright browser contexts open each original HTML+JS via synthetic disposable Auth GET identity only, block all other remote calls, assert fragment removal, unchanged form visibility, desktop/390px width, and capture genuine browser screenshots with disposable email addresses. Screenshots are TEST fixtures, not live account success evidence.
+
+**Gates:** Exact head Admin Dashboard, FWH Database, Android and Governance; operator visual acceptance. Narrow rollback Stage 8 changes only; PR #40 remains draft/unmerged and not hosted. Real email sender, Auth callback and production activation remain separately gated.

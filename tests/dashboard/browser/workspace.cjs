@@ -868,6 +868,47 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       }
       errors.push(`Unexpected external request ${url.pathname}`); return reply({ message: 'Blocked test request' }, 503);
     });
+
+    // Stage 8: actual account setup pages with isolated, synthetic verified
+    // invitation identities only. All attempted writes are blocked, never live.
+    for(const [kind,role] of [['admin','ADMIN'],['contractor','CONTRACTOR']]){
+      const setupContext=await browser.newContext({viewport:{width:1280,height:900}});
+      const setupPage=await setupContext.newPage();
+      const outbound=[];
+      await setupPage.route('https://**/*',route=>{
+        const request=route.request(),url=new URL(request.url());
+        outbound.push({path:url.pathname,method:request.method()});
+        if(url.pathname==='/auth/v1/user' && request.method()==='GET'){
+          return route.fulfill({status:200,headers:{
+            'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
+            body:JSON.stringify({id:uuid(kind==='admin'?9871:9872),
+              email:kind+'-preview@example.invalid',
+              app_metadata:{role,organization_id:organization},
+              user_metadata:{display_name:'Disposable '+role+' preview',
+                ...(kind==='admin'?{scoped_admin_invitation_id:uuid(9873)}
+                  :{team_invitation_id:uuid(9874)})}})});
+        }
+        return route.fulfill({status:403,headers:{
+          'Content-Type':'application/json','Access-Control-Allow-Origin':'*'},
+          body:'{"message":"No setup writes allowed in this browser fixture"}'});
+      });
+      await setupPage.goto('http://127.0.0.1:'+server.address().port+'/'+kind+
+        '-invite.html#access_token=disposable-fixture-only&type=invite');
+      await setupPage.locator('#password-form:visible').waitFor();
+      assert.equal(await setupPage.locator('#invite-check').innerText(),'INVITATION VERIFIED');
+      for(const id of ['new-password','confirm-password','set-password']){
+        assert.equal(await setupPage.locator('#'+id).isVisible(),true,'Missing setup control '+id);
+      }
+      assert.equal(new URL(setupPage.url()).hash,'','Setup token fragment must be removed');
+      assert.deepEqual(outbound,[{path:'/auth/v1/user',method:'GET'}],
+        'Opening setup form must not trigger activation or password writes');
+      await setupPage.screenshot({path:path.join(output,'stage8-'+kind+'-setup-desktop.png'),fullPage:true});
+      await setupPage.setViewportSize({width:390,height:844});
+      assert.equal(await setupPage.locator('body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),
+        true,kind+' account setup must fit 390px screen');
+      await setupPage.screenshot({path:path.join(output,'stage8-'+kind+'-setup-mobile.png'),fullPage:true});
+      await setupContext.close();
+    }
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     let firstLogin = true;
