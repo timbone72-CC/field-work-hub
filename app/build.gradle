@@ -13,8 +13,8 @@ android {
         applicationId 'com.inandout.fieldphotoprep.team.internal'
         minSdk 26
         targetSdk 36
-        versionCode (project.hasProperty("fwhRecovery") ? 35 : 34)
-        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-ui-recovery-internal' : '0.5-phase5-ui-internal')
+        versionCode (project.hasProperty("fwhRecovery") ? 37 : 36)
+        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-immersive-ui-recovery-internal' : '0.5-phase5-immersive-ui-internal')
         buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', project.hasProperty('fwhRecovery') ? 'false' : 'true'
 
         javaCompileOptions {
