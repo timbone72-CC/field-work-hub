@@ -752,7 +752,7 @@ public final class MainActivity extends Activity {
         FwhVisualStyle.button(row, false);
         row.setTextSize(15);
         row.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
-        row.setContentDescription("Open " + address + ", " + number
+        row.setContentDescription("Open " + address + ", " + jobLine
                 + ", " + status + ", due " + due);
         LinearLayout.LayoutParams params = matchWrap();
         params.bottomMargin = dp(8);
