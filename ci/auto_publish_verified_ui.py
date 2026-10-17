@@ -69,20 +69,25 @@ def marked_version(message):
 
 
 def validate_ci(runs, sha):
-    successful = {}
+    # The most recent attempt governs. Never reuse an older PASS when a newer
+    # run on the same SHA has failed, been cancelled or is still pending.
+    latest = {}
     for run in runs:
         name = run.get("name")
         if name not in NAMES or run.get("head_sha") != sha:
             continue
         if run.get("event") != "pull_request" or run.get("head_branch") != BRANCH:
             continue
-        if run.get("head_repository", {}).get("full_name") != REPO:
+        if (run.get("head_repository") or {}).get("full_name") != REPO:
             continue
-        if run.get("status") != "completed" or run.get("conclusion") != "success":
-            continue
-        successful[name] = run["id"]
-    require(set(successful) == NAMES, "All three exact-source PR CI gates have not passed")
-    return successful["Android Team Client CI"]
+        if name not in latest or (int(run.get("id", 0)), int(run.get("run_attempt", 1))) > (
+                int(latest[name].get("id", 0)), int(latest[name].get("run_attempt", 1))):
+            latest[name] = run
+    require(set(latest) == NAMES, "All three exact-source PR CI gates are required")
+    for name, run in latest.items():
+        require(run.get("status") == "completed" and run.get("conclusion") == "success",
+                "Newest " + name + " is not successful")
+    return latest["Android Team Client CI"]["id"]
 
 
 def validate_diff(comparison):
