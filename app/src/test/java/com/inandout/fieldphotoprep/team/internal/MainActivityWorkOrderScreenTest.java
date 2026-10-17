@@ -64,6 +64,19 @@ public class MainActivityWorkOrderScreenTest {
         return null;
     }
 
+    private static Button findButton(View root, String label) {
+        if (root instanceof Button && label.equals(((Button) root).getText().toString()))
+            return (Button) root;
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                Button found = findButton(group.getChildAt(i), label);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     private static boolean containsText(View view, String text) {
         if (view instanceof TextView && ((TextView) view).getText().toString().contains(text))
             return true;
@@ -133,6 +146,10 @@ public class MainActivityWorkOrderScreenTest {
         assertTrue(containsText(detail, "Photos"));
         assertTrue(containsText(detail, "Start Work"));
         assertTrue(containsText(detail, "Accept"));
+        assertEquals(android.graphics.Color.WHITE,
+                findButton(detail, "Start Work").getCurrentTextColor());
+        assertEquals(FwhVisualStyle.INK,
+                findButton(detail, "Photos").getCurrentTextColor());
 
         SupabaseApi.WorkOrder changed = work(
                 "wo-a", "run-new", "assign-new", "15 Oak St", "100", "ASSIGNED");
@@ -173,9 +190,31 @@ public class MainActivityWorkOrderScreenTest {
         LinearLayout detail = (LinearLayout) field(a, "detailContainer");
         assertTrue(containsText(detail, "Photos"));
         assertTrue(containsText(detail, "Finish Field Work"));
+        assertEquals(android.graphics.Color.WHITE,
+                findButton(detail, "Continue Photos").getCurrentTextColor());
+        assertEquals(FwhVisualStyle.INK,
+                findButton(detail, "Finish Field Work").getCurrentTextColor());
+        assertTrue(findButton(detail, "Finish Field Work").isEnabled());
         assertTrue(containsText(detail, "Approve Reassignment"));
         assertTrue(containsText(detail, "Decline Reassignment"));
         assertTrue(containsText(detail, "Approve Office-Team Change"));
         assertTrue(containsText(detail, "Decline Office-Team Change"));
+    }
+
+    @Test
+    public void reviewConflictNeverEmphasizesBlockedPhotoCapture() throws Exception {
+        MainActivity a = ui();
+        SupabaseApi.WorkOrder job = work(
+                "wo-review", "run-review", "assign-review",
+                "21 Cedar St", "600", "IN_PROGRESS");
+        job.conflictReason = "PROTOCOL_REVIEW";
+        call(a, "renderWorkOrders", List.class, List.of(job));
+        firstButton((LinearLayout) field(a, "workOrdersContainer")).performClick();
+        LinearLayout detail = (LinearLayout) field(a, "detailContainer");
+        assertEquals(FwhVisualStyle.INK,
+                findButton(detail, "Photos").getCurrentTextColor());
+        assertNull(findButton(detail, "Continue Photos"));
+        assertNull(findButton(detail, "Finish Field Work"));
+        assertTrue(containsText(detail, "Your saved progress is preserved."));
     }
 }
