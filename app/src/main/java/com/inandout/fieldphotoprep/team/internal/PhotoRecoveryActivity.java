@@ -39,7 +39,8 @@ public final class PhotoRecoveryActivity extends Activity {
         }
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         content.setBackgroundColor(FwhVisualStyle.CANVAS);
-        int pad = (int)(20 * getResources().getDisplayMetrics().density); content.setPadding(pad,pad,pad,pad);
+        int pad = (int)(20 * getResources().getDisplayMetrics().density);
+        FwhImmersiveNavigation.protect(this, content, pad, pad, pad, pad);
         TextView title = new TextView(this); title.setText("Recover my photos"); title.setTextSize(24);
         FwhVisualStyle.heading(title); title.setPadding(0, 0, 0, pad / 2); content.addView(title);
         status = new TextView(this);
@@ -54,6 +55,10 @@ public final class PhotoRecoveryActivity extends Activity {
         cancel = button(content,"Cancel export",()->cancelled.set(true)); cancel.setVisibility(android.view.View.GONE);
         button(content,"Back",this::finish);
         setContentView(content); load();
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        FwhImmersiveNavigation.enter(this);
     }
     private Button button(LinearLayout parent,String label,Runnable action) {
         Button b=new Button(this);
