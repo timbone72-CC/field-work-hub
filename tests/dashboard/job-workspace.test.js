@@ -298,3 +298,32 @@ test('Modern Premium Stage 2 routes existing work without replacing roles or act
   assert.equal((html.match(/data-job-tab="/g) || []).length, 6,
     'Selected-job tabs remain unchanged');
 });
+
+test('Modern Premium Stage 3 visually prioritizes actual job status without changing any actions', () => {
+  const html = fs.readFileSync(require.resolve('../../dashboard/index.html'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../../dashboard/styles.css'), 'utf8');
+  const js = fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'), 'utf8');
+  const stage = css.split('/* Modern Premium Stage 3:')[1];
+  assert.ok(stage, 'Stage 3 overrides must be isolated');
+  assert.match(html, /styles\.css\?v=modern-premium-stage3-20261017/);
+  assert.match(html, /class="fwh-job-identity"/);
+  assert.match(html, /class="workspace-navigation fwh-job-guidance"/);
+  assert.match(html, /id="job-next-action"/);
+  assert.match(html, /id="job-next-action-open"/);
+  assert.match(html, /id="job-unsaved"/);
+  assert.match(stage, /#edit-work-order-section #job-next-action-open/);
+  assert.match(stage, /@media \(max-width: 620px\)/);
+  assert.doesNotMatch(stage, /(?:display:\s*none|visibility:\s*hidden|pointer-events:\s*none)/i);
+  for (const id of ['job-previous','job-next','job-reload','prepare-repeat-work',
+    'prepare-custom-work','job-address-load','job-address-previous',
+    'job-address-next','save-edit','cancel-edit','job-save-continue','job-stay','job-discard']) {
+    assert.match(html, new RegExp('id="' + id + '"'), 'Missing operational control: ' + id);
+  }
+  for (const panel of ['details','assignment','requirements','photos','delivery','history']) {
+    assert.match(html, new RegExp('data-job-tab="' + panel + '"'), 'Missing tab: ' + panel);
+    assert.match(html, new RegExp('data-job-panel="' + panel + '"'), 'Missing panel: ' + panel);
+  }
+  assert.equal((html.match(/data-job-tab="/g) || []).length, 6);
+  assert.match(js, /el\('job-next-action-open'\)\.addEventListener\('click'/);
+  assert.match(js, /editSection\.addEventListener\('cancel'/);
+});
