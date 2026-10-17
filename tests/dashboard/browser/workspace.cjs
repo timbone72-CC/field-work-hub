@@ -981,6 +981,44 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#job-facts').isVisible(), true);
     assert.equal(await page.locator('#job-next-action-open').isVisible(), true);
     assert.equal(await page.locator('.workspace-tabs [data-job-tab]').count(), 6);
+    // The exact original address lookup stays mounted, but is reached via the
+    // magnifying glass in the selected-job header rather than a bottom block.
+    assert.equal(await page.locator('#job-lookup-popover').evaluate(el=>el.open), false);
+    assert.equal(await page.locator('#job-address-load').isVisible(), false);
+    await page.locator('#job-lookup-toggle').click();
+    assert.equal(await page.locator('#job-lookup-popover').evaluate(el=>el.open), true);
+    for (const id of ['job-address-load','job-address-previous','job-address-next',
+      'job-address-status','job-address-work-orders']) {
+      assert.equal(await page.locator('#'+id).isVisible(), true,
+        'Original lookup control remains visible in popup: '+id);
+    }
+    assert.match(await page.locator('#job-address-status').innerText(),/Load this address/);
+    await page.screenshot({path:path.join(output,'stage3-job-lookup-desktop.png'),fullPage:false});
+    await page.setViewportSize({width:390,height:844});
+    const bounds=await page.locator('.fwh-job-lookup-surface').boundingBox();
+    assert.ok(bounds && bounds.x>=0 && bounds.x+bounds.width<=391,
+      'Search popup must fit narrow phone width');
+    assert.equal(await page.locator('#edit-work-order-section').evaluate(el=>
+      el.scrollWidth<=el.clientWidth+1),true,
+      'Opening address lookup must not create horizontal scrolling');
+    await page.screenshot({path:path.join(output,'stage3-job-lookup-mobile.png'),fullPage:false});
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#job-lookup-popover').evaluate(el=>el.open), false,
+      'Escape closes only the lookup');
+    assert.equal(await page.locator('dialog').evaluate(el=>el.open), true,
+      'Escape with lookup open must not close current work order');
+    assert.equal(await page.locator('#job-lookup-toggle').evaluate(el=>el===document.activeElement),true,
+      'Escape returns focus to the magnifier');
+    await page.locator('#job-lookup-toggle').click();
+    await page.locator('#job-lookup-close').click();
+    assert.equal(await page.locator('#job-lookup-popover').evaluate(el=>el.open),false,
+      'Close X dismisses only the lookup');
+    await page.locator('#job-lookup-toggle').click();
+    await page.evaluate(()=>document.getElementById('job-next-action')
+      .dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})));
+    assert.equal(await page.locator('#job-lookup-popover').evaluate(el=>el.open),false,
+      'Outside pointer dismisses the popup without changing jobs');
+    await page.setViewportSize({width:1280,height:900});
     // Capture a real viewport with the Stage 2 Work Orders destination active.
     // The preexisting exhaustive browser test runs without a top-level view,
     // so route context here for screenshot only, then restore that fixture.
