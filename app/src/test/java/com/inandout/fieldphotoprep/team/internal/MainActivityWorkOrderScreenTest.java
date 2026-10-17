@@ -38,7 +38,7 @@ public class MainActivityWorkOrderScreenTest {
         SupabaseApi.WorkOrder order = new SupabaseApi.WorkOrder(
                 id, "org-a", run, 1, number, address, "Inspection", "Instructions",
                 "2026-10-22", status, "user-a", "", "", "2026-10-16T00:00:00Z",
-                "", "", "", "");
+                "", "", "");
         order.assignmentInstanceId = instance;
         return order;
     }
@@ -87,7 +87,8 @@ public class MainActivityWorkOrderScreenTest {
         LinearLayout list = (LinearLayout) field(a, "workOrdersContainer");
         ScrollView scroll = (ScrollView) field(a, "workOrdersScroll");
         assertSame(list.getParent(), scroll);
-        assertEquals(2, ((Button) list.getChildAt(0)).getText().toString().contains("15 Oak") ? 2 : 0);
+        assertTrue(containsText(list, "WO 100"));
+        assertTrue(containsText(list, "WO 200"));
         assertTrue(containsText(list, "Completed Work"));
 
         EditText search = (EditText) field(a, "workOrderSearch");
