@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Field Work Hub Admin</title>
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
-  <link rel="stylesheet" href="styles.css?v=modern-premium-stage2b-20261017">
+  <link rel="stylesheet" href="styles.css?v=modern-premium-stage3-20261017">
 </head>
 <body>
   <main class="shell">
@@ -160,22 +160,27 @@
 
       <dialog class="job-workspace hidden" id="edit-work-order-section" aria-labelledby="edit-heading">
         <header class="workspace-header">
-          <p class="eyebrow">Job workspace</p>
-          <h2 id="edit-heading">Work Order</h2>
-          <p id="job-address"></p>
-          <p id="job-facts" class="muted"></p>
-          <p id="job-receipt" class="muted"></p>
-          <div class="workspace-navigation" aria-label="Current operational guidance">
-            <p id="job-next-action" role="status" aria-live="polite"></p>
+          <div class="fwh-job-identity">
+            <p class="eyebrow">Job workspace</p>
+            <h2 id="edit-heading">Work Order</h2>
+            <p id="job-address"></p>
+            <p id="job-facts" class="muted"></p>
+            <p id="job-receipt" class="muted"></p>
+          </div>
+          <div class="workspace-navigation fwh-job-guidance" aria-label="Current operational guidance">
+            <div class="fwh-job-guidance-text">
+              <p class="fwh-job-guidance-label">Current status and next step</p>
+              <p id="job-next-action" role="status" aria-live="polite"></p>
+            </div>
             <button id="job-next-action-open" type="button" class="secondary">Open details</button>
           </div>
-          <div class="workspace-navigation">
+          <div class="workspace-navigation fwh-job-pager" aria-label="Move through selected work orders">
             <button id="job-previous" type="button" class="secondary">Previous job</button>
             <button id="job-next" type="button" class="secondary">Next job</button>
             <button id="job-reload" type="button" class="secondary" hidden>Reload job</button>
           </div>
           <p id="job-context" class="muted" role="status"></p>
-          <div class="workspace-navigation" aria-label="Prepare a separate new work order">
+          <div class="workspace-navigation fwh-job-repeat" aria-label="Prepare a separate new work order">
             <button id="prepare-repeat-work" class="secondary" type="button">Prepare repeat work</button>
             <button id="prepare-custom-work" class="secondary" type="button">Prepare custom work at this address</button>
           </div>
