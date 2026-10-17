@@ -14,7 +14,8 @@ let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
 let ownerAdminInviteAttempts=[],ownerAdminInviteFailOnce=true;
 let syntheticRole='ADMIN', staffingGranted=true, staffInviteFailOnce=true, staffingWorkTier=2;
 let recoveryMode=false, recoveryGranted=true, recoveryPhotoRequests=0, recoveryCorruptBytes='NONE';
-const recoveryJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==','base64');
+// A small valid, entirely synthetic JPEG with a visible TEST mark. No client photo.
+const recoveryJpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABYPERMRDhYTEhMZFxYaITckIR4eIUQwMyg3UEZUU09GTUxYY39sWF54X0xNbpZweIOHjpCOVmqcp5uKpn+Ljon/2wBDARcZGSEdIUEkJEGJW01biYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYn/wAARCABGAG4DASIAAhEBAxEB/8QAGQABAAMBAQAAAAAAAAAAAAAAAAQFBgMB/8QANRAAAgIBAQQHBQcFAAAAAAAAAAECAxEEBRMhMRJBUVJhcaEGFCKCkTVEgbLB0eEjMkKx8P/EABcBAQEBAQAAAAAAAAAAAAAAAAACAQP/xAAcEQEBAQADAAMAAAAAAAAAAAAAARECEhMhQWH/2gAMAwEAAhEDEQA/ANKACkgAAAAACk2lt2utOrR4snhredUX4dv+uXM7bN21Tq2qrkqrm0kuqT8Ozy8uYxmxagANAAAAAAAAACq2ltqnSN1UpW3JtNdUX49vl58gzcTtXq6NHU7LpqPDhHrl5IzO1Nr267NUVu6M5UeuXmQtTqLtVbvb5uc8Yy+w5FSIvLQAGpXOzNuWUyjVq5Oypv8AveXKP7r/ALwNHTbXfVG2qSlCSymjBkrRa/UaGeaZ5j1wlxi/wMsVOTagh7P2jRrof030bEsyrfNfuTCVgADQ8lJRi5POEs8Fl/Q9AGf2jrto6jNel0mppr4fFu2pv6cilnpdRXjeUzhnl044z9TdFN7Rfd/m/Q2Vz5T41nN1Pu+o3U+76koFOXZF3U+76jdT7vqSgDsi7qfd9Rup931JQB2cq9Lq/hsqoueHmMoRb4+DRotm7Q1U2qtbpLoybSViqaX49n89RI2P9m0/N+Zk0m124z7AAYsAAApvaL7v836FyBE2bMY0GyIqVvvk4+8WOCipqOI44t8OWccCtc/NlwaCieqnRXJ2XJzSb6W7y+H+P8nVOy26iUNVYq7IOWFGOOGO1Z6xp0ZoGyA7N8/1C2P9m0/N+Zk0Al0kyAADQAAAAAPOiuk5YWWsZx1AAclo9KouK01Ki+aUFhnVRimmor4VhcOSADHoADQAAAAB/9k=','base64');
 const recoveryJpegSha256=require('node:crypto').createHash('sha256').update(recoveryJpeg).digest('hex');
 let staffingPagingRace=false, staffingScopeShift=false, staffingDetailDenied=false;
 let staffWorkEdits=[], staffWorkEditFailOnce=true, staffWorkDue='2026-10-20';
@@ -2068,6 +2069,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(recoveryPhotoRequests,0,'List cannot silently issue private image links');
     await page.locator('#recovery-card button').filter({hasText:reviewPhoto.slice(0,8)}).click();
     await wait(page,()=>!document.querySelector('#recovery-card img').hidden);
+    await wait(page,()=>{ const image=document.querySelector('#recovery-card img');
+      return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0; });
+    assert.equal(await page.locator('#recovery-card img').evaluate(el=>el.naturalWidth),110,
+      'Synthetic recovery JPEG must actually decode before screenshot');
     assert.equal(recoveryPhotoRequests,1);
     // Stage 9 uses only real, server-checked synthetic recovery facts.
     // A recovery-only user must never acquire Admin or Supervisor screens.
