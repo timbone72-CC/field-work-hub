@@ -410,7 +410,7 @@ export async function proveInactiveClientDestinationFolder({
  const receipt=await ledger.confirmClientDestinationProviderProof(
   actionId,preflightActionId,candidate,spec.id,expectedDriveId);
  if(receipt?.destination_id!==destinationId||receipt.verified!==true
-  ||receipt.active!==false||typeof receipt.replayed!=='boolean)
+  ||receipt.active!==false||typeof receipt.replayed!=='boolean')
   fail('CLIENT_PROOF_RECEIPT_UNVERIFIED');
  return Object.freeze({status:'CLIENT_DESTINATION_VERIFIED_INACTIVE',
   destination_id:destinationId,company_id:companyId,
