@@ -1,37 +1,48 @@
 # Phase 5: real private Storage provider gate — READ ONLY
 
-**State (2026-10-17):** Google Drive's separate synthetic resumable file upload is a genuine verified PASS (fourth TEST, independently confirmed SHA-256), but the **private Supabase Storage Range/206 gate described in this document remains UNVERIFIED**. The Google pass cannot enable client Send or prove photo-byte review/delivery.
+**Current boundary:** One independent fourth disposable Google Drive resumable TEST file is confirmed by real provider SHA-256 (2026-10-17). That PASS does not establish FWH's protected received-photo content, Admin review or final client Send. The real authenticated Supabase photo-byte gate in this document remains **NOT RUN**.
 
-## Preconditions
+## Why the received-photo gate uses Admin signed preview
 
-Operate only against an **already existing, disposable** FWH photo. Before this test can succeed, the pending Phase 5 SQL/RLS/transfer receipt stack must pass a separately governed staging/deployment gate, and the test photo must have its accepted Finish, original Auth owner, exact stored object key, total bytes and SHA-256 verified. Read-only live Team verification on 2026-10-17 confirmed that `fwh-review-private` is a non-public bucket containing 10 objects, with existing authenticated Storage SELECT/INSERT policies and private delivery tables. The operator explicitly classified all 10 existing objects as TEST-only on 2026-10-17. A subsequent live **read-only metadata-only** reconciliation matched **10/10** received transfer records to exact photo/version receipts, active private Storage object IDs/versions/keys, SHA-256 and recorded lengths, JPEG MIME, exact org/WO/run/photo path, original owner, and their accepted Finish set and registered photo bindings (using null-safe field comparisons). All 10 belong to **one TEST owner and one TEST organization**; original receipt-session IDs still belong to that owner. No object bytes were opened, and no authenticated HTTP Range/206 test was performed. These are **eligible candidate fixtures**, not a live Storage authorization or content PASS. Select one privately from the verified ledger only when a fresh original-owner Auth JWT is available; do not publish identifiers, JWTs or hashes in GitHub or chat. **Never use actual customer evidence.**
+A direct GET to /storage/v1/object/authenticated/fwh-review-private/... is **not** the received-photo viewer. The deployed fwh_review_private_select Storage RLS policy invokes private.photo_storage_object_allowed, which authorizes the original upload owner only when the registered transfer is WAITING and has no verified receipt. Once the photo is RECEIVED, that raw owner GET is deliberately denied.
 
-## Restricted read-only run
+The existing scoped **Admin private preview** is the approved received-photo path: authenticated POST /functions/v1/admin-private-photo with only immutable photo UUID and transfer-version UUID. The server validates the live Auth session and current organization/team work authority, rebinds the exact RECEIVED receipt and Storage object, and issues a 120-second same-origin signed Storage URL. The Admin dashboard already follows that path, and an image preview is only displayed after the browser loads the signed image. **Never weaken Storage RLS or reclassify a received photo as WAITING to make a test pass.**
 
-From a trusted, locally secured Node.js 22+ environment, configure the following environment variables. Do not put credentials into GitHub, terminal history, chat, screenshots, or documentation.
+The existing phase5-private-range.mjs read-only test now checks this actual path. It confirms raw anonymous direct access is denied; optionally confirms raw original-owner access is denied after receipt; confirms unauthenticated signer access is denied; optionally confirms a separate **actually unauthorized** office/user session cannot sign the photo; obtains one authorized short-lived Admin signed URL; then attempts bounded 256 KiB 206 Partial Content reads from that exact signed URL and hashes all returned JPEG bytes against the immutable registered receipt. It never sends Send, review decisions, migrations, writes, updates, or deletes. If signed URL Range requests are not supported by the live provider, record **BLOCKED/FAIL** rather than silently falling back to a whole-file 200 download or weakening RLS.
 
-| Variable | Required source |
+## Existing TEST evidence
+
+Operator classified **all 10** existing FWH Team private review photos as TEST-only on 2026-10-17. Read-only catalog/receipt/Finish reconciliation verified 10/10 exact received transfer + receipt + active object identity/version/key, SHA-256 and size, Storage JPEG metadata, canonical org/WO/run/photo path, capture owner and accepted Finish provenance. There is **one original TEST capturing owner and one TEST organization**. Metadata proves fixture suitability, not actual HTTP content or Admin authorization. No photo bytes were inspected in that metadata reconciliation. Do not ask whether these original photos are customer photos again absent contradicting evidence. Choose one privately from the already verified ledger; no new photo is needed for this preflight.
+
+## Private operator-side prerequisites
+
+Use a trusted, locally secured **Node.js 22+** environment, the existing FWH Team project only, and an active approved Admin account with work permission for that TEST photo. Do not paste JWTs, signed URLs, original photo IDs/keys/hashes or credential material into GitHub, terminal history, chat or screenshots. The optional second TEST user must be **unauthorized for this photo** (different organization/team or valid non-office role). A second authorized Admin should not be used as a negative control.
+
+| Environment variable | Meaning |
 | --- | --- |
-| FWH_TEST_EVIDENCE_CLASS | Literal DISPOSABLE_FWH_TEST_ONLY |
-| FWH_TEST_PROJECT_URL | Literal https://vyocaujuwrivoqynvitm.supabase.co (Team, never FPP) |
-| FWH_TEST_BUCKET | Literal fwh-review-private |
-| FWH_TEST_OBJECT_KEY | Existing TEST org_uuid/work_order_uuid/run_uuid/photo_uuid.jpg |
-| FWH_TEST_PHOTO_ID, FWH_TEST_OWNER_ID | Immutable TEST photo UUID, original Auth owner UUID |
-| FWH_TEST_SIZE, FWH_TEST_SHA256 | Exact derivative byte count and whole-photo lowercase SHA-256 from registered accepted TEST receipt |
-| FWH_TEST_PUBLISHABLE_KEY | Team publishable/legacy anon key, NOT a secret/service key |
-| FWH_TEST_OWNER_JWT | Fresh test original-owner Auth JWT, current session and exact org |
-| FWH_TEST_OTHER_OWNER_JWT | Optional fresh different test owner's Auth JWT; required for cross-owner denial evidence |
+| FWH_TEST_EVIDENCE_CLASS | DISPOSABLE_FWH_TEST_ONLY |
+| FWH_TEST_PROJECT_URL | https://vyocaujuwrivoqynvitm.supabase.co (Team; never FPP) |
+| FWH_TEST_BUCKET | fwh-review-private |
+| FWH_TEST_OBJECT_KEY | Exact existing TEST org_uuid/work_order_uuid/run_uuid/photo_uuid.jpg from trusted receipt |
+| FWH_TEST_PHOTO_ID, FWH_TEST_TRANSFER_VERSION | Exact immutable UUIDs from that same received transfer/receipt |
+| FWH_TEST_OWNER_ID | Original captured-by Auth UUID from verified receipt (fixture binding only, not signer identity) |
+| FWH_TEST_SIZE, FWH_TEST_SHA256 | Exact whole-JPEG byte count and lowercase 64-digit SHA-256 from verified receipt |
+| FWH_TEST_PUBLISHABLE_KEY | FWH Team publishable/legacy anon key; **never** service role |
+| FWH_TEST_ADMIN_JWT | Fresh, normal scoped Admin Auth JWT for the exact TEST job; server rechecks its signature/session/capability |
+| FWH_TEST_OWNER_JWT | Optional fresh original contractor JWT; verifies direct **received** object reads are denied |
+| FWH_TEST_OTHER_USER_JWT | Optional fresh different **unauthorized** user JWT; verifies server signer denial. Required to claim cross-user denial PASS |
 
-Run node tests/provider/phase5-private-range.mjs
+Run privately: node tests/provider/phase5-private-range.mjs
 
-This sends only GET requests to the **fixed FWH Team origin**. Anonymous and optional foreign-owner access must be denied. The owner must receive exact 206 Partial Content with Content-Range for each bounded 256 KiB segment. Bytes are streamed and checked against the whole-photo SHA-256. Responses never contain object keys, URLs, OAuth tokens, source bytes or user identities.
+The output reports only pass/fail class, verified whole content bytes and chunk count, and DENIED or NOT_SUPPLIED for optional negative roles. Do not share environmental values. An existing verified receipt and a current authorized Admin session are required. A database service view or old Auth session UUID does **not** mint an Admin JWT. This invocation is a real, operator-side physical/network test and cannot be claimed from a source CI run.
 
-If the output says other_owner=NOT_SUPPLIED, do not claim cross-owner authorization verified. Incorrect 200, redirect, range/length/MIME/hash or incomplete bytes are fail-closed; do not substitute a full download and call it a PASS. The script never writes database, Storage, TUS, Drive, APK or FPP objects.
+## Verification layers and remaining release gates
 
-## Test layers and release gate
+- Focused synthetic, no-provider self-tests: node --test tests/provider/*.test.mjs. These run in the existing Dashboard CI; they prove test logic and fail-closed handling, not the live provider.
+- Real read-only scoped TEST gate: Admin/other-user signed-URL authorization and actual 206/Content-Range/bytes/SHA-256 against one preexisting received TEST photo. A separate denied anonymous direct URL is checked; owner_direct=NOT_SUPPLIED or other_office=NOT_SUPPLIED means that optional check is not proven.
+- Separate UI evidence: actual Admin private photo preview visually loads (or displays truthful failure), bounded office access and refusal to publish, Review On/Off, correction and approved explicit TEST Send.
+- Existing accepted independent Google TEST upload PASS must **not** be rerun for reassurance; three earlier ambiguous provider journals stay frozen.
+- Live holding remains private; as of the last read-only parity check, 10 operator-confirmed TEST held objects and receipts, **0** client destinations, **0** ready delivery workers, **0** queued Send attempts, **0** final client receipts. Hosted client-delivery is TEST read-only, not active delivery. Two planned client proposal/upload-fence migrations remain deliberately unapplied pending the governed release gate.
+- Remaining real Phase 5/6 workflow, TUS/recovery, device, verified recovery-email, Web Push and explicit Level-3 merge/integration gates follow the approved parent-phase plans. The internal company Shared Drive is **never** automatically an approved client destination. Protected phone originals cannot be removed on a private receipt alone.
 
-- Synthetic, no-network self-tests: node --test tests/provider/*.test.mjs. They run in Dashboard CI and prove test-harness validation, not real provider behavior.
-- Real read-only gate: run once the authorized disposable sample and test owner JWT exist. No service-role key is involved. Record only the redacted result and effective bucket/policy/provider versions.
-- Accepted provider evidence: Google Workspace OAuth, approved TEST folder and one genuine two-chunk Drive resumable synthetic JSON upload with independently verified final remote SHA-256 (2026-10-17); do not repeat that gate for reassurance.
-- Separate unresolved gates: a real disposable accepted private photo transfer, initial TUS begin/HEAD/PATCH and verified full-byte receipt, actual owner and cross-owner Storage Range/206, real Admin private-image preview, company/client-specific destination and package Send, original preservation and two-device recovery, and Level-3 runtime pre-merge approval.
-- Live Team read-only parity on 2026-10-17: `private.client_delivery_runtime` has zero rows (no worker ready), `private.client_delivery_outbox` has zero rows, `private.client_delivery_final_receipts` has zero rows, and Storage object policies for the review bucket exist. Therefore Phase 5 foundations are present but **no live delivery is configured**. PR #40 remains draft with default-OFF delivery; source plans and live behavior must not be conflated. The company internal Shared Drive is NOT an approved client destination.
+Do not invent a privileged temporary policy, receive-time bypass, service-role client, new photo, alternate test endpoint or manual provider upload to force PASS. Keep the existing implementation record and PR #40 as sole authoritative handoff.
