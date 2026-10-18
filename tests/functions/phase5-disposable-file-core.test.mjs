@@ -393,3 +393,30 @@ test('third TEST verify never creates a missing journal or uses the earlier one'
    thirdJournal:second.journal,mode:'complete'}),e=>
      e instanceof FileProofBlocked&&e.code==='THIRD_TEST_CONFIGURATION_REQUIRED');
 });
+
+test('all three frozen attempts allow exact-ID read-only inspection without new POST or journal mutation',async()=>{
+ const {original,second}=await freezeTwo();
+ const third=rig({failStart:true,generatedFileId:thirdId});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),
+   /Google may have created/);
+ for(const r of [original,second,third]){
+   const before=JSON.stringify(r.getSaved());
+   const generated=r.events.filter(x=>x==='generate').length;
+   const started=r.starts();
+   r.drive.verifyFile=async()=>{
+     r.events.push('GET:receipt');
+     const err=new Error('private provider body must not reach logs');
+     err.code='PROVIDER_IDENTITY_UNCERTAIN';
+     throw err;
+   };
+   const result=await run(r,'inspect');
+   assert.deepEqual(result,{
+     status:'ORIGINAL_FILE_NOT_VERIFIED',reason:'PROVIDER_IDENTITY_UNCERTAIN',
+     verified:false,writes:false
+   });
+   assert.equal(JSON.stringify(r.getSaved()),before);
+   assert.equal(r.starts(),started);
+   assert.equal(r.events.filter(x=>x==='generate').length,generated);
+   assert.equal(r.events.filter(x=>x==='GET:receipt').length,1);
+ }
+});
