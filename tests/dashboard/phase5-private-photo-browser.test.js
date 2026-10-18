@@ -21,7 +21,7 @@ function rig({anon=403,anonSign=401,admin=200,range=206,
  corrupt=false,wrongRange=false,wrongAccount=false,wrongWork=false,
  wrongPhotoHash=false,noToken=false,wrongSigned=false}={}){
  const requests=[],status=[];
- const storage={getItem:()=>noToken?null:JSON.stringify({access_token:token})};
+ const adminToken=noToken?null:token;
  const fetcher=async (url,opts={})=>{
    const u=String(url);requests.push({url:u,method:opts.method,headers:opts.headers});
    assert.equal(opts.credentials,'omit');
@@ -57,7 +57,7 @@ function rig({anon=403,anonSign=401,admin=200,range=206,
      'Content-Range':'bytes '+begin+'-'+(wrongRange?end+1:end)+'/'+bytes.length
    }});
  };
- return {config:{fetcher,storage,
+ return {config:{fetcher,adminToken,
    hashBytes:async b=>createHash('sha256').update(b).digest('hex'),
    status:message=>status.push(message)},requests,status};
 }
