@@ -45,13 +45,18 @@ async function proof(drive,config,record){
  * Fail/timeout after START_ATTEMPTED can only reconcile the ORIGINAL ID,
  * never initiate another session or generate a replacement Drive ID.
  */
-export async function runDisposableFileProof({config,drive,journal,mode,excludedFileId=null}={}){
+export async function runDisposableFileProof({
+  config,drive,journal,mode,excludedFileId=null,excludedFileIds=null
+}={}){
   if(!['prepare','begin','resume','verify','inspect'].includes(mode)
     ||!config||config.testOnly!==true||!ID.test(config.driveId??'')
     ||!ID.test(config.folderId??'')||!ID.test(config.rootId??'')
     ||new Set([config.driveId,config.folderId,config.rootId]).size!==3
     ||typeof config.email!=='string'
     ||(excludedFileId!==null&&!ID.test(excludedFileId))
+    ||(excludedFileIds!==null&&(!Array.isArray(excludedFileIds)
+      ||excludedFileIds.length>2||excludedFileIds.some(id=>!ID.test(id))
+      ||new Set(excludedFileIds).size!==excludedFileIds.length))
     ||!drive||!journal||!['read','reserve','update'].every(k=>typeof journal[k]==='function'))
     block('DISPOSABLE_TEST_CONFIGURATION_REQUIRED');
   const user=await drive.verifyProviderIdentity(config.email);
@@ -65,7 +70,8 @@ export async function runDisposableFileProof({config,drive,journal,mode,excluded
     const ids=await drive.generateIds(1);
     if(!Array.isArray(ids)||ids.length!==1||!ID.test(ids[0])
       ||ids[0]===config.rootId||ids[0]===config.folderId
-      ||ids[0]===excludedFileId)block('TEST_FILE_ID_UNAVAILABLE');
+      ||ids[0]===excludedFileId
+      ||excludedFileIds?.includes(ids[0]))block('TEST_FILE_ID_UNAVAILABLE');
     const testId=randomUUID(),bytes=contentFor(testId);
     r={format:FORMAT,drive_id:config.driveId,folder_id:config.folderId,
       file_id:ids[0],test_id:testId,sha256:hash(bytes),size:bytes.length,
@@ -171,4 +177,57 @@ export async function runApprovedReplacementFileProof({
   if(!['TEST_FILE_SHA256_VERIFIED','SAME_TEST_FILE_VERIFIED'].includes(result.status))
     block('REPLACEMENT_FINAL_RECEIPT_UNVERIFIED');
   return {...result,status:'TEST_REPLACEMENT_FILE_SHA256_VERIFIED'};
+}
+
+
+// The operator separately approved exactly one THIRD disposable TEST file after
+// two independent Google session-start results were frozen without a usable URL.
+// Both earlier journals remain read-only, immutable evidence. A third attempt
+// has its own file ID and owner-private journal; it cannot authorize a fourth.
+export async function runApprovedThirdFileProof({
+  config,drive,originalJournal,replacementJournal,thirdJournal,mode
+}={}){
+  if(!['prepare','complete','verify'].includes(mode)
+    ||!config||typeof originalJournal?.read!=='function'
+    ||typeof replacementJournal?.read!=='function'
+    ||!thirdJournal||typeof thirdJournal.read!=='function'
+    ||typeof thirdJournal.reserve!=='function'
+    ||typeof thirdJournal.update!=='function'
+    ||originalJournal===replacementJournal
+    ||originalJournal===thirdJournal
+    ||replacementJournal===thirdJournal)
+    block('THIRD_TEST_CONFIGURATION_REQUIRED');
+  const first=await originalJournal.read();
+  const second=await replacementJournal.read();
+  if(!first||!second)block('PRIOR_TEST_JOURNALS_REQUIRED');
+  validate(first,config);
+  validate(second,config);
+  if(first.state!=='START_ATTEMPTED'||first.session_url!==null
+    ||second.state!=='START_ATTEMPTED'||second.session_url!==null)
+    block('PRIOR_TEST_ATTEMPTS_NOT_FROZEN');
+  if(first.file_id===second.file_id||first.test_id===second.test_id)
+    block('PRIOR_TEST_IDENTITIES_COLLIDE');
+  const guarded={config,drive,journal:thirdJournal,
+    excludedFileIds:[first.file_id,second.file_id]};
+  if(mode==='prepare')
+    return runDisposableFileProof({...guarded,mode:'prepare'});
+  const saved=await thirdJournal.read();
+  if(saved!==null){
+    validate(saved,config);
+    if(guarded.excludedFileIds.includes(saved.file_id)
+      ||saved.test_id===first.test_id||saved.test_id===second.test_id)
+      block('THIRD_TEST_IDENTITY_COLLISION');
+  }
+  if(mode==='verify')
+    return runDisposableFileProof({...guarded,mode:'verify'});
+  if(saved?.state==='RESERVED'||saved?.state==='START_ATTEMPTED')
+    block('THIRD_SESSION_UNCERTAIN_NO_RECREATE');
+  if(saved===null)
+    await runDisposableFileProof({...guarded,mode:'begin'});
+  // Only the durable saved session may continue. A lost start URL remains
+  // frozen, and a final receipt is an independent original-ID Google GET.
+  const result=await runDisposableFileProof({...guarded,mode:'resume'});
+  if(!['TEST_FILE_SHA256_VERIFIED','SAME_TEST_FILE_VERIFIED'].includes(result.status))
+    block('THIRD_FINAL_RECEIPT_UNVERIFIED');
+  return {...result,status:'TEST_THIRD_FILE_SHA256_VERIFIED'};
 }
