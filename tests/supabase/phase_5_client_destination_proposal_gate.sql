@@ -9,6 +9,7 @@ declare
  client1 uuid:=gen_random_uuid(); client2 uuid:=gen_random_uuid();
  action1 uuid:=gen_random_uuid(); first_result jsonb; second_result jsonb;
  proposed_id uuid; d private.client_delivery_destinations%rowtype;
+ proof_action uuid:=gen_random_uuid(); proof_plan jsonb; proof_replay jsonb; proof_file text:='fwh_disposable_client_proof_123456789';
  proof jsonb; proof2 jsonb; preflight_action uuid:=gen_random_uuid();
  root_id text:='fwh_disposable_root_123456789';
  denied boolean;
@@ -139,6 +140,64 @@ begin
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Stale destination revision could be attested';end if;
 
+
+ -- Provider proof must be durably reserved before any remote POST.
+ proof_plan:=public.service_read_client_destination_provider_proof(proposed_id);
+ if proof_plan->>'exists'<>'false'
+ then raise exception 'No unreserved proof may appear as existing';end if;
+ proof_plan:=public.service_reserve_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_plan->>'reserved'<>'true' or proof_plan->>'replayed'<>'false'
+    or proof_plan->>'folder_id'<>proof_file
+ then raise exception 'Provider proof reservation failed';end if;
+ proof_replay:=public.service_read_client_destination_provider_proof(proposed_id);
+ if proof_replay->>'completed'<>'false' or proof_replay->>'folder_id'<>proof_file
+    or proof_replay->>'action_id'<>proof_action::text
+ then raise exception 'Reserved file ID was not durable';end if;
+ proof_replay:=public.service_reserve_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_replay->>'replayed'<>'true'
+ then raise exception 'Reservation replay could create duplicate';end if;
+ denied:=false;
+ begin
+  perform public.service_reserve_client_destination_provider_proof(
+   proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+   'different_proof_id_123456789','fwh_distinct_drive_123456');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Reserved file ID was replaceable';end if;
+ denied:=false;
+ begin
+  perform public.service_reserve_client_destination_provider_proof(
+   proposed_id,gen_random_uuid(),preflight_action,gen_random_uuid(),
+   'another_proof_id_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale destination revision reserved';end if;
+ proof_plan:=public.service_confirm_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_plan->>'verified'<>'true' or proof_plan->>'active'<>'false'
+    or proof_plan->>'replayed'<>'false'
+ then raise exception 'Exact remote receipt did not leave Send inactive';end if;
+ proof_replay:=public.service_confirm_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_replay->>'replayed'<>'true'
+ then raise exception 'Confirmed provider receipt could not replay';end if;
+ proof_replay:=public.service_read_client_destination_provider_proof(proposed_id);
+ if proof_replay->>'completed'<>'true'
+ then raise exception 'Confirmed provider proof not durable';end if;
+ denied:=false;
+ begin
+  perform public.service_confirm_client_destination_provider_proof(
+   proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+   'changed_proof_id_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Conflicting confirmed file identity accepted';end if;
+ if (select count(*) from private.client_destination_provider_proof_receipts
+    where destination_id=proposed_id)<>1
+ then raise exception 'Duplicate/fake provider receipt';end if;
  execute 'reset role';
  if (select count(*) from private.client_delivery_destination_preflights
      where destination_id=proposed_id and organization_id=org1 and company_id=client1)<>1
@@ -146,8 +205,9 @@ begin
  select * into d from private.client_delivery_destinations where id=proposed_id;
  if d.id is null or d.organization_id<>org1 or d.company_id<>client1
   or d.provider<>'GOOGLE_DRIVE' or d.provider_identity<>'office@disposable.invalid'
-  or d.root_folder_id<>root_id or d.verified or d.active or d.verified_at is not null
-  or d.verification_receipt is not null then
+  or d.root_folder_id<>root_id or not d.verified or d.active or d.verified_at is null
+  or d.verification_receipt->>'type'<>'CLIENT_ROOT_DISPOSABLE_FOLDER_GET_LIST_V1'
+  or d.verification_receipt->>'proof_folder_id'<>proof_file then
   raise exception 'Safe destination proposal persisted unexpected authority';end if;
  if (select count(*) from private.client_delivery_destinations
     where organization_id in (org1,org2))<>1 then
