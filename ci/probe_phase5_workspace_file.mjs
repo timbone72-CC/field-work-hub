@@ -8,7 +8,7 @@ import {open,lstat,rename} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {runDisposableFileProof,runApprovedReplacementFileProof,
-  runApprovedThirdFileProof} from './phase5_disposable_file_core.mjs';
+  runApprovedThirdFileProof,runStagedFourthFileProof} from './phase5_disposable_file_core.mjs';
 import {createWorkspaceTokenProvider} from '../supabase/functions/client-delivery/workspace-oauth.mjs';
 import {createDriveClient} from '../supabase/functions/client-delivery/drive-client.mjs';
 import {preferIPv4ForLocalWorkspaceBootstrap} from './authorize_phase5_workspace_provider.mjs';
@@ -21,6 +21,8 @@ const receiptPath=join(home,'phase5-disposable-file-proof.json');
 const replacementPath=join(home,'phase5-disposable-file-proof-replacement-20261017.json');
 // Exactly one separately approved third TEST file; previous journals untouched.
 const thirdPath=join(home,'phase5-disposable-file-proof-third-20261017.json');
+// Fourth is staged in source only; no provider POST without explicit operator approval.
+const fourthPath=join(home,'phase5-disposable-file-proof-fourth-20261017.json');
 const lockPath=join(home,'phase5-disposable-file-proof.lock');
 const testMarker='DISPOSABLE_FWH_TEST_ONLY';
 const fail=code=>{const error=new Error(code);error.code=code;throw error;};
@@ -47,7 +49,11 @@ const SAFE_CODES=new Set([
   'THIRD_TEST_CONFIGURATION_REQUIRED','PRIOR_TEST_JOURNALS_REQUIRED',
   'PRIOR_TEST_ATTEMPTS_NOT_FROZEN','PRIOR_TEST_IDENTITIES_COLLIDE',
   'THIRD_TEST_IDENTITY_COLLISION','THIRD_SESSION_UNCERTAIN_NO_RECREATE',
-  'THIRD_FINAL_RECEIPT_UNVERIFIED'
+  'THIRD_FINAL_RECEIPT_UNVERIFIED',
+  'FOURTH_TEST_CONFIGURATION_REQUIRED','THREE_PRIOR_TEST_JOURNALS_REQUIRED',
+  'THREE_PRIOR_TEST_ATTEMPTS_NOT_FROZEN','THREE_PRIOR_TEST_IDENTITIES_COLLIDE',
+  'FOURTH_TEST_IDENTITY_COLLISION','FOURTH_SESSION_UNCERTAIN_NO_RECREATE',
+  'FOURTH_FINAL_RECEIPT_UNVERIFIED','FOURTH_TEST_ALREADY_RESERVED'
 ]);
 const safeFailure=error=>SAFE_CODES.has(error?.code)?error.code
   :error?.code==='EEXIST'?'PROTECTED_TEST_LOCK_OR_JOURNAL_EXISTS'
@@ -116,6 +122,7 @@ async function execute(mode,attempt='original'){
  const journal=journalFor(receiptPath);
  const replacementJournal=journalFor(replacementPath);
  const thirdJournal=journalFor(thirdPath);
+ const fourthJournal=journalFor(fourthPath);
  // Never expose credential contents, session URL, Google IDs or origin errors.
  const lock=await open(lockPath,'wx',0o600);
  try{
@@ -145,7 +152,13 @@ async function execute(mode,attempt='original'){
      }
      return;
    }
-   const result=attempt==='third'
+   const result=attempt==='fourth'
+     ?await runStagedFourthFileProof({config,drive,
+       originalJournal:{read:()=>readProtected(receiptPath)},
+       replacementJournal:{read:()=>readProtected(replacementPath)},
+       thirdJournal:{read:()=>readProtected(thirdPath)},
+       fourthJournal,mode})
+     :attempt==='third'
      ?await runApprovedThirdFileProof({config,drive,
        originalJournal:{read:()=>readProtected(receiptPath)},
        replacementJournal:{read:()=>readProtected(replacementPath)},
@@ -185,6 +198,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
    '--third-prepare':['prepare','third'],
    '--third-complete':['complete','third'],
    '--third-verify':['verify','third'],
+   '--fourth-prepare':['prepare','fourth'],
+   '--fourth-complete':['complete','fourth'],
+   '--fourth-verify':['verify','fourth'],
    '--inspect-all':['inspect','all']};
  const selected=modes[process.argv[2]];
  if(process.argv.length!==3||!selected){
