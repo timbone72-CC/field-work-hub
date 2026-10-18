@@ -442,7 +442,7 @@ test('staged fourth prepare is read-only with exactly three untouched frozen jou
  assert.deepEqual(await runFourth(original,second,third,fourth,'prepare'),
    {status:'TEST_FILE_PARENT_VERIFIED',writes:false});
  assert.equal(fourth.getSaved(),null);
- assert.deepEqual(fourth.events,['account','destination:'+rootId,'destination:'+folderId]);
+ assert.deepEqual(fourth.events,['read','account','destination:'+rootId,'destination:'+folderId]);
  assert.deepEqual(earlier.map(r=>JSON.stringify(r.getSaved())),snapshots);
  assert.equal(fourth.starts(),0);
 });
