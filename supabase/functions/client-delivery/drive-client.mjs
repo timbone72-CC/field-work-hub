@@ -176,6 +176,41 @@ export function createDriveClient({accessToken,fetcher=fetch}){
           sha256:null,size:null};
       return {id,parent,mime,sha256:sha256??null,size:size??null};
     },
+    // Independent Drive+parent-scoped lookup by the exact reserved folder
+    // identity. This is a second read after files.get, never a substitute.
+    async lookupExactFolder({id,parent,name,expectedDriveId,appProperties}){
+      valid(id,ID,'REMOTE_ID_REQUIRED');
+      valid(parent,PARENT,'PARENT_ID_REQUIRED');
+      valid(expectedDriveId,PARENT,'EXPECTED_SHARED_DRIVE_REQUIRED');
+      if(typeof name!=='string'||!/^FWH DISPOSABLE CLIENT PROOF [a-f0-9]{12}$/.test(name)
+        ||!appProperties||typeof appProperties!=='object'
+        ||Array.isArray(appProperties)
+        ||Object.keys(appProperties).sort().join(',')!==
+          ['fwh_org','fwh_company','fwh_destination','fwh_kind','fwh_key'].sort().join(','))
+        throw new DriveUncertain('EXACT_PROOF_LOOKUP_REQUIRED');
+      const url=new URL('/drive/v3/files',DRIVE_ORIGIN);
+      url.searchParams.set('q',"'"+parent+"' in parents and name = '"+name+"' and trashed = false");
+      url.searchParams.set('corpora','drive');
+      url.searchParams.set('driveId',expectedDriveId);
+      url.searchParams.set('supportsAllDrives','true');
+      url.searchParams.set('includeItemsFromAllDrives','true');
+      url.searchParams.set('pageSize','100');
+      url.searchParams.set('fields','nextPageToken,files(id,name,mimeType,parents,driveId,trashed,appProperties)');
+      const r=handleHttp(await request(url),[200]);
+      const list=await boundedJson(r);
+      if(!Array.isArray(list.files)||list.files.length!==1||list.nextPageToken)
+        throw new DriveUncertain('EXACT_PROOF_LOOKUP_UNVERIFIED');
+      const f=list.files[0];
+      if(f.id!==id||f.name!==name||f.driveId!==expectedDriveId||f.trashed!==false
+        ||f.mimeType!=='application/vnd.google-apps.folder'
+        ||!Array.isArray(f.parents)||f.parents.length!==1||f.parents[0]!==parent
+        ||!f.appProperties||typeof f.appProperties!=='object'
+        ||Object.keys(f.appProperties).sort().join(',')!==
+           Object.keys(appProperties).sort().join(',')
+        ||Object.keys(appProperties).some(k=>f.appProperties[k]!==appProperties[k]))
+        throw new DriveUncertain('EXACT_PROOF_LOOKUP_UNVERIFIED');
+      return {id,parent,drive_id:expectedDriveId,readback_verified:true};
+    },
     async createPreallocatedFolder(spec){
       const data=fixedObject(spec);
       if(data.mimeType!=='application/vnd.google-apps.folder')throw new DriveUncertain('FOLDER_ONLY');
