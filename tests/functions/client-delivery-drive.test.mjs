@@ -180,7 +180,7 @@ test('Google session Location is an opaque capability with strict host, path and
     ['https://www.googleapis.com/upload/drive/v3/files?upload_id=x','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
     ['https://www.googleapis.com/upload/drive/v3/files?uploadType=media&upload_id=x','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
     ['https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x&upload_id=y','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
-    [base+'&'.repeat(100),'UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
+    [base+Array.from({length:25},(_,i)=>'&extra_'+i+'=x').join(''),'UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
     [base+'&provider='+('a'.repeat(16384)),'UPLOAD_SESSION_MALFORMED']
   ];
   for(const [location,code] of denied){
