@@ -105,6 +105,24 @@ begin
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Office actor could spoof a verified provider read';end if;
 
+ -- An Admin session may not read/reserve/confirm any provider proof.
+ denied:=false;
+ begin perform public.service_read_client_destination_provider_proof(proposed_id);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin inspected reserved Google proof identity';end if;
+ denied:=false;
+ begin perform public.service_reserve_client_destination_provider_proof(
+  proposed_id,gen_random_uuid(),preflight_action,(first_result->>'revision')::uuid,
+  'unauthorized_proof_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin reserved a provider remote ID';end if;
+ denied:=false;
+ begin perform public.service_confirm_client_destination_provider_proof(
+  proposed_id,gen_random_uuid(),preflight_action,(first_result->>'revision')::uuid,
+  'unauthorized_proof_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin forged provider verification/activation';end if;
+
  -- Only the existing service role can read exact same-organization company/root
  -- and record a preflight. Proof does NOT verify or activate the destination.
  execute 'set local role service_role';
