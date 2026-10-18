@@ -8,7 +8,8 @@ const folderId='disposable_folder_1234567890';
 const rootId='disposable_root_1234567890123';
 const config={testOnly:true,driveId,folderId,rootId,email:'tester@disposable.invalid'};
 const fileId='disposable_file_123456789012';
-function rig({failStart=false,wrongAccount=false,wrongFolder=false,failFinal=false}={}){
+const replacementId='separate_replacement_file_20261017';
+function rig({failStart=false,wrongAccount=false,wrongFolder=false,failFinal=false,generatedFileId=fileId}={}){
   const events=[];
   let saved=null,offset=0,started=0;
   const journal={
@@ -23,10 +24,10 @@ function rig({failStart=false,wrongAccount=false,wrongFolder=false,failFinal=fal
       if(wrongFolder&&id===folderId)throw Error('foreign TEST parent');
       return {id,drive_id:driveId,can_add_children:true};
     },
-    async generateIds(n){events.push('generate');assert.equal(n,1);return [fileId];},
+    async generateIds(n){events.push('generate');assert.equal(n,1);return [generatedFileId];},
     async startResumable(spec,{size}){events.push('POST:start');
       assert.equal(saved.state,'START_ATTEMPTED','one-shot journal saved before POST');
-      assert.equal(spec.id,fileId);assert.equal(spec.parent,folderId);
+      assert.equal(spec.id,generatedFileId);assert.equal(spec.parent,folderId);
       assert.equal(spec.mime,'application/json');assert.equal(size,saved.size);
       started++;
       if(failStart)throw Error('Google may have created a file before lost reply');
@@ -47,13 +48,13 @@ function rig({failStart=false,wrongAccount=false,wrongFolder=false,failFinal=fal
       return {complete_candidate:offset===total,requires_get_verification:true};
     },
     async verifyFile(expected){events.push('GET:receipt');
-      assert.equal(expected.id,fileId);assert.equal(expected.parent,folderId);
+      assert.equal(expected.id,generatedFileId);assert.equal(expected.parent,folderId);
       assert.equal(expected.mime,'application/json');
       assert.equal(expected.expectedDriveId,driveId);
       assert.equal(expected.appProperties.fwh_manifest,saved.sha256);
       assert.equal(expected.name,'FWH_DISPOSABLE_'+saved.test_id+'.json');
       if(failFinal||offset!==saved.size)throw Error('remote checksum unverified');
-      return {id:fileId,parent:folderId,mime:'application/json',
+      return {id:generatedFileId,parent:folderId,mime:'application/json',
         sha256:saved.sha256,size:saved.size};
     }
   };
@@ -211,20 +212,14 @@ test('operator-approved replacement completes one different TEST ID and preserve
  const original=rig({failStart:true});
  await assert.rejects(()=>run(original,'begin'));
  const saved=JSON.stringify(original.getSaved());
- const second=rig();
- // Pretend Drive generated a different immutable file ID.
- second.drive.generateIds=async count=>{
-   second.events.push('generate');
-   assert.equal(count,1);
-   return ['separate_replacement_file_20261017'];
- };
+ const second=rig({generatedFileId:replacementId});
  assert.deepEqual(await runReplacement(original,second,'prepare'),
    {status:'TEST_FILE_PARENT_VERIFIED',writes:false});
  const completed=await runReplacement(original,second,'complete');
  assert.equal(completed.status,'TEST_REPLACEMENT_FILE_SHA256_VERIFIED');
  assert.equal(second.starts(),1);
  assert.equal(second.getSaved().state,'VERIFIED');
- assert.equal(second.getSaved().file_id,'separate_replacement_file_20261017');
+ assert.equal(second.getSaved().file_id,replacementId);
  assert.equal(JSON.stringify(original.getSaved()),saved);
  assert.equal(original.starts(),1);
  const before=second.events.filter(x=>x==='POST:start').length;
@@ -237,7 +232,7 @@ test('replacement lost start response becomes a new permanent one-shot stop',asy
  const original=rig({failStart:true});
  await assert.rejects(()=>run(original,'begin'));
  const saved=JSON.stringify(original.getSaved());
- const second=rig({failStart:true});
+ const second=rig({failStart:true,generatedFileId:replacementId});
  await assert.rejects(()=>runReplacement(original,second,'complete'),
    /Google may have created/);
  assert.equal(second.getSaved().state,'START_ATTEMPTED');
