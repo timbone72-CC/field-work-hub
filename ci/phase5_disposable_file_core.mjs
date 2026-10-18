@@ -55,7 +55,7 @@ export async function runDisposableFileProof({
     ||typeof config.email!=='string'
     ||(excludedFileId!==null&&!ID.test(excludedFileId))
     ||(excludedFileIds!==null&&(!Array.isArray(excludedFileIds)
-      ||excludedFileIds.length>2||excludedFileIds.some(id=>!ID.test(id))
+      ||excludedFileIds.length>3||excludedFileIds.some(id=>!ID.test(id))
       ||new Set(excludedFileIds).size!==excludedFileIds.length))
     ||!drive||!journal||!['read','reserve','update'].every(k=>typeof journal[k]==='function'))
     block('DISPOSABLE_TEST_CONFIGURATION_REQUIRED');
@@ -230,4 +230,59 @@ export async function runApprovedThirdFileProof({
   if(!['TEST_FILE_SHA256_VERIFIED','SAME_TEST_FILE_VERIFIED'].includes(result.status))
     block('THIRD_FINAL_RECEIPT_UNVERIFIED');
   return {...result,status:'TEST_THIRD_FILE_SHA256_VERIFIED'};
+}
+
+
+// Source-only staging for a FOURTH TEST, not provider-write authorization.
+// All three unsuccessful starts have distinct immutable IDs/journals.
+// The fourth has a separately protected journal and one newly generated ID.
+// Only a deliberately invoked fourth 'complete' mode can make a provider POST.
+export async function runStagedFourthFileProof({
+  config,drive,originalJournal,replacementJournal,thirdJournal,fourthJournal,mode
+}={}){
+  if(!['prepare','complete','verify'].includes(mode)
+    ||!config||!drive
+    ||typeof originalJournal?.read!=='function'
+    ||typeof replacementJournal?.read!=='function'
+    ||typeof thirdJournal?.read!=='function'
+    ||!fourthJournal||typeof fourthJournal.read!=='function'
+    ||typeof fourthJournal.reserve!=='function'
+    ||typeof fourthJournal.update!=='function'
+    ||new Set([originalJournal,replacementJournal,thirdJournal,fourthJournal]).size!==4)
+    block('FOURTH_TEST_CONFIGURATION_REQUIRED');
+  const earlier=await Promise.all([
+    originalJournal.read(),replacementJournal.read(),thirdJournal.read()
+  ]);
+  if(earlier.some(r=>!r))block('THREE_PRIOR_TEST_JOURNALS_REQUIRED');
+  for(const r of earlier){
+    validate(r,config);
+    if(r.state!=='START_ATTEMPTED'||r.session_url!==null)
+      block('THREE_PRIOR_TEST_ATTEMPTS_NOT_FROZEN');
+  }
+  const ids=earlier.map(r=>r.file_id);
+  const uuids=earlier.map(r=>r.test_id);
+  if(new Set(ids).size!==3||new Set(uuids).size!==3)
+    block('THREE_PRIOR_TEST_IDENTITIES_COLLIDE');
+  const guarded={config,drive,journal:fourthJournal,excludedFileIds:ids};
+  const saved=await fourthJournal.read();
+  if(saved!==null){
+    validate(saved,config);
+    if(ids.includes(saved.file_id)||uuids.includes(saved.test_id))
+      block('FOURTH_TEST_IDENTITY_COLLISION');
+  }
+  if(mode==='prepare'){
+    if(saved!==null)block('FOURTH_TEST_ALREADY_RESERVED');
+    // This checks only the already configured TEST account and destination.
+    return runDisposableFileProof({...guarded,mode:'prepare'});
+  }
+  if(mode==='verify')
+    return runDisposableFileProof({...guarded,mode:'verify'});
+  if(saved?.state==='RESERVED'||saved?.state==='START_ATTEMPTED')
+    block('FOURTH_SESSION_UNCERTAIN_NO_RECREATE');
+  if(saved===null)
+    await runDisposableFileProof({...guarded,mode:'begin'});
+  const result=await runDisposableFileProof({...guarded,mode:'resume'});
+  if(!['TEST_FILE_SHA256_VERIFIED','SAME_TEST_FILE_VERIFIED'].includes(result.status))
+    block('FOURTH_FINAL_RECEIPT_UNVERIFIED');
+  return {...result,status:'TEST_FOURTH_FILE_SHA256_VERIFIED'};
 }
