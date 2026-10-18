@@ -195,10 +195,10 @@ begin
    'changed_proof_id_123456789','fwh_distinct_drive_123456');
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Conflicting confirmed file identity accepted';end if;
+ execute 'reset role';
  if (select count(*) from private.client_destination_provider_proof_receipts
     where destination_id=proposed_id)<>1
  then raise exception 'Duplicate/fake provider receipt';end if;
- execute 'reset role';
  if (select count(*) from private.client_delivery_destination_preflights
      where destination_id=proposed_id and organization_id=org1 and company_id=client1)<>1
  then raise exception 'Service preflight journal had unexpected rows';end if;
