@@ -7,8 +7,8 @@ import {pathToFileURL} from 'node:url';
 import {open,lstat,rename} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {randomUUID} from 'node:crypto';
-import {runDisposableFileProof,runApprovedReplacementFileProof}
-  from './phase5_disposable_file_core.mjs';
+import {runDisposableFileProof,runApprovedReplacementFileProof,
+  runApprovedThirdFileProof} from './phase5_disposable_file_core.mjs';
 import {createWorkspaceTokenProvider} from '../supabase/functions/client-delivery/workspace-oauth.mjs';
 import {createDriveClient} from '../supabase/functions/client-delivery/drive-client.mjs';
 import {preferIPv4ForLocalWorkspaceBootstrap} from './authorize_phase5_workspace_provider.mjs';
@@ -19,6 +19,8 @@ const folderPath=join(home,'phase5-disposable-folder-proof.json');
 const receiptPath=join(home,'phase5-disposable-file-proof.json');
 // Separate one-time operator-approved TEST attempt; NEVER overwrite the original.
 const replacementPath=join(home,'phase5-disposable-file-proof-replacement-20261017.json');
+// Exactly one separately approved third TEST file; previous journals untouched.
+const thirdPath=join(home,'phase5-disposable-file-proof-third-20261017.json');
 const lockPath=join(home,'phase5-disposable-file-proof.lock');
 const testMarker='DISPOSABLE_FWH_TEST_ONLY';
 const fail=code=>{const error=new Error(code);error.code=code;throw error;};
@@ -40,7 +42,11 @@ const SAFE_CODES=new Set([
   'UPLOAD_SESSION_ENDPOINT_UNRECOGNIZED','UPLOAD_SESSION_QUERY_UNRECOGNIZED',
   'PROTECTED_LOCAL_FILE_REQUIRED',
   'PROTECTED_LOCAL_DIRECTORY_REQUIRED','INVALID_UPLOAD_SIZE',
-  'EXACT_APP_PROPERTIES_REQUIRED','PREALLOCATED_ID_REQUIRED'
+  'EXACT_APP_PROPERTIES_REQUIRED','PREALLOCATED_ID_REQUIRED',
+  'THIRD_TEST_CONFIGURATION_REQUIRED','PRIOR_TEST_JOURNALS_REQUIRED',
+  'PRIOR_TEST_ATTEMPTS_NOT_FROZEN','PRIOR_TEST_IDENTITIES_COLLIDE',
+  'THIRD_TEST_IDENTITY_COLLISION','THIRD_SESSION_UNCERTAIN_NO_RECREATE',
+  'THIRD_FINAL_RECEIPT_UNVERIFIED'
 ]);
 const safeFailure=error=>SAFE_CODES.has(error?.code)?error.code
   :error?.code==='EEXIST'?'PROTECTED_TEST_LOCK_OR_JOURNAL_EXISTS'
@@ -75,7 +81,7 @@ async function replaceOriginal(value,path=receiptPath){
  await rename(temporary,path);
  await syncHome();
 }
-async function execute(mode,replacement=false){
+async function execute(mode,attempt='original'){
  const dir=await lstat(home);
  if(!dir.isDirectory()||(dir.mode&0o077)!==0
    ||(process.getuid&&dir.uid!==process.getuid()))
@@ -108,6 +114,7 @@ async function execute(mode,replacement=false){
    update:value=>replaceOriginal(value,path)});
  const journal=journalFor(receiptPath);
  const replacementJournal=journalFor(replacementPath);
+ const thirdJournal=journalFor(thirdPath);
  // Never expose credential contents, session URL, Google IDs or origin errors.
  const lock=await open(lockPath,'wx',0o600);
  try{
@@ -117,11 +124,16 @@ async function execute(mode,replacement=false){
    await drive.verifyFile({id:folder.id,parent:folder.parent,
      name:folder.name,mime:folder.mime,sha256:null,size:null,
      appProperties:folder.appProperties,expectedDriveId:config.driveId});
-   const result=replacement
-     ?await runApprovedReplacementFileProof({config,drive,
+   const result=attempt==='third'
+     ?await runApprovedThirdFileProof({config,drive,
        originalJournal:{read:()=>readProtected(receiptPath)},
-       replacementJournal,mode})
-     :await runDisposableFileProof({config,drive,journal,mode});
+       replacementJournal:{read:()=>readProtected(replacementPath)},
+       thirdJournal,mode})
+     :attempt==='replacement'
+       ?await runApprovedReplacementFileProof({config,drive,
+         originalJournal:{read:()=>readProtected(receiptPath)},
+         replacementJournal,mode})
+       :await runDisposableFileProof({config,drive,journal,mode});
    if(result.verified===false){
      // A missing/inaccessible object is NOT proof that a second create is safe.
      process.stdout.write('BLOCKED: '+result.status+' ('+result.reason+
@@ -143,12 +155,15 @@ async function execute(mode,replacement=false){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  preferIPv4ForLocalWorkspaceBootstrap();
- const modes={'--prepare':['prepare',false],
-   '--begin':['begin',false],'--resume':['resume',false],
-   '--verify':['verify',false],'--inspect':['inspect',false],
-   '--replacement-prepare':['prepare',true],
-   '--replacement-complete':['complete',true],
-   '--replacement-verify':['verify',true]};
+ const modes={'--prepare':['prepare','original'],
+   '--begin':['begin','original'],'--resume':['resume','original'],
+   '--verify':['verify','original'],'--inspect':['inspect','original'],
+   '--replacement-prepare':['prepare','replacement'],
+   '--replacement-complete':['complete','replacement'],
+   '--replacement-verify':['verify','replacement'],
+   '--third-prepare':['prepare','third'],
+   '--third-complete':['complete','third'],
+   '--third-verify':['verify','third']};
  const selected=modes[process.argv[2]];
  if(process.argv.length!==3||!selected){
    process.stderr.write('BLOCKED: VALID_TEST_MODE_REQUIRED\n');
@@ -158,7 +173,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
      // Only checked status constants may appear, NEVER Google response bodies,
      // local JSON, OAuth values, original IDs or resumable session URLs.
      process.stderr.write('BLOCKED: '+safeFailure(error)+
-       '. Both TEST journals must be preserved; no blind retry.\n');
+       '. All TEST journals must be preserved; no blind retry.\n');
      process.exitCode=1;
    });
  }
