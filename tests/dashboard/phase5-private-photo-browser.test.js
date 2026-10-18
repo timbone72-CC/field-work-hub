@@ -64,8 +64,9 @@ function rig({anon=403,anonSign=401,admin=200,range=206,
 test('signed-in TEST dashboard route hashes exact 2 ranged JPEG chunks without token copying',async()=>{
  const r=rig();
  const out=await verifyBrowserPrivatePhoto(r.config);
- assert.deepEqual(out,{verified:true,anonymous_storage:'DENIED',
-   anonymous_signer:'DENIED',authorized_admin:'PASS',sha256:'MATCH',
+ assert.deepEqual(out,{verified:true,private_bytes_verified:true,
+   anonymous_storage:'DENIED',anonymous_signer:'DENIED',
+   authorized_admin:'PASS',sha256:'MATCH',
    partial_206:'PASS',ranges:2,bytes:bytes.length,
    foreign_user:'NOT_TESTED',original_owner_direct:'NOT_TESTED',
    delivery:'DISABLED'});
@@ -109,6 +110,43 @@ test('altered private bytes or changed approved receipt hash blocks',async()=>{
    const r=rig(opt);
    await assert.rejects(()=>verifyBrowserPrivatePhoto(r.config),
      e=>e.code==='SHA256_RECEIPT_MISMATCH');
+ }
+});
+test('live-observed anonymous Storage 400 is a rejected request, not falsely called exposure or denial PASS',async()=>{
+ const r=rig({anon:400});
+ const out=await verifyBrowserPrivatePhoto(r.config);
+ assert.equal(out.private_bytes_verified,true);
+ assert.equal(out.verified,false);
+ assert.equal(out.anonymous_storage,'REJECTED_400_UNVERIFIED');
+ assert.equal(out.anonymous_signer,'DENIED');
+ assert.equal(out.sha256,'MATCH');
+ assert.equal(out.partial_206,'PASS');
+ assert.equal(r.requests.filter(x=>x.url===signedUrl).length,2);
+});
+test('400 from anonymous signer remains unverified despite successful authenticated bytes',async()=>{
+ const r=rig({anonSign:400});
+ const out=await verifyBrowserPrivatePhoto(r.config);
+ assert.equal(out.verified,false);
+ assert.equal(out.anonymous_storage,'DENIED');
+ assert.equal(out.anonymous_signer,'REJECTED_400_UNVERIFIED');
+ assert.equal(out.private_bytes_verified,true);
+});
+test('5xx/429 anonymous responses block without claiming denial or running signed reads',async()=>{
+ for(const options of [{anon:500},{anon:429},{anonSign:503}]){
+   const r=rig(options);
+   await assert.rejects(()=>verifyBrowserPrivatePhoto(r.config),
+     e=>['ANONYMOUS_STORAGE_ACCESS_STATUS_UNVERIFIED',
+         'ANONYMOUS_SIGNER_ACCESS_STATUS_UNVERIFIED'].includes(e.code));
+   assert.equal(r.requests.filter(x=>x.url===signedUrl).length,0);
+ }
+});
+test('actual successful anonymous 2xx response signals exposure and blocks all later reads',async()=>{
+ for(const options of [{anon:200},{anon:206},{anonSign:200}]){
+   const r=rig(options);
+   await assert.rejects(()=>verifyBrowserPrivatePhoto(r.config),
+      e=>['ANONYMOUS_STORAGE_ACCESS_EXPOSED',
+         'ANONYMOUS_SIGNER_ACCESS_EXPOSED'].includes(e.code));
+   assert.equal(r.requests.filter(x=>x.url===signedUrl).length,0);
  }
 });
 test('all request methods are reads or authorized read-only POST, never Send',async()=>{
