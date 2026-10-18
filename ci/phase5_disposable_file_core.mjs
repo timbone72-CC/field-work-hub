@@ -45,12 +45,13 @@ async function proof(drive,config,record){
  * Fail/timeout after START_ATTEMPTED can only reconcile the ORIGINAL ID,
  * never initiate another session or generate a replacement Drive ID.
  */
-export async function runDisposableFileProof({config,drive,journal,mode}={}){
+export async function runDisposableFileProof({config,drive,journal,mode,excludedFileId=null}={}){
   if(!['prepare','begin','resume','verify','inspect'].includes(mode)
     ||!config||config.testOnly!==true||!ID.test(config.driveId??'')
     ||!ID.test(config.folderId??'')||!ID.test(config.rootId??'')
     ||new Set([config.driveId,config.folderId,config.rootId]).size!==3
     ||typeof config.email!=='string'
+    ||(excludedFileId!==null&&!ID.test(excludedFileId))
     ||!drive||!journal||!['read','reserve','update'].every(k=>typeof journal[k]==='function'))
     block('DISPOSABLE_TEST_CONFIGURATION_REQUIRED');
   const user=await drive.verifyProviderIdentity(config.email);
@@ -63,7 +64,8 @@ export async function runDisposableFileProof({config,drive,journal,mode}={}){
     if(r!==null)block('TEST_FILE_ALREADY_RESERVED');
     const ids=await drive.generateIds(1);
     if(!Array.isArray(ids)||ids.length!==1||!ID.test(ids[0])
-      ||ids[0]===config.rootId||ids[0]===config.folderId)block('TEST_FILE_ID_UNAVAILABLE');
+      ||ids[0]===config.rootId||ids[0]===config.folderId
+      ||ids[0]===excludedFileId)block('TEST_FILE_ID_UNAVAILABLE');
     const testId=randomUUID(),bytes=contentFor(testId);
     r={format:FORMAT,drive_id:config.driveId,folder_id:config.folderId,
       file_id:ids[0],test_id:testId,sha256:hash(bytes),size:bytes.length,
@@ -131,4 +133,42 @@ export async function runDisposableFileProof({config,drive,journal,mode}={}){
   await proof(drive,config,r);
   await journal.update({...r,state:'VERIFIED'});
   return {status:'TEST_FILE_SHA256_VERIFIED',writes:true};
+}
+
+// One separately approved disposable TEST attempt. The original ID and journal
+// are never rewritten/retried: this accepts only the known lost-session state.
+// A replacement has its OWN exclusive journal and one-shot generated Google ID.
+export async function runApprovedReplacementFileProof({
+  config,drive,originalJournal,replacementJournal,mode
+}={}){
+  if(!['prepare','complete','verify'].includes(mode)
+    ||typeof originalJournal?.read!=='function'
+    ||!replacementJournal
+    ||originalJournal===replacementJournal)
+    block('REPLACEMENT_TEST_CONFIGURATION_REQUIRED');
+  const original=await originalJournal.read();
+  if(!config||!original)block('ORIGINAL_TEST_JOURNAL_REQUIRED');
+  validate(original,config); // exact original TEST drive/folder/bytes binding
+  if(original.state!=='START_ATTEMPTED'||original.session_url!==null)
+    block('ORIGINAL_TEST_ATTEMPT_REQUIRED');
+  const guarded={config,drive,journal:replacementJournal,excludedFileId:original.file_id};
+  if(mode==='prepare')
+    return runDisposableFileProof({...guarded,mode:'prepare'});
+  const saved=await replacementJournal.read();
+  if(saved!==null){
+    validate(saved,config);
+    if(saved.file_id===original.file_id)block('REPLACEMENT_FILE_ID_COLLISION');
+  }
+  if(mode==='verify')
+    return runDisposableFileProof({...guarded,mode:'verify'});
+  if(saved?.state==='RESERVED'||(saved?.state==='START_ATTEMPTED'&&!saved.session_url))
+    block('REPLACEMENT_SESSION_UNCERTAIN_NO_RECREATE');
+  if(saved===null)
+    await runDisposableFileProof({...guarded,mode:'begin'});
+  // Resume ONLY the original session persisted in this replacement journal.
+  // On lost POST/session response, later invocations stop (no third ID).
+  const result=await runDisposableFileProof({...guarded,mode:'resume'});
+  if(!['TEST_FILE_SHA256_VERIFIED','SAME_TEST_FILE_VERIFIED'].includes(result.status))
+    block('REPLACEMENT_FINAL_RECEIPT_UNVERIFIED');
+  return {...result,status:'TEST_REPLACEMENT_FILE_SHA256_VERIFIED'};
 }
