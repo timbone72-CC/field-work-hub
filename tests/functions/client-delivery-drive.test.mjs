@@ -169,7 +169,8 @@ test('Google session Location is a trusted-origin opaque capability, never initi
     assert.equal((await client.probeResumable(session.session_url,250000)).offset,0);
     assert.equal(calls[1].url.toString(),location,'must use the same URL for zero-byte probe');
     assert.equal(calls.length,2);
-    assert.equal(calls[1].options.redirect,'error');
+    assert.equal(calls[1].options.redirect,'manual');
+    assert.equal('resumableProgress' in calls[1].options,false);
     assert.equal(calls[1].options.headers['Content-Range'],'bytes */250000');
   }
   const denied=[
@@ -202,6 +203,65 @@ test('lost responses, expired session, incompatible offset never allow a new fil
   const {client:expired}=fixture(()=>json({},410));
   await expectCode(()=>expired.probeResumable(url,250000),'PROVIDER_IDENTITY_UNCERTAIN');
   await expectCode(()=>client.probeResumable('https://attacker.invalid/test',250000),'UNTRUSTED_UPLOAD_SESSION');
+});
+test('308 without Location is progress; 308 with Location always fails closed',async()=>{
+  const uri='https://www.googleapis.com/upload/drive/v3/files?session=opaque';
+  const {client,calls}=fixture(()=>new Response(null,
+    {status:308,headers:{Range:'bytes=0-262143'}}));
+  assert.deepEqual(await client.probeResumable(uri,524288),
+    {offset:262144,complete_candidate:false});
+  assert.equal(calls[0].options.redirect,'manual');
+  const {client:bad,calls:badCalls}=fixture(()=>new Response(null,
+    {status:308,headers:{Range:'bytes=0-262143',Location:'https://attacker.invalid/steal'}}));
+  await expectCode(()=>bad.probeResumable(uri,524288),'PROVIDER_REDIRECT_FORBIDDEN');
+  assert.equal(badCalls.length,1);
+  await expectCode(()=>bad.uploadChunk(uri,524288,0,new Uint8Array(262144)),
+    'PROVIDER_REDIRECT_FORBIDDEN');
+  assert.equal(badCalls.length,2);
+  assert.equal(badCalls[1].options.redirect,'manual');
+  // The rest of the Drive API still rejects redirects at the transport layer.
+  const {client:nonProgress,calls:normal}=fixture(()=>new Response(null,
+    {status:200,headers:{'Content-Type':'application/json'},body:null}));
+  await assert.rejects(()=>nonProgress.generateIds(1));
+  assert.equal(normal[0].options.redirect,'error');
+});
+test('native Node fetch exposes a Google-style 308 under manual mode but never follows Location',async()=>{
+  const {createServer}=await import('node:http');
+  let redirectedRequests=0;
+  const server=createServer((req,res)=>{
+    req.resume();
+    if(req.url==='/redirected'){
+      redirectedRequests++;
+      res.writeHead(200).end('NOT_ALLOWED');
+      return;
+    }
+    if(req.url==='/with-location'){
+      res.writeHead(308,{Range:'bytes=0-131071',Location:'/redirected'}).end();
+      return;
+    }
+    res.writeHead(308,{Range:'bytes=0-131071'}).end();
+  });
+  await new Promise((resolve,reject)=>{
+    server.once('error',reject);
+    server.listen(0,'127.0.0.1',resolve);
+  });
+  try{
+    const local='http://127.0.0.1:'+server.address().port;
+    const uri='https://www.googleapis.com/upload/drive/v3/files?session=opaque';
+    let path='/incomplete';
+    const client=createDriveClient({accessToken:'disposable-secret-token-only',
+      fetcher:(ignored,opts)=>fetch(local+path,opts)});
+    // Native fetch with redirect:error on 308 fails instead of revealing Range.
+    await assert.rejects(()=>fetch(local+'/incomplete',
+      {method:'PUT',redirect:'error',headers:{'Content-Range':'bytes */250000'}}));
+    assert.deepEqual(await client.probeResumable(uri,250000),
+      {offset:131072,complete_candidate:false});
+    path='/with-location';
+    await expectCode(()=>client.probeResumable(uri,250000),'PROVIDER_REDIRECT_FORBIDDEN');
+    assert.equal(redirectedRequests,0,'no location-bearing 308 may be followed');
+  }finally{
+    await new Promise((resolve,reject)=>server.close(e=>e?reject(e):resolve()));
+  }
 });
 test('chunked upload is bounded, unaligned ranges rejected, 308 is not receipt',async()=>{
   const url='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=test';
