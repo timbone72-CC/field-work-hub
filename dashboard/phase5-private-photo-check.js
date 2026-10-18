@@ -27,11 +27,7 @@ async function json(res,limit=12000){
    return JSON.parse(raw);
  }catch{err('UNTRUSTED_RESPONSE');}
 }
-function sessionToken(storage){
- let raw;
- try{raw=JSON.parse(storage.getItem('fppTeamAdmin.tabAuthSession')||'null');}
- catch{err('SIGN_IN_TO_TEST_DASHBOARD');}
- const token=raw?.access_token;
+function sessionToken(token){
  if(typeof token!=='string'||token.length<20)err('SIGN_IN_TO_TEST_DASHBOARD');
  // This is input consistency, not authority. Auth and scoped RPC recheck every request.
  try{
@@ -86,10 +82,10 @@ async function readRanges(fetcher,url,expectedHash,hashBytes){
  if(actual!==expectedHash)err('SHA256_RECEIPT_MISMATCH');
  return {bytes:size,ranges:pieces.length};
 }
-async function verifyBrowserPrivatePhoto({fetcher,storage,hashBytes,status=()=>{}}){
- if(typeof fetcher!=='function'||typeof hashBytes!=='function'
-    ||typeof storage?.getItem!=='function')err('TEST_RUNTIME_UNAVAILABLE');
- const {token,claims}=sessionToken(storage);
+async function verifyBrowserPrivatePhoto({fetcher,adminToken,hashBytes,status=()=>{}}){
+ if(typeof fetcher!=='function'||typeof hashBytes!=='function')
+   err('TEST_RUNTIME_UNAVAILABLE');
+ const {token,claims}=sessionToken(adminToken);
  const headers={apikey:KEY,Authorization:'Bearer '+token};
  status('Checking the current Admin permission and existing TEST work order…');
  const user=await json(await call(fetcher,HOST+'/auth/v1/user',{headers,method:'GET'}));
@@ -148,29 +144,49 @@ async function verifyBrowserPrivatePhoto({fetcher,storage,hashBytes,status=()=>{
 }
 if(typeof module!=='undefined'&&module.exports)
  module.exports={verifyBrowserPrivatePhoto,readRanges,exactSignedURL};
+// TEST opt-in is mounted in the existing authenticated dashboard.
+// The existing app/session owner supplies an in-memory access token.
 if(root&&root.document&&root.location){
  const ready=()=>{
-   const button=root.document.getElementById('run-test');
-   const output=root.document.getElementById('test-result');
-   if(!button||!output)return;
-   const current=root.location.pathname;
-   if(current!=='/field-work-hub/phase56-review/phase5-private-photo-check.html'){
-     output.textContent='BLOCKED: TEST_PREVIEW_ONLY';button.disabled=true;return;
-   }
+   const path=root.location.pathname;
+   if(path!=='/field-work-hub/phase56-review/' ||
+     new URLSearchParams(root.location.search).get('phase5PrivatePhotoTest')!=='1')
+     return;
+   const host=root.document.querySelector('main');
+   if(!host)return;
+   const panel=root.document.createElement('section');
+   panel.id='phase5-private-photo-test';
+   panel.style.cssText='margin:12px auto;padding:16px;max-width:700px;'+
+     'border:2px solid #487caa;border-radius:10px;background:#f2f7fc;color:#173553;';
+   const title=root.document.createElement('h2');
+   title.textContent='TEST-only private photo verification';
+   const info=root.document.createElement('p');
+   info.textContent='Uses this dashboard login to read one existing TEST photo. '+
+     'No tokens to copy; no photos, reviews, or delivery settings will be changed.';
+   const button=root.document.createElement('button');
+   button.type='button';button.className='secondary';
+   button.textContent='Verify TEST photo bytes';
+   const output=root.document.createElement('p');
+   output.setAttribute('role','status');output.setAttribute('aria-live','polite');
+   output.textContent='Not started.';
+   panel.append(title,info,button,output);
+   host.prepend(panel);
    button.addEventListener('click',async()=>{
-     button.disabled=true;output.textContent='Checking private TEST photo…';
+     button.disabled=true;output.textContent='Checking existing TEST photo…';
      try{
+       // The binding is established by the existing app/session scripts.
+       const token=typeof accessToken!=='undefined'?accessToken:null;
        const result=await verifyBrowserPrivatePhoto({
-         fetcher:root.fetch.bind(root),storage:root.sessionStorage,
+         fetcher:root.fetch.bind(root),adminToken:token,
          hashBytes:async bytes=>{
            const digest=new Uint8Array(await root.crypto.subtle.digest('SHA-256',bytes));
            return Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('');
-         },status:msg=>{output.textContent=msg;}
+         },status:message=>{output.textContent=message;}
        });
-       output.textContent='PASS: Received TEST photo verified. '+result.bytes+
-         ' bytes, '+result.ranges+' HTTP 206 ranges, SHA-256 match. '+
-         'Anonymous Storage and signer denied. Foreign-user denial remains pending. '+
-         'No photo change or Send.';
+       output.textContent='PASS: Existing TEST photo verified, '+result.bytes+
+         ' bytes across '+result.ranges+' HTTP 206 ranges; SHA-256 matches. '+
+         'Anonymous Storage and signer denied. Foreign-user check remains pending. '+
+         'No photo or Send changed.';
      }catch(e){
        const allow=new Set(['SIGN_IN_TO_TEST_DASHBOARD','TEST_RUNTIME_UNAVAILABLE',
          'TEST_WORK_ORDER_UNAVAILABLE','TEST_PHOTO_NOT_AVAILABLE','NETWORK_UNAVAILABLE',
@@ -183,7 +199,8 @@ if(root&&root.document&&root.location){
      }finally{button.disabled=false;}
    });
  };
- if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',ready);
+ if(root.document.readyState==='loading')
+   root.document.addEventListener('DOMContentLoaded',ready);
  else ready();
 }
 })(typeof window!=='undefined'?window:null);
