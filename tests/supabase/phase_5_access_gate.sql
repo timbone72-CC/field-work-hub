@@ -866,6 +866,41 @@ begin
    or has_table_privilege('authenticated','private.supervisor_grants','select')
    or has_table_privilege('authenticated','private.platform_owner_capabilities','insert') then
    raise exception 'Foundation broad grants';end if;
+ -- Across every current or future migration, prevent broadening unrelated
+ -- privileged entrypoints and tables. Retain intentional authenticated RPCs.
+ if exists (select 1 from pg_catalog.pg_proc p
+   join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+   where n.nspname in ('public','private') and p.prosecdef
+     and has_function_privilege('anon',p.oid,'EXECUTE'))
+ then raise exception 'Anonymous SECURITY DEFINER execution exposed';end if;
+ if exists (select 1 from pg_catalog.pg_proc p
+   join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+   where n.nspname in ('public','private') and p.prosecdef
+     and not exists (select 1 from unnest(coalesce(p.proconfig,array[]::text[])) config_item
+       where config_item like 'search_path=%'))
+ then raise exception 'Privileged function without fixed search_path';end if;
+ if exists (select 1 from pg_catalog.pg_class c
+   join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+   where n.nspname in ('public','private') and c.relkind in ('r','p')
+     and (has_table_privilege('anon',c.oid,'SELECT')
+       or has_table_privilege('anon',c.oid,'INSERT')
+       or has_table_privilege('anon',c.oid,'UPDATE')
+       or has_table_privilege('anon',c.oid,'DELETE')))
+ then raise exception 'Anonymous business table grant exposed';end if;
+ if exists (select 1 from pg_catalog.pg_class c
+   join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+   where n.nspname='private' and c.relkind in ('r','p')
+     and (has_table_privilege('authenticated',c.oid,'SELECT')
+       or has_table_privilege('authenticated',c.oid,'INSERT')
+       or has_table_privilege('authenticated',c.oid,'UPDATE')
+       or has_table_privilege('authenticated',c.oid,'DELETE')))
+ then raise exception 'Private table direct client grant exposed';end if;
+ if exists (select 1 from pg_catalog.pg_class c
+   join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+   where n.nspname='public' and c.relkind in ('r','p')
+     and not c.relrowsecurity)
+ then raise exception 'Public business table without RLS';end if;
+ raise notice 'Global privilege-surface test: privileged search_path, anon and private-table grants PASS';
  raise notice 'Phase 5 access foundation: all capability/session/isolation gates PASS';
 end;
 $gate$;
