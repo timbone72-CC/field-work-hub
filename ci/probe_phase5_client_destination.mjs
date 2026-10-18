@@ -16,16 +16,16 @@ import {validateProofConfiguration} from './probe_phase5_workspace_folder.mjs';
 import {preferIPv4ForLocalWorkspaceBootstrap} from './authorize_phase5_workspace_provider.mjs';
 
 const runCommand=promisify(execFile);
-const PROJECT='vyocaujuwrivoqynvitm';
+export const PROJECT='vyocaujuwrivoqynvitm';
 const BRANCH='feat/phase-5-6-dashboard-workflow';
 const REPO='timbone72-CC/field-work-hub';
-const TEST=Object.freeze({
+export const TEST=Object.freeze({
   organizationId:'494154a6-2a7a-4c98-a0a8-2143443fec0e',
   companyId:'8e964c9f-906b-40be-8fa5-e58e3b650596',
   destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7'
 });
 const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
-const HOME=join(homedir(),'.config','field-work-hub');
+export const HOME=join(homedir(),'.config','field-work-hub');
 const JOURNAL=join(HOME,'phase5-client-destination-preflight.json');
 const BLOCK='DISPOSABLE_FWH_TEST_ONLY';
 const fail=code=>{const e=new Error(code);e.code=code;throw e;};
@@ -107,7 +107,7 @@ export async function runClientDestinationPreflight({
   return {status:'TEST_CLIENT_DESTINATION_PREFLIGHT_RECORDED',
     active:false,verified:false,replayed:result.replayed};
 }
-async function privateJson(path){
+export async function privateJson(path){
   const st=await lstat(path);
   if(!st.isFile()||st.isSymbolicLink()||(st.mode&0o077)!==0
     ||st.size<2||st.size>16384
@@ -130,14 +130,14 @@ const journal={
     try{await dir.sync();}finally{await dir.close();}
   }
 };
-async function command(bin,args){
+export async function command(bin,args){
   try{
     const r=await runCommand(bin,args,{timeout:30000,maxBuffer:1048576,
       encoding:'utf8',windowsHide:true});
     return r.stdout.trim();
   }catch{fail('TRUSTED_OPERATOR_CLI_UNAVAILABLE');}
 }
-async function operatorServiceJwt(){
+export async function operatorServiceJwt(){
   // The operator's already-authenticated Supabase CLI returns the legacy
   // service_role JWT in memory. Never print, save, embed or ship any key.
   const raw=await command('supabase',['projects','api-keys',
@@ -151,9 +151,7 @@ async function operatorServiceJwt(){
     fail('TRUSTED_SERVICE_KEY_UNAVAILABLE');
   return hits[0].api_key;
 }
-async function main(){
-  if(process.argv.length!==3||process.argv[2]!=='--record')
-    fail('EXACT_TEST_PREFLIGHT_MODE_REQUIRED');
+export async function loadTrustedTestOperatorContext(){
   const branch=await command('git',['branch','--show-current']);
   const clean=await command('git',['status','--porcelain']);
   const head=await command('git',['rev-parse','HEAD']);
@@ -179,6 +177,13 @@ async function main(){
     refreshToken:credential.FWH_TEST_WORKSPACE_REFRESH_TOKEN,
     requiredScope:credential.FWH_TEST_WORKSPACE_SCOPE
   });
+  return {credential,folder,ledger,tokenProvider};
+}
+async function main(){
+  if(process.argv.length!==3||process.argv[2]!=='--record')
+    fail('EXACT_TEST_PREFLIGHT_MODE_REQUIRED');
+  const {credential,folder,ledger,tokenProvider}=
+    await loadTrustedTestOperatorContext();
   const result=await runClientDestinationPreflight({
     credential,folder,ledger,tokenProvider,journal
   });
