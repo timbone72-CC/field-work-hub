@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runDisposableFileProof,runApprovedReplacementFileProof,
-  runApprovedThirdFileProof,FileProofBlocked}
+  runApprovedThirdFileProof,runStagedFourthFileProof,FileProofBlocked}
   from '../../ci/phase5_disposable_file_core.mjs';
 
 const driveId='disposable_client_drive_123456';
@@ -419,4 +419,117 @@ test('all three frozen attempts allow exact-ID read-only inspection without new 
    assert.equal(r.events.filter(x=>x==='generate').length,generated);
    assert.equal(r.events.filter(x=>x==='GET:receipt').length,1);
  }
+});
+
+
+const fourthId='separate_fourth_file_20261017';
+const runFourth=(first,second,third,fourth,mode,c=config)=>
+ runStagedFourthFileProof({config:c,drive:fourth.drive,
+   originalJournal:first.journal,replacementJournal:second.journal,
+   thirdJournal:third.journal,fourthJournal:fourth.journal,mode});
+async function freezeThree(){
+ const {original,second}=await freezeTwo();
+ const third=rig({failStart:true,generatedFileId:thirdId});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),
+   /Google may have created/);
+ return {original,second,third};
+}
+test('staged fourth prepare is read-only with exactly three untouched frozen journals',async()=>{
+ const {original,second,third}=await freezeThree();
+ const earlier=[original,second,third];
+ const snapshots=earlier.map(r=>JSON.stringify(r.getSaved()));
+ const fourth=rig({generatedFileId:fourthId});
+ assert.deepEqual(await runFourth(original,second,third,fourth,'prepare'),
+   {status:'TEST_FILE_PARENT_VERIFIED',writes:false});
+ assert.equal(fourth.getSaved(),null);
+ assert.deepEqual(fourth.events,['account','destination:'+rootId,'destination:'+folderId]);
+ assert.deepEqual(earlier.map(r=>JSON.stringify(r.getSaved())),snapshots);
+ assert.equal(fourth.starts(),0);
+});
+test('fourth isolated provider proof completes once, saves exact ID and cannot silently create fifth',async()=>{
+ const {original,second,third}=await freezeThree();
+ const earlier=[original,second,third];
+ const snapshots=earlier.map(r=>JSON.stringify(r.getSaved()));
+ const fourth=rig({generatedFileId:fourthId});
+ const result=await runFourth(original,second,third,fourth,'complete');
+ assert.equal(result.status,'TEST_FOURTH_FILE_SHA256_VERIFIED');
+ assert.equal(fourth.starts(),1);
+ assert.equal(fourth.getSaved().state,'VERIFIED');
+ assert.equal(fourth.getSaved().file_id,fourthId);
+ assert.equal(fourth.offset(),fourth.getSaved().size);
+ assert.equal((await runFourth(original,second,third,fourth,'verify')).status,
+   'SAME_TEST_FILE_VERIFIED');
+ assert.equal((await runFourth(original,second,third,fourth,'complete')).status,
+   'TEST_FOURTH_FILE_SHA256_VERIFIED');
+ assert.equal(fourth.starts(),1);
+ assert.equal(fourth.events.filter(x=>x==='generate').length,1);
+ assert.deepEqual(earlier.map(r=>JSON.stringify(r.getSaved())),snapshots);
+});
+test('fourth lost session freezes and refuses all repeated provider POSTs',async()=>{
+ const {original,second,third}=await freezeThree();
+ const fourth=rig({failStart:true,generatedFileId:fourthId});
+ await assert.rejects(()=>runFourth(original,second,third,fourth,'complete'),
+   /Google may have created/);
+ const frozen=JSON.stringify(fourth.getSaved());
+ assert.equal(fourth.getSaved().state,'START_ATTEMPTED');
+ assert.equal(fourth.getSaved().session_url,null);
+ for(const mode of ['complete','prepare']){
+   await assert.rejects(()=>runFourth(original,second,third,fourth,mode),e=>
+     e instanceof FileProofBlocked&&
+     e.code===(mode==='complete'?'FOURTH_SESSION_UNCERTAIN_NO_RECREATE':
+       'FOURTH_TEST_ALREADY_RESERVED'));
+ }
+ assert.equal(JSON.stringify(fourth.getSaved()),frozen);
+ assert.equal(fourth.starts(),1);
+ assert.equal(fourth.events.filter(x=>x==='generate').length,1);
+});
+test('fourth refuses any of the previous three Google file IDs before journal reserve',async()=>{
+ const {original,second,third}=await freezeThree();
+ for(const used of [original,second,third].map(r=>r.getSaved().file_id)){
+   const fourth=rig({generatedFileId:used});
+   await assert.rejects(()=>runFourth(original,second,third,fourth,'complete'),e=>
+     e instanceof FileProofBlocked&&e.code==='TEST_FILE_ID_UNAVAILABLE');
+   assert.equal(fourth.getSaved(),null);
+   assert.equal(fourth.starts(),0);
+ }
+});
+test('fourth preflight fails closed on missing, corrupt, duplicated and unfrozen earlier journals',async()=>{
+ const cases=[
+  {update:s=>null,expected:'THREE_PRIOR_TEST_JOURNALS_REQUIRED'},
+  {update:s=>({...s,state:'SESSION_READY',
+     session_url:'https://www.googleapis.com/upload/drive/v3/files?upload_id=x'}),
+   expected:'THREE_PRIOR_TEST_ATTEMPTS_NOT_FROZEN'},
+  {update:s=>({...s,folder_id:'different_folder'}),
+   expected:'SAVED_TEST_FILE_UNCERTAIN'}
+ ];
+ for(const c of cases){
+   const {original,second,third}=await freezeThree();
+   third.setSaved(c.update(third.getSaved()));
+   const fourth=rig({generatedFileId:fourthId});
+   await assert.rejects(()=>runFourth(original,second,third,fourth,'complete'),
+     e=>e instanceof FileProofBlocked&&e.code===c.expected);
+   assert.equal(fourth.events.length,0);
+   assert.equal(fourth.getSaved(),null);
+ }
+ const {original,second,third}=await freezeThree();
+ third.setSaved({...third.getSaved(),file_id:second.getSaved().file_id});
+ const fourth=rig({generatedFileId:fourthId});
+ await assert.rejects(()=>runFourth(original,second,third,fourth,'complete'),e=>
+   e instanceof FileProofBlocked&&e.code==='THREE_PRIOR_TEST_IDENTITIES_COLLIDE');
+ assert.equal(fourth.getSaved(),null);
+});
+test('fourth VERIFY cannot create, and shared journals or wrong TEST identity block before network',async()=>{
+ const {original,second,third}=await freezeThree();
+ const fourth=rig({generatedFileId:fourthId});
+ await assert.rejects(()=>runFourth(original,second,third,fourth,'verify'),
+   e=>e instanceof FileProofBlocked&&e.code==='TEST_FILE_NOT_RESERVED');
+ assert.equal(fourth.events.filter(x=>x==='generate').length,0);
+ await assert.rejects(()=>runStagedFourthFileProof({config,drive:fourth.drive,
+   originalJournal:original.journal,replacementJournal:second.journal,
+   thirdJournal:third.journal,fourthJournal:third.journal,mode:'complete'}),
+   e=>e instanceof FileProofBlocked&&e.code==='FOURTH_TEST_CONFIGURATION_REQUIRED');
+ await assert.rejects(()=>runFourth(original,second,third,fourth,'prepare',
+   {...config,testOnly:false}),
+   e=>e instanceof FileProofBlocked&&e.code==='DISPOSABLE_TEST_CONFIGURATION_REQUIRED');
+ assert.equal(fourth.starts(),0);
 });
