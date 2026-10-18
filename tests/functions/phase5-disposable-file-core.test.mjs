@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runDisposableFileProof,runApprovedReplacementFileProof,FileProofBlocked}
+import {runDisposableFileProof,runApprovedReplacementFileProof,
+  runApprovedThirdFileProof,FileProofBlocked}
   from '../../ci/phase5_disposable_file_core.mjs';
 
 const driveId='disposable_client_drive_123456';
@@ -284,4 +285,111 @@ test('replacement VERIFY cannot initiate and requires its own independent journa
    replacementJournal:original.journal,mode:'complete'
  }),error=>error instanceof FileProofBlocked&&
    error.code==='REPLACEMENT_TEST_CONFIGURATION_REQUIRED');
+});
+
+const thirdId='separate_third_file_20261017';
+const runThird=(original,second,third,mode,c=config)=>
+  runApprovedThirdFileProof({config:c,drive:third.drive,
+    originalJournal:original.journal,replacementJournal:second.journal,
+    thirdJournal:third.journal,mode});
+async function freezeTwo(){
+ const original=rig({failStart:true});
+ await assert.rejects(()=>run(original,'begin'),/Google may have created/);
+ const second=rig({failStart:true,generatedFileId:replacementId});
+ await assert.rejects(()=>runReplacement(original,second,'complete'),
+   /Google may have created/);
+ return {original,second};
+}
+test('third TEST completes using a third ID without touching either frozen attempt',async()=>{
+ const {original,second}=await freezeTwo();
+ const beforeFirst=JSON.stringify(original.getSaved());
+ const beforeSecond=JSON.stringify(second.getSaved());
+ const third=rig({generatedFileId:thirdId});
+ assert.deepEqual(await runThird(original,second,third,'prepare'),
+   {status:'TEST_FILE_PARENT_VERIFIED',writes:false});
+ assert.equal(third.starts(),0);
+ assert.equal(third.getSaved(),null);
+ const result=await runThird(original,second,third,'complete');
+ assert.equal(result.status,'TEST_THIRD_FILE_SHA256_VERIFIED');
+ assert.equal(third.starts(),1);
+ assert.equal(third.getSaved().file_id,thirdId);
+ assert.equal(third.getSaved().state,'VERIFIED');
+ assert.equal(third.offset(),third.getSaved().size);
+ assert.equal(JSON.stringify(original.getSaved()),beforeFirst);
+ assert.equal(JSON.stringify(second.getSaved()),beforeSecond);
+ assert.deepEqual((await runThird(original,second,third,'verify')).status,
+   'SAME_TEST_FILE_VERIFIED');
+ assert.equal((await runThird(original,second,third,'complete')).status,
+   'TEST_THIRD_FILE_SHA256_VERIFIED');
+ assert.equal(third.starts(),1,'repeat must never produce a fourth provider ID or POST');
+ assert.equal(third.events.filter(v=>v==='generate').length,1);
+});
+test('failed third start is frozen; fourth provider start and both earlier journal writes denied',async()=>{
+ const {original,second}=await freezeTwo();
+ const beforeFirst=JSON.stringify(original.getSaved());
+ const beforeSecond=JSON.stringify(second.getSaved());
+ const third=rig({failStart:true,generatedFileId:thirdId});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),
+   /Google may have created/);
+ assert.equal(third.getSaved().state,'START_ATTEMPTED');
+ assert.equal(third.getSaved().session_url,null);
+ const beforeEvents=third.events.length;
+ await assert.rejects(()=>runThird(original,second,third,'complete'),e=>
+   e instanceof FileProofBlocked&&e.code==='THIRD_SESSION_UNCERTAIN_NO_RECREATE');
+ assert.equal(third.starts(),1);
+ assert.equal(third.events.slice(beforeEvents).includes('generate'),false);
+ assert.equal(JSON.stringify(original.getSaved()),beforeFirst);
+ assert.equal(JSON.stringify(second.getSaved()),beforeSecond);
+});
+test('third TEST refuses IDs from either prior attempt before reserve or POST',async()=>{
+ const {original,second}=await freezeTwo();
+ for(const alreadyUsed of [original.getSaved().file_id,second.getSaved().file_id]){
+   const third=rig({generatedFileId:alreadyUsed});
+   await assert.rejects(()=>runThird(original,second,third,'complete'),e=>
+     e instanceof FileProofBlocked&&e.code==='TEST_FILE_ID_UNAVAILABLE');
+   assert.equal(third.getSaved(),null);
+   assert.equal(third.starts(),0);
+ }
+});
+test('third TEST requires both distinct frozen journals and never guesses missing state',async()=>{
+ const {original,second}=await freezeTwo();
+ const third=rig({generatedFileId:thirdId});
+ second.setSaved(null);
+ await assert.rejects(()=>runThird(original,second,third,'prepare'),e=>
+   e instanceof FileProofBlocked&&e.code==='PRIOR_TEST_JOURNALS_REQUIRED');
+ second.setSaved({...original.getSaved()});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),e=>
+   e instanceof FileProofBlocked&&e.code==='PRIOR_TEST_IDENTITIES_COLLIDE');
+ second.setSaved({...original.getSaved(),file_id:replacementId,
+   test_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),e=>
+   e instanceof FileProofBlocked&&e.code==='SAVED_TEST_FILE_UNCERTAIN');
+ assert.equal(third.getSaved(),null);
+ assert.equal(third.events.length,0);
+});
+test('third TEST rejects unfrozen or changed parent/identity and does not create Google file',async()=>{
+ const {original,second}=await freezeTwo();
+ const third=rig({generatedFileId:thirdId});
+ second.setSaved({...second.getSaved(),state:'SESSION_READY',
+   session_url:'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=old'});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),e=>
+   e instanceof FileProofBlocked&&e.code==='PRIOR_TEST_ATTEMPTS_NOT_FROZEN');
+ assert.equal(third.starts(),0);
+ second.setSaved({...second.getSaved(),state:'START_ATTEMPTED',session_url:null,
+   drive_id:'foreign_test_shared_drive'});
+ await assert.rejects(()=>runThird(original,second,third,'complete'),e=>
+   e instanceof FileProofBlocked&&e.code==='SAVED_TEST_FILE_UNCERTAIN');
+ assert.equal(third.starts(),0);
+});
+test('third TEST verify never creates a missing journal or uses the earlier one',async()=>{
+ const {original,second}=await freezeTwo();
+ const third=rig({generatedFileId:thirdId});
+ await assert.rejects(()=>runThird(original,second,third,'verify'),e=>
+   e instanceof FileProofBlocked&&e.code==='TEST_FILE_NOT_RESERVED');
+ assert.equal(third.getSaved(),null);
+ assert.equal(third.starts(),0);
+ await assert.rejects(()=>runApprovedThirdFileProof({config,drive:third.drive,
+   originalJournal:original.journal,replacementJournal:second.journal,
+   thirdJournal:second.journal,mode:'complete'}),e=>
+     e instanceof FileProofBlocked&&e.code==='THIRD_TEST_CONFIGURATION_REQUIRED');
 });
