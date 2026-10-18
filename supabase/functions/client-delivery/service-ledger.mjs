@@ -15,7 +15,10 @@ const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_confirm_delivery_file','service_finish_delivery',
  'service_quarantine_expired_delivery',
  'service_read_client_destination_candidate',
- 'service_record_client_destination_preflight']);
+ 'service_record_client_destination_preflight',
+ 'service_read_client_destination_provider_proof',
+ 'service_reserve_client_destination_provider_proof',
+ 'service_confirm_client_destination_provider_proof']);
 export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
   let origin;
   try{origin=new URL(url);}catch{throw new DriveUncertain('SERVICE_BACKEND_NOT_CONFIGURED');}
@@ -54,6 +57,20 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_expected_revision:candidate.revision,
         p_provider_identity:candidate.provider_identity,
         p_root:candidate.root_folder_id,p_shared_drive:driveId
+      }),
+    readClientDestinationProviderProof:id=>rpc(
+      'service_read_client_destination_provider_proof',{p_destination:id}),
+    reserveClientDestinationProviderProof:(action,preflight,candidate,fileId,driveId)=>
+      rpc('service_reserve_client_destination_provider_proof',{
+        p_destination:candidate.destination_id,p_action:action,
+        p_preflight:preflight,p_revision:candidate.revision,
+        p_file_id:fileId,p_drive_id:driveId
+      }),
+    confirmClientDestinationProviderProof:(action,preflight,candidate,fileId,driveId)=>
+      rpc('service_confirm_client_destination_provider_proof',{
+        p_destination:candidate.destination_id,p_action:action,
+        p_preflight:preflight,p_revision:candidate.revision,
+        p_file_id:fileId,p_drive_id:driveId
       }),
     claim:worker=>rpc('service_claim_delivery',{p_worker:worker}),
     heartbeat:(pkg,worker,gen)=>rpc('service_heartbeat_delivery',
