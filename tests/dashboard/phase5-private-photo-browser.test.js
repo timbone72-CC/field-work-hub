@@ -19,7 +19,8 @@ const makeJson=(v,status=200)=>new Response(JSON.stringify(v),{
  status,headers:{'Content-Type':'application/json'}});
 function rig({anon=403,anonSign=401,admin=200,range=206,
  corrupt=false,wrongRange=false,wrongAccount=false,wrongWork=false,
- wrongPhotoHash=false,noToken=false,wrongSigned=false}={}){
+ wrongPhotoHash=false,noToken=false,wrongSigned=false,
+ hideRange=false,headStatus=200,headSizeOffset=0,headMime='image/jpeg'}={}){
  const requests=[],status=[];
  const adminToken=noToken?null:token;
  const fetcher=async (url,opts={})=>{
@@ -48,13 +49,18 @@ function rig({anon=403,anonSign=401,admin=200,range=206,
        expires_in:120}):makeJson({error:'denied'},admin);
    }
    assert.equal(u,signedUrl);
+   if(opts.method==='HEAD'){
+     return new Response(null,{status:headStatus,headers:{
+       'Content-Type':headMime,'Content-Length':String(bytes.length+headSizeOffset)}});
+   }
    const m=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.Range);
    assert.ok(m);const begin=Number(m[1]),end=Number(m[2]);
    const rangeBytes=bytes.slice(begin,end+1);
    if(corrupt&&begin===0)rangeBytes[0]^=1;
    return new Response(rangeBytes,{status:range,headers:{
      'Content-Type':'image/jpeg','Content-Length':String(rangeBytes.length),
-     'Content-Range':'bytes '+begin+'-'+(wrongRange?end+1:end)+'/'+bytes.length
+     ...(!hideRange?{'Content-Range':'bytes '+begin+'-'+
+       (wrongRange?end+1:end)+'/'+bytes.length}:{})
    }});
  };
  return {config:{fetcher,adminToken,
@@ -67,7 +73,8 @@ test('signed-in TEST dashboard route hashes exact 2 ranged JPEG chunks without t
  assert.deepEqual(out,{verified:true,private_bytes_verified:true,
    anonymous_storage:'DENIED',anonymous_signer:'DENIED',
    authorized_admin:'PASS',sha256:'MATCH',
-   partial_206:'PASS',ranges:2,bytes:bytes.length,
+   partial_206:'PASS',content_range:'VERIFIED',
+   ranges:2,bytes:bytes.length,
    foreign_user:'NOT_TESTED',original_owner_direct:'NOT_TESTED',
    delivery:'DISABLED'});
  assert.equal(r.requests.filter(x=>x.method==='GET'&&x.url===signedUrl).length,2);
@@ -149,9 +156,46 @@ test('actual successful anonymous 2xx response signals exposure and blocks all l
    assert.equal(r.requests.filter(x=>x.url===signedUrl).length,0);
  }
 });
+test('actual Chrome-style CORS hidden Content-Range verifies exact bytes but never claims full PASS',async()=>{
+ const r=rig({hideRange:true,anon:400});
+ const out=await verifyBrowserPrivatePhoto(r.config);
+ assert.equal(out.private_bytes_verified,true);
+ assert.equal(out.partial_206,'PASS');
+ assert.equal(out.sha256,'MATCH');
+ assert.equal(out.content_range,'NOT_EXPOSED');
+ assert.equal(out.anonymous_storage,'REJECTED_400_UNVERIFIED');
+ assert.equal(out.verified,false);
+ assert.equal(r.requests.filter(x=>x.url===signedUrl&&x.method==='HEAD').length,1);
+ assert.equal(r.requests.filter(x=>x.url===signedUrl&&x.method==='GET').length,2);
+});
+test('CORS hidden Content-Range with all other checks denied remains partial, not false PASS',async()=>{
+ const r=rig({hideRange:true});
+ const out=await verifyBrowserPrivatePhoto(r.config);
+ assert.equal(out.content_range,'NOT_EXPOSED');
+ assert.equal(out.anonymous_storage,'DENIED');
+ assert.equal(out.anonymous_signer,'DENIED');
+ assert.equal(out.private_bytes_verified,true);
+ assert.equal(out.verified,false);
+});
+test('no independent HEAD size or wrong content type blocks BEFORE any ranged reads',async()=>{
+ for(const opt of [
+   {headStatus:403},{headSizeOffset:1},{headMime:'application/octet-stream'}
+ ]){
+   const r=rig(opt);
+   await assert.rejects(()=>verifyBrowserPrivatePhoto(r.config),
+     e=>['SIGNED_HEAD_NOT_AVAILABLE','SIGNED_HEAD_IDENTITY_UNVERIFIED','RANGE_BYTE_MISMATCH'].includes(e.code));
+   if(opt.headSizeOffset!==1)
+     assert.equal(r.requests.filter(x=>x.url===signedUrl&&x.method==='GET').length,0);
+ }
+});
+test('browser-hidden Content-Range never permits a changed photo SHA-256',async()=>{
+ const r=rig({hideRange:true,corrupt:true});
+ await assert.rejects(()=>verifyBrowserPrivatePhoto(r.config),
+   e=>e.code==='SHA256_RECEIPT_MISMATCH');
+});
 test('all request methods are reads or authorized read-only POST, never Send',async()=>{
  const r=rig();await verifyBrowserPrivatePhoto(r.config);
- assert.equal(r.requests.some(x=>!['GET','POST'].includes(x.method)),false);
+ assert.equal(r.requests.some(x=>!['GET','HEAD','POST'].includes(x.method)),false);
  assert.equal(r.requests.some(x=>/send|upload|create|delete|activate|cleanup|grant/i.test(x.url)),false);
  assert.equal(r.requests.filter(x=>x.method==='POST').length,3);
 });
