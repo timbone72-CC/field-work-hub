@@ -89,7 +89,7 @@ When uncertain between levels, use the higher level.
 
 ## Scope and ownership
 
-Change the smallest module that owns the behavior. Adjacent defects are reported separately unless the user expands scope.
+Change only what is approved, using the smallest responsible module and necessary supporting code. Preserve all unrelated and previously accepted functionality. If an unrelated functional change becomes necessary, **FULL STOP** the affected work. Explain the reason and obtain explicit operator approval before proceeding.
 
 Protected ownership boundaries:
 - Supabase/Auth/RLS: server identity and authorization;

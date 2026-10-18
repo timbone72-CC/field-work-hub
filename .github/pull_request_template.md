@@ -18,4 +18,4 @@
 
 ## Evidence / Remaining Gates
 
-<!-- Passed versus outstanding verification, current status and exact next gate -->
+<!-- Preserve accepted evidence and any BLOCKED/FAIL/PENDING gates; state what actually passed (or is not required), and write the exact Next checkpoint. Update the existing authoritative build-state record, not a second handoff document. -->
