@@ -13,7 +13,9 @@ const METHODS=new Set(['service_claim_delivery','service_heartbeat_delivery',
  'service_store_upload_session','service_record_upload_offset',
  'service_get_delivery_file_plan',
  'service_confirm_delivery_file','service_finish_delivery',
- 'service_quarantine_expired_delivery']);
+ 'service_quarantine_expired_delivery',
+ 'service_read_client_destination_candidate',
+ 'service_record_client_destination_preflight']);
 export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
   let origin;
   try{origin=new URL(url);}catch{throw new DriveUncertain('SERVICE_BACKEND_NOT_CONFIGURED');}
@@ -42,6 +44,17 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     catch{throw new DriveUncertain('SERVICE_RPC_RESPONSE_INVALID');}
   };
   return {
+    // Service-only read of the exact inactive Admin proposal precedes any
+    // Google GET. The service never trusts client-origin company/root labels.
+    readClientDestination:id=>rpc('service_read_client_destination_candidate',
+      {p_destination:id}),
+    recordClientDestinationPreflight:(action,candidate,driveId)=>
+      rpc('service_record_client_destination_preflight',{
+        p_action:action,p_destination:candidate.destination_id,
+        p_expected_revision:candidate.revision,
+        p_provider_identity:candidate.provider_identity,
+        p_root:candidate.root_folder_id,p_shared_drive:driveId
+      }),
     claim:worker=>rpc('service_claim_delivery',{p_worker:worker}),
     heartbeat:(pkg,worker,gen)=>rpc('service_heartbeat_delivery',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
