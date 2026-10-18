@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const source = name => fs.readFileSync(path.join(__dirname, '..', '..', 'dashboard', name), 'utf8');
+const source = name => fs.readFileSync(path.join(__dirname, '..', '..', 'dashboard', name), 'utf8').replace(/\r\n/g, '\n');
 const rows = receipt => [
   { id: 'control-one', wo_number: 'TEST-0001', organization_id: 'test-org' },
   { id: 'control-two', wo_number: 'TEST-0002-ADMIN-ONLY', organization_id: 'test-org' },
@@ -14,7 +14,7 @@ const contractors = [{ user_id: 'test-contractor', email: 'contractor@example.in
 const response = (data, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => data });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 
-function fixture() {
+function fixture({ actualSignIn = false } = {}) {
   const elements = new Map();
   class Element {
     constructor(id = '') {
@@ -68,6 +68,7 @@ function fixture() {
   });
   context.signOutButton.addEventListener('click', () => { context.accessToken = null; context.currentUser = null; context.workOrderRows = []; });
   get('editor').classes.add('hidden'); get('assignee').value = 'test-contractor'; get('edit-assignee').value = 'test-contractor';
+  if (actualSignIn) vm.runInContext(source('app.js').match(/async function signInWithPassword[\s\S]*?\n}\n/)[0], context);
   vm.runInContext(source('session.js'), context);
   vm.runInContext(source('app.js').match(/function verifyAdminRls[\s\S]*?\n}\n/)[0], context);
   vm.runInContext(source('auto-refresh.js'), context);
@@ -162,7 +163,7 @@ test('a delayed token refresh cannot restore a signed-out session', async () => 
 test('a temporary token-refresh failure preserves the session for a later retry', async () => {
   const f = fixture(); f.run("storeAdminSession({access_token:accessToken, refresh_token:'test-refresh', expires_at:1})");
   f.context.fetch = async () => { throw Error('Network unavailable'); };
-  await assert.rejects(f.run('ensureFreshAdminSession()'), /Network/); assert.equal(f.context.accessToken, 'test-old-access'); assert.equal(f.storage.size, 1);
+  await assert.rejects(f.run('ensureFreshAdminSession()'), /connection failed/); assert.equal(f.context.accessToken, 'test-old-access'); assert.equal(f.storage.size, 1);
 });
 
 test('rejected refresh and changed Admin authority fail closed', async () => {
@@ -186,4 +187,168 @@ test('a body arriving after sign-out cannot expose or apply the previous login d
   const apiResponse = await f.run('adminFetch("https://example.invalid/auth/v1/user")');
   const payload = apiResponse.json(); f.context.signOutButton.click(); body.resolve(user);
   await assert.rejects(payload, /session changed/); assert.equal(f.context.currentUser, null);
+});
+
+test('fresh-token data denial retains its code and stage, clears access and never retries', async () => {
+  const f = fixture(); let requests = 0;
+  f.context.fetch = async () => {
+    requests++;
+    return response({code:'PGRST303',message:'JWT issued at future',details:'PRIVATE-TOKEN',hint:'PRIVATE-EMAIL'},401);
+  };
+  await assert.rejects(f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders?address=PRIVATE-ADDRESS")'),error=>{
+    assert.equal(error.status,401);assert.equal(error.code,'PGRST303');
+    assert.equal(error.requestStage,'loading work orders');assert.ok(error.elapsedMs>=0);
+    assert.match(error.message,/token time validation/);
+    assert.doesNotMatch(error.message,/expired|PRIVATE|https:/);
+    return true;
+  });
+  assert.equal(requests,1);assert.equal(f.storage.size,0);assert.equal(f.context.accessToken,null);
+  assert.equal(f.context.currentUser,null);assert.equal(f.context.workOrderRows.length,0);
+  assert.match(f.calls.messages.at(-1),/PGRST303/);
+});
+
+test('an old denial body cannot sign out a newer authenticated session',async()=>{
+  const f=fixture(),body=deferred();
+  f.context.fetch=async()=>({ok:false,status:401,json:()=>body.promise});
+  const request=f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")');
+  await new Promise(resolve=>setImmediate(resolve));
+  f.context.signOutButton.click();
+  f.context.accessToken='test-other-access';f.context.currentUser={...user,id:'other-admin'};
+  f.run("storeAdminSession({access_token:accessToken,refresh_token:'other-refresh',expires_in:3600})");
+  body.resolve({code:'PGRST303'});
+  await assert.rejects(request,/session changed/);
+  assert.equal(f.context.accessToken,'test-other-access');assert.equal(f.storage.size,1);
+  assert.equal(f.calls.messages.some(message=>message.includes('PGRST303')),false);
+});
+
+test('fetch and body timeouts identify the request without retaining transport text',async()=>{
+  for(const bodyTimeout of [false,true]){
+    const f=fixture();
+    const issue=new Error('PRIVATE-TRANSPORT');issue.name='TimeoutError';
+    f.context.fetch=async()=>{
+      if(!bodyTimeout)throw issue;
+      return {ok:true,status:200,json:async()=>{throw issue;}};
+    };
+    await assert.rejects((async()=>{
+      const result=await f.run('adminFetch(SUPABASE_URL+"/rest/v1/rpc/admin_list_assignable_users")');
+      return result.json();
+    })(),error=>{
+      assert.equal(error.name,'TimeoutError');assert.equal(error.requestStage,'loading contractors');
+      assert.doesNotMatch(JSON.stringify(error),/PRIVATE/);return true;
+    });
+  }
+});
+
+function loginFixture() {
+  const f=fixture({actualSignIn:true});let submit;
+  Object.assign(f.context,{
+    loginForm:{addEventListener:(_event,callback)=>{submit=callback;}},
+    emailInput:{value:'fixture@example.invalid'},passwordInput:{value:'SYNTHETIC-PASSWORD'},
+    RecoveryGallery:{reset(){},async show(){throw Error('no recovery grant');}},
+    authHeaders:()=>({})
+  });
+  f.context.currentUser=null;f.context.accessToken=null;f.context.workOrderRows=[];
+  vm.runInContext(source('app.js').match(/async function fetchCurrentUser[\s\S]*?\n}\n/)[0],f.context);
+  vm.runInContext(source('app.js').match(/loginForm\.addEventListener\('submit',[\s\S]*?\n}\);/)[0],f.context);
+  return {...f,submit:()=>submit({preventDefault(){}})};
+}
+
+test('login separates successful password Auth from failed initial work access',async()=>{
+  const f=loginFixture();let tokenCalls=0;
+  f.context.fetch=async url=>{
+    if(url.includes('/token')){tokenCalls++;return response({access_token:'new-access',refresh_token:'new-refresh',expires_in:3600});}
+    if(url.endsWith('/user'))return response(user);
+    return response({code:'PGRST303',message:'JWT issued at future'},401);
+  };
+  f.context.fetchWorkOrders=async()=>f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")');
+  await f.submit();
+  assert.equal(tokenCalls,1);assert.equal(f.context.passwordInput.value,'');
+  assert.equal(f.context.currentUser,null);assert.equal(f.context.accessToken,null);assert.equal(f.storage.size,0);
+  assert.match(f.calls.messages.at(-1),/loading work orders.*PGRST303/);
+  assert.doesNotMatch(f.calls.messages.at(-1),/session expired/);
+});
+
+test('login work timeout preserves only verified tab credentials and reports the data stage',async()=>{
+  const f=loginFixture();
+  f.context.fetch=async url=>{
+    if(url.includes('/token'))return response({access_token:'new-access',refresh_token:'new-refresh',expires_in:3600});
+    if(url.endsWith('/user'))return response(user);
+    const issue=new Error('PRIVATE-TRANSPORT');issue.name='TimeoutError';throw issue;
+  };
+  f.context.fetchWorkOrders=async()=>f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")');
+  await f.submit();
+  assert.equal(f.storage.size,1);assert.match([...f.storage.values()][0],/new-refresh/);
+  assert.equal(f.context.currentUser,null);assert.equal(f.context.accessToken,null);assert.equal(f.context.workOrderRows.length,0);
+  assert.match(f.calls.messages.at(-1),/timed out while loading work orders/);
+  assert.doesNotMatch(f.calls.messages.at(-1),/PRIVATE|new-refresh|SYNTHETIC-PASSWORD/);
+});
+
+test('password rejection and user-verification timeout have distinct safe login stages',async()=>{
+  for(const passwordDenied of [true,false]){
+    const f=loginFixture();f.storage.clear();
+    f.context.fetch=async url=>{
+      if(url.includes('/token'))return passwordDenied
+        ?response({error_code:'invalid_credentials',message:'PRIVATE-ACCOUNT'},400)
+        :response({access_token:'new-access',refresh_token:'new-refresh',expires_in:3600});
+      const issue=new Error('PRIVATE-URL');issue.name='TimeoutError';throw issue;
+    };
+    await f.submit();
+    assert.match(f.calls.messages.at(-1),passwordDenied?/signing in.*HTTP 400.*invalid_credentials/:/verifying your account/);
+    assert.doesNotMatch(f.calls.messages.at(-1),/PRIVATE/);assert.equal(f.storage.size,0);
+    assert.equal(f.context.accessToken,null);assert.equal(f.context.currentUser,null);
+  }
+});
+
+test('malicious HTTP error fields never reach diagnostic messages',async()=>{
+  const f=fixture();
+  f.context.fetch=async()=>response({code:'PRIVATE-CODE',message:'PRIVATE-MESSAGE',error_code:'PRIVATE-EMAIL'},401);
+  await assert.rejects(f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")'),error=>{
+    assert.equal(error.code,undefined);assert.doesNotMatch(error.message,/PRIVATE/);return true;
+  });
+});
+
+test('restore of a rejected user request reports its code without rotating or reopening access',async()=>{
+  const f=fixture();let requests=0;
+  f.context.authHeaders=()=>({});f.context.RecoveryGallery={reset(){}};
+  vm.runInContext(source('app.js').match(/async function fetchCurrentUser[\s\S]*?\n}\n/)[0],f.context);
+  f.context.fetch=async()=>{requests++;return response({code:'PGRST303'},401);};
+  await f.run('restoreAdminSession()');
+  assert.equal(requests,1);assert.equal(f.storage.size,0);assert.equal(f.context.accessToken,null);
+  assert.match(f.calls.messages.at(-1),/verifying your account.*PGRST303/);
+});
+
+test('superseded password login failure cannot clear a newer verified login',async()=>{
+  const f=loginFixture(),body=deferred();let workRequests=0;
+  f.context.fetch=async url=>{
+    if(url.includes('/token'))return response({access_token:'new-access',refresh_token:'new-refresh',expires_in:3600});
+    if(url.endsWith('/user'))return response(user);
+    workRequests++;
+    return workRequests===1?{ok:false,status:401,json:()=>body.promise}:response([]);
+  };
+  f.context.fetchWorkOrders=async()=>{
+    const result=await f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")');return result.json();
+  };
+  const previous=f.submit();await new Promise(resolve=>setImmediate(resolve));
+  await f.submit();
+  body.resolve({code:'PGRST303'});await previous;
+  assert.equal(f.context.accessToken,'new-access');assert.equal(f.context.currentUser.id,user.id);
+  assert.equal(f.storage.size,1);assert.equal(f.calls.messages.some(message=>message.includes('PGRST303')),false);
+});
+
+test('disabled-work explanation survives denied recovery without revealing arbitrary server text',async()=>{
+  const f=loginFixture();f.storage.clear();let recoveryReads=0;
+  f.context.RecoveryGallery.show=async()=>{recoveryReads++;throw Error('no recovery grant');};
+  f.context.fetch=async url=>{
+    if(url.includes('/token'))return response({access_token:'new-access',refresh_token:'new-refresh',expires_in:3600});
+    if(url.endsWith('/user'))return response(user);
+    return response({message:'Office work access disabled',details:'PRIVATE-ACCOUNT'},403);
+  };
+  f.context.fetchWorkOrders=async()=>{
+    const result=await f.run('adminFetch(SUPABASE_URL+"/rest/v1/work_orders")');
+    throw await f.context.adminHttpFailure(result,result.adminRequestStage,result.adminRequestStartedAt);
+  };
+  await f.submit();
+  assert.equal(recoveryReads,1);assert.equal(f.context.accessToken,null);assert.equal(f.context.currentUser,null);
+  assert.equal(f.storage.size,0);assert.match(f.calls.messages.at(-1),/Office work access disabled/);
+  assert.doesNotMatch(f.calls.messages.at(-1),/PRIVATE/);
 });

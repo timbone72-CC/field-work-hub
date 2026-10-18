@@ -1,0 +1,11 @@
+# FWH development bucket manifest. This local CLI label is not the hosted project ref.
+# `supabase seed buckets --linked` is a governed provider setup step, NOT automatic.
+project_id = "field-work-hub"
+
+[db]
+major_version = 17
+
+[storage.buckets.fwh-review-private]
+public = false
+file_size_limit = "32MiB"
+allowed_mime_types = ["image/jpeg"]

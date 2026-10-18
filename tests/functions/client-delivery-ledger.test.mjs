@@ -1,0 +1,124 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createServiceLedger} from '../../supabase/functions/client-delivery/service-ledger.mjs';
+import {DriveUncertain} from '../../supabase/functions/client-delivery/drive-client.mjs';
+const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+const token='legacyheader.legacypayload.legacysignature';
+function mock(reply=()=>Response.json({claimed:false})){
+ const calls=[];
+ const ledger=createServiceLedger({url:'https://fwh-test.supabase.co',serviceRoleJwt:token,
+  fetcher:async(url,options)=>{calls.push({url,options});return reply(new URL(url),options);}});
+ return {ledger,calls};
+}
+test('only current legacy service JWT can access allowlisted private worker RPCs',async()=>{
+ for(const params of [{url:'http://fwh-test.supabase.co',serviceRoleJwt:token},
+  {url:'https://evil.invalid',serviceRoleJwt:token},
+  {url:'https://fwh-test.supabase.co',serviceRoleJwt:'sb_publishable_public'},
+  {url:'https://fwh-test.supabase.co',serviceRoleJwt:token+'\n'}]){
+  assert.throws(()=>createServiceLedger(params),DriveUncertain);
+ }
+ const {ledger,calls}=mock();
+ assert.deepEqual(await ledger.claim(uuid(1)),{claimed:false});
+ assert.equal(calls.length,1);
+ assert.equal(new URL(calls[0].url).pathname,'/rest/v1/rpc/service_claim_delivery');
+ assert.equal(calls[0].options.headers.apikey,token);
+ assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
+ assert.equal(calls[0].options.redirect,'error');
+ assert.ok(!JSON.stringify(await ledger.claim(uuid(1))).includes(token));
+});
+test('correct fenced lease identity is supplied for all upload session and delivery RPCs',async()=>{
+ const pkg=uuid(1),worker=uuid(2),file=uuid(3),g=7;
+ const {ledger,calls}=mock(url=>Response.json(
+   url.pathname.endsWith('/service_begin_upload_session')
+     ? {plan_id:file,start_recorded:true} : {exists:false}));
+ const inner=ledger.forLease(pkg,worker,g);
+ assert.equal(await inner.getSession(file),null);
+ await inner.getFilePlan(file);
+ assert.deepEqual(await inner.beginSession(file),{plan_id:file,start_recorded:true});
+ await inner.storeSession(pkg,worker,g,file,{version:1,nonce:'none',payload:'encrypted'});
+ await inner.recordOffset(pkg,worker,g,file,131072,false);
+ await inner.confirmFile({package_id:pkg,kind:'PHOTO',photo_id:uuid(4),mime:'image/jpeg'},
+  worker,g,{id:'drive-file-123456',parent:'folder-123456',sha256:'a'.repeat(64),size:100});
+ assert.deepEqual(calls.map(c=>new URL(c.url).pathname.split('/').pop()),
+  ['service_read_upload_session','service_get_delivery_file_plan','service_begin_upload_session',
+   'service_store_upload_session','service_record_upload_offset','service_confirm_delivery_file']);
+ for(const c of calls){
+   assert.equal(JSON.parse(c.options.body).p_package,pkg);
+   assert.equal(JSON.parse(c.options.body).p_worker,worker);
+   assert.equal(JSON.parse(c.options.body).p_generation,g);
+ }
+});
+test('scoped address and WO folder lookups retain server-only current-lease arguments',async()=>{
+ const pkg=uuid(1),worker=uuid(2),g=7;
+ const {ledger,calls}=mock(()=>Response.json({exists:false}));
+ await ledger.readParent(pkg,worker,g,'ADDRESS');
+ await ledger.reserveParent(pkg,worker,g,'ADDRESS','generated-folder-0001','root-folder-0001');
+ await ledger.readParent(pkg,worker,g,'WORK_ORDER');
+ await ledger.reserveParent(pkg,worker,g,'WORK_ORDER','generated-folder-0002','generated-folder-0001');
+ assert.deepEqual(calls.map(c=>new URL(c.url).pathname.split('/').pop()),[
+  'service_read_delivery_parent','service_reserve_delivery_parent',
+  'service_read_delivery_parent','service_reserve_delivery_parent']);
+ for(const call of calls){
+   const arg=JSON.parse(call.options.body);
+   assert.equal(arg.p_package,pkg);
+   assert.equal(arg.p_worker,worker);
+   assert.equal(arg.p_generation,g);
+   assert.ok(['ADDRESS','WORK_ORDER'].includes(arg.p_kind));
+   assert.equal(call.options.headers.Authorization,'Bearer '+token);
+   assert.equal(call.options.redirect,'error');
+ }
+ const mapId=uuid(9),proof={id:'generated-folder-0001',parent:'root-folder-0001',name:'address-123'};
+ await ledger.beginParentCreate(pkg,worker,g,mapId);
+ await ledger.confirmParent(pkg,worker,g,mapId,proof);
+ assert.deepEqual(calls.slice(-2).map(call=>new URL(call.url).pathname.split('/').pop()),[
+   'service_begin_delivery_parent_create','service_confirm_delivery_parent']);
+ const begin=JSON.parse(calls.at(-2).options.body);
+ const confirm=JSON.parse(calls.at(-1).options.body);
+ for(const a of [begin,confirm]){
+   assert.equal(a.p_package,pkg);assert.equal(a.p_worker,worker);
+   assert.equal(a.p_generation,g);assert.equal(a.p_map,mapId);
+ }
+ assert.deepEqual(confirm.p_proof,proof);
+ const missing=JSON.parse(calls[0].options.body);
+ assert.equal('p_remote_id' in missing,false);
+ const present=JSON.parse(calls[1].options.body);
+ assert.equal(present.p_remote_id,'generated-folder-0001');
+ assert.equal(present.p_parent_id,'root-folder-0001');
+});
+test('package folder uses current fenced lease for one-shot get/begin/confirm',async()=>{
+ const pkg=uuid(1),worker=uuid(2),plan=uuid(3),generation=7;
+ const {ledger,calls}=mock(()=>Response.json({state:'PREALLOCATED'}));
+ const scoped=ledger.forLease(pkg,worker,generation);
+ await scoped.getFolderPlan(plan);
+ await scoped.beginFolderCreate(plan);
+ await scoped.confirmFolder({package_id:pkg,plan_id:plan},worker,generation,{
+   id:'folder_immutable_12345',parent:'wo_immutable_123456',
+   name:'package-'+pkg,mime:'application/vnd.google-apps.folder',
+   drive_id:'client_drive_001',trashed:false,
+   appProperties:{fwh_package:pkg,fwh_manifest:'a'.repeat(64)},
+   sha256:null,size:null
+ });
+ assert.deepEqual(calls.map(x=>new URL(x.url).pathname.split('/').pop()),[
+   'service_get_delivery_folder_plan','service_begin_delivery_folder_create',
+   'service_confirm_delivery_folder']);
+ for(const call of calls){
+   const body=JSON.parse(call.options.body);
+   assert.equal(body.p_package,pkg);
+   assert.equal(body.p_worker,worker);
+   assert.equal(body.p_generation,generation);
+   assert.equal(body.p_plan,plan);
+   assert.equal(call.options.headers.Authorization,'Bearer '+token);
+ }
+ assert.equal(JSON.parse(calls[2].options.body).p_proof.drive_id,'client_drive_001');
+});
+test('unauthorized and ambiguous backend failures never reveal service secrets or claim delivery',async()=>{
+ for(const status of [401,403,503]){
+  const {ledger}=mock(()=>Response.json({secret:'not to show'}, {status}));
+  await assert.rejects(()=>ledger.claim(uuid(1)),e=>
+   e instanceof DriveUncertain&&e.code===(status===503?'SERVICE_RPC_UNAVAILABLE':'SERVICE_RPC_AUTH_DENIED')
+    &&!e.message.includes('not to show'));
+ }
+ const {ledger}=mock(()=>{throw Error('private backend failed');});
+ await assert.rejects(()=>ledger.claim(uuid(1)),e=>
+  e instanceof DriveUncertain&&e.code==='SERVICE_RPC_OUTCOME_UNCERTAIN');
+});

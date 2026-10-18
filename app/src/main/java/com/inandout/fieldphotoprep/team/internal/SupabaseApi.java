@@ -5,7 +5,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -13,14 +15,28 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 final class SupabaseApi
         implements AssignmentRepository.Remote,
                 SessionCoordinator.Remote,
-                ActionSyncCoordinator.Remote {
+                ActionSyncCoordinator.Remote,
+                PhotoTransferCoordinator.Remote {
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 20_000;
+    private static final String TUS_VERSION = "1.0.0";
+    private static final String TUS_PATH = "/storage/v1/upload/resumable";
+    private final okhttp3.OkHttpClient tusClient =
+            new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .readTimeout(READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    .writeTimeout(60_000, TimeUnit.MILLISECONDS)
+                    .followRedirects(false)
+                    .followSslRedirects(false)
+                    .retryOnConnectionFailure(false)
+                    .build();
 
     static final class AuthSession {
         final String accessToken;
@@ -72,6 +88,11 @@ final class SupabaseApi
         String conflictReason = "";
         String pendingKind = "";
         String requirementSnapshotJson = "{}";
+        String acknowledgmentReceivedAt = "";
+        String acknowledgedAt = "";
+        String reopenReason = "";
+        boolean acceptPending = false;
+        String teamHandoffRequestId = "";
 
         WorkOrder(
                 String id,
@@ -206,6 +227,9 @@ final class SupabaseApi
                             nullableString(row, "field_completed_at"),
                             nullableString(row, "updated_at"));
             workOrder.assignmentInstanceId = nullableString(row, "assignment_instance_id");
+            workOrder.acknowledgmentReceivedAt = nullableString(row, "acknowledgment_received_at");
+            workOrder.acknowledgedAt = nullableString(row, "acknowledged_at");
+            workOrder.reopenReason = nullableString(row, "reopen_reason");
             workOrder.requirementSnapshotJson = row.has("requirement_snapshot") ? row.getJSONObject("requirement_snapshot").toString() : "{}";
             workOrders.add(workOrder);
         }
@@ -228,8 +252,54 @@ final class SupabaseApi
         postRpc(accessToken, "respond_reassignment", request);
     }
 
+    // Online-only, exact-job consent. The request is not cached as a field action,
+    // reassignment, or photo; no offline tap can falsely approve an office move.
+    void attachPendingTeamHandoffConsents(String token, List<WorkOrder> orders)
+            throws IOException, JSONException, ApiException {
+        JSONArray pending = new JSONArray(postRpc(token,
+                "pending_work_order_team_handoff_consents", new JSONObject()));
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject item = pending.getJSONObject(i);
+            String workOrderId = nullableString(item, "work_order_id");
+            String requestId = nullableString(item, "request_id");
+            if (requestId.isEmpty() || workOrderId.isEmpty())
+                throw new IllegalStateException("Invalid team-handoff consent identity");
+            for (WorkOrder workOrder : orders) {
+                if (workOrder.id.equals(workOrderId)
+                        && "IN_PROGRESS".equals(workOrder.fieldStatus)) {
+                    if (!workOrder.teamHandoffRequestId.isEmpty())
+                        throw new IllegalStateException("Duplicate team-handoff consent");
+                    workOrder.teamHandoffRequestId = requestId;
+                }
+            }
+        }
+    }
+
+    void respondTeamHandoffConsent(String token, String requestId, boolean accept)
+            throws IOException, JSONException, ApiException {
+        JSONObject request = new JSONObject();
+        request.put("p_request", requestId);
+        request.put("p_accept", accept);
+        String response = postRpc(token, "respond_work_order_team_handoff_consent", request);
+        JSONObject result = new JSONObject(response);
+        if (!requestId.equals(nullableString(result, "request_id"))
+                || !(accept ? "APPROVED" : "DECLINED").equals(
+                        nullableString(result, "status")))
+            throw new IllegalStateException("Team-handoff consent receipt did not match request");
+    }
+
     @Override
     public FieldActionResult submit(String accessToken, FieldAction action) throws Exception {
+        if ("ACK".equals(action.kind)) {
+            JSONObject ack = new JSONObject();
+            ack.put("p_action_id", action.actionId);
+            ack.put("p_work_order_id", action.workOrderId);
+            ack.put("p_run_id", action.runId);
+            ack.put("p_assignment_instance_id", action.assignmentInstanceId);
+            ack.put("p_event_time", action.eventTime);
+            return new FieldActionResult(action,
+                    postRpc(accessToken, "acknowledge_assignment_acceptance", ack));
+        }
         JSONObject request = new JSONObject();
         request.put("p_action_id", action.actionId);
         request.put("p_work_order_id", action.workOrderId);
@@ -258,6 +328,227 @@ final class SupabaseApi
             return new FieldActionResult(action, postRpc(accessToken,"accept_field_action_v4",request));
         }
         return new FieldActionResult(action, postRpc(accessToken, "accept_field_action", request));
+    }
+
+    @Override
+    public PhotoTransferCoordinator.Registration register(String accessToken, PhotoTransfer row)
+            throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("p_action", row.beginActionId);
+        request.put("p_photo", row.photoId);
+        request.put("p_prepared_sha256", row.preparedSha256);
+        request.put("p_prepared_size", row.preparedSize);
+        JSONObject result = new JSONObject(postRpc(accessToken, "begin_photo_transfer", request));
+        if (result.length() != 7)
+            throw new IllegalStateException("Private registration response was not exact.");
+        return new PhotoTransferCoordinator.Registration(
+                result.getString("photo_id"),
+                result.getString("transfer_version"),
+                result.getString("bucket"),
+                result.getString("object_key"),
+                result.getString("prepared_sha256"),
+                result.getLong("prepared_size"),
+                result.getString("state"));
+    }
+
+    @Override
+    public PhotoTransferCoordinator.Status status(String accessToken, PhotoTransfer row)
+            throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("p_photo", row.photoId);
+        request.put("p_transfer_version", row.transferVersion);
+        String body = postRpc(accessToken, "photo_transfer_status", request);
+        JSONObject result = new JSONObject(body);
+        String state = result.getString("state");
+        int expected = "RECEIVED".equals(state) ? 4 : 3;
+        if (result.length() != expected)
+            throw new IllegalStateException("Private transfer status response was not exact.");
+        return new PhotoTransferCoordinator.Status(
+                result.getString("photo_id"),
+                result.getString("transfer_version"),
+                state,
+                "RECEIVED".equals(state) ? body : "");
+    }
+
+    @Override
+    public String createSession(String accessToken, PhotoTransfer row) throws Exception {
+        if (!"fwh-review-private".equals(row.bucket) || row.objectKey.isEmpty()
+                || row.preparedSize <= 0 || row.preparedSize > PhotoTransferDao.MAX_PREPARED_BYTES)
+            throw new IllegalStateException("Private TUS creation binding is incomplete.");
+        String endpoint = storageOrigin() + TUS_PATH;
+        String metadata = tusMetadata("bucketName", row.bucket)
+                + "," + tusMetadata("objectName", row.objectKey)
+                + "," + tusMetadata("contentType", "image/jpeg")
+                + "," + tusMetadata("cacheControl", "3600");
+        okhttp3.Request request = new okhttp3.Request.Builder()
+                .url(endpoint)
+                .header("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Tus-Resumable", TUS_VERSION)
+                .header("Upload-Length", Long.toString(row.preparedSize))
+                .header("Upload-Metadata", metadata)
+                .post(okhttp3.RequestBody.create(new byte[0]))
+                .build();
+        try (okhttp3.Response response = tusClient.newCall(request).execute()) {
+            if (response.code() != 201)
+                throw apiException(response, "Resumable session creation failed.");
+            String location = response.header("Location", "");
+            if (location.isEmpty()) throw new IOException("Resumable session omitted Location.");
+            String resolved = new URL(new URL(endpoint), location).toString();
+            if (!PhotoTransferDao.safeTusUrl(resolved))
+                throw new IOException("Resumable session returned an untrusted location.");
+            return resolved;
+        }
+    }
+
+    @Override
+    public PhotoTransferCoordinator.Head head(String accessToken, PhotoTransfer row)
+            throws Exception {
+        if (!PhotoTransferDao.safeTusUrl(row.tusUrl))
+            throw new IOException("Saved resumable session URL is not trusted.");
+        okhttp3.Request request = tusRequest(row.tusUrl, accessToken).head().build();
+        try (okhttp3.Response response = tusClient.newCall(request).execute()) {
+            if (response.code() == 404 || response.code() == 410)
+                return PhotoTransferCoordinator.Head.missing();
+            if (response.code() != 200)
+                throw apiException(response, "Resumable session reconciliation failed.");
+            long offset = requiredLongHeader(response, "Upload-Offset");
+            long length = requiredLongHeader(response, "Upload-Length");
+            if (offset < 0 || length < 0 || offset > length)
+                throw new IOException("Resumable session returned invalid progress.");
+            return PhotoTransferCoordinator.Head.present(length, offset);
+        }
+    }
+
+    @Override
+    public long patch(String accessToken, PhotoTransfer row, File prepared, int maxBytes)
+            throws Exception {
+        if (!PhotoTransferDao.safeTusUrl(row.tusUrl) || maxBytes != PhotoTransferCoordinator.TUS_CHUNK_BYTES)
+            throw new IOException("Resumable upload parameters are not trusted.");
+        long remaining = row.preparedSize - row.confirmedOffset;
+        if (remaining <= 0) return row.confirmedOffset;
+        int count = (int) Math.min((long) maxBytes, remaining);
+        okhttp3.RequestBody body = new PreparedChunkBody(
+                prepared, row.confirmedOffset, count, row.preparedSize);
+        okhttp3.Request request = tusRequest(row.tusUrl, accessToken)
+                .header("Upload-Offset", Long.toString(row.confirmedOffset))
+                .patch(body)
+                .build();
+        try (okhttp3.Response response = tusClient.newCall(request).execute()) {
+            if (response.code() != 204)
+                throw apiException(response, "Resumable photo chunk was not confirmed.");
+            long offset = requiredLongHeader(response, "Upload-Offset");
+            if (offset < row.confirmedOffset || offset > row.preparedSize)
+                throw new IOException("Resumable upload returned invalid progress.");
+            return offset;
+        }
+    }
+
+    @Override
+    public String verify(String accessToken, PhotoTransfer row) throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("action_id", row.verificationActionId);
+        request.put("photo_id", row.photoId);
+        request.put("transfer_version", row.transferVersion);
+        return postEdge(accessToken, "verify-private-photo", request);
+    }
+
+    private String postEdge(String accessToken, String functionName, JSONObject request)
+            throws IOException, ApiException {
+        URL url = new URL(SupabaseConfig.PROJECT_URL + "/functions/v1/" + functionName);
+        HttpURLConnection connection = open(url);
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        addAuthHeaders(connection, accessToken);
+        connection.setRequestProperty("Content-Type", "application/json");
+        byte[] payload = request.toString().getBytes(StandardCharsets.UTF_8);
+        connection.setFixedLengthStreamingMode(payload.length);
+        try (OutputStream output = connection.getOutputStream()) {
+            output.write(payload);
+        }
+        int status = connection.getResponseCode();
+        String body = readBody(connection, status);
+        long retryAfter = retryDelay(connection.getHeaderField("Retry-After"));
+        connection.disconnect();
+        if (status < 200 || status >= 300)
+            throw new ApiException(status, extractErrorMessage(status, body), retryAfter);
+        return body;
+    }
+
+    private okhttp3.Request.Builder tusRequest(String url, String accessToken) {
+        return new okhttp3.Request.Builder()
+                .url(url)
+                .header("apikey", SupabaseConfig.PUBLISHABLE_KEY)
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Tus-Resumable", TUS_VERSION);
+    }
+
+    private static String storageOrigin() throws IOException {
+        URL project = new URL(SupabaseConfig.PROJECT_URL);
+        String host = project.getHost();
+        if (!"https".equals(project.getProtocol()) || !host.endsWith(".supabase.co"))
+            throw new IOException("Configured Supabase origin is invalid.");
+        return "https://" + host.substring(0, host.length() - ".supabase.co".length())
+                + ".storage.supabase.co";
+    }
+
+    private static String tusMetadata(String key, String value) {
+        return key + " " + Base64.getEncoder().encodeToString(
+                value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static long requiredLongHeader(okhttp3.Response response, String name)
+            throws IOException {
+        String value = response.header(name);
+        if (value == null) throw new IOException("Resumable response omitted " + name + ".");
+        try { return Long.parseLong(value); }
+        catch (NumberFormatException error) {
+            throw new IOException("Resumable response had invalid " + name + ".", error);
+        }
+    }
+
+    private static ApiException apiException(okhttp3.Response response, String fallback)
+            throws IOException {
+        String body = response.body() == null ? "" : response.body().string();
+        String message = extractErrorMessage(response.code(), body);
+        if (message.startsWith("Request failed")) message = fallback;
+        return new ApiException(response.code(), message,
+                retryDelay(response.header("Retry-After")));
+    }
+
+    private static final class PreparedChunkBody extends okhttp3.RequestBody {
+        private static final okhttp3.MediaType TYPE =
+                okhttp3.MediaType.get("application/offset+octet-stream");
+        private final File file;
+        private final long offset, expectedSize;
+        private final int count;
+
+        PreparedChunkBody(File file, long offset, int count, long expectedSize) {
+            this.file = file; this.offset = offset; this.count = count;
+            this.expectedSize = expectedSize;
+        }
+
+        @Override public okhttp3.MediaType contentType() { return TYPE; }
+        @Override public long contentLength() { return count; }
+        @Override public boolean isOneShot() { return true; }
+
+        @Override public void writeTo(okio.BufferedSink sink) throws IOException {
+            if (!file.isFile() || file.length() != expectedSize)
+                throw new IOException("Prepared photo changed before upload.");
+            try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+                input.seek(offset);
+                byte[] buffer = new byte[64 * 1024];
+                int remaining = count;
+                while (remaining > 0) {
+                    int read = input.read(buffer, 0, Math.min(buffer.length, remaining));
+                    if (read < 0) throw new IOException("Prepared photo ended during upload.");
+                    sink.write(buffer, 0, read);
+                    remaining -= read;
+                }
+            }
+            if (file.length() != expectedSize)
+                throw new IOException("Prepared photo changed during upload.");
+        }
     }
 
     private String postRpc(String accessToken, String functionName, JSONObject request)
