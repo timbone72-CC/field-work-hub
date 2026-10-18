@@ -212,3 +212,68 @@ export async function continueTrustedGeographicLeaf({
   ledger:geographicLedger,expectedDriveId
  });
 }
+
+
+// Phase 5A/D source candidate: read-only Google account/root proof for an
+// existing *INACTIVE* server-side client proposal. The two service RPCs are
+// deliberately not present in the hosted TEST-only verifier until their
+// canonical SQL migrations, current team scope and private TEST configuration
+// are staged. No public/browser operation or activation is introduced.
+export async function preflightInactiveClientDestination({
+  ledger, tokenProvider, actionId, destinationId, organizationId, companyId,
+  expectedEmail, expectedDriveId, expectedRootId, internalDriveId,
+  testEvidenceClass, fetcher=fetch
+}={}){
+  const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ID=/^[A-Za-z0-9_-]{10,160}$/;
+  if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+    ||![actionId,destinationId,organizationId,companyId].every(x=>UUID.test(x??''))
+    ||typeof expectedEmail!=='string'||!/^[-._+a-z0-9]+@[-.a-z0-9]+\.[a-z]{2,}$/i.test(expectedEmail)
+    ||expectedEmail!==expectedEmail.toLowerCase()
+    ||![expectedRootId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+    ||new Set([expectedRootId,expectedDriveId,internalDriveId]).size!==3
+    ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+    ||typeof ledger?.readClientDestination!=='function'
+    ||typeof ledger?.recordClientDestinationPreflight!=='function')
+    throw new DriveUncertain('TEST_CLIENT_DESTINATION_PREFLIGHT_NOT_CONFIGURED');
+  // Never get org, client or root authority from a browser request.
+  const candidate=await ledger.readClientDestination(destinationId);
+  if(!candidate||candidate.destination_id!==destinationId
+    ||candidate.organization_id!==organizationId
+    ||candidate.company_id!==companyId
+    ||!UUID.test(candidate.revision??'')
+    ||candidate.provider!=='GOOGLE_DRIVE'
+    ||candidate.provider_identity!==expectedEmail
+    ||candidate.root_folder_id!==expectedRootId
+    ||candidate.verified!==false||candidate.active!==false)
+    throw new DriveUncertain('TEST_CLIENT_DESTINATION_SCOPE_MISMATCH');
+  // Provider operations are GET only. No file ID generation/create/send.
+  let auth;
+  try{auth=await tokenProvider();}
+  catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+  if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+    ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+    throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+  const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+  const verifiedAccount=await drive.verifyProviderIdentity(expectedEmail);
+  const verifiedRoot=await drive.verifyDestination({
+    folderId:expectedRootId,expectedDriveId
+  });
+  if(verifiedAccount.account!==expectedEmail
+    ||verifiedRoot.id!==expectedRootId
+    ||verifiedRoot.drive_id!==expectedDriveId
+    ||verifiedRoot.can_add_children!==true)
+    throw new DriveUncertain('TEST_CLIENT_DESTINATION_PROVIDER_MISMATCH');
+  // Failure after a trusted POST is ambiguous. The original action UUID must
+  // be retained and replayed, never replaced with a new proposal/identity.
+  const result=await ledger.recordClientDestinationPreflight(
+    actionId,candidate,verifiedRoot.drive_id);
+  if(result?.destination_id!==destinationId||result.company_id!==companyId
+    ||result.preflight_recorded!==true||result.verified!==false
+    ||result.active!==false||typeof result.replayed!=='boolean')
+    throw new DriveUncertain('TEST_CLIENT_DESTINATION_RECEIPT_UNVERIFIED');
+  return Object.freeze({status:'CLIENT_DESTINATION_PREFLIGHT_RECORDED',
+    destination_id:destinationId,company_id:companyId,
+    provider_read_verified:true,preflight_recorded:true,
+    verified:false,active:false,replayed:result.replayed});
+}
