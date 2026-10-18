@@ -153,7 +153,9 @@ test('provider wrong account or Drive cannot record a preflight receipt',async()
     const r=rig(options);
     await assert.rejects(()=>runClientDestinationPreflight(r.config));
     assert.equal(r.calls.writes.length,0);
-    assert.equal(r.calls.google.length,2);
+    // A mismatched account is rejected after about.get; a wrong Drive
+    // requires the second exact root GET. Neither reaches the receipt RPC.
+    assert.equal(r.calls.google.length,options.providerEmail?1:2);
     assert.equal(r.calls.saved.length,1);
   }
 });
