@@ -144,3 +144,175 @@ test('service ledger uses only allowlisted authenticated RPC names and exact inp
     p_provider_identity:account,p_root:root,p_shared_drive:drive
   });
 });
+
+
+import {proveInactiveClientDestinationFolder as prove}
+ from '../../supabase/functions/client-delivery/worker-runtime.mjs';
+const proofId='fwh_disposable_client_proof_123456789';
+const proofAction=u(6),preflightAction=action;
+const proofName='FWH DISPOSABLE CLIENT PROOF '+proofAction.replaceAll('-','').slice(0,12);
+const proofProps={fwh_org:org,fwh_company:company,fwh_destination:destination,
+ fwh_kind:'ADDRESS',fwh_key:proofAction};
+const receiptProof=()=>({destination_id:destination,verified:true,active:false,replayed:false});
+function proofRig({saved=false,completed=false,postError=false,wrongGet=false,
+ wrongList=false,noPreflight=false,reserveError=false,attestError=false,
+ wrongRoot=false}={}){
+ const events=[],logs=[],plans=[];
+ const savedPlan={
+  exists:true,completed,action_id:proofAction,preflight_action_id:preflightAction,
+  destination_id:destination,organization_id:org,company_id:company,
+  root_folder_id:root,drive_id:drive,folder_id:proofId,folder_name:proofName,
+  revision,provider_identity:account
+ };
+ const ledger={
+  readClientDestinationProviderProof:async id=>{events.push('READ_PLAN');assert.equal(id,destination);
+    return saved?savedPlan:{exists:false};},
+  readClientDestination:async id=>{events.push('READ_CANDIDATE');assert.equal(id,destination);
+    return wrongRoot?{...candidate(),root_folder_id:'different_client_root'}:candidate();},
+  recordClientDestinationPreflight:async (...args)=>{events.push('RECORD_PREFLIGHT');
+    if(noPreflight)throw Error('preflight unavailable');
+    assert.equal(args[0],preflightAction);return receipt();},
+  reserveClientDestinationProviderProof:async (...args)=>{
+    events.push('RESERVE');
+    if(reserveError)throw Error('database reserve outcome uncertain');
+    plans.push(args);
+    return {reserved:true,replayed:false,folder_id:proofId,folder_name:proofName,
+      destination_id:destination,organization_id:org,company_id:company,
+      root_folder_id:root,drive_id:drive};
+  },
+  confirmClientDestinationProviderProof:async (...args)=>{
+   events.push('CONFIRM');
+   if(attestError)throw Error('database confirmation uncertain');
+   assert.deepEqual(args.map((x,i)=>i===2?'CANDIDATE':x),
+     [proofAction,preflightAction,'CANDIDATE',proofId,drive]);
+   return receiptProof();
+  }
+ };
+ const fetcher=async(url,opts)=>{
+  const target=new URL(url),method=opts?.method??'GET';
+  logs.push({path:target.pathname,method,query:target.searchParams.toString()});
+  if(target.pathname==='/drive/v3/about')
+   return new Response(JSON.stringify({user:{emailAddress:account,me:true,
+     permissionId:'same-trusted-provider'}}),{status:200});
+  if(target.pathname==='/drive/v3/files/generateIds')
+   return new Response(JSON.stringify({ids:[proofId]}),{status:200});
+  if(target.pathname==='/drive/v3/files/'+root)
+   return new Response(JSON.stringify({id:root,trashed:false,
+      mimeType:'application/vnd.google-apps.folder',driveId:drive,
+      capabilities:{canAddChildren:true}}),{status:200});
+  if(target.pathname==='/drive/v3/files'&&method==='POST'){
+   assert.equal(events.at(-1),'RESERVE','no POST until durable reservation');
+   const body=JSON.parse(opts.body);
+   assert.equal(body.id,proofId);assert.equal(body.parents[0],root);
+   assert.deepEqual(body.appProperties,proofProps);
+   if(postError)throw Error('remote POST outcome uncertain');
+   return new Response(JSON.stringify({id:proofId}),{status:200});
+  }
+  if(target.pathname==='/drive/v3/files/'+proofId){
+   return new Response(JSON.stringify({
+     id:proofId,trashed:false,driveId:drive,mimeType:'application/vnd.google-apps.folder',
+     name:proofName,parents:[wrongGet?'wrongParent':root],appProperties:proofProps
+   }),{status:200});
+  }
+  if(target.pathname==='/drive/v3/files'&&method==='GET'){
+   assert.equal(target.searchParams.get('driveId'),drive);
+   assert.match(target.searchParams.get('q'),/ in parents and name = /);
+   return new Response(JSON.stringify({files:[{
+     id:proofId,trashed:false,driveId:drive,
+     mimeType:'application/vnd.google-apps.folder',
+     name:proofName,parents:[root],appProperties:wrongList?
+       {...proofProps,fwh_company:u(77)}:proofProps
+   }]}),{status:200});
+  }
+  throw Error('Unexpected provider request '+method+' '+target.pathname);
+ };
+ const tokenProvider=async()=>({accessToken:'mocked-private-test-workspace-access-token',
+   expiresInSeconds:3600});
+ const config={ledger,tokenProvider,actionId:proofAction,
+  preflightActionId:preflightAction,destinationId:destination,
+  organizationId:org,companyId:company,expectedEmail:account,
+  expectedDriveId:drive,expectedRootId:root,internalDriveId:internal,
+  testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',allowProviderCreate:true,fetcher};
+ return {config,logs,events,plans};
+}
+test('new TEST proof reserves exact file ID before ONE folder POST then GET, list and receipt',async()=>{
+ const r=proofRig();
+ const result=await prove(r.config);
+ assert.deepEqual(result,{status:'CLIENT_DESTINATION_VERIFIED_INACTIVE',
+  destination_id:destination,company_id:company,verified:true,active:false,
+  replayed:false,provider_writes_performed:true});
+ const methods=r.logs.filter(x=>x.method==='POST');
+ assert.equal(methods.length,1);
+ assert.ok(r.events.indexOf('RESERVE')>=0);
+ assert.equal(r.events.at(-1),'CONFIRM');
+ assert.equal(r.plans.length,1);
+});
+test('saved reservation resumes GET/LIST, never POST or new Drive ID even when allowCreate=true',async()=>{
+ const r=proofRig({saved:true});
+ const result=await prove(r.config);
+ assert.equal(result.active,false);
+ assert.equal(result.provider_writes_performed,false);
+ assert.equal(r.logs.filter(x=>x.method==='POST').length,0);
+ assert.equal(r.logs.filter(x=>x.path.endsWith('/generateIds')).length,0);
+ assert.equal(r.events.includes('RESERVE'),false);
+ assert.equal(r.events.at(-1),'CONFIRM');
+});
+test('confirmed receipt replay cannot reopen Google create or mark destination active',async()=>{
+ const r=proofRig({saved:true,completed:true});
+ const result=await prove(r.config);
+ assert.equal(result.replayed,true);
+ assert.equal(result.verified,true);
+ assert.equal(result.active,false);
+ assert.equal(r.logs.length,0);
+ assert.deepEqual(r.events,['READ_PLAN']);
+});
+test('remote lost POST reply reconciles only same-ID GET/LIST, no blind retry',async()=>{
+ const r=proofRig({postError:true});
+ const result=await prove(r.config);
+ assert.equal(result.verified,true);
+ assert.equal(r.logs.filter(x=>x.method==='POST').length,1);
+ assert.equal(r.events.at(-1),'CONFIRM');
+});
+test('absent explicit create approval makes zero Google calls and zero reservation',async()=>{
+ const r=proofRig();
+ await assert.rejects(()=>prove({...r.config,allowProviderCreate:false}),
+  e=>e.code==='CLIENT_PROOF_CREATION_NOT_AUTHORIZED');
+ assert.deepEqual(r.events,['READ_PLAN']);assert.equal(r.logs.length,0);
+});
+test('server reservation uncertainty stops before provider POST; no alternate file ID created',async()=>{
+ const r=proofRig({reserveError:true});
+ await assert.rejects(()=>prove(r.config));
+ assert.equal(r.logs.filter(x=>x.method==='POST').length,0);
+ assert.equal(r.events.includes('CONFIRM'),false);
+});
+test('wrong remote GET or independent list cannot mark a client destination verified',async()=>{
+ for(const options of [{wrongGet:true},{wrongList:true}]){
+  const r=proofRig(options);
+  await assert.rejects(()=>prove(r.config));
+  assert.equal(r.events.includes('CONFIRM'),false);
+  assert.equal(r.logs.filter(x=>x.method==='POST').length,1);
+ }
+});
+test('wrong client/root, absent preflight or invalid TEST scope cannot begin provider creation',async()=>{
+ for(const options of [{wrongRoot:true},{noPreflight:true}]){
+  const r=proofRig(options);
+  await assert.rejects(()=>prove(r.config));
+  assert.equal(r.events.includes('RESERVE'),false);
+  assert.equal(r.logs.filter(x=>x.method==='POST').length,0);
+ }
+ for(const changes of [
+  {testEvidenceClass:'CUSTOMER'},{companyId:u(80)},{organizationId:u(81)},
+  {expectedRootId:internal},{expectedDriveId:root},{actionId:'bad'},
+  {preflightActionId:'bad'}, {expectedEmail:'wrong@example.org'}
+ ]){
+  const r=proofRig();
+  await assert.rejects(()=>prove({...r.config,...changes}));
+  assert.equal(r.events.includes('RESERVE'),false);
+  assert.equal(r.logs.filter(x=>x.method==='POST').length,0);
+ }
+});
+test('unconfirmed service receipt never implies remote delivery or activation',async()=>{
+ const r=proofRig({attestError:true});
+ await assert.rejects(()=>prove(r.config));
+ assert.equal(r.events.at(-1),'CONFIRM');
+});
