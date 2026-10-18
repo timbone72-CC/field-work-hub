@@ -124,6 +124,26 @@ async function execute(mode,attempt='original'){
    await drive.verifyFile({id:folder.id,parent:folder.parent,
      name:folder.name,mime:folder.mime,sha256:null,size:null,
      appProperties:folder.appProperties,expectedDriveId:config.driveId});
+   if(attempt==='all'){
+     // One bounded read-only exact-ID GET per existing disposable attempt.
+     // Auth refresh may POST to Google OAuth; there are no Drive file writes,
+     // new generated IDs, journal updates, session starts or byte PUTs here.
+     for(const [label,path] of [
+       ['ORIGINAL',receiptPath],['SECOND',replacementPath],['THIRD',thirdPath]
+     ]){
+       const record={read:()=>readProtected(path),
+         reserve:()=>fail('READ_ONLY_TEST_JOURNAL'),
+         update:()=>fail('READ_ONLY_TEST_JOURNAL')};
+       const result=await runDisposableFileProof({config,drive,
+         journal:record,mode:'inspect'});
+       const resultLine=result.verified===false
+         ?'BLOCKED: '+label+'_'+result.status+' ('+result.reason+')'
+         :'PASS: '+label+'_'+result.status;
+       process.stdout.write(resultLine+'. No Drive file write.\n');
+       if(result.verified===false)process.exitCode=1;
+     }
+     return;
+   }
    const result=attempt==='third'
      ?await runApprovedThirdFileProof({config,drive,
        originalJournal:{read:()=>readProtected(receiptPath)},
@@ -163,7 +183,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
    '--replacement-verify':['verify','replacement'],
    '--third-prepare':['prepare','third'],
    '--third-complete':['complete','third'],
-   '--third-verify':['verify','third']};
+   '--third-verify':['verify','third'],
+   '--inspect-all':['inspect','all']};
  const selected=modes[process.argv[2]];
  if(process.argv.length!==3||!selected){
    process.stderr.write('BLOCKED: VALID_TEST_MODE_REQUIRED\n');
