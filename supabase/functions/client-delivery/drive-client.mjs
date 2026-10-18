@@ -41,7 +41,7 @@ function fixedObject({id,parent,name,mime,appProperties}) {
 // A generous bound keeps it inside the existing protected 16-KiB local journal.
 function sessionUrl(value){
   if(typeof value!=='string'||value.length===0||value.length>12000
-    ||/[\\x00-\\x20\\x7f\\\\]/.test(value))
+    ||/[\x00-\x20\x7f\\]/.test(value))
     throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');
   let u;
   try {u=new URL(value);}catch{throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');}
