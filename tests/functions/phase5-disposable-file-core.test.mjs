@@ -31,7 +31,7 @@ function rig({failStart=false,wrongAccount=false,wrongFolder=false,failFinal=fal
       assert.equal(spec.mime,'application/json');assert.equal(size,saved.size);
       started++;
       if(failStart)throw Error('Google may have created a file before lost reply');
-      return {remote_id:fileId,total:size,session_url:
+      return {remote_id:generatedFileId,total:size,session_url:
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=proof'};
     },
     async probeResumable(session,total){events.push('probe');
