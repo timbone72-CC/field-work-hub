@@ -44,6 +44,7 @@ create function private.service_read_client_destination_provider_proof(p_destina
 returns jsonb language plpgsql stable security definer set search_path='' as $read$
 declare r private.client_destination_provider_proof_reservations%rowtype;
         receipt private.client_destination_provider_proof_receipts%rowtype;
+        d private.client_delivery_destinations%rowtype;
 begin
  if p_destination is null then raise exception 'Exact client destination required' using errcode='22023';end if;
  select * into r from private.client_destination_provider_proof_reservations
@@ -51,6 +52,14 @@ begin
  if r.destination_id is null then return jsonb_build_object('exists',false);end if;
  select * into receipt from private.client_destination_provider_proof_receipts
    where destination_id=r.destination_id;
+ select * into d from private.client_delivery_destinations where id=r.destination_id;
+ if d.id is null or d.active or d.revision is distinct from r.expected_revision
+   or d.organization_id is distinct from r.organization_id
+   or d.company_id is distinct from r.company_id
+   or d.root_folder_id is distinct from r.root_folder_id
+   or d.provider_identity is distinct from r.provider_identity
+   or d.verified is distinct from (receipt.destination_id is not null)
+ then raise exception 'Proof state no longer matches the inactive destination' using errcode='42501';end if;
  return jsonb_build_object('exists',true,'completed',receipt.destination_id is not null,
   'action_id',r.action_id,'preflight_action_id',r.preflight_action_id,
   'destination_id',r.destination_id,'organization_id',r.organization_id,
