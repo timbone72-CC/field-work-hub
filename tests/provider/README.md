@@ -1,10 +1,10 @@
 # Phase 5: real private Storage provider gate — READ ONLY
 
-**State:** source + synthetic CI tests. A real Supabase/Google/phone PASS has NOT been recorded. This gate cannot enable client Send.
+**State (2026-10-17):** Google Drive's separate synthetic resumable file upload is a genuine verified PASS (fourth TEST, independently confirmed SHA-256), but the **private Supabase Storage Range/206 gate described in this document remains UNVERIFIED**. The Google pass cannot enable client Send or prove photo-byte review/delivery.
 
 ## Preconditions
 
-Operate only against an **already existing, disposable** FWH photo. Before this test can succeed, the pending Phase 5 SQL/RLS/transfer receipt stack must pass a separately governed staging/deployment gate, and the test photo must have its accepted Finish, original Auth owner, exact stored object key, total bytes and SHA-256 verified. The current live Team project has no such authorized test sample or Phase 5 Storage permissions. **Never use customer evidence.**
+Operate only against an **already existing, disposable** FWH photo. Before this test can succeed, the pending Phase 5 SQL/RLS/transfer receipt stack must pass a separately governed staging/deployment gate, and the test photo must have its accepted Finish, original Auth owner, exact stored object key, total bytes and SHA-256 verified. Read-only live Team verification on 2026-10-17 confirmed that `fwh-review-private` is a non-public bucket containing 10 objects, with existing authenticated Storage SELECT/INSERT policies and private delivery tables. None of the 10 names contained `test` or `disposable`; this is only a naming check and **does not establish that an approved disposable fixture exists**. No existing object was downloaded or treated as TEST evidence. An explicitly identified, authorized disposable TEST owner/photo and real accepted transfer receipt are still required. **Never use customer evidence.**
 
 ## Restricted read-only run
 
@@ -32,5 +32,6 @@ If the output says other_owner=NOT_SUPPLIED, do not claim cross-owner authorizat
 
 - Synthetic, no-network self-tests: node --test tests/provider/*.test.mjs. They run in Dashboard CI and prove test-harness validation, not real provider behavior.
 - Real read-only gate: run once the authorized disposable sample and test owner JWT exist. No service-role key is involved. Record only the redacted result and effective bucket/policy/provider versions.
-- Separate unresolved gates: initial TUS begin/HEAD/PATCH, trusted full-byte verification receipts, real reviewer preview permissions, backend Workspace OAuth, exact client-specific TEST Drive destination, restored/retried Google resumable upload, final file GET/checksum, two-device retention/recovery and Level-3 runtime pre-merge approval.
-- PR #40 remains draft with default-OFF delivery and no deployed Phase 5 policies. The company internal Shared Drive is NOT an approved client destination.
+- Accepted provider evidence: Google Workspace OAuth, approved TEST folder and one genuine two-chunk Drive resumable synthetic JSON upload with independently verified final remote SHA-256 (2026-10-17); do not repeat that gate for reassurance.
+- Separate unresolved gates: a real disposable accepted private photo transfer, initial TUS begin/HEAD/PATCH and verified full-byte receipt, actual owner and cross-owner Storage Range/206, real Admin private-image preview, company/client-specific destination and package Send, original preservation and two-device recovery, and Level-3 runtime pre-merge approval.
+- Live Team read-only parity on 2026-10-17: `private.client_delivery_runtime` has zero rows (no worker ready), `private.client_delivery_outbox` has zero rows, `private.client_delivery_final_receipts` has zero rows, and Storage object policies for the review bucket exist. Therefore Phase 5 foundations are present but **no live delivery is configured**. PR #40 remains draft with default-OFF delivery; source plans and live behavior must not be conflated. The company internal Shared Drive is NOT an approved client destination.
