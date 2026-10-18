@@ -34,11 +34,15 @@ function fixedObject({id,parent,name,mime,appProperties}) {
     throw new DriveUncertain('EXACT_APP_PROPERTIES_REQUIRED');
   return {id,name,mimeType:mime,parents:[parent],appProperties};
 }
-// Drive's response Location is a bearer-capability URL. Never send OAuth
-// tokens or bytes to an untrusted host, arbitrary route or query argument.
-// Google documents /upload/ and publishes /resumable/upload/ for this method.
-// Some session Locations retain recognized request query parameters.
+// Google's directly authenticated resumable-init response provides an opaque
+// bearer-capability Location. Only trust its fixed HTTPS Google origin, exact
+// Drive upload endpoint and uniquely identified resumable session. Preserve
+// all provider-supplied query parameters byte-for-byte rather than guessing
+// Google's optional keys (which broke two real disposable TEST initiations).
+// The URL is secret: only ever store in the protected session journal.
 function sessionUrl(value){
+  if(typeof value!=='string'||value.length>16384)
+    throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');
   let u;
   try {u=new URL(value);}catch{throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');}
   if(u.protocol!=='https:'||u.origin!==DRIVE_ORIGIN||u.username||u.password||u.hash)
@@ -46,17 +50,15 @@ function sessionUrl(value){
   if(!['/upload/drive/v3/files','/resumable/upload/drive/v3/files'].includes(u.pathname))
     throw new DriveUncertain('UPLOAD_SESSION_ENDPOINT_UNRECOGNIZED');
   const params=u.searchParams;
-  const allowed=new Set(['uploadType','upload_id','supportsAllDrives','fields']);
-  const expectedFields='id,size,sha256Checksum,parents,mimeType,appProperties';
   const keys=[...params.keys()];
-  if(keys.length<2||keys.length>4||new Set(keys).size!==keys.length
-    ||keys.some(k=>!allowed.has(k))
+  if(keys.length<2||keys.length>24||keys.some(k=>!k||k.length>128)
+    ||new Set(keys).size!==keys.length
     ||params.get('uploadType')!=='resumable'
-    ||!params.get('upload_id')||params.get('upload_id').length>4096
-    ||(params.has('supportsAllDrives')&&params.get('supportsAllDrives')!=='true')
-    ||(params.has('fields')&&params.get('fields')!==expectedFields))
+    ||!params.get('upload_id')||params.get('upload_id').length>8192)
     throw new DriveUncertain('UPLOAD_SESSION_QUERY_UNRECOGNIZED');
-  return u.toString();
+  // Never normalize, drop, sort or invent query values from a Google Location.
+  // Redirect handling remains 'error' in request(), including session PUTs.
+  return value;
 }
 function handleHttp(response,expected){
   if(expected.includes(response.status))return response;
