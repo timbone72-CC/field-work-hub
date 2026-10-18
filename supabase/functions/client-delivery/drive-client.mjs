@@ -77,15 +77,24 @@ export function createDriveClient({accessToken,fetcher=fetch}){
     const exact=typeof url==='string'?url:url.toString();
     const origin=new URL(exact);
     if(origin.origin!==DRIVE_ORIGIN)throw new DriveUncertain('UNTRUSTED_DRIVE_ORIGIN');
-    // Authorization is sent only to fixed Google host; redirects cannot forward it.
+    const {resumableProgress=false,...fetchOptions}=options;
+    // Google uses HTTP 308 *without* Location to acknowledge upload progress.
+    // Native Node fetch with redirect:'error' rejects 308 before exposing Range,
+    // even if no Location exists. For status/chunk PUTs only, 'manual' exposes
+    // the 308 but must NEVER follow a Location-bearing HTTP redirect.
+    let response;
     try {
-      return await fetcher(exact,{...options,redirect:'error',
-        headers:{Authorization:'Bearer '+accessToken,...(options.headers||{})}});
+      response=await fetcher(exact,{...fetchOptions,
+        redirect:resumableProgress?'manual':'error',
+        headers:{Authorization:'Bearer '+accessToken,...(fetchOptions.headers||{})}});
     } catch {
-      // POST/PATCH/PUT may already have committed remotely. Never retry with
-      // a different ID or treat a thrown response as a known-safe absence.
+      // A request may already have committed remotely. No blind retry.
       throw new DriveUncertain('PROVIDER_OUTCOME_UNCERTAIN');
     }
+    if(resumableProgress&&response.status>=300&&response.status<400
+      &&response.headers.has('Location'))
+      throw new DriveUncertain('PROVIDER_REDIRECT_FORBIDDEN');
+    return response;
   };
   const get=async(id)=>{
     valid(id,ID,'REMOTE_ID_REQUIRED');
@@ -200,7 +209,7 @@ export function createDriveClient({accessToken,fetcher=fetch}){
       const url=sessionUrl(session);
       if(!Number.isSafeInteger(total)||total<=0||total>32*1024*1024)
         throw new DriveUncertain('INVALID_UPLOAD_SIZE');
-      const r=handleHttp(await request(url,{method:'PUT',
+      const r=handleHttp(await request(url,{method:'PUT',resumableProgress:true,
         headers:{'Content-Length':'0','Content-Range':`bytes */${total}`}}),[200,201,308]);
       if(r.status!==308)return {complete_candidate:true,requires_get_verification:true};
       const range=r.headers.get('Range');
@@ -219,7 +228,7 @@ export function createDriveClient({accessToken,fetcher=fetch}){
         ||(offset+chunk.length!==total&&chunk.length%CHUNK!==0))
         throw new DriveUncertain('INVALID_UPLOAD_RANGE');
       const end=offset+chunk.length-1;
-      const response=handleHttp(await request(url,{method:'PUT',headers:{
+      const response=handleHttp(await request(url,{method:'PUT',resumableProgress:true,headers:{
         'Content-Length':String(chunk.length),
         'Content-Range':`bytes ${offset}-${end}/${total}`},body:chunk}),[200,201,308]);
       // Even HTTP 201 requires an independent GET of the preallocated ID.
