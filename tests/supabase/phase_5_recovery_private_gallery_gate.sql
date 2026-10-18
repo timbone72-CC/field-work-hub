@@ -139,8 +139,21 @@ begin
     photo,transfer.version,admin_id,admin_id);
     exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Removed storage catalog still signed';end if;
+  -- Browser recovery can read only a bounded authorized gallery. Neither
+  -- the signed-URL target nor recovery-grant creation/completion belongs
+  -- directly to authenticated clients, even for a previously verified Admin.
   if has_function_privilege('authenticated',
     'public.photo_recovery_target_for_session(uuid,uuid,uuid,uuid)','execute')
+    or has_function_privilege('authenticated',
+      'private.photo_recovery_target_for_session(uuid,uuid,uuid,uuid)','execute')
+    or has_function_privilege('authenticated',
+      'private.admin_private_photo_target_for_session(uuid,uuid,uuid,uuid)','execute')
+    or has_function_privilege('authenticated',
+      'private.freeze_photo_recovery_scope(uuid,uuid,uuid,uuid,uuid[],text)','execute')
+    or has_function_privilege('authenticated',
+      'private.freeze_photo_recovery_scope(uuid,uuid,uuid,uuid,uuid[],text,uuid)','execute')
+    or has_function_privilege('authenticated',
+      'private.complete_photo_recovery_grant(uuid)','execute')
     or has_function_privilege('anon','public.photo_recovery_page(uuid,integer)','execute')
     or has_table_privilege('authenticated','private.photo_recovery_members','select')
   then raise exception 'Broad recovery/read privileges';end if;
