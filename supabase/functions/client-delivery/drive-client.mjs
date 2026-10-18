@@ -34,30 +34,21 @@ function fixedObject({id,parent,name,mime,appProperties}) {
     throw new DriveUncertain('EXACT_APP_PROPERTIES_REQUIRED');
   return {id,name,mimeType:mime,parents:[parent],appProperties};
 }
-// Google's directly authenticated resumable-init response provides an opaque
-// bearer-capability Location. Only trust its fixed HTTPS Google origin, exact
-// Drive upload endpoint and uniquely identified resumable session. Preserve
-// all provider-supplied query parameters byte-for-byte rather than guessing
-// Google's optional keys (which broke two real disposable TEST initiations).
-// The URL is secret: only ever store in the protected session journal.
+// A successful authenticated Google initiation provides a Location with an
+// opaque, secret resumable-session capability. Its path and query are NOT the
+// client-owned initiation URL grammar. Reject unsafe destinations, preserve
+// Google's exact bytes and commit this URI before any content PUT.
+// A generous bound keeps it inside the existing protected 16-KiB local journal.
 function sessionUrl(value){
-  if(typeof value!=='string'||value.length>16384)
+  if(typeof value!=='string'||value.length===0||value.length>12000
+    ||/[\\x00-\\x20\\x7f\\\\]/.test(value))
     throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');
   let u;
   try {u=new URL(value);}catch{throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');}
   if(u.protocol!=='https:'||u.origin!==DRIVE_ORIGIN||u.username||u.password||u.hash)
     throw new DriveUncertain('UNTRUSTED_UPLOAD_SESSION');
-  if(!['/upload/drive/v3/files','/resumable/upload/drive/v3/files'].includes(u.pathname))
-    throw new DriveUncertain('UPLOAD_SESSION_ENDPOINT_UNRECOGNIZED');
-  const params=u.searchParams;
-  const keys=[...params.keys()];
-  if(keys.length<2||keys.length>24||keys.some(k=>!k||k.length>128)
-    ||new Set(keys).size!==keys.length
-    ||params.get('uploadType')!=='resumable'
-    ||!params.get('upload_id')||params.get('upload_id').length>8192)
-    throw new DriveUncertain('UPLOAD_SESSION_QUERY_UNRECOGNIZED');
-  // Never normalize, drop, sort or invent query values from a Google Location.
-  // Redirect handling remains 'error' in request(), including session PUTs.
+  // Do not require uploadType/upload_id, a fixed path, unique query keys or
+  // a query count. None are guaranteed for Google's returned Location.
   return value;
 }
 function handleHttp(response,expected){
@@ -81,11 +72,14 @@ export function createDriveClient({accessToken,fetcher=fetch}){
   if(typeof accessToken!=='string'||!/^[-._~+\/A-Za-z0-9]{20,8192}$/.test(accessToken))
     throw new DriveUncertain('SERVER_OAUTH_TOKEN_REQUIRED');
   const request=async(url,options={})=>{
-    const origin=new URL(url);
+    // Validate the destination, but do not re-serialize a saved session URI:
+    // the provider's query string and percent encoding are opaque.
+    const exact=typeof url==='string'?url:url.toString();
+    const origin=new URL(exact);
     if(origin.origin!==DRIVE_ORIGIN)throw new DriveUncertain('UNTRUSTED_DRIVE_ORIGIN');
     // Authorization is sent only to fixed Google host; redirects cannot forward it.
     try {
-      return await fetcher(origin.toString(),{...options,redirect:'error',
+      return await fetcher(exact,{...options,redirect:'error',
         headers:{Authorization:'Bearer '+accessToken,...(options.headers||{})}});
     } catch {
       // POST/PATCH/PUT may already have committed remotely. Never retry with
