@@ -38,6 +38,37 @@ begin
     exception when serialization_failure then denied:=true; end;
   if not denied then raise exception 'Assignment action UUID accepted changed inputs'; end if;
 
+  -- The published RPC is deliberately EXECUTE-granted to authenticated:
+  -- prove real client role cannot turn Contractor identity into Supervisor authority.
+  rev:=md5(to_jsonb(w)::text) from public.work_orders w where id=wo;
+  perform set_config('request.jwt.claims',jsonb_build_object(
+    'sub',oldc,'session_id',oldc)::text,true);
+  execute 'set local role authenticated';
+  denied:=false;
+  begin
+    perform public.office_supervisor_assign_work(
+      gen_random_uuid(),org,wo,oldc,scope,rev,'unauthorized Contractor assignment');
+  exception when insufficient_privilege then denied:=true; end;
+  execute 'reset role';
+  if not denied then raise exception 'Contractor executed privileged Supervisor assignment'; end if;
+  if (select assigned_user_id from public.work_orders where id=wo)<>newc then
+    raise exception 'Denied Contractor request mutated assignment'; end if;
+
+  -- A previously successful action ID must not become a replay authority
+  -- after the Supervisor's live grant is revoked.
+  update private.supervisor_grants set active=false where organization_id=org and user_id=sup;
+  perform set_config('request.jwt.claims',jsonb_build_object(
+    'sub',sup,'session_id',sup)::text,true);
+  execute 'set local role authenticated';
+  denied:=false;
+  begin
+    perform public.office_supervisor_assign_work(
+      action,org,wo,newc,scope,rev,'route change');
+  exception when insufficient_privilege then denied:=true; end;
+  execute 'reset role';
+  if not denied then raise exception 'Revoked Supervisor replayed assignment action'; end if;
+  update private.supervisor_grants set active=true where organization_id=org and user_id=sup;
+
   -- In progress: request only. Current Contractor must consent.
   update public.work_orders set assigned_user_id=oldc,field_status='IN_PROGRESS',started_at=now(),
     pending_assignee_user_id=null,reassignment_requested_at=null where id=wo;
