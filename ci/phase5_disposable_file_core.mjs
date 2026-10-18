@@ -161,7 +161,7 @@ export async function runApprovedReplacementFileProof({
   }
   if(mode==='verify')
     return runDisposableFileProof({...guarded,mode:'verify'});
-  if(saved?.state==='RESERVED'||(saved?.state==='START_ATTEMPTED'&&!saved.session_url))
+  if(saved?.state==='RESERVED'||saved?.state==='START_ATTEMPTED')
     block('REPLACEMENT_SESSION_UNCERTAIN_NO_RECREATE');
   if(saved===null)
     await runDisposableFileProof({...guarded,mode:'begin'});
