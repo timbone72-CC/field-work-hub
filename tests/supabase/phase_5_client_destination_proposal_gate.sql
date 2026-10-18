@@ -9,6 +9,7 @@ declare
  client1 uuid:=gen_random_uuid(); client2 uuid:=gen_random_uuid();
  action1 uuid:=gen_random_uuid(); first_result jsonb; second_result jsonb;
  proposed_id uuid; d private.client_delivery_destinations%rowtype;
+ proof jsonb; proof2 jsonb; preflight_action uuid:=gen_random_uuid();
  root_id text:='fwh_disposable_root_123456789';
  denied boolean;
 begin
@@ -91,7 +92,57 @@ begin
  exception when unique_violation then denied:=true;end;
  if not denied then raise exception 'Same Google root bound to a second company';end if;
 
+ -- An authenticated Admin cannot invoke either trusted service-only RPC.
+ denied:=false;
+ begin perform public.service_read_client_destination_candidate(proposed_id);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Office actor could inspect trusted destination candidate';end if;
+ denied:=false;
+ begin perform public.service_record_client_destination_preflight(
+  preflight_action,proposed_id,(first_result->>'revision')::uuid,
+  'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Office actor could spoof a verified provider read';end if;
+
+ -- Only the existing service role can read exact same-organization company/root
+ -- and record a preflight. Proof does NOT verify or activate the destination.
+ execute 'set local role service_role';
+ proof:=public.service_read_client_destination_candidate(proposed_id);
+ if proof->>'organization_id'<>org1::text or proof->>'company_id'<>client1::text
+    or proof->>'root_folder_id'<>root_id
+    or proof->>'provider_identity'<>'office@disposable.invalid'
+    or proof->>'active'<>'false' or proof->>'verified'<>'false'
+ then raise exception 'Service read lost immutable TEST client binding';end if;
+ proof:=public.service_record_client_destination_preflight(
+  preflight_action,proposed_id,(first_result->>'revision')::uuid,
+  'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ if proof->>'preflight_recorded'<>'true' or proof->>'active'<>'false'
+    or proof->>'verified'<>'false' or proof->>'replayed'<>'false'
+ then raise exception 'Trusted GET preflight incorrectly activated a destination';end if;
+ proof2:=public.service_record_client_destination_preflight(
+  preflight_action,proposed_id,(first_result->>'revision')::uuid,
+  'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ if proof2->>'replayed'<>'true'
+ then raise exception 'Same verified GET journal did not replay';end if;
+ denied:=false;
+ begin
+  perform public.service_record_client_destination_preflight(
+   preflight_action,proposed_id,(first_result->>'revision')::uuid,
+   'office@disposable.invalid',root_id,'different_drive_123456789');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Changed Drive ID silently reused provider evidence';end if;
+ denied:=false;
+ begin
+  perform public.service_record_client_destination_preflight(
+   gen_random_uuid(),proposed_id,gen_random_uuid(),
+   'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale destination revision could be attested';end if;
+
  execute 'reset role';
+ if (select count(*) from private.client_delivery_destination_preflights
+     where destination_id=proposed_id and organization_id=org1 and company_id=client1)<>1
+ then raise exception 'Service preflight journal had unexpected rows';end if;
  select * into d from private.client_delivery_destinations where id=proposed_id;
  if d.id is null or d.organization_id<>org1 or d.company_id<>client1
   or d.provider<>'GOOGLE_DRIVE' or d.provider_identity<>'office@disposable.invalid'
