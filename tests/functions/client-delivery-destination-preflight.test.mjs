@@ -193,26 +193,26 @@ function proofRig({saved=false,completed=false,postError=false,wrongGet=false,
   logs.push({path:target.pathname,method,query:target.searchParams.toString()});
   if(target.pathname==='/drive/v3/about')
    return new Response(JSON.stringify({user:{emailAddress:account,me:true,
-     permissionId:'same-trusted-provider'}}),{status:200});
+     permissionId:'same-trusted-provider'}}),{status:200,headers:{'Content-Type':'application/json'}});
   if(target.pathname==='/drive/v3/files/generateIds')
-   return new Response(JSON.stringify({ids:[proofId]}),{status:200});
+   return new Response(JSON.stringify({ids:[proofId]}),{status:200,headers:{'Content-Type':'application/json'}});
   if(target.pathname==='/drive/v3/files/'+root)
    return new Response(JSON.stringify({id:root,trashed:false,
       mimeType:'application/vnd.google-apps.folder',driveId:drive,
-      capabilities:{canAddChildren:true}}),{status:200});
+      capabilities:{canAddChildren:true}}),{status:200,headers:{'Content-Type':'application/json'}});
   if(target.pathname==='/drive/v3/files'&&method==='POST'){
    assert.equal(events.at(-1),'RESERVE','no POST until durable reservation');
    const body=JSON.parse(opts.body);
    assert.equal(body.id,proofId);assert.equal(body.parents[0],root);
    assert.deepEqual(body.appProperties,proofProps);
    if(postError)throw Error('remote POST outcome uncertain');
-   return new Response(JSON.stringify({id:proofId}),{status:200});
+   return new Response(JSON.stringify({id:proofId}),{status:200,headers:{'Content-Type':'application/json'}});
   }
   if(target.pathname==='/drive/v3/files/'+proofId){
    return new Response(JSON.stringify({
      id:proofId,trashed:false,driveId:drive,mimeType:'application/vnd.google-apps.folder',
      name:proofName,parents:[wrongGet?'wrongParent':root],appProperties:proofProps
-   }),{status:200});
+   }),{status:200,headers:{'Content-Type':'application/json'}});
   }
   if(target.pathname==='/drive/v3/files'&&method==='GET'){
    assert.equal(target.searchParams.get('driveId'),drive);
@@ -222,7 +222,7 @@ function proofRig({saved=false,completed=false,postError=false,wrongGet=false,
      mimeType:'application/vnd.google-apps.folder',
      name:proofName,parents:[root],appProperties:wrongList?
        {...proofProps,fwh_company:u(77)}:proofProps
-   }]}),{status:200});
+   }]}),{status:200,headers:{'Content-Type':'application/json'}});
   }
   throw Error('Unexpected provider request '+method+' '+target.pathname);
  };
