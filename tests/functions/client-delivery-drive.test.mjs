@@ -178,14 +178,17 @@ test('Google session Location is a trusted-origin opaque capability, never initi
     ['http://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x','UNTRUSTED_UPLOAD_SESSION'],
     ['https://name:pass@www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x','UNTRUSTED_UPLOAD_SESSION'],
     ['https://www.googleapis.com/upload/drive/v3/files#ignored','UNTRUSTED_UPLOAD_SESSION'],
-    [base+'%0aHeader:%20evil','UPLOAD_SESSION_MALFORMED'],
-    [base+' '.repeat(1),'UPLOAD_SESSION_MALFORMED'],
-    [base+'\\extra','UPLOAD_SESSION_MALFORMED'],
+    ['https://[unparseable/upload','UPLOAD_SESSION_MALFORMED'],
     [base+'&provider='+('a'.repeat(12000)),'UPLOAD_SESSION_MALFORMED']
   ];
   for(const [location,code] of denied){
     const {client}=fixture(()=>new Response(null,{status:200,headers:{Location:location}}));
     await expectCode(()=>client.startResumable(metadata,{size:250000}),code);
+  }
+  for(const location of [base+'\r\nHeader:evil',base+' ',base+'\\extra']){
+    const {client,calls}=fixture(()=>{throw Error('must reject before network');});
+    await expectCode(()=>client.probeResumable(location,250000),'UPLOAD_SESSION_MALFORMED');
+    assert.equal(calls.length,0);
   }
 });
 test('lost responses, expired session, incompatible offset never allow a new file ID',async()=>{
