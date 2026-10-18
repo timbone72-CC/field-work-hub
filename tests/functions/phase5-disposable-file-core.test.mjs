@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runDisposableFileProof,FileProofBlocked}
+import {runDisposableFileProof,runApprovedReplacementFileProof,FileProofBlocked}
   from '../../ci/phase5_disposable_file_core.mjs';
 
 const driveId='disposable_client_drive_123456';
@@ -201,4 +201,92 @@ test('CLI refuses missing/unknown mode without reading private receipts or invok
   assert.equal(result.stdout,'');
   assert.equal(result.stderr.trim(),'BLOCKED: VALID_TEST_MODE_REQUIRED');
   assert.equal(result.stderr.includes('DO_NOT_PRINT_TEST_TOKEN'),false);
+});
+
+const runReplacement=(original,second,mode,c=config)=>
+  runApprovedReplacementFileProof({config:c,drive:second.drive,
+    originalJournal:original.journal,replacementJournal:second.journal,mode});
+
+test('operator-approved replacement completes one different TEST ID and preserves failed original',async()=>{
+ const original=rig({failStart:true});
+ await assert.rejects(()=>run(original,'begin'));
+ const saved=JSON.stringify(original.getSaved());
+ const second=rig();
+ // Pretend Drive generated a different immutable file ID.
+ second.drive.generateIds=async count=>{
+   second.events.push('generate');
+   assert.equal(count,1);
+   return ['separate_replacement_file_20261017'];
+ };
+ assert.deepEqual(await runReplacement(original,second,'prepare'),
+   {status:'TEST_FILE_PARENT_VERIFIED',writes:false});
+ const completed=await runReplacement(original,second,'complete');
+ assert.equal(completed.status,'TEST_REPLACEMENT_FILE_SHA256_VERIFIED');
+ assert.equal(second.starts(),1);
+ assert.equal(second.getSaved().state,'VERIFIED');
+ assert.equal(second.getSaved().file_id,'separate_replacement_file_20261017');
+ assert.equal(JSON.stringify(original.getSaved()),saved);
+ assert.equal(original.starts(),1);
+ const before=second.events.filter(x=>x==='POST:start').length;
+ assert.equal((await runReplacement(original,second,'complete')).status,
+   'TEST_REPLACEMENT_FILE_SHA256_VERIFIED');
+ assert.equal(second.events.filter(x=>x==='POST:start').length,before);
+});
+
+test('replacement lost start response becomes a new permanent one-shot stop',async()=>{
+ const original=rig({failStart:true});
+ await assert.rejects(()=>run(original,'begin'));
+ const saved=JSON.stringify(original.getSaved());
+ const second=rig({failStart:true});
+ await assert.rejects(()=>runReplacement(original,second,'complete'),
+   /Google may have created/);
+ assert.equal(second.getSaved().state,'START_ATTEMPTED');
+ assert.equal(second.getSaved().session_url,null);
+ await assert.rejects(()=>runReplacement(original,second,'complete'),error=>
+   error instanceof FileProofBlocked&&error.code==='REPLACEMENT_SESSION_UNCERTAIN_NO_RECREATE');
+ assert.equal(second.starts(),1);
+ assert.equal(JSON.stringify(original.getSaved()),saved);
+});
+
+test('replacement refuses generating original Google file ID even for TEST',async()=>{
+ const original=rig({failStart:true});
+ await assert.rejects(()=>run(original,'begin'));
+ const second=rig();
+ second.drive.generateIds=async()=>{
+   second.events.push('generate');return [original.getSaved().file_id];
+ };
+ await assert.rejects(()=>runReplacement(original,second,'complete'),error=>
+   error instanceof FileProofBlocked&&error.code==='TEST_FILE_ID_UNAVAILABLE');
+ assert.equal(second.getSaved(),null);
+ assert.equal(second.starts(),0);
+});
+
+test('replacement refuses missing or modified/other-state original attempt',async()=>{
+ const original=rig(),second=rig();
+ await assert.rejects(()=>runReplacement(original,second,'complete'),error=>
+   error instanceof FileProofBlocked&&error.code==='ORIGINAL_TEST_JOURNAL_REQUIRED');
+ assert.equal(second.events.length,0);
+ await run(original,'begin');
+ await assert.rejects(()=>runReplacement(original,second,'complete'),error=>
+   error instanceof FileProofBlocked&&error.code==='ORIGINAL_TEST_ATTEMPT_REQUIRED');
+ assert.equal(second.events.length,0);
+ original.setSaved({...original.getSaved(),folder_id:'different_root_file_identity'});
+ await assert.rejects(()=>runReplacement(original,second,'complete'),error=>
+   error instanceof FileProofBlocked&&error.code==='SAVED_TEST_FILE_UNCERTAIN');
+ assert.equal(second.events.length,0);
+});
+
+test('replacement VERIFY cannot initiate and requires its own independent journal',async()=>{
+ const original=rig({failStart:true});
+ await assert.rejects(()=>run(original,'begin'));
+ const second=rig();
+ await assert.rejects(()=>runReplacement(original,second,'verify'),error=>
+   error instanceof FileProofBlocked&&error.code==='TEST_FILE_NOT_RESERVED');
+ assert.equal(second.starts(),0);
+ assert.equal(second.getSaved(),null);
+ await assert.rejects(()=>runApprovedReplacementFileProof({
+   config,drive:second.drive,originalJournal:original.journal,
+   replacementJournal:original.journal,mode:'complete'
+ }),error=>error instanceof FileProofBlocked&&
+   error.code==='REPLACEMENT_TEST_CONFIGURATION_REQUIRED');
 });
