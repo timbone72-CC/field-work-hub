@@ -19,6 +19,17 @@ async function call(fetcher,url,opts={}){
    signal:AbortSignal.timeout(20000)});}
  catch{err('NETWORK_UNAVAILABLE');}
 }
+// Security evidence must distinguish successful photo bytes (exposure), verified
+// authorization denial, rejected malformed/unresolved requests, and outages.
+// A Storage 400 NoSuchKey is neither a public-read success nor RLS denial proof.
+async function anonymousAccess(response,subject){
+ const status=response.status;
+ await response.body?.cancel().catch(()=>{});
+ if(denySet.has(status))return 'DENIED';
+ if(status===400)return 'REJECTED_400_UNVERIFIED';
+ if(status>=200&&status<300)err('ANONYMOUS_'+subject+'_EXPOSED');
+ err('ANONYMOUS_'+subject+'_STATUS_UNVERIFIED');
+}
 async function json(res,limit=12000){
  if(!res.ok)err('AUTHORIZED_READ_DENIED');
  try{
@@ -120,13 +131,11 @@ async function verifyBrowserPrivatePhoto({fetcher,adminToken,hashBytes,status=()
  status('Checking anonymous access denial without exposing photo bytes…');
  const anon=await call(fetcher,direct,{method:'GET',headers:{
    apikey:KEY,Range:'bytes=0-0',Accept:'image/jpeg'}});
- if(!denySet.has(anon.status))err('ANONYMOUS_STORAGE_ACCESS_NOT_DENIED');
- await anon.body?.cancel().catch(()=>{});
+ const anonymousStorage=await anonymousAccess(anon,'STORAGE_ACCESS');
  const req={photo_id:selected.photo_id,transfer_version:selected.transfer_version};
  const anonymousSigner=await call(fetcher,signer,{method:'POST',
    headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify(req)});
- if(!denySet.has(anonymousSigner.status))err('ANONYMOUS_SIGNER_ACCESS_NOT_DENIED');
- await anonymousSigner.body?.cancel().catch(()=>{});
+ const anonymousSignerResult=await anonymousAccess(anonymousSigner,'SIGNER_ACCESS');
  status('Requesting an authorized, short-lived private preview…');
  const signed=await json(await call(fetcher,signer,{method:'POST',
    headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(req)}));
@@ -137,7 +146,9 @@ async function verifyBrowserPrivatePhoto({fetcher,adminToken,hashBytes,status=()
  status('Checking every returned JPEG byte and the immutable SHA-256 receipt…');
  const range=await readRanges(fetcher,exact,selected.observed_sha256,hashBytes);
  // No token, selected UUID, URL, hash, JPEG, or user ID is returned or logged.
- return {verified:true,anonymous_storage:'DENIED',anonymous_signer:'DENIED',
+ return {verified:anonymousStorage==='DENIED'&&anonymousSignerResult==='DENIED',
+   private_bytes_verified:true,
+   anonymous_storage:anonymousStorage,anonymous_signer:anonymousSignerResult,
    authorized_admin:'PASS',sha256:'MATCH',partial_206:'PASS',
    ranges:range.ranges,bytes:range.bytes,foreign_user:'NOT_TESTED',
    original_owner_direct:'NOT_TESTED',delivery:'DISABLED'};
@@ -183,17 +194,24 @@ if(root&&root.document&&root.location){
            return Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('');
          },status:message=>{output.textContent=message;}
        });
-       output.textContent='PASS: Existing TEST photo verified, '+result.bytes+
-         ' bytes across '+result.ranges+' HTTP 206 ranges; SHA-256 matches. '+
-         'Anonymous Storage and signer denied. Foreign-user check remains pending. '+
-         'No photo or Send changed.';
+       output.textContent=(result.verified?'PASS:':'PARTIAL:')+
+         ' Existing TEST photo: '+result.bytes+' bytes across '+result.ranges+
+         ' HTTP 206 ranges; SHA-256 matches. Anonymous Storage: '+
+         (result.anonymous_storage==='DENIED'?'DENIED':
+           'REJECTED 400 (authorization denial not proved)')+
+         '; anonymous signer: '+
+         (result.anonymous_signer==='DENIED'?'DENIED':
+           'REJECTED 400 (authorization denial not proved)')+
+         '. Foreign-user check remains pending. No photo or Send changed.';
      }catch(e){
        const allow=new Set(['SIGN_IN_TO_TEST_DASHBOARD','TEST_RUNTIME_UNAVAILABLE',
          'TEST_WORK_ORDER_UNAVAILABLE','TEST_PHOTO_NOT_AVAILABLE','NETWORK_UNAVAILABLE',
          'AUTHORIZED_READ_DENIED','UNTRUSTED_RESPONSE','INVALID_SIGNED_URL',
          'RANGE_206_UNSUPPORTED','RANGE_IDENTITY_MISMATCH','RANGE_BYTE_MISMATCH',
-         'SHA256_RECEIPT_MISMATCH','ANONYMOUS_STORAGE_ACCESS_NOT_DENIED',
-         'ANONYMOUS_SIGNER_ACCESS_NOT_DENIED']);
+         'SHA256_RECEIPT_MISMATCH','ANONYMOUS_STORAGE_ACCESS_EXPOSED',
+         'ANONYMOUS_SIGNER_ACCESS_EXPOSED',
+         'ANONYMOUS_STORAGE_ACCESS_STATUS_UNVERIFIED',
+         'ANONYMOUS_SIGNER_ACCESS_STATUS_UNVERIFIED']);
        output.textContent='BLOCKED: '+(allow.has(e.code)?e.code:'PRIVATE_TEST_UNVERIFIED')+
          '. No photo or delivery change.';
      }finally{button.disabled=false;}
