@@ -62,36 +62,56 @@ function exactSignedURL(location,path){
  return u.toString();
 }
 async function readRanges(fetcher,url,expectedHash,hashBytes){
- const pieces=[];let size=null;
- for(let at=0;size===null||at<size;at+=CHUNK){
-   const end=size===null?CHUNK-1:Math.min(at+CHUNK,size)-1;
+ // CORS may hide Content-Range even when Supabase sends it correctly.
+ // Obtain the same signed object's full size with read-only HEAD; this
+ // cannot return photo bytes or invent a privileged path.
+ const head=await call(fetcher,url,{method:'HEAD',headers:{Accept:'image/jpeg'}});
+ if(head.status!==200){await head.body?.cancel().catch(()=>{});err('SIGNED_HEAD_NOT_AVAILABLE');}
+ const size=Number(head.headers.get('Content-Length'));
+ const headMime=(head.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase();
+ await head.body?.cancel().catch(()=>{});
+ if(!Number.isSafeInteger(size)||size<=CHUNK||size>MAX||headMime!=='image/jpeg')
+   err('SIGNED_HEAD_IDENTITY_UNVERIFIED');
+ const all=new Uint8Array(size);
+ let count=0,parts=0,rangeHeadersVerified=true;
+ for(let at=0;at<size;at+=CHUNK){
+   const end=Math.min(at+CHUNK,size)-1,need=end-at+1;
    const res=await call(fetcher,url,{method:'GET',headers:{
-     Range:'bytes='+at+'-'+end,Accept:'image/jpeg',
-     'Accept-Encoding':'identity'}});
-   if(res.status!==206)err('RANGE_206_UNSUPPORTED');
-   const m=/^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.headers.get('Content-Range')||'');
-   if(!m||Number(m[1])!==at||Number(m[2])!==end)
-     err('RANGE_IDENTITY_MISMATCH');
-   const total=Number(m[3]);
-   if(!Number.isSafeInteger(total)||total<=CHUNK||total>MAX
-      ||(size!==null&&total!==size)||end>=total)
-     err('RANGE_IDENTITY_MISMATCH');
-   size=total;
-   const mime=(res.headers.get('Content-Type')||'').split(';')[0].toLowerCase().trim();
+     Range:'bytes='+at+'-'+end,Accept:'image/jpeg','Accept-Encoding':'identity'}});
+   if(res.status!==206){await res.body?.cancel().catch(()=>{});err('RANGE_206_UNSUPPORTED');}
+   const rawRange=res.headers.get('Content-Range');
+   if(rawRange!==null){
+     const m=/^bytes (\d+)-(\d+)\/(\d+)$/.exec(rawRange);
+     if(!m||Number(m[1])!==at||Number(m[2])!==end||Number(m[3])!==size)
+       err('RANGE_IDENTITY_MISMATCH');
+   }else{
+     // Missing CORS-exposed header is NOT a verified header match.
+     rangeHeadersVerified=false;
+   }
+   const mime=(res.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase();
    if(mime!=='image/jpeg'
      ||!['','identity'].includes(res.headers.get('Content-Encoding')||'')
-     ||(res.headers.has('Content-Length')&&res.headers.get('Content-Length')!==String(end-at+1)))
+     ||(res.headers.has('Content-Length')&&res.headers.get('Content-Length')!==String(need)))
      err('RANGE_IDENTITY_MISMATCH');
-   const bytes=new Uint8Array(await res.arrayBuffer());
-   if(bytes.length!==end-at+1)err('RANGE_BYTE_MISMATCH');
-   pieces.push(bytes);
+   if(!res.body)err('RANGE_BYTE_MISMATCH');
+   const reader=res.body.getReader();let got=0;
+   try{
+     while(true){
+       const {done,value}=await reader.read();if(done)break;
+       if(!(value instanceof Uint8Array)||got+value.length>need)
+         err('RANGE_BYTE_MISMATCH');
+       all.set(value,at+got);got+=value.length;
+     }
+   }catch(e){if(e.code)throw e;err('NETWORK_UNAVAILABLE');}
+   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+   if(got!==need)err('RANGE_BYTE_MISMATCH');
+   count+=got;parts++;
  }
- const all=new Uint8Array(size);let pos=0;
- for(const b of pieces){all.set(b,pos);pos+=b.length;}
- if(pos!==size)err('RANGE_BYTE_MISMATCH');
+ if(count!==size)err('RANGE_BYTE_MISMATCH');
  const actual=await hashBytes(all);
  if(actual!==expectedHash)err('SHA256_RECEIPT_MISMATCH');
- return {bytes:size,ranges:pieces.length};
+ return {bytes:size,ranges:parts,
+   content_range:rangeHeadersVerified?'VERIFIED':'NOT_EXPOSED'};
 }
 async function verifyBrowserPrivatePhoto({fetcher,adminToken,hashBytes,status=()=>{}}){
  if(typeof fetcher!=='function'||typeof hashBytes!=='function')
@@ -146,10 +166,12 @@ async function verifyBrowserPrivatePhoto({fetcher,adminToken,hashBytes,status=()
  status('Checking every returned JPEG byte and the immutable SHA-256 receipt…');
  const range=await readRanges(fetcher,exact,selected.observed_sha256,hashBytes);
  // No token, selected UUID, URL, hash, JPEG, or user ID is returned or logged.
- return {verified:anonymousStorage==='DENIED'&&anonymousSignerResult==='DENIED',
+ return {verified:anonymousStorage==='DENIED'&&anonymousSignerResult==='DENIED'
+     &&range.content_range==='VERIFIED',
    private_bytes_verified:true,
    anonymous_storage:anonymousStorage,anonymous_signer:anonymousSignerResult,
    authorized_admin:'PASS',sha256:'MATCH',partial_206:'PASS',
+   content_range:range.content_range,
    ranges:range.ranges,bytes:range.bytes,foreign_user:'NOT_TESTED',
    original_owner_direct:'NOT_TESTED',delivery:'DISABLED'};
 }
@@ -196,7 +218,9 @@ if(root&&root.document&&root.location){
        });
        output.textContent=(result.verified?'PASS:':'PARTIAL:')+
          ' Existing TEST photo: '+result.bytes+' bytes across '+result.ranges+
-         ' HTTP 206 ranges; SHA-256 matches. Anonymous Storage: '+
+         ' HTTP 206 ranges; SHA-256 matches. Content-Range header: '+
+         (result.content_range==='VERIFIED'?'VERIFIED':'NOT EXPOSED (pending independent check)')+
+         '. Anonymous Storage: '+
          (result.anonymous_storage==='DENIED'?'DENIED':
            'REJECTED 400 (authorization denial not proved)')+
          '; anonymous signer: '+
@@ -208,7 +232,8 @@ if(root&&root.document&&root.location){
          'TEST_WORK_ORDER_UNAVAILABLE','TEST_PHOTO_NOT_AVAILABLE','NETWORK_UNAVAILABLE',
          'AUTHORIZED_READ_DENIED','UNTRUSTED_RESPONSE','INVALID_SIGNED_URL',
          'RANGE_206_UNSUPPORTED','RANGE_IDENTITY_MISMATCH','RANGE_BYTE_MISMATCH',
-         'SHA256_RECEIPT_MISMATCH','ANONYMOUS_STORAGE_ACCESS_EXPOSED',
+         'SHA256_RECEIPT_MISMATCH','SIGNED_HEAD_NOT_AVAILABLE',
+         'SIGNED_HEAD_IDENTITY_UNVERIFIED','ANONYMOUS_STORAGE_ACCESS_EXPOSED',
          'ANONYMOUS_SIGNER_ACCESS_EXPOSED',
          'ANONYMOUS_STORAGE_ACCESS_STATUS_UNVERIFIED',
          'ANONYMOUS_SIGNER_ACCESS_STATUS_UNVERIFIED']);
