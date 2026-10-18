@@ -277,3 +277,143 @@ export async function preflightInactiveClientDestination({
     provider_read_verified:true,preflight_recorded:true,
     verified:false,active:false,replayed:result.replayed});
 }
+
+
+/**
+ * Source-only TEST proof; same trusted-worker/Drive/ledger owners as Phase 5D.
+ * First invocation may create ONE disposable, company-bound proof folder only
+ * after the exact Google ID has been durably reserved by service RPC.
+ * Any crash/ambiguous result: subsequent invocations GET/LIST the reserved ID;
+ * never retry the POST, generate an alternate ID, Send, or activate delivery.
+ */
+export async function proveInactiveClientDestinationFolder({
+ ledger,tokenProvider,actionId,preflightActionId,destinationId,
+ organizationId,companyId,expectedEmail,expectedDriveId,expectedRootId,
+ internalDriveId,testEvidenceClass,allowProviderCreate=false,fetcher=fetch
+}={}){
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const ID=/^[A-Za-z0-9_-]{10,160}$/;
+ const fail=code=>{throw new DriveUncertain(code);};
+ if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+  ||![actionId,preflightActionId,destinationId,organizationId,companyId]
+    .every(x=>UUID.test(x??''))
+  ||typeof expectedEmail!=='string'||expectedEmail!==expectedEmail.toLowerCase()
+  ||!/^[-._+a-z0-9]+@[-.a-z0-9]+\.[a-z]{2,}$/.test(expectedEmail)
+  ||![expectedDriveId,expectedRootId,internalDriveId].every(x=>ID.test(x??''))
+  ||new Set([expectedDriveId,expectedRootId,internalDriveId]).size!==3
+  ||typeof ledger?.readClientDestinationProviderProof!=='function'
+  ||typeof ledger?.readClientDestination!=='function'
+  ||typeof ledger?.reserveClientDestinationProviderProof!=='function'
+  ||typeof ledger?.confirmClientDestinationProviderProof!=='function'
+  ||typeof ledger?.recordClientDestinationPreflight!=='function'
+  ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+  ||typeof allowProviderCreate!=='boolean')
+  fail('TEST_CLIENT_PROOF_NOT_CONFIGURED');
+ // Read before generating IDs. The service RPC rejects active, stale-revision
+ // or moved company/Drive candidates, and retains the original reserved ID.
+ const existing=await ledger.readClientDestinationProviderProof(destinationId);
+ if(!existing||typeof existing.exists!=='boolean')
+  fail('CLIENT_PROOF_RESERVATION_UNCERTAIN');
+ const validatePlan=(p,completed=false)=>{
+  const exactName='FWH DISPOSABLE CLIENT PROOF '+actionId.replaceAll('-','').slice(0,12);
+  if(p?.destination_id!==destinationId||p?.organization_id!==organizationId
+   ||p?.company_id!==companyId||p?.root_folder_id!==expectedRootId
+   ||p?.drive_id!==expectedDriveId||p?.folder_name!==exactName
+   ||p?.action_id!==actionId||p?.preflight_action_id!==preflightActionId
+   ||p?.provider_identity!==expectedEmail||!UUID.test(p.revision??'')
+   ||!ID.test(p.folder_id??'')||p.folder_id===expectedRootId
+   ||p.folder_id===expectedDriveId
+   ||(completed&&p.completed!==true))
+    fail('CLIENT_PROOF_RESERVATION_MISMATCH');
+ };
+ if(existing.exists){
+  validatePlan(existing);
+  if(existing.completed===true)
+   return Object.freeze({status:'CLIENT_DESTINATION_VERIFIED_INACTIVE',
+    destination_id:destinationId,company_id:companyId,
+    verified:true,active:false,replayed:true,provider_writes_performed:false});
+  if(existing.completed!==false)fail('CLIENT_PROOF_RESERVATION_UNCERTAIN');
+ }else if(allowProviderCreate!==true){
+  fail('CLIENT_PROOF_CREATION_NOT_AUTHORIZED');
+ }
+ // Only an inactive exact matching server proposal can pass this preflight,
+ // even if the caller already has a reservation from a previous request.
+ const preflight=await preflightInactiveClientDestination({
+  ledger,tokenProvider,actionId:preflightActionId,destinationId,
+  organizationId,companyId,expectedEmail,expectedDriveId,expectedRootId,
+  internalDriveId,testEvidenceClass,fetcher
+ });
+ if(preflight.preflight_recorded!==true||preflight.active!==false
+    ||preflight.verified!==false)
+   fail('CLIENT_PROOF_ROOT_PREFLIGHT_UNVERIFIED');
+ const candidate=await ledger.readClientDestination(destinationId);
+ if(!candidate||candidate.destination_id!==destinationId
+  ||candidate.organization_id!==organizationId||candidate.company_id!==companyId
+  ||candidate.root_folder_id!==expectedRootId
+  ||candidate.provider_identity!==expectedEmail
+  ||!UUID.test(candidate.revision??'')
+  ||candidate.active!==false||candidate.verified!==false)
+  fail('CLIENT_PROOF_SCOPE_MISMATCH');
+ let auth;
+ try{auth=await tokenProvider();}
+ catch{fail('WORKSPACE_AUTHORIZATION_REQUIRED');}
+ if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+  ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+  fail('WORKSPACE_AUTHORIZATION_REQUIRED');
+ const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+ await drive.verifyProviderIdentity(expectedEmail);
+ await drive.verifyDestination({folderId:expectedRootId,expectedDriveId});
+ let plan=existing;
+ let mayPost=false;
+ if(!existing.exists){
+  const [id]=await drive.generateIds(1);
+  if(!ID.test(id??'')||id===expectedRootId||id===expectedDriveId)
+   fail('CLIENT_PROOF_NEW_ID_INVALID');
+  // If reservation commit/response is uncertain, STOP and read it next time.
+  // There is no Google POST before durable successful reservation response.
+  plan=await ledger.reserveClientDestinationProviderProof(
+    actionId,preflightActionId,candidate,id,expectedDriveId);
+  if(plan?.reserved!==true||typeof plan.replayed!=='boolean'
+    ||plan.folder_id!==id||plan.destination_id!==destinationId
+    ||plan.organization_id!==organizationId||plan.company_id!==companyId
+    ||plan.root_folder_id!==expectedRootId||plan.drive_id!==expectedDriveId)
+    fail('CLIENT_PROOF_RESERVATION_UNCERTAIN');
+  mayPost=!plan.replayed;
+ }else{
+  // Saved reservation must NEVER create another remote object, even when the
+  // first request was interrupted before its create HTTP response.
+  if(plan.folder_id===undefined)fail('CLIENT_PROOF_RESERVATION_UNCERTAIN');
+ }
+ const name='FWH DISPOSABLE CLIENT PROOF '+actionId.replaceAll('-','').slice(0,12);
+ if(plan.folder_name!==name||!ID.test(plan.folder_id??''))
+  fail('CLIENT_PROOF_RESERVATION_MISMATCH');
+ const spec={id:plan.folder_id,parent:expectedRootId,name,
+  mime:'application/vnd.google-apps.folder',
+  appProperties:{fwh_org:organizationId,fwh_company:companyId,
+   fwh_destination:destinationId,fwh_kind:'ADDRESS',fwh_key:actionId}};
+ if(mayPost){
+  try{await drive.createPreallocatedFolder(spec);}
+  catch{/* An ambiguous POST can only be resolved by same-ID GET/LIST below. */}
+ }
+ // A Google files.create response is NEVER enough. Both independent reads
+ // must prove the exact original ID/parent/Drive/name/appProperties.
+ const proof=await drive.verifyFile({id:spec.id,parent:spec.parent,mime:spec.mime,
+  name:spec.name,expectedDriveId,sha256:null,size:null,
+  appProperties:spec.appProperties});
+ if(proof.trashed!==false||proof.drive_id!==expectedDriveId)
+  fail('CLIENT_PROOF_REMOTE_IDENTITY_UNVERIFIED');
+ const listed=await drive.lookupExactFolder({id:spec.id,parent:spec.parent,
+  name:spec.name,expectedDriveId,appProperties:spec.appProperties});
+ if(listed.readback_verified!==true||listed.id!==spec.id
+  ||listed.drive_id!==expectedDriveId)
+  fail('CLIENT_PROOF_REMOTE_LIST_UNVERIFIED');
+ const receipt=await ledger.confirmClientDestinationProviderProof(
+  actionId,preflightActionId,candidate,spec.id,expectedDriveId);
+ if(receipt?.destination_id!==destinationId||receipt.verified!==true
+  ||receipt.active!==false||typeof receipt.replayed!=='boolean)
+  fail('CLIENT_PROOF_RECEIPT_UNVERIFIED');
+ return Object.freeze({status:'CLIENT_DESTINATION_VERIFIED_INACTIVE',
+  destination_id:destinationId,company_id:companyId,
+  verified:true,active:false,replayed:receipt.replayed,
+  provider_writes_performed:mayPost});
+}
