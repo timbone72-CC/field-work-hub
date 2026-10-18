@@ -144,44 +144,44 @@ test('resumable start pins metadata and rejects any redirected session host',asy
     Location:'https://steal.invalid/upload/drive/v3/files?uploadType=resumable&upload_id=evil'}}));
   await expectCode(()=>bad.startResumable(metadata,{size:250000}),'UNTRUSTED_UPLOAD_SESSION');
 });
-test('Google session Location is an opaque capability with strict host, path and identity',async()=>{
+test('Google session Location is a trusted-origin opaque capability, never initiation-query grammar',async()=>{
   const base='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=abc123';
-  const providerExtras=[
+  const providerLocations=[
     base,
-    'https://www.googleapis.com/resumable/upload/drive/v3/files?uploadType=resumable&upload_id=abc123',
+    'https://www.googleapis.com/resumable/upload/drive/v3/files?upload_id=abc123',
+    'https://www.googleapis.com/upload/drive/v3/files?upload_protocol=resumable&upload_id=abc123',
+    'https://www.googleapis.com/upload/drive/v3/files?session=opaque123',
+    'https://www.googleapis.com/future/upload/session?tag=a&tag=b',
+    'https://www.googleapis.com/upload/drive/v3/files',
     base+'&supportsAllDrives=true',
-    base+'&fields=id%2Csize%2Csha256Checksum%2Cparents%2CmimeType%2CappProperties',
-    base+'&upload_protocol=resumable&provider_option=opaque%2Fvalue&fields=unrecognized',
+    base+'&fields=nonstandard%2FField&token=%2f%2B%3D',
     base+'&opaqueToken=AZ%2F%2B%3D&supportsAllDrives=false&extra=kept%2bexactly'
   ];
-  for(const location of providerExtras){
+  for(const location of providerLocations){
     const {client,calls}=fixture((url,opts)=>{
       if(opts.method==='POST')return new Response(null,{status:200,headers:{Location:location}});
       if(opts.method==='PUT')return new Response(null,{status:308,headers:{}});
-      throw Error('unexpected method');
+      throw Error('unexpected HTTP method');
     });
     const session=await client.startResumable(metadata,{size:250000});
-    assert.equal(session.session_url,location,'do not silently strip or rewrite provider query');
+    assert.equal(session.session_url,location,'must persist exact opaque provider URL');
     assert.equal(session.remote_id,fileId);
-    const progress=await client.probeResumable(session.session_url,250000);
-    assert.equal(progress.offset,0);
-    assert.equal(calls[1].url.toString(),location);
-    assert.equal(calls[1].options.redirect,'error');
+    assert.equal((await client.probeResumable(session.session_url,250000)).offset,0);
+    assert.equal(calls[1].url.toString(),location,'must use the same URL for zero-byte probe');
     assert.equal(calls.length,2);
+    assert.equal(calls[1].options.redirect,'error');
+    assert.equal(calls[1].options.headers['Content-Range'],'bytes */250000');
   }
   const denied=[
     ['https://evil.invalid/upload/drive/v3/files?uploadType=resumable&upload_id=x','UNTRUSTED_UPLOAD_SESSION'],
     ['https://www.googleapis.com.evil.invalid/upload/drive/v3/files?uploadType=resumable&upload_id=x','UNTRUSTED_UPLOAD_SESSION'],
     ['http://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x','UNTRUSTED_UPLOAD_SESSION'],
     ['https://name:pass@www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x','UNTRUSTED_UPLOAD_SESSION'],
-    ['https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x#ignored','UNTRUSTED_UPLOAD_SESSION'],
-    ['https://www.googleapis.com/upload/drive/v3/files/other?uploadType=resumable&upload_id=x','UPLOAD_SESSION_ENDPOINT_UNRECOGNIZED'],
-    ['https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
-    ['https://www.googleapis.com/upload/drive/v3/files?upload_id=x','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
-    ['https://www.googleapis.com/upload/drive/v3/files?uploadType=media&upload_id=x','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
-    ['https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=x&upload_id=y','UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
-    [base+Array.from({length:25},(_,i)=>'&extra_'+i+'=x').join(''),'UPLOAD_SESSION_QUERY_UNRECOGNIZED'],
-    [base+'&provider='+('a'.repeat(16384)),'UPLOAD_SESSION_MALFORMED']
+    ['https://www.googleapis.com/upload/drive/v3/files#ignored','UNTRUSTED_UPLOAD_SESSION'],
+    [base+'%0aHeader:%20evil','UPLOAD_SESSION_MALFORMED'],
+    [base+' '.repeat(1),'UPLOAD_SESSION_MALFORMED'],
+    [base+'\\extra','UPLOAD_SESSION_MALFORMED'],
+    [base+'&provider='+('a'.repeat(12000)),'UPLOAD_SESSION_MALFORMED']
   ];
   for(const [location,code] of denied){
     const {client}=fixture(()=>new Response(null,{status:200,headers:{Location:location}}));
