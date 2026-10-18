@@ -34,14 +34,28 @@ function fixedObject({id,parent,name,mime,appProperties}) {
     throw new DriveUncertain('EXACT_APP_PROPERTIES_REQUIRED');
   return {id,name,mimeType:mime,parents:[parent],appProperties};
 }
+// Drive's response Location is a bearer-capability URL. Never send OAuth
+// tokens or bytes to an untrusted host, arbitrary route or query argument.
+// Google documents /upload/ and publishes /resumable/upload/ for this method.
+// Some session Locations retain recognized request query parameters.
 function sessionUrl(value){
   let u;
-  try {u=new URL(value);}catch{throw new DriveUncertain('UNTRUSTED_UPLOAD_SESSION');}
-  if(u.protocol!=='https:'||u.origin!==DRIVE_ORIGIN||u.username||u.password||u.hash
-    ||u.pathname!=='/upload/drive/v3/files'
-    ||u.searchParams.get('uploadType')!=='resumable'
-    ||!u.searchParams.get('upload_id')||u.searchParams.size!==2)
+  try {u=new URL(value);}catch{throw new DriveUncertain('UPLOAD_SESSION_MALFORMED');}
+  if(u.protocol!=='https:'||u.origin!==DRIVE_ORIGIN||u.username||u.password||u.hash)
     throw new DriveUncertain('UNTRUSTED_UPLOAD_SESSION');
+  if(!['/upload/drive/v3/files','/resumable/upload/drive/v3/files'].includes(u.pathname))
+    throw new DriveUncertain('UPLOAD_SESSION_ENDPOINT_UNRECOGNIZED');
+  const params=u.searchParams;
+  const allowed=new Set(['uploadType','upload_id','supportsAllDrives','fields']);
+  const expectedFields='id,size,sha256Checksum,parents,mimeType,appProperties';
+  const keys=[...params.keys()];
+  if(keys.length<2||keys.length>4||new Set(keys).size!==keys.length
+    ||keys.some(k=>!allowed.has(k))
+    ||params.get('uploadType')!=='resumable'
+    ||!params.get('upload_id')||params.get('upload_id').length>4096
+    ||(params.has('supportsAllDrives')&&params.get('supportsAllDrives')!=='true')
+    ||(params.has('fields')&&params.get('fields')!==expectedFields))
+    throw new DriveUncertain('UPLOAD_SESSION_QUERY_UNRECOGNIZED');
   return u.toString();
 }
 function handleHttp(response,expected){
