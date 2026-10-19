@@ -43,7 +43,7 @@ export async function prepareTrustedDelivery({
  */
 export async function advanceTrustedDeliveryOneStep({
   ledger,tokenProvider,makeWorkerId,expectedEmail,expectedDriveId,
-  fetcher=fetch
+  projectUrl,serviceRoleJwt,makeVault,fetcher=fetch
 }={}){
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const HASH=/^[a-f0-9]{64}$/;
@@ -80,6 +80,51 @@ export async function advanceTrustedDeliveryOneStep({
     workerId=makeWorkerId();
     if(!UUID.test(workerId??''))
       throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+  }
+  // Once immutable file reservations exist, bypass preallocation entirely.
+  // The original server lease alone selects the next plan; never generate a
+  // replacement Google ID or trust package/plan IDs from request JSON.
+  if(originalClaim!==null){
+    if(typeof ledger.nextReservedItem!=='function')
+      throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+    const item=await ledger.nextReservedItem(
+      originalClaim.package_id,workerId,originalClaim.generation);
+    if(!item||!['UNRESERVED','FOLDER','FILE',
+      'RECEIPTS_READY_FOR_FINAL_RECHECK'].includes(item.state))
+      throw new DriveUncertain('FROZEN_DELIVERY_ITEM_UNVERIFIED');
+    if(item.state==='RECEIPTS_READY_FOR_FINAL_RECHECK')
+      return Object.freeze({state:'FINAL_PROVIDER_RECHECK_REQUIRED'});
+    if(item.state==='FOLDER'||item.state==='FILE'){
+      if(!UUID.test(item.plan_id??'')
+        ||(item.state==='FILE'&&!['PHOTO','MANIFEST'].includes(item.kind))
+        ||(item.state==='FOLDER'&&item.kind!==undefined))
+        throw new DriveUncertain('FROZEN_DELIVERY_ITEM_UNVERIFIED');
+      const lease={tokenProvider,ledger,workerId,
+        generation:originalClaim.generation,packageId:originalClaim.package_id,
+        planId:item.plan_id,expectedEmail,expectedDriveId,fetcher};
+      if(item.state==='FOLDER'){
+        const result=await continueTrustedPackageFolder(lease);
+        if(result?.state!=='FOLDER_VERIFIED'||result.plan_id!==item.plan_id)
+          throw new DriveUncertain('FROZEN_DELIVERY_ITEM_UNVERIFIED');
+        return Object.freeze({state:'PACKAGE_FOLDER_STEP_VERIFIED'});
+      }
+      // Private source, encryption and the exact current lease are mandatory.
+      // A missing backend credential stops before any OAuth/Google operation.
+      if(typeof projectUrl!=='string'||!projectUrl
+        ||typeof serviceRoleJwt!=='string'||!serviceRoleJwt
+        ||typeof makeVault!=='function')
+        throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+      const vault=await makeVault();
+      if(!vault)throw new DriveUncertain('SESSION_KEY_NOT_CONFIGURED');
+      const result=await continueTrustedDeliveryFile({
+        ...lease,projectUrl,serviceRoleJwt,vault
+      });
+      if(result?.state==='FILE_VERIFIED')
+        return Object.freeze({state:'FILE_STEP_VERIFIED'});
+      if(['PROGRESS','NEEDS_INDEPENDENT_GET'].includes(result?.state))
+        return Object.freeze({state:'FILE_STEP_PENDING'});
+      throw new DriveUncertain('FROZEN_DELIVERY_ITEM_UNVERIFIED');
+    }
   }
   // Capture only the server-returned frozen manifest to decide which existing
   // parent owner applies. Never accept a browser-selected folder layout.
