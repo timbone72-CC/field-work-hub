@@ -5,6 +5,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const response = (status, body) => ({ status, body });
 const valid = value => typeof value === 'string' && UUID.test(value);
 const fail = (status, message) => response(status, { error: message });
+// The deployed main Admin root and the isolated PR #40 TEST preview are
+// distinct exact callbacks. Never accept the preview in PRODUCTION.
+const MAIN_ADMIN_CALLBACK =
+  'https://timbone72-cc.github.io/field-work-hub/admin-invite.html';
+const TEST_ADMIN_CALLBACK =
+  'https://timbone72-cc.github.io/field-work-hub/phase56-review/admin-invite.html';
+const allowedAdminCallback = (environment, url) =>
+  url === MAIN_ADMIN_CALLBACK ||
+  (environment === 'TEST' && url === TEST_ADMIN_CALLBACK);
 
 export async function handleScopedAdminInvite({
   body, callerClient, adminClient, organizationId, environment, redirectUrl,
@@ -12,7 +21,7 @@ export async function handleScopedAdminInvite({
 }) {
   if (!valid(organizationId) || !['TEST', 'PRODUCTION'].includes(environment) ||
     typeof redirectUrl !== 'string' ||
-    !/^https:\/\/timbone72-cc\.github\.io\/field-work-hub\/admin-invite\.html$/.test(redirectUrl)) {
+    !allowedAdminCallback(environment, redirectUrl)) {
     return fail(503, 'Scoped staff invitations are not configured.');
   }
   const action = body.action_id;
