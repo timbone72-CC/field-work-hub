@@ -34,6 +34,98 @@ export async function prepareTrustedDelivery({
   return result;
 }
 
+
+/**
+ * Trusted one-wakeup/one-parent-step coordinator. Recovery identity comes
+ * ONLY from the durable, service-role fenced outbox; never from caller JSON.
+ * This does NOT silently restart an expired/UNCERTAIN delivery or finish one.
+ * Package/file continuation and final receipts remain separately gated.
+ */
+export async function advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider,makeWorkerId,expectedEmail,expectedDriveId,
+  fetcher=fetch
+}={}){
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const HASH=/^[a-f0-9]{64}$/;
+  if(typeof ledger?.readActiveLease!=='function'
+    ||typeof ledger?.claim!=='function'
+    ||typeof ledger?.heartbeat!=='function'
+    ||typeof makeWorkerId!=='function'
+    ||typeof tokenProvider!=='function'
+    ||typeof expectedEmail!=='string'||!expectedEmail
+    ||typeof expectedDriveId!=='string'||!expectedDriveId
+    ||typeof fetcher!=='function')
+    throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+  // A read is not an ownership transfer. Every subsequent reserved write is
+  // checked against the current lease by the existing service-only RPC owner.
+  const old=await ledger.readActiveLease();
+  if(!old||!['ACTIVE','NONE','BLOCKED_UNCERTAIN'].includes(old.state))
+    throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
+  if(old.state==='BLOCKED_UNCERTAIN')
+    throw new DriveUncertain('EXPIRED_DELIVERY_REQUIRES_RECONCILIATION');
+  let workerId,originalClaim=null;
+  if(old.state==='ACTIVE'){
+    if(!UUID.test(old.package_id??'')||!UUID.test(old.worker_id??'')
+      ||!Number.isSafeInteger(old.generation)||old.generation<1
+      ||!UUID.test(old.destination_id??'')
+      ||!HASH.test(old.approved_sha256??'')
+      ||old.manifest?.package_id!==old.package_id
+      ||old.manifest?.destination_id!==old.destination_id)
+      throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
+    workerId=old.worker_id;
+    originalClaim={claimed:true,package_id:old.package_id,
+      generation:old.generation,destination_id:old.destination_id,
+      approved_sha256:old.approved_sha256,manifest:old.manifest};
+  }else{
+    workerId=makeWorkerId();
+    if(!UUID.test(workerId??''))
+      throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+  }
+  // Capture only the server-returned frozen manifest to decide which existing
+  // parent owner applies. Never accept a browser-selected folder layout.
+  let frozen=null;
+  const scopedLedger={
+    ...ledger,
+    claim:async requested=>{
+      if(requested!==workerId)
+        throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
+      const result=originalClaim??await ledger.claim(workerId);
+      if(result?.claimed===true)frozen=result.manifest;
+      return result;
+    }
+  };
+  const staged=await prepareTrustedDelivery({
+    tokenProvider,ledger:scopedLedger,workerId,
+    expectedEmail,expectedDriveId,fetcher
+  });
+  if(staged?.claimed===false)return Object.freeze({state:'NO_ELIGIBLE_PACKAGES'});
+  if(staged?.claimed!==true||staged.package_id!==(originalClaim?.package_id??staged.package_id)
+    ||!Number.isSafeInteger(staged.generation)||staged.generation<1
+    ||staged.provider_writes_performed!==false)
+    throw new DriveUncertain('FROZEN_LEASE_OR_PLAN_UNVERIFIED');
+  const kind=staged.next_parent_kind;
+  if(kind===undefined){
+    // Immutable package/file IDs are now prepared, but real upload and
+    // terminal delivery are NOT performed by this bounded parent coordinator.
+    return Object.freeze({state:'PACKAGE_IDENTITIES_PREALLOCATED'});
+  }
+  if(!['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER'].includes(kind)
+    ||!frozen||!['ADDRESS_WORK_ORDER','STATE_COUNTY_CITY_ADDRESS',
+      'STATE_CITY_ADDRESS'].includes(frozen.folder_layout??'ADDRESS_WORK_ORDER'))
+    throw new DriveUncertain('FROZEN_LEASE_OR_PLAN_UNVERIFIED');
+  const layout=frozen.folder_layout??'ADDRESS_WORK_ORDER';
+  const lease={tokenProvider,ledger,workerId,generation:staged.generation,
+    packageId:staged.package_id,expectedEmail,expectedDriveId,fetcher,kind};
+  let done;
+  if(layout==='ADDRESS_WORK_ORDER'||['STATE','COUNTY','CITY'].includes(kind))
+    done=await continueTrustedDeliveryParent(lease);
+  else
+    done=await continueTrustedGeographicLeaf(lease);
+  if(done?.state!=='PARENT_VERIFIED'||done.kind!==kind)
+    throw new DriveUncertain('FROZEN_PARENT_UNVERIFIED');
+  return Object.freeze({state:'PARENT_STEP_VERIFIED'});
+}
+
 /**
  * Candidate continuation of the SAME worker's existing, preallocated file.
  * It does not claim work, create new Google IDs/folders, finish a package,
