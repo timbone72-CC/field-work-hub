@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareTrustedDelivery,continueTrustedPackageFolder}
+import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedPackageFolder}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain} from '../../supabase/functions/client-delivery/drive-client.mjs';
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
@@ -147,4 +147,96 @@ test('wrong current OAuth identity refuses folder write before lease continuatio
   e instanceof DriveUncertain&&e.code==='WORKSPACE_ACCOUNT_MISMATCH');
  assert.equal(r.events.includes('POST'),false);
  assert.equal(r.events.includes('plan'),false);
+});
+
+
+test('original-lease recovery refuses expired/unknown states without OAuth or claim',async()=>{
+ for(const state of ['BLOCKED_UNCERTAIN','malformed']){
+  const events=[];
+  const ledger={readActiveLease:async()=>{events.push('read');return {state};},
+    claim:async()=>{events.push('claim');return claim;},
+    heartbeat:async()=>{events.push('heartbeat');}};
+  const runner=()=>advanceTrustedDeliveryOneStep({
+   ledger,tokenProvider:async()=>{events.push('oauth');return {}},
+   makeWorkerId:()=>uuid(1),expectedEmail:scope,expectedDriveId:driveId
+  });
+  await assert.rejects(runner,e=>e instanceof DriveUncertain
+   &&e.code===(state==='BLOCKED_UNCERTAIN'
+     ?'EXPIRED_DELIVERY_REQUIRES_RECONCILIATION':'ORIGINAL_LEASE_READ_UNCERTAIN'));
+  assert.deepEqual(events,['read']);
+ }
+});
+test('malformed recovered identity cannot be swapped into a new claim',async()=>{
+ const events=[],ledger={
+  readActiveLease:async()=>{events.push('read');return {
+   state:'ACTIVE',package_id:uuid(3),worker_id:'untrusted',
+   generation:1,destination_id:uuid(4),approved_sha256:'a'.repeat(64),
+   manifest:claim.manifest};},
+  claim:async()=>{events.push('claim');return claim;},
+  heartbeat:async()=>{events.push('heartbeat');}};
+ await assert.rejects(()=>advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider:async()=>{events.push('oauth');return {}},
+  makeWorkerId:()=>uuid(99),expectedEmail:scope,expectedDriveId:driveId
+ }),e=>e instanceof DriveUncertain&&e.code==='ORIGINAL_LEASE_READ_UNCERTAIN');
+ assert.deepEqual(events,['read']);
+});
+test('new wakeup with empty outbox does not allocate Drive IDs or create a lease',async()=>{
+ const events=[],ledger={
+  readActiveLease:async()=>{events.push('read');return {state:'NONE'};},
+  claim:async()=>{events.push('claim');return {claimed:false};},
+  heartbeat:async()=>{events.push('heartbeat');}};
+ const result=await advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider:async()=>{events.push('oauth');
+   return {accessToken:'private-token-not-for-client',expiresInSeconds:3600};},
+  makeWorkerId:()=>uuid(1),expectedEmail:scope,expectedDriveId:driveId,
+  fetcher:async()=>{events.push('provider');throw Error('unexpected');}
+ });
+ assert.deepEqual(result,{state:'NO_ELIGIBLE_PACKAGES'});
+ assert.deepEqual(events,['read','oauth','claim']);
+});
+test('restart uses original active lease and GET-reconciles attempted folder without second POST',async()=>{
+ const events=[],mapId=uuid(11),folderId='saved_'+'a'.repeat(24);
+ const props={fwh_org:uuid(12),fwh_company:uuid(13),
+  fwh_destination:claim.destination_id,fwh_kind:'ADDRESS',fwh_key:uuid(14)};
+ const map={exists:true,map_id:mapId,kind:'ADDRESS',remote_folder_id:folderId,
+  parent_remote_id:rootId,remote_name:'address-test',state:'ATTEMPTED',
+  appProperties:props};
+ const original={state:'ACTIVE',package_id:claim.package_id,worker_id:uuid(1),
+  generation:claim.generation,destination_id:claim.destination_id,
+  approved_sha256:claim.approved_sha256,manifest:claim.manifest};
+ const ledger={
+  readActiveLease:async()=>{events.push('read-active');return original;},
+  claim:async()=>{throw Error('MUST NOT CLAIM DIFFERENT LEASE');},
+  heartbeat:async(pkg,worker,gen)=>{
+   events.push('heartbeat');assert.equal(pkg,claim.package_id);
+   assert.equal(worker,uuid(1));assert.equal(gen,1);},
+  readParent:async()=>{events.push('read-parent');return map;},
+  confirmParent:async(_pkg,_worker,_gen,id,proof)=>{
+   events.push('confirm');assert.equal(id,mapId);assert.equal(proof.id,folderId);},
+  beginParentCreate:async()=>{throw Error('MUST NOT RECREATE');},
+  reserveParent:async()=>{throw Error('MUST NOT RESERVE NEW ID');},
+  reserve:async()=>{throw Error('MUST NOT RESERVE FILE');}
+ };
+ const fetcher=async(url,opts)=>{
+  const u=new URL(url);
+  events.push((opts.method||'GET')+' '+u.pathname);
+  if(u.pathname==='/drive/v3/about')return Response.json({
+   user:{emailAddress:scope,me:true,permissionId:'perm_abc123'}});
+  if(u.pathname==='/drive/v3/files/'+rootId)return Response.json({
+   id:rootId,mimeType:'application/vnd.google-apps.folder',
+   driveId,trashed:false,capabilities:{canAddChildren:true}});
+  if(u.pathname==='/drive/v3/files/'+folderId)return Response.json({
+   id:folderId,name:map.remote_name,driveId,parents:[rootId],
+   mimeType:'application/vnd.google-apps.folder',trashed:false,
+   appProperties:props});
+  throw Error('Unexpected provider operation '+u.pathname);
+ };
+ const result=await advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider:async()=>({accessToken:'private-token-not-for-client',
+   expiresInSeconds:3600}),makeWorkerId:()=>{throw Error('NO NEW WORKER');},
+  expectedEmail:scope,expectedDriveId:driveId,fetcher});
+ assert.deepEqual(result,{state:'PARENT_STEP_VERIFIED'});
+ assert.ok(events.includes('confirm'));
+ assert.equal(events.some(x=>x.startsWith('POST /drive/')),false);
+ assert.equal(events.some(x=>x.includes('generateIds')),false);
 });
