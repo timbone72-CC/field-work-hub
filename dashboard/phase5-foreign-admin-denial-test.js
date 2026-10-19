@@ -120,7 +120,12 @@ async function verifyForeignAdminDenied({fetcher,adminToken,email,password,progr
        fail('FOREIGN_SIGNED_URL_EXPOSED');
      fail('FOREIGN_SIGNER_DENIAL_UNVERIFIED');
    }
-   const denied=await bounded(response,1000,'FOREIGN_SIGNER_DENIAL_UNVERIFIED');
+   let denied;
+   try{
+     const raw=await response.text();
+     if(raw.length>1000)fail('FOREIGN_SIGNER_DENIAL_UNVERIFIED');
+     denied=JSON.parse(raw);
+   }catch(e){if(e.code)throw e;fail('FOREIGN_SIGNER_DENIAL_UNVERIFIED');}
    if(denied.error!=='PHOTO_ACCESS_DENIED'||Object.keys(denied).length!==1)
      fail('FOREIGN_SIGNER_DENIAL_UNVERIFIED');
    passed=true;
