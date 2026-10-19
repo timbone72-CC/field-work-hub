@@ -133,3 +133,16 @@ test('unauthorized and ambiguous backend failures never reveal service secrets o
  await assert.rejects(()=>ledger.claim(uuid(1)),e=>
   e instanceof DriveUncertain&&e.code==='SERVICE_RPC_OUTCOME_UNCERTAIN');
 });
+
+test('next reserved item lookup is service-only and bound to original lease IDs',async()=>{
+ const pkg=uuid(1),worker=uuid(2),generation=3,plan=uuid(4);
+ const {ledger,calls}=mock(()=>Response.json({state:'FOLDER',plan_id:plan}));
+ const result=await ledger.nextReservedItem(pkg,worker,generation);
+ assert.deepEqual(result,{state:'FOLDER',plan_id:plan});
+ assert.equal(new URL(calls[0].url).pathname,
+  '/rest/v1/rpc/service_next_delivery_item');
+ assert.deepEqual(JSON.parse(calls[0].options.body),{
+  p_package:pkg,p_worker:worker,p_generation:generation});
+ assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
+ assert.equal(calls[0].options.redirect,'error');
+});
