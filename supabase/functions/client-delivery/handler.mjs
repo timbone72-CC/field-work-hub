@@ -129,7 +129,13 @@ export function createDeliveryHandler({
       // outbox; callers supply NO package/user/worker/file identities.
       const result=await advanceTrustedDeliveryOneStep({
         tokenProvider,ledger,makeWorkerId,
-        expectedEmail:expectedAccount,expectedDriveId,fetcher
+        expectedEmail:expectedAccount,expectedDriveId,fetcher,
+        projectUrl:supabaseUrl,serviceRoleJwt,
+        makeVault:async()=>{
+          if(typeof sessionVaultKey!=='string'||!sessionVaultKey)
+            throw Error('SESSION_KEY_NOT_CONFIGURED');
+          return createSessionVault({base64Key:sessionVaultKey});
+        }
       });
       if(result.state==='NO_ELIGIBLE_PACKAGES')
         return reply(200,'NO_ELIGIBLE_PACKAGES');
@@ -137,6 +143,14 @@ export function createDeliveryHandler({
         return reply(200,'PARENT_STEP_VERIFIED');
       if(result.state==='PACKAGE_IDENTITIES_PREALLOCATED')
         return reply(200,'PREALLOCATED_ONLY');
+      if(result.state==='PACKAGE_FOLDER_STEP_VERIFIED')
+        return reply(200,'FOLDER_STEP_VERIFIED');
+      if(result.state==='FILE_STEP_VERIFIED')
+        return reply(200,'FILE_STEP_VERIFIED');
+      if(result.state==='FILE_STEP_PENDING')
+        return reply(200,'FILE_STEP_PENDING');
+      if(result.state==='FINAL_PROVIDER_RECHECK_REQUIRED')
+        return reply(200,'FINAL_PROVIDER_RECHECK_REQUIRED');
       return reply(503,'TRUSTED_STEP_UNVERIFIED');
     }
     if(payload.operation==='preallocate'){
