@@ -1,7 +1,10 @@
 // Encrypt private Drive resumable session capabilities before DB persistence.
 // This is NOT a deployed provider. A lost encryption key is a real recovery
 // blocker and must not trigger a new preallocated file or blind create.
-const FIXED='https://www.googleapis.com/upload/drive/v3/files';
+const DRIVE_ORIGIN='https://www.googleapis.com';
+// The protected ciphertext field is bounded separately from the Drive
+// adapter's network URL bound; AES-GCM/base64url expands the stored bytes.
+const MAX_SESSION_URL=7000;
 const ID=/^[A-Za-z0-9_-]{10,160}$/;
 const PREFIX='FWH-DRIVE-SESSION-V1';
 function base64url(bytes) {
@@ -27,12 +30,18 @@ export async function createSessionVault({base64Key,subtle=crypto.subtle,random=
     return text(PREFIX+'|'+packageId+'|'+fileId);
   };
   const validateUrl=val=>{
+    // Google's resumable Location is an opaque, secret capability: neither
+    // its path nor its query grammar is fixed by our request's initiation URL.
+    // Preserve the exact returned bytes; only the HTTPS Google origin is
+    // trusted, and bound the value before writing ciphertext to the DB.
+    if(typeof val!=='string'||val.length===0||val.length>MAX_SESSION_URL
+      ||/[\\x00-\\x20\\x7f\\\\]/.test(val))
+      throw Error('UNTRUSTED_UPLOAD_SESSION');
     let u;try{u=new URL(val);}catch{throw Error('UNTRUSTED_UPLOAD_SESSION');}
-    if(u.href.startsWith(FIXED)===false||u.origin!=='https://www.googleapis.com'
-      ||u.pathname!=='/upload/drive/v3/files'||u.username||u.password||u.hash
-      ||u.searchParams.size!==2||u.searchParams.get('uploadType')!=='resumable'
-      ||!u.searchParams.get('upload_id'))throw Error('UNTRUSTED_UPLOAD_SESSION');
-    return u.toString();
+    if(u.protocol!=='https:'||u.origin!==DRIVE_ORIGIN
+      ||u.username||u.password||u.hash)
+      throw Error('UNTRUSTED_UPLOAD_SESSION');
+    return val;
   };
   return {
     async seal(url,identity) {
