@@ -62,6 +62,8 @@ jobs:
           node --check dashboard/app.js
           node --check dashboard/auto-refresh.js
           node --check dashboard/owner-management.js
+          node --check dashboard/test-other-org-first-admin.js
+          node --check supabase/functions/admin-invite-contractor/test-other-org-first-admin.mjs
           node --check dashboard/staffing.js
           node --check dashboard/recovery.js
           node --check dashboard/session.js
