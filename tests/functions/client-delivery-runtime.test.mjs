@@ -243,3 +243,62 @@ test('restart uses original active lease and GET-reconciles attempted folder wit
  assert.equal(events.some(x=>x.startsWith('POST /drive/')),false);
  assert.equal(events.some(x=>x.includes('generateIds')),false);
 });
+
+test('first scheduler wakeup creates only one server-reserved folder after attempt journal',async()=>{
+ const events=[],folderId='generated_'+'c'.repeat(24),mapId=uuid(19);
+ const props={fwh_org:uuid(12),fwh_company:uuid(13),
+  fwh_destination:claim.destination_id,fwh_kind:'ADDRESS',fwh_key:uuid(14)};
+ let map=null;
+ const ledger={
+  readActiveLease:async()=>{events.push('read-active');return {state:'NONE'};},
+  claim:async worker=>{events.push('claim');assert.equal(worker,uuid(1));return claim;},
+  heartbeat:async()=>{events.push('heartbeat');},
+  readParent:async()=>{events.push('read-parent');return map??{exists:false,kind:'ADDRESS'};},
+  reserveParent:async(_pkg,_worker,_gen,kind,id,parent)=>{
+   events.push('reserve-parent');assert.equal(kind,'ADDRESS');
+   assert.equal(id,folderId);assert.equal(parent,rootId);
+   map={exists:true,map_id:mapId,kind,remote_folder_id:id,
+    parent_remote_id:parent,remote_name:'address-test',state:'RESERVED',
+    appProperties:props};
+   return map;
+  },
+  beginParentCreate:async()=>{
+   events.push('begin-attempt');
+   map={...map,state:'ATTEMPTED'};
+   return {state:'MAY_CREATE',map_id:mapId,file_id:folderId,parent_id:rootId};
+  },
+  confirmParent:async()=>{events.push('confirmed');},
+  reserve:async()=>{throw Error('NO_FILE_BEFORE_PARENTS');}
+ };
+ const fetcher=async(raw,opts)=>{
+  const u=new URL(raw);const key=(opts.method??'GET')+' '+u.pathname;
+  events.push(key);
+  if(u.pathname==='/drive/v3/about')return Response.json({
+   user:{emailAddress:scope,me:true,permissionId:'perm_abc123'}});
+  if(u.pathname==='/drive/v3/files/'+rootId)return Response.json({
+   id:rootId,mimeType:'application/vnd.google-apps.folder',driveId,
+   trashed:false,capabilities:{canAddChildren:true}});
+  if(u.pathname==='/drive/v3/files/generateIds')
+   return Response.json({ids:[folderId]});
+  if(u.pathname==='/drive/v3/files'&&opts.method==='POST'){
+   assert.ok(events.indexOf('begin-attempt')<events.indexOf(key));
+   const spec=JSON.parse(opts.body);
+   assert.equal(spec.id,folderId);assert.equal(spec.parents[0],rootId);
+   return Response.json({id:folderId});
+  }
+  if(u.pathname==='/drive/v3/files/'+folderId)return Response.json({
+   id:folderId,name:'address-test',mimeType:'application/vnd.google-apps.folder',
+   driveId,trashed:false,parents:[rootId],appProperties:props});
+  throw Error('Unexpected provider operation');
+ };
+ const result=await advanceTrustedDeliveryOneStep({
+  ledger,makeWorkerId:()=>uuid(1),
+  tokenProvider:async()=>({accessToken:'private-token-not-for-client',
+    expiresInSeconds:3600}),expectedEmail:scope,expectedDriveId:driveId,fetcher});
+ assert.deepEqual(result,{state:'PARENT_STEP_VERIFIED'});
+ assert.equal(events.filter(x=>x==='POST /drive/v3/files').length,1);
+ assert.equal(events.filter(x=>x==='confirmed').length,1);
+ assert.ok(events.indexOf('begin-attempt')<events.indexOf('POST /drive/v3/files'));
+ assert.ok(events.indexOf('POST /drive/v3/files')<
+  events.indexOf('GET /drive/v3/files/'+folderId));
+});
