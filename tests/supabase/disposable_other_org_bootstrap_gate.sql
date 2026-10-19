@@ -12,6 +12,22 @@ insert into public.work_orders(id, organization_id, wo_number,
 insert into private.platform_owner_capabilities(user_id,active,environment,verified_at)
   values('00000000-0000-0000-0000-000000000010',true,'TEST',now());
 
+-- The real file rejects an ordinary authenticated caller, even a known Admin.
+-- A controlled rollback-on-error keeps this disposable verification transaction live.
+set local role authenticated;
+\set ON_ERROR_ROLLBACK on
+\set ON_ERROR_STOP off
+\ir ../../ci/bootstrap_disposable_other_organization.sql
+\if :ERROR
+  \echo 'Expected ordinary-user bootstrap denial'
+\else
+  \echo 'SECURITY FAIL: authenticated caller ran operator bootstrap'
+  \quit 1
+\endif
+\set ON_ERROR_STOP on
+\set ON_ERROR_ROLLBACK off
+reset role;
+
 -- Execute the SAME SQL file that the operator would apply; this is DATA only.
 \ir ../../ci/bootstrap_disposable_other_organization.sql
 
@@ -48,4 +64,16 @@ begin
   raise notice 'Disposable other-org bootstrap atomicity, owner isolation and bounded seat PASS';
 end;
 $verify$;
+-- A second execution cannot create a second team, seat, or membership.
+\set ON_ERROR_ROLLBACK on
+\set ON_ERROR_STOP off
+\ir ../../ci/bootstrap_disposable_other_organization.sql
+\if :ERROR
+  \echo 'Expected one-shot bootstrap replay denial'
+\else
+  \echo 'SECURITY FAIL: one-shot bootstrap accepted replay'
+  \quit 1
+\endif
+\set ON_ERROR_STOP on
+\set ON_ERROR_ROLLBACK off
 rollback;
