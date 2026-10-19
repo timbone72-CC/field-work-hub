@@ -53,4 +53,34 @@ begin
  raise notice 'Phase 5 client mapping, default-deny destination, revision and audit PASS';
 end;
 $test$;
+
+-- The recovery reader is service_role-only and performs no claim, heartbeat,
+-- quarantine, new ID reservation or other delivery state mutation.
+do $lease_acl$
+declare got jsonb; denied boolean:=false;
+begin
+ if has_function_privilege('authenticated',
+   'public.service_read_active_delivery_lease()','execute')
+   or has_function_privilege('anon',
+   'public.service_read_active_delivery_lease()','execute')
+   or not has_function_privilege('service_role',
+   'public.service_read_active_delivery_lease()','execute')
+ then raise exception 'Delivery lease recovery reader grants are unsafe'; end if;
+ execute 'set local role authenticated';
+ begin
+  perform public.service_read_active_delivery_lease();
+ exception when insufficient_privilege then denied:=true;
+ end;
+ execute 'reset role';
+ if not denied then raise exception 'Authenticated user read delivery worker lease';end if;
+ execute 'set local role service_role';
+ got:=public.service_read_active_delivery_lease();
+ execute 'reset role';
+ if got is distinct from '{"state":"NONE"}'::jsonb
+ then raise exception 'Empty delivery outbox incorrectly resumed';end if;
+ if exists(select 1 from private.client_delivery_outbox)
+ then raise exception 'Read-only lease probe mutated delivery outbox';end if;
+ raise notice 'Service-only inactive/empty lease recovery PASS';
+end;
+$lease_acl$;
 rollback;
