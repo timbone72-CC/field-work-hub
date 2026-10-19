@@ -27,8 +27,16 @@ function same(a,b){
     'parent_id','name','work_order_id','mime','sha256','size']){
     if(a[k]!==b[k])deny();
   }
-  if(a.appProperties.fwh_package!==b.appProperties.fwh_package
-    ||a.appProperties.fwh_manifest!==b.appProperties.fwh_manifest)deny();
+  // Another current-lease read may advance the journal, but it must
+  // never regress a previously observed ATTEMPTED/VERIFIED write to
+  // PREALLOCATED: that would permit an unsafe second provider POST.
+  const states=['PREALLOCATED','ATTEMPTED','VERIFIED'];
+  if(states.indexOf(b.state)<states.indexOf(a.state))deny();
+  // All persisted provider metadata is immutable, not only two known keys.
+  const keys=Object.keys(a.appProperties).sort();
+  if(keys.length!==Object.keys(b.appProperties).length
+    ||keys.some(k=>!Object.hasOwn(b.appProperties,k)
+      ||a.appProperties[k]!==b.appProperties[k]))deny();
 }
 const RECEIPT=(plan,expectedDriveId)=>({id:plan.file_id,parent:plan.parent_id,mime:plan.mime,
   name:plan.name,expectedDriveId,sha256:null,size:null,appProperties:plan.appProperties});
