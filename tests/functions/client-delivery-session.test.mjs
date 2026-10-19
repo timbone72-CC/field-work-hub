@@ -23,16 +23,38 @@ test('nonce is fresh for each sealed upload session; refresh never exports key',
  assert.notEqual(x.payload,y.payload);
  assert.ok(!JSON.stringify(x).includes(b64(bytes)));
 });
-test('session URL never accepts another origin, path, token or too many parameters',async()=>{
+test('Google returned opaque resumable Location retains exact URL bytes across seal/open',async()=>{
  const vault=await createSessionVault({base64Key:b64(bytes)});
- for(const bad of [
-  'https://evil.invalid/upload/drive/v3/files?uploadType=resumable&upload_id=1',
-  'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
-  'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=1&leak=1',
-  'https://www.googleapis.com/drive/v3/files?uploadType=resumable&upload_id=1',
-  'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=1#evil'
- ])await assert.rejects(()=>vault.seal(bad,id),/UNTRUSTED_UPLOAD_SESSION/);
+ const candidates=[
+  'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&opaque=%2fA%2B&opaque=z',
+  'https://www.googleapis.com/upload/drive/v3/files?upload_id=PRIVATE-SECOND&server=opaque',
+  'https://www.googleapis.com/some-provider-session-path?token=opaque-id',
+  'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable'
+ ];
+ for(const opaque of candidates){
+  const sealed=await vault.seal(opaque,id);
+  assert.ok(!JSON.stringify(sealed).includes('opaque-id'));
+  assert.equal(await vault.open(sealed,id),opaque);
+ }
 });
+test('session vault rejects foreign origins, credentials, fragments, controls and unsafe size',async()=>{
+ const vault=await createSessionVault({base64Key:b64(bytes)});
+ const invalid=[
+  'https://evil.invalid/upload/drive/v3/files?uploadType=resumable&upload_id=1',
+  'https://www.googleapis.com.evil.invalid/upload/drive/v3/files',
+  'https://www.googleapis.com@evil.invalid/upload/drive/v3/files',
+  'https://attacker@www.googleapis.com/upload/drive/v3/files',
+  'http://www.googleapis.com/upload/drive/v3/files',
+  'https://www.googleapis.com/upload/drive/v3/files#private',
+  'https://www.googleapis.com/upload/drive/v3/files\\nheader:evil',
+  'https://www.googleapis.com/upload/drive/v3/files\\\\\\\\unsafe',
+  'https://www.googleapis.com/upload/drive/v3/files?'+'x'.repeat(7100),
+  ''
+ ];
+ for(const raw of invalid)
+  await assert.rejects(()=>vault.seal(raw,id),/UNTRUSTED_UPLOAD_SESSION/);
+});
+
 test('no unknown encryption key length can silently produce an unrecoverable journal',async()=>{
  for(const invalid of ['bad',b64(new Uint8Array(16)),'']){
   await assert.rejects(()=>createSessionVault({base64Key:invalid}),/BACKEND_SESSION_KEY_REQUIRED/);
