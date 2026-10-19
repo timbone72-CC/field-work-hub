@@ -81,14 +81,14 @@ function rig({originalWorkWrong=false,photoMissing=false,authStatus=200,
  return {requests,config:{fetcher,adminToken:originalToken,
    email:'separate-test@example.invalid',password:temporaryPassword}};
 }
-test('separate-company Admin real-bearer gate requires exact and paged RLS isolation, signer 403 and revoked session',async()=>{
+test('separate-company Admin real-bearer gate requires exact and paged RLS isolation, signer 403 and acknowledged local signout',async()=>{
  const r=rig(),progress=[];
  const result=await verifyForeignAdminDenied({...r.config,
    progress:m=>progress.push(m)});
  assert.deepEqual(result,{
    verified:true,foreign_company:'SEPARATE_ADMIN',exact_work_order:'HIDDEN',
    scoped_list:'ISOLATED',signer:'PHOTO_ACCESS_DENIED',
-   temporary_session:'REVOKED',photo_bytes_read:false,delivery:'INACTIVE'});
+   temporary_session:'SIGNED_OUT_LOCAL',photo_bytes_read:false,delivery:'INACTIVE'});
  assert.equal(r.requests.filter(x=>x.url.includes('/auth/v1/token')).length,1);
  assert.equal(r.requests.filter(x=>x.url.includes('/auth/v1/logout')).length,1);
  assert.equal(r.requests.filter(x=>x.url.includes('/admin-private-photo')).length,1);
