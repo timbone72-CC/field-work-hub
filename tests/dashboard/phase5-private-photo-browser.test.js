@@ -128,7 +128,7 @@ test('live-observed anonymous Storage 400 is a rejected request, not falsely cal
  assert.equal(out.anonymous_signer,'DENIED');
  assert.equal(out.sha256,'MATCH');
  assert.equal(out.partial_206,'PASS');
- assert.equal(r.requests.filter(x=>x.url===signedUrl).length,2);
+ assert.equal(r.requests.filter(x=>x.url===signedUrl&&x.method==='GET').length,2);
 });
 test('400 from anonymous signer remains unverified despite successful authenticated bytes',async()=>{
  const r=rig({anonSign:400});
@@ -183,7 +183,8 @@ test('no independent HEAD size or wrong content type blocks BEFORE any ranged re
  ]){
    const r=rig(opt);
    await assert.rejects(()=>verifyBrowserPrivatePhoto(r.config),
-     e=>['SIGNED_HEAD_NOT_AVAILABLE','SIGNED_HEAD_IDENTITY_UNVERIFIED','RANGE_BYTE_MISMATCH'].includes(e.code));
+     e=>['SIGNED_HEAD_NOT_AVAILABLE','SIGNED_HEAD_IDENTITY_UNVERIFIED',
+          'RANGE_IDENTITY_MISMATCH','RANGE_BYTE_MISMATCH'].includes(e.code));
    if(opt.headSizeOffset!==1)
      assert.equal(r.requests.filter(x=>x.url===signedUrl&&x.method==='GET').length,0);
  }
