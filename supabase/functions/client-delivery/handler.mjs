@@ -75,7 +75,7 @@ export function createDeliveryHandler({
       ||!Number.isSafeInteger(payload.generation)||payload.generation<1
       ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
       ||(payload.operation==='reconcile_parent'
-        &&!['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER'].includes(payload.kind))
+        &&!['STATE','COUNTY','CITY'].includes(payload.kind))
       ||(payload.operation==='reconcile_geographic_leaf'
         &&!['ADDRESS','WORK_ORDER'].includes(payload.kind)))
       return reply(400,'EXACT_REQUEST_REQUIRED');
