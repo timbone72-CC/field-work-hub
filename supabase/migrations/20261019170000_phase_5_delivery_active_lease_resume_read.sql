@@ -42,7 +42,9 @@ begin
  -- A subsequent operation MUST heartbeat and recheck the original SQL lease.
  return jsonb_build_object('state','ACTIVE','package_id',o.package_id,
   'worker_id',o.worker_id,'generation',o.lease_generation,
-  'lease_until',o.lease_until);
+  'lease_until',o.lease_until,
+  'approved_sha256',o.approved_sha256,'destination_id',o.destination_id,
+  'manifest',k.approved_manifest);
 end;
 $resume$;
 create function public.service_read_active_delivery_lease()
