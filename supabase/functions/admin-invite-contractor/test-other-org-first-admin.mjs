@@ -44,12 +44,12 @@ export async function handleTestOtherOrgFirstAdmin({
     });
   if (allowanceError || allowance?.organization_id !== organizationId ||
       !UUID.test(allowance?.revision ?? '') ||
-      Number(allowance?.admin_limit) !== 1 ||
-      Number(allowance?.supervisor_limit) !== 0 ||
-      Number(allowance?.admin_active) !== 0 ||
-      Number(allowance?.admin_reserved) > 1 ||
-      Number(allowance?.supervisor_active) !== 0 ||
-      Number(allowance?.supervisor_reserved) !== 0) {
+      allowance.admin_limit !== 1 ||
+      allowance.supervisor_limit !== 0 ||
+      allowance.admin_active !== 0 ||
+      ![0, 1].includes(allowance.admin_reserved) ||
+      allowance.supervisor_active !== 0 ||
+      allowance.supervisor_reserved !== 0) {
     return denied(403, 'Verified Product Owner and unused TEST Admin seat required.');
   }
   // The only possible action ID IS the existing team UUID. A second action
