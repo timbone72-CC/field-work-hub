@@ -122,6 +122,39 @@ test('wrong hierarchy parent, package identity, or changed server plan is denied
  await assert.rejects(()=>altered.run(),e=>e.code==='FOLDER_IDENTITY_OR_LEASE_UNCERTAIN');
  assert.equal(altered.calls.includes('create'),false);
 });
+test('regressed package-folder journal cannot trigger a second provider POST',async()=>{
+ for(const past of ['ATTEMPTED','VERIFIED']){
+   const old={...plan,state:past};
+   const t=rig({original:old,firstState:'PREALLOCATED'});
+   await assert.rejects(()=>t.run(old),
+     e=>e.code==='FOLDER_IDENTITY_OR_LEASE_UNCERTAIN');
+   assert.deepEqual(t.calls,['heartbeat','read']);
+   assert.equal(t.committed.length,0);
+ }
+ // A legitimately advancing, atomically persisted journal remains resumable.
+ const advanced={...plan,state:'ATTEMPTED'};
+ const t=rig({original:advanced,firstState:'VERIFIED'});
+ await t.run(advanced);
+ assert.equal(t.calls.includes('create'),false);
+ assert.equal(t.calls.includes('begin'),false);
+ assert.equal(t.committed.length,1);
+});
+test('package-folder immutable provider metadata rejects changed or extra keys',async()=>{
+ const baseline={...plan,appProperties:{...plan.appProperties,
+   fwh_extra:'original'}};
+ for(const changedProperties of [
+   {...baseline.appProperties,fwh_extra:'different'},
+   {...plan.appProperties},
+   {...baseline.appProperties,fwh_new:'extra'}
+ ]){
+   const t=rig({original:baseline,
+     changed:{...baseline,appProperties:changedProperties}});
+   await assert.rejects(()=>t.run(baseline),
+     e=>e.code==='FOLDER_IDENTITY_OR_LEASE_UNCERTAIN');
+   assert.deepEqual(t.calls,['heartbeat','read']);
+   assert.equal(t.committed.length,0);
+ }
+});
 test('Drive adapter also rejects correct-name folders in a foreign Shared Drive',async()=>{
  const drive=createDriveClient({accessToken:'server-test-token-for-client',
    fetcher:async (raw,opts)=>{
