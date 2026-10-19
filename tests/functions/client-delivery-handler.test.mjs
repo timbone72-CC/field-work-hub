@@ -136,6 +136,46 @@ test('private continuation errors are redacted with no new Google write on OAuth
  assert.equal(text.includes(leased.package_id),false);
  assert.deepEqual(paths,[['/token','POST']]);
 });
+test('advance_once accepts no caller-controlled work or folder identity',async()=>{
+ let touched=0;
+ const h=createDeliveryHandler({...candidateConfig,
+  fetcher:()=>{touched++;throw Error('unexpected');}});
+ for(const malformed of [
+  {operation:'advance_once',package_id:uuid(1)},
+  {operation:'advance_once',worker_id:uuid(1)},
+  {operation:'advance_once',generation:1},
+  {operation:'advance_once',kind:'STATE'},
+  {operation:'advance_once',forceSend:true}
+ ]){
+  const r=await h(request(secret,malformed));
+  assert.equal(r.status,400);
+  assert.deepEqual(await r.json(),{status:'EXACT_REQUEST_REQUIRED'});
+ }
+ assert.equal(touched,0);
+});
+test('expired original lease blocks advance_once without Google OAuth or new claim',async()=>{
+ const calls=[];
+ const h=createDeliveryHandler({...candidateConfig,fetcher:async(raw,opts)=>{
+  const u=new URL(raw);calls.push([u.pathname,opts.method]);
+  assert.equal(u.pathname,'/rest/v1/rpc/service_read_active_delivery_lease');
+  assert.equal(opts.headers.Authorization,'Bearer '+candidateConfig.serviceRoleJwt);
+  return Response.json({state:'BLOCKED_UNCERTAIN'});
+ }});
+ const r=await h(request(secret,{operation:'advance_once'}));
+ assert.equal(r.status,503);
+ const text=await r.text();
+ assert.equal(text,'{"status":"TRUSTED_PROVIDER_UNAVAILABLE"}');
+ assert.deepEqual(calls,[['/rest/v1/rpc/service_read_active_delivery_lease','POST']]);
+});
+test('default-off scheduler wakeup performs no claim, Google GET or file write',async()=>{
+ let count=0;
+ const h=createDeliveryHandler({...candidateConfig,enabled:false,
+  fetcher:()=>{count++;throw Error('unexpected');}});
+ const r=await h(request(secret,{operation:'advance_once'}));
+ assert.equal(r.status,503);
+ assert.equal((await r.json()).status,'WORKER_NOT_ACTIVATED');
+ assert.equal(count,0);
+});
 test('Deno source defaults delivery OFF on empty provider configuration',async()=>{
  const prior=globalThis.Deno;
  let installed=null;
