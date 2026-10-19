@@ -5,7 +5,7 @@
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
 import {createDriveClient} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
-import {prepareTrustedDelivery,continueTrustedDeliveryParent,
+import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeliveryParent,
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
  continueTrustedDeliveryFile} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
@@ -59,6 +59,7 @@ export function createDeliveryHandler({
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const fields={
     preallocate:['operation'],
+    advance_once:['operation'],
     verify_test_connection:['operation'],
     reconcile_parent:['operation','package_id','worker_id','generation','kind'],
     reconcile_geographic_leaf:['operation','package_id','worker_id','generation','kind'],
@@ -70,8 +71,7 @@ export function createDeliveryHandler({
     ||Object.keys(payload).length!==required.length
     ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
-  if(payload.operation!=='preallocate'
-    &&payload.operation!=='verify_test_connection'){
+  if(!['preallocate','advance_once','verify_test_connection'].includes(payload.operation)){
     if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
       ||!Number.isSafeInteger(payload.generation)||payload.generation<1
       ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
@@ -124,6 +124,21 @@ export function createDeliveryHandler({
     const tokenProvider=createWorkspaceTokenProvider({
       clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
     const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+    if(payload.operation==='advance_once'){
+      // Leases are recovered exclusively from the service-only immutable
+      // outbox; callers supply NO package/user/worker/file identities.
+      const result=await advanceTrustedDeliveryOneStep({
+        tokenProvider,ledger,makeWorkerId,
+        expectedEmail:expectedAccount,expectedDriveId,fetcher
+      });
+      if(result.state==='NO_ELIGIBLE_PACKAGES')
+        return reply(200,'NO_ELIGIBLE_PACKAGES');
+      if(result.state==='PARENT_STEP_VERIFIED')
+        return reply(200,'PARENT_STEP_VERIFIED');
+      if(result.state==='PACKAGE_IDENTITIES_PREALLOCATED')
+        return reply(200,'PREALLOCATED_ONLY');
+      return reply(503,'TRUSTED_STEP_UNVERIFIED');
+    }
     if(payload.operation==='preallocate'){
       const result=await prepareTrustedDelivery({
         tokenProvider,ledger,workerId:makeWorkerId(),
