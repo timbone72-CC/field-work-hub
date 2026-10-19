@@ -311,6 +311,8 @@ test('restart resumes exact saved package folder plan with no new claim or Drive
   manifest:claim.manifest};
  const ledger={
   ...r.input.ledger,
+  claim:async()=>{throw Error('REPLACEMENT_CLAIM_FORBIDDEN');},
+  heartbeat:async()=>{throw Error('UNEXPECTED_PARENT_HEARTBEAT');},
   readActiveLease:async()=>{events.push('read-active');return original;},
   nextReservedItem:async(pkg,worker,gen)=>{
    events.push('next');assert.deepEqual([pkg,worker,gen],[uuid(3),uuid(1),1]);
@@ -335,6 +337,8 @@ test('file plan without backend vault stops before OAuth, private bytes or Googl
   manifest:claim.manifest};
  const ledger={
   readActiveLease:async()=>{events.push('read');return original;},
+  claim:async()=>{throw Error('CLAIM_FORBIDDEN');},
+  heartbeat:async()=>{throw Error('HEARTBEAT_FORBIDDEN');},
   nextReservedItem:async()=>{events.push('next');return {
    state:'FILE',kind:'PHOTO',plan_id:uuid(44)};},
   claim:async()=>{throw Error('CLAIM_FORBIDDEN')}
@@ -353,6 +357,8 @@ test('all recorded receipts do not imply Google recheck or a final delivery rece
   readActiveLease:async()=>({state:'ACTIVE',package_id:claim.package_id,
    worker_id:uuid(1),generation:1,destination_id:claim.destination_id,
    approved_sha256:claim.approved_sha256,manifest:claim.manifest}),
+  claim:async()=>{throw Error('CLAIM_FORBIDDEN');},
+  heartbeat:async()=>{throw Error('HEARTBEAT_FORBIDDEN');},
   nextReservedItem:async()=>{events.push('next');
    return {state:'RECEIPTS_READY_FOR_FINAL_RECHECK'};},
   finish:async()=>{throw Error('MUST_NOT_FINISH_WITHOUT_REMOTE_RECHECK');}
@@ -373,6 +379,8 @@ test('invalid server-supplied next plan is denied before provider access',async(
    readActiveLease:async()=>({state:'ACTIVE',package_id:claim.package_id,
     worker_id:uuid(1),generation:1,destination_id:claim.destination_id,
     approved_sha256:claim.approved_sha256,manifest:claim.manifest}),
+   claim:async()=>{throw Error('CLAIM_FORBIDDEN');},
+   heartbeat:async()=>{throw Error('HEARTBEAT_FORBIDDEN');},
    nextReservedItem:async()=>item
   };
   await assert.rejects(()=>advanceTrustedDeliveryOneStep({
