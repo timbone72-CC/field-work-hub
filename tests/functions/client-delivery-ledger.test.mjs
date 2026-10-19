@@ -26,6 +26,17 @@ test('only current legacy service JWT can access allowlisted private worker RPCs
  assert.equal(calls[0].options.redirect,'error');
  assert.ok(!JSON.stringify(await ledger.claim(uuid(1))).includes(token));
 });
+test('recovery reads only original durable active-lease RPC using service JWT',async()=>{
+ const {ledger,calls}=mock(()=>Response.json({state:'NONE'}));
+ assert.deepEqual(await ledger.readActiveLease(),{state:'NONE'});
+ assert.equal(calls.length,1);
+ assert.equal(new URL(calls[0].url).pathname,
+  '/rest/v1/rpc/service_read_active_delivery_lease');
+ assert.deepEqual(JSON.parse(calls[0].options.body),{});
+ assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
+ assert.equal(calls[0].options.redirect,'error');
+ assert.equal(calls.some(x=>/service_claim|service_heartbeat|quarantine/.test(x.url)),false);
+});
 test('correct fenced lease identity is supplied for all upload session and delivery RPCs',async()=>{
  const pkg=uuid(1),worker=uuid(2),file=uuid(3),g=7;
  const {ledger,calls}=mock(url=>Response.json(
