@@ -1,4 +1,5 @@
 import { handleScopedAdminInvite } from './scoped-admin-invite.mjs';
+import { handleTestOtherOrgFirstAdmin } from './test-other-org-first-admin.mjs';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -98,6 +99,20 @@ Deno.serve(async (req: Request) => {
   const operation = typeof body.operation === 'string'
     ? body.operation.trim().toLowerCase()
     : 'invite';
+
+  if (operation === 'test_other_org_first_admin') {
+    // Separate, explicitly gated TEST fixture. The caller JWT is never
+    // rewritten to the other organization and gains no business/photo scope.
+    const result = await handleTestOtherOrgFirstAdmin({
+      body, callerClient, adminClient,
+      callerOrganizationId: String(callerOrganizationId),
+      environment: Deno.env.get('TEAM_ADMIN_INVITE_ENVIRONMENT') ?? '',
+      redirectUrl: Deno.env.get('TEAM_ADMIN_INVITE_REDIRECT_URL') ?? '',
+      enabled: Deno.env.get('TEAM_ADMIN_INVITE_ENABLED') === 'true' &&
+        Deno.env.get('TEAM_TEST_OTHER_ORG_FIRST_ADMIN_ENABLED') === 'true'
+    });
+    return jsonResponse(result.status, result.body);
+  }
 
   if (operation === 'invite_admin' || operation === 'invite_admin_new_team') {
     // Explicitly disabled unless this exact Team environment has been
