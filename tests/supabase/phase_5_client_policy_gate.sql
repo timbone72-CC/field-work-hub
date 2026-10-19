@@ -83,4 +83,34 @@ begin
  raise notice 'Service-only inactive/empty lease recovery PASS';
 end;
 $lease_acl$;
+-- Next reserved item is a current-lease service-only read, not a way
+-- to claim an item, allocate a Drive ID or inspect another tenant.
+do $next_acl$
+declare denied boolean:=false;
+begin
+ if has_function_privilege('authenticated',
+   'public.service_next_delivery_item(uuid,uuid,bigint)','execute')
+   or has_function_privilege('anon',
+   'public.service_next_delivery_item(uuid,uuid,bigint)','execute')
+   or not has_function_privilege('service_role',
+   'public.service_next_delivery_item(uuid,uuid,bigint)','execute')
+ then raise exception 'Next-item reader must remain service-only';end if;
+ execute 'set local role authenticated';
+ begin
+  perform public.service_next_delivery_item(gen_random_uuid(),gen_random_uuid(),1);
+ exception when insufficient_privilege then denied:=true;end;
+ execute 'reset role';
+ if not denied then raise exception 'Authenticated caller read reserved work';end if;
+ denied:=false;
+ execute 'set local role service_role';
+ begin
+  perform public.service_next_delivery_item(gen_random_uuid(),gen_random_uuid(),1);
+ exception when insufficient_privilege then denied:=true;end;
+ execute 'reset role';
+ if not denied then raise exception 'Missing current lease was accepted';end if;
+ if exists(select 1 from private.client_delivery_file_plans)
+ then raise exception 'Next-item ACL probe created delivery plans';end if;
+ raise notice 'Service-only next reserved item and missing lease denial PASS';
+end;
+$next_acl$;
 rollback;
