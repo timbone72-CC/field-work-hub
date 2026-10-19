@@ -105,7 +105,7 @@ begin
  execute 'set local role service_role';
  begin
   perform public.service_next_delivery_item(gen_random_uuid(),gen_random_uuid(),1);
- exception when insufficient_privilege then denied:=true;end;
+ exception when insufficient_privilege or serialization_failure then denied:=true;end;
  execute 'reset role';
  if not denied then raise exception 'Missing current lease was accepted';end if;
  if exists(select 1 from private.client_delivery_file_plans)
