@@ -216,3 +216,31 @@ test('invalid team, unconfigured environment or cross-account details fail befor
   assert.equal(env.status, 503);
   assert.equal(events.length, 0);
 });
+
+test('exact isolated Admin preview callback is TEST-only and cannot redirect elsewhere', async () => {
+  const preview = 'https://timbone72-cc.github.io/field-work-hub/phase56-review/admin-invite.html';
+  const good = harness();
+  const accepted = await handleScopedAdminInvite({
+    ...good.args, redirectUrl: preview, environment: 'TEST'
+  });
+  assert.equal(accepted.status, 200);
+  const generated = good.events.find(e => e[0] === 'generateLink');
+  assert.equal(generated[1].options.redirectTo, preview);
+
+  for (const [environment, redirectUrl] of [
+    ['PRODUCTION', preview],
+    ['TEST', 'https://example.invalid/field-work-hub/phase56-review/admin-invite.html'],
+    ['TEST', preview + '?next=https://other.invalid'],
+    ['TEST', preview.replace('https:', 'http:')],
+    ['TEST', preview.replace('phase56-review/', '') + '/'],
+    ['TEST', 'https://timbone72-cc.github.io/field-work-hub/phase56-review/*']
+  ]) {
+    const denied = harness();
+    const response = await handleScopedAdminInvite({
+      ...denied.args, environment, redirectUrl
+    });
+    assert.equal(response.status, 503);
+    assert.equal(denied.events.length, 0,
+      'No DB reservation or Auth call on unapproved callback');
+  }
+});
