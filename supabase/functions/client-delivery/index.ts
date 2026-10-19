@@ -19,4 +19,6 @@ Deno.serve(createDeliveryHandler({
  oauthScope:Deno.env.get('FWH_GOOGLE_OAUTH_SCOPE')??'',
  supabaseUrl:Deno.env.get('SUPABASE_URL')??'',
  serviceRoleJwt:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'',
+ // Source-only file continuation needs the separate private AES-GCM key.
+ sessionVaultKey:Deno.env.get('FWH_CLIENT_DELIVERY_SESSION_VAULT_KEY')??'',
 }));
