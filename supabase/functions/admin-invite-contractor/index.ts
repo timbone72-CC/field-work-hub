@@ -108,8 +108,7 @@ Deno.serve(async (req: Request) => {
       callerOrganizationId: String(callerOrganizationId),
       environment: Deno.env.get('TEAM_ADMIN_INVITE_ENVIRONMENT') ?? '',
       redirectUrl: Deno.env.get('TEAM_ADMIN_INVITE_REDIRECT_URL') ?? '',
-      enabled: Deno.env.get('TEAM_ADMIN_INVITE_ENABLED') === 'true' &&
-        Deno.env.get('TEAM_TEST_OTHER_ORG_FIRST_ADMIN_ENABLED') === 'true'
+      enabled: Deno.env.get('TEAM_TEST_OTHER_ORG_FIRST_ADMIN_ENABLED') === 'true'
     });
     return jsonResponse(result.status, result.body);
   }
