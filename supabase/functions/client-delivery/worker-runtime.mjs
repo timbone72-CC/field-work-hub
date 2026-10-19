@@ -99,8 +99,10 @@ export async function advanceTrustedDeliveryOneStep({
     expectedEmail,expectedDriveId,fetcher
   });
   if(staged?.claimed===false)return Object.freeze({state:'NO_ELIGIBLE_PACKAGES'});
-  if(staged?.claimed!==true||staged.package_id!==(originalClaim?.package_id??staged.package_id)
+  if(staged?.claimed!==true||!UUID.test(staged.package_id??'')
     ||!Number.isSafeInteger(staged.generation)||staged.generation<1
+    ||(originalClaim!==null&&(staged.package_id!==originalClaim.package_id
+      ||staged.generation!==originalClaim.generation))
     ||staged.provider_writes_performed!==false)
     throw new DriveUncertain('FROZEN_LEASE_OR_PLAN_UNVERIFIED');
   const kind=staged.next_parent_kind;
