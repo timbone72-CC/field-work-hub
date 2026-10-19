@@ -209,6 +209,7 @@ test('restart uses original active lease and GET-reconciles attempted folder wit
   approved_sha256:claim.approved_sha256,manifest:claim.manifest};
  const ledger={
   readActiveLease:async()=>{events.push('read-active');return original;},
+  nextReservedItem:async()=>{events.push('next');return {state:'UNRESERVED'};},
   claim:async()=>{throw Error('MUST NOT CLAIM DIFFERENT LEASE');},
   heartbeat:async(pkg,worker,gen)=>{
    events.push('heartbeat');assert.equal(pkg,claim.package_id);
@@ -301,4 +302,83 @@ test('first scheduler wakeup creates only one server-reserved folder after attem
  assert.ok(events.indexOf('begin-attempt')<events.indexOf('POST /drive/v3/files'));
  assert.ok(events.indexOf('POST /drive/v3/files')<
   events.indexOf('GET /drive/v3/files/'+folderId));
+});
+
+test('restart resumes exact saved package folder plan with no new claim or Drive ID',async()=>{
+ const r=folderRig('ATTEMPTED'),events=r.events;
+ const original={state:'ACTIVE',package_id:claim.package_id,worker_id:uuid(1),
+  generation:1,destination_id:claim.destination_id,approved_sha256:claim.approved_sha256,
+  manifest:claim.manifest};
+ const ledger={
+  ...r.input.ledger,
+  readActiveLease:async()=>{events.push('read-active');return original;},
+  nextReservedItem:async(pkg,worker,gen)=>{
+   events.push('next');assert.deepEqual([pkg,worker,gen],[uuid(3),uuid(1),1]);
+   return {state:'FOLDER',plan_id:uuid(9)};
+  },
+  claim:async()=>{throw Error('REPLACEMENT_CLAIM_FORBIDDEN');}
+ };
+ const done=await advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider:r.input.tokenProvider,makeWorkerId:()=>{throw Error('REPLACEMENT_WORKER');},
+  expectedEmail:scope,expectedDriveId:driveId,fetcher:r.input.fetcher
+ });
+ assert.deepEqual(done,{state:'PACKAGE_FOLDER_STEP_VERIFIED'});
+ assert.equal(events.includes('plan'),true);
+ assert.equal(events.includes('confirm'),true);
+ assert.equal(events.includes('POST'),false);
+ assert.equal(events.some(v=>String(v).includes('generateIds')),false);
+});
+test('file plan without backend vault stops before OAuth, private bytes or Google writes',async()=>{
+ const events=[];
+ const original={state:'ACTIVE',package_id:claim.package_id,worker_id:uuid(1),
+  generation:1,destination_id:claim.destination_id,approved_sha256:claim.approved_sha256,
+  manifest:claim.manifest};
+ const ledger={
+  readActiveLease:async()=>{events.push('read');return original;},
+  nextReservedItem:async()=>{events.push('next');return {
+   state:'FILE',kind:'PHOTO',plan_id:uuid(44)};},
+  claim:async()=>{throw Error('CLAIM_FORBIDDEN')}
+ };
+ await assert.rejects(()=>advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider:async()=>{events.push('oauth');throw Error('forbidden');},
+  makeWorkerId:()=>{throw Error('forbidden');},
+  expectedEmail:scope,expectedDriveId:driveId,
+  fetcher:async()=>{events.push('network');throw Error('forbidden');}
+ }),e=>e instanceof DriveUncertain&&e.code==='TRUSTED_WORKER_NOT_CONFIGURED');
+ assert.deepEqual(events,['read','next']);
+});
+test('all recorded receipts do not imply Google recheck or a final delivery receipt',async()=>{
+ const events=[];
+ const ledger={
+  readActiveLease:async()=>({state:'ACTIVE',package_id:claim.package_id,
+   worker_id:uuid(1),generation:1,destination_id:claim.destination_id,
+   approved_sha256:claim.approved_sha256,manifest:claim.manifest}),
+  nextReservedItem:async()=>{events.push('next');
+   return {state:'RECEIPTS_READY_FOR_FINAL_RECHECK'};},
+  finish:async()=>{throw Error('MUST_NOT_FINISH_WITHOUT_REMOTE_RECHECK');}
+ };
+ const result=await advanceTrustedDeliveryOneStep({
+  ledger,tokenProvider:async()=>{throw Error('MUST_NOT_USE_OAUTH');},
+  makeWorkerId:()=>{throw Error('MUST_NOT_NEW_WORKER');},
+  expectedEmail:scope,expectedDriveId:driveId
+ });
+ assert.deepEqual(result,{state:'FINAL_PROVIDER_RECHECK_REQUIRED'});
+ assert.deepEqual(events,['next']);
+});
+test('invalid server-supplied next plan is denied before provider access',async()=>{
+ for(const item of [{state:'FOLDER',plan_id:'not-a-uuid'},
+   {state:'FILE',plan_id:uuid(44),kind:'FOLDER'},
+   {state:'UNEXPECTED'}]){
+  const ledger={
+   readActiveLease:async()=>({state:'ACTIVE',package_id:claim.package_id,
+    worker_id:uuid(1),generation:1,destination_id:claim.destination_id,
+    approved_sha256:claim.approved_sha256,manifest:claim.manifest}),
+   nextReservedItem:async()=>item
+  };
+  await assert.rejects(()=>advanceTrustedDeliveryOneStep({
+   ledger,tokenProvider:async()=>{throw Error('NO_OAUTH');},
+   makeWorkerId:()=>{throw Error('NO_NEW_WORKER');},
+   expectedEmail:scope,expectedDriveId:driveId
+  }),e=>e instanceof DriveUncertain&&e.code==='FROZEN_DELIVERY_ITEM_UNVERIFIED');
+ }
 });
