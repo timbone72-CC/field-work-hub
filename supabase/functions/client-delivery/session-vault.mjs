@@ -35,7 +35,7 @@ export async function createSessionVault({base64Key,subtle=crypto.subtle,random=
     // Preserve the exact returned bytes; only the HTTPS Google origin is
     // trusted, and bound the value before writing ciphertext to the DB.
     if(typeof val!=='string'||val.length===0||val.length>MAX_SESSION_URL
-      ||/[\\x00-\\x20\\x7f\\\\]/.test(val))
+      ||/[\x00-\x20\x7f\\]/.test(val))
       throw Error('UNTRUSTED_UPLOAD_SESSION');
     let u;try{u=new URL(val);}catch{throw Error('UNTRUSTED_UPLOAD_SESSION');}
     if(u.protocol!=='https:'||u.origin!==DRIVE_ORIGIN
