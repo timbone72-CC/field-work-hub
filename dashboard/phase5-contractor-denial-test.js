@@ -112,7 +112,12 @@ async function verifyContractorSignerDenied({fetcher,adminToken,email,password,p
        fail('CONTRACTOR_SIGNED_URL_EXPOSED');
      fail('CONTRACTOR_DENIAL_UNVERIFIED');
    }
-   const denial=await bounded(attempt,1000,'CONTRACTOR_DENIAL_UNVERIFIED');
+   let denial;
+   try{
+     const raw=await attempt.text();
+     if(raw.length>1000)fail('CONTRACTOR_DENIAL_UNVERIFIED');
+     denial=JSON.parse(raw);
+   }catch(e){if(e.code)throw e;fail('CONTRACTOR_DENIAL_UNVERIFIED');}
    if(denial.error!=='PHOTO_ACCESS_DENIED'||Object.keys(denial).length!==1)
      fail('CONTRACTOR_DENIAL_UNVERIFIED');
    verified=true;
