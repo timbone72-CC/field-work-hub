@@ -152,7 +152,7 @@ async function verifyForeignAdminDenied({fetcher,adminToken,email,password,progr
  if(!passed)fail('FOREIGN_SIGNER_DENIAL_UNVERIFIED');
  return Object.freeze({verified:true,foreign_company:'SEPARATE_ADMIN',
    exact_work_order:'HIDDEN',scoped_list:'ISOLATED',
-   signer:'PHOTO_ACCESS_DENIED',temporary_session:'REVOKED',
+   signer:'PHOTO_ACCESS_DENIED',temporary_session:'SIGNED_OUT_LOCAL',
    photo_bytes_read:false,delivery:'INACTIVE'});
 }
 if(typeof module!=='undefined'&&module.exports)
@@ -213,7 +213,7 @@ if(root?.document&&root?.location){
        });
        output.textContent='PASS: Separate-company Admin identity verified; '+
          'original TEST work order hidden from exact and scoped list reads; '+
-         'private-photo signer returned PHOTO_ACCESS_DENIED; temporary session revoked. '+
+         'private-photo signer returned PHOTO_ACCESS_DENIED; temporary TEST login signed out locally (previously issued JWT expires separately). '+
          'No photo bytes or delivery changed.';
      }catch(error){
        const allowed=new Set(['TEST_CREDENTIALS_REQUIRED','TEST_SESSION_UNVERIFIED',
