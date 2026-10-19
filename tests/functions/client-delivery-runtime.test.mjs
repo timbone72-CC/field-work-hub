@@ -184,7 +184,10 @@ test('new wakeup with empty outbox does not allocate Drive IDs or create a lease
  const events=[],ledger={
   readActiveLease:async()=>{events.push('read');return {state:'NONE'};},
   claim:async()=>{events.push('claim');return {claimed:false};},
-  heartbeat:async()=>{events.push('heartbeat');}};
+  heartbeat:async()=>{events.push('heartbeat');},
+  readParent:async()=>{throw Error('NO_EMPTY_QUEUE_PARENT_READ');},
+  reserveParent:async()=>{throw Error('NO_EMPTY_QUEUE_RESERVATION');},
+  reserve:async()=>{throw Error('NO_EMPTY_QUEUE_FILE_RESERVATION');}};
  const result=await advanceTrustedDeliveryOneStep({
   ledger,tokenProvider:async()=>{events.push('oauth');
    return {accessToken:'private-token-not-for-client',expiresInSeconds:3600};},
