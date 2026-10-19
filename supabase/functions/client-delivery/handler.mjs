@@ -4,7 +4,10 @@
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
 import {createDriveClient} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
-import {prepareTrustedDelivery} from './worker-runtime.mjs';
+import {prepareTrustedDelivery,continueTrustedDeliveryParent,
+ continueTrustedGeographicLeaf,continueTrustedPackageFolder,
+ continueTrustedDeliveryFile} from './worker-runtime.mjs';
+import {createSessionVault} from './session-vault.mjs';
 
 function reply(status,code) {
  return new Response(JSON.stringify({status:code}),{status,headers:{
@@ -25,7 +28,7 @@ export function createDeliveryHandler({
   testPreflightEnabled=false,testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,
   clientId,clientSecret,refreshToken,oauthScope,
-  supabaseUrl,serviceRoleJwt,
+  supabaseUrl,serviceRoleJwt,sessionVaultKey,
   fetcher=fetch,makeWorkerId=()=>crypto.randomUUID()
 }={}){
  return async request=>{
@@ -45,12 +48,38 @@ export function createDeliveryHandler({
     if(request.headers.get('content-type')!=='application/json')
       return reply(400,'EXACT_REQUEST_REQUIRED');
     const body=await request.text();
-    if(body.length>200)return reply(413,'REQUEST_TOO_LARGE');
+    if(body.length>512)return reply(413,'REQUEST_TOO_LARGE');
     payload=JSON.parse(body);
   }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
-  if(!payload||Array.isArray(payload)||Object.keys(payload).length!==1
-    ||!['preallocate','verify_test_connection'].includes(payload.operation))
+  // Only a trusted backend caller holding the dedicated worker secret may
+  // name an existing leased continuation. The service ledger rechecks the
+  // exact frozen package/worker/generation before every remote operation.
+  // One invocation performs at most ONE existing folder or file step.
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const fields={
+    preallocate:['operation'],
+    verify_test_connection:['operation'],
+    reconcile_parent:['operation','package_id','worker_id','generation','kind'],
+    reconcile_geographic_leaf:['operation','package_id','worker_id','generation','kind'],
+    reconcile_package_folder:['operation','package_id','worker_id','generation','plan_id'],
+    transfer_one_chunk:['operation','package_id','worker_id','generation','plan_id']
+  };
+  const required=fields[payload?.operation];
+  if(!payload||Array.isArray(payload)||!required
+    ||Object.keys(payload).length!==required.length
+    ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
+  if(payload.operation!=='preallocate'
+    &&payload.operation!=='verify_test_connection'){
+    if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
+      ||!Number.isSafeInteger(payload.generation)||payload.generation<1
+      ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
+      ||(payload.operation==='reconcile_parent'
+        &&!['STATE','COUNTY','CITY','ADDRESS','WORK_ORDER'].includes(payload.kind))
+      ||(payload.operation==='reconcile_geographic_leaf'
+        &&!['ADDRESS','WORK_ORDER'].includes(payload.kind)))
+      return reply(400,'EXACT_REQUEST_REQUIRED');
+  }
   if(payload.operation==='verify_test_connection'){
     // TEST probe and delivery must never be active together. The operator
     // controls TEST-only roots in trusted server environment, not payload.
@@ -94,14 +123,42 @@ export function createDeliveryHandler({
     const tokenProvider=createWorkspaceTokenProvider({
       clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
     const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
-    const result=await prepareTrustedDelivery({
-      tokenProvider,ledger,workerId:makeWorkerId(),
+    if(payload.operation==='preallocate'){
+      const result=await prepareTrustedDelivery({
+        tokenProvider,ledger,workerId:makeWorkerId(),
+        expectedEmail:expectedAccount,expectedDriveId,fetcher
+      });
+      if(result.claimed===false)return reply(200,'NO_ELIGIBLE_PACKAGES');
+      if(result.provider_writes_performed!==false)
+        return reply(503,'PROVIDER_NOT_READY');
+      return reply(200,'PREALLOCATED_ONLY');
+    }
+    const lease={
+      tokenProvider,ledger,workerId:payload.worker_id,
+      generation:payload.generation,packageId:payload.package_id,
       expectedEmail:expectedAccount,expectedDriveId,fetcher
-    });
-    if(result.claimed===false)return reply(200,'NO_ELIGIBLE_PACKAGES');
-    if(result.provider_writes_performed!==false)
-      return reply(503,'PROVIDER_NOT_READY');
-    return reply(200,'PREALLOCATED_ONLY');
+    };
+    let result;
+    if(payload.operation==='reconcile_parent')
+      result=await continueTrustedDeliveryParent({...lease,kind:payload.kind});
+    else if(payload.operation==='reconcile_geographic_leaf')
+      result=await continueTrustedGeographicLeaf({...lease,kind:payload.kind});
+    else if(payload.operation==='reconcile_package_folder')
+      result=await continueTrustedPackageFolder({...lease,planId:payload.plan_id});
+    else if(payload.operation==='transfer_one_chunk'){
+      // A missing, wrong or lost encryption key is a hard stop, never a
+      // reason to allocate a replacement Google Drive file or session.
+      if(typeof sessionVaultKey!=='string'||!sessionVaultKey)
+        return reply(503,'SESSION_KEY_NOT_CONFIGURED');
+      const vault=await createSessionVault({base64Key:sessionVaultKey});
+      result=await continueTrustedDeliveryFile({...lease,planId:payload.plan_id,
+        projectUrl:supabaseUrl,serviceRoleJwt,vault});
+    }
+    if(result?.state==='PARENT_VERIFIED'
+      ||result?.state==='FOLDER_VERIFIED')return reply(200,'FOLDER_STEP_VERIFIED');
+    if(['FILE_VERIFIED','PROGRESS','NEEDS_INDEPENDENT_GET'].includes(result?.state))
+      return reply(200,result.state==='FILE_VERIFIED'?'FILE_STEP_VERIFIED':'FILE_STEP_PENDING');
+    return reply(503,'TRUSTED_STEP_UNVERIFIED');
   }catch {
     // Never expose a live OAuth token, session URI, Supabase key, package ID
     // or provider error body in responses to callers.
