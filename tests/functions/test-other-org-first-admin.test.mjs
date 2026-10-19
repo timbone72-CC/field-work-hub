@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { handleTestOtherOrgFirstAdmin } from
   '../../supabase/functions/admin-invite-contractor/test-other-org-first-admin.mjs';
 
@@ -186,4 +187,22 @@ test('recorded or uncertain invitation never generates another Auth link', async
     assert.equal(r.status, 409);
     assert.equal(events.filter(e => e[0] === 'generateLink').length, 0);
   }
+});
+
+test('independent feature flag permits only one-time other-org TEST path, not ordinary Admin recruitment', () => {
+  const entry = readFileSync(new URL(
+    '../../supabase/functions/admin-invite-contractor/index.ts', import.meta.url
+  ), 'utf8');
+  const testOperation = entry.split("if (operation === 'test_other_org_first_admin') {")[1]
+    ?.split("if (operation === 'invite_admin' || operation === 'invite_admin_new_team') {")[0];
+  assert.ok(testOperation, 'The separately scoped TEST operation must exist');
+  assert.match(testOperation, /TEAM_TEST_OTHER_ORG_FIRST_ADMIN_ENABLED/);
+  assert.doesNotMatch(testOperation, /TEAM_ADMIN_INVITE_ENABLED/);
+  assert.match(testOperation, /TEAM_ADMIN_INVITE_ENVIRONMENT/);
+  const normalStaffOperation = entry.split(
+    "if (operation === 'invite_admin' || operation === 'invite_admin_new_team') {"
+  )[1]?.split('// The original Contractor invite/cancel owner')[0];
+  assert.ok(normalStaffOperation, 'The original Admin recruitment path must exist');
+  assert.match(normalStaffOperation, /TEAM_ADMIN_INVITE_ENABLED/);
+  assert.doesNotMatch(normalStaffOperation, /TEAM_TEST_OTHER_ORG_FIRST_ADMIN_ENABLED/);
 });
