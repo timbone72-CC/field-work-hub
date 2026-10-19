@@ -1,6 +1,7 @@
-// Candidate only. Not deployed: current Team backend has no provider OAuth,
-// verified client destination, secure scheduled invocation or real-photo PASS.
-// Deployment requires verify_jwt=false PLUS the dedicated worker-secret check.
+// Candidate only. NOT deployed as the current TEST worker: the confirmed
+// client TEST destination is verified but INACTIVE and no real Send gate passed.
+// A later authorized rollout needs a private scheduler and dedicated worker
+// secret; hosting the current read-only TEST preflight does not enable Send.
 import {createDeliveryHandler} from './handler.mjs';
 Deno.serve(createDeliveryHandler({
  enabled:Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true',
