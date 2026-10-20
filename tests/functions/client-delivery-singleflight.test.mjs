@@ -50,7 +50,7 @@ function harness({onClaim=()=>Response.json({claimed:false}),onToken=token,
   if(pathname==='/token'){oauth++;return await onToken();}
   throw Error('UNEXPECTED_NETWORK_PATH '+pathname);
  };
- return {handler:createDeliveryHandler({...settings,fetcher}),
+ return {handler:createDeliveryHandler({...settings,fetcher}),fetcher,
   get holder(){return holder;},
   get oauth(){return oauth;},
   get claims(){return claims;},
@@ -68,7 +68,10 @@ test('overlapping network wakeups: first owns permit, second performs no provide
  }});
  const first=fixture.handler(req());
  await waiting;
- const second=await fixture.handler(req());
+ // Independent Edge isolate/handler instance shares only the simulated
+ // database singleton; an in-memory mutex would NOT reject this request.
+ const separateIsolate=createDeliveryHandler({...settings,fetcher:fixture.fetcher});
+ const second=await separateIsolate(req());
  assert.equal(second.status,503);
  assert.deepEqual(await second.json(),{status:'WORKER_BUSY'});
  assert.equal(fixture.claims,1);
