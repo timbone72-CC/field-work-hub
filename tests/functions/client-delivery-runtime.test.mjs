@@ -391,10 +391,12 @@ test('invalid server-supplied next plan is denied before provider access',async(
  }
 });
 
-function finalRig({moved=false,changedChecksum=false,badSnapshot=false}={}){
+function finalRig({moved=false,changedChecksum=false,badSnapshot=false,
+  withPhoto=false,movedPhoto=false,changedPhotoChecksum=false}={}){
  const seen=[],org=uuid(31),company=uuid(32);
  const addr='address_'+'a'.repeat(20),wo='workorder_'+'b'.repeat(20);
  const folder='package_'+'c'.repeat(20),manifestFile='manifest_'+'d'.repeat(20);
+ const photoFile='photo_'+'e'.repeat(20);
  const sha='a'.repeat(64);
  const props={fwh_package:uuid(3),fwh_manifest:sha};
  const app=(kind,key)=>({
@@ -413,11 +415,15 @@ function finalRig({moved=false,changedChecksum=false,badSnapshot=false}={}){
  const files=[{
   id:folder,parent:wo,name:'package-'+uuid(3),
   mime:'application/vnd.google-apps.folder',sha256:null,size:null,appProperties:props
- },{
-  id:manifestFile,parent:folder,name:'submission.json',
+ },
+ ...(withPhoto?[{id:photoFile,parent:folder,name:'field-photo-'+uuid(9)+'.jpg',
+  mime:'image/jpeg',sha256:'b'.repeat(64),size:250000,appProperties:props}]:[]),
+ {id:manifestFile,parent:folder,name:'submission.json',
   mime:'application/json',sha256:sha,size:42,appProperties:props
  }];
- const frozen={...claim.manifest,selected_photos:[],
+ const frozen={...claim.manifest,
+   selected_photos:withPhoto?[{photo_id:uuid(9),
+     observed_sha256:'b'.repeat(64),observed_size:250000}]:[],
    organization_id:org,client_company_id:company};
  const original={state:'ACTIVE',package_id:uuid(3),worker_id:uuid(1),
   destination_id:uuid(4),generation:1,approved_sha256:sha,manifest:frozen};
@@ -433,7 +439,7 @@ function finalRig({moved=false,changedChecksum=false,badSnapshot=false}={}){
     ?{...snapshot,root_id:'foreign_root_1234567'}:snapshot;},
   finish:async()=>{seen.push('finish');
    return {package_id:uuid(3),status:'DELIVERED',
-    manifest_sha256:sha,verified_file_count:2};}
+    manifest_sha256:sha,verified_file_count:files.length};}
  };
  const specs=[
   ...ancestor,...files,
@@ -447,10 +453,13 @@ function finalRig({moved=false,changedChecksum=false,badSnapshot=false}={}){
   const item=specs.find(p=>path==='/drive/v3/files/'+p.id);
   if(!item)throw Error('UNEXPECTED_URL');
   return Response.json({id:item.id,name:item.name,mimeType:item.mime,
-   parents:item.parent?[moved&&item.id===manifestFile?rootId:item.parent]:undefined,
+   parents:item.parent?[(moved&&item.id===manifestFile
+     ||movedPhoto&&item.id===photoFile)?rootId:item.parent]:undefined,
    driveId,trashed:false,appProperties:item.appProperties,
-   sha256Checksum:item.mime==='application/json'
-     ?changedChecksum?'0'.repeat(64):item.sha256:undefined,
+   sha256Checksum:['application/json','image/jpeg'].includes(item.mime)
+     ?(changedChecksum&&item.id===manifestFile
+       ||changedPhotoChecksum&&item.id===photoFile)
+         ?'0'.repeat(64):item.sha256:undefined,
    size:item.size,capabilities:item.capabilities});
  };
  const args={ledger,tokenProvider:async()=>({accessToken:'private-token-not-for-client',
@@ -479,4 +488,19 @@ test('final snapshot changed remote root blocks before OAuth or Google GET',asyn
  await assert.rejects(()=>advanceTrustedDeliveryOneStep(r.args),e=>
   e instanceof DriveUncertain&&e.code==='FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
  assert.deepEqual(r.seen,['read-lease','next','snapshot']);
+});
+
+test('final receipt rechecks selected original JPEG alongside submission manifest',async()=>{
+ const r=finalRig({withPhoto:true});
+ assert.deepEqual(await advanceTrustedDeliveryOneStep(r.args),{state:'PACKAGE_DELIVERED'});
+ assert.equal(r.seen.filter(v=>v==='finish').length,1);
+ assert.equal(r.seen.filter(v=>v.startsWith('GET /drive/v3/files/')).length,6);
+});
+test('changed JPEG parent or hash denies final receipt and preserves original file IDs',async()=>{
+ for(const mode of [{movedPhoto:true},{changedPhotoChecksum:true}]){
+  const r=finalRig({withPhoto:true,...mode});
+  await assert.rejects(()=>advanceTrustedDeliveryOneStep(r.args),DriveUncertain);
+  assert.equal(r.seen.includes('finish'),false);
+  assert.equal(r.seen.some(v=>v.startsWith('POST /drive/')),false);
+ }
 });
