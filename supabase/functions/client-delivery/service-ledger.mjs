@@ -3,7 +3,7 @@
 import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_read_active_delivery_lease','service_next_delivery_item','service_claim_delivery','service_heartbeat_delivery',
- 'service_reserve_delivery_file','service_read_delivery_parent',
+ 'service_reserve_delivery_file','service_reserve_delivery_file_set','service_read_delivery_parent',
  'service_reserve_delivery_parent','service_read_geographic_parent',
  'service_reserve_geographic_parent','service_read_geographic_leaf',
  'service_reserve_geographic_leaf','service_begin_delivery_parent_create',
@@ -82,6 +82,11 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     reserve:(pkg,worker,gen,kind,photo,id,parent)=>rpc('service_reserve_delivery_file',
       {p_package:pkg,p_worker:worker,p_generation:gen,p_kind:kind,
         p_photo:photo,p_file_id:id,p_parent_id:parent}),
+    reserveBatch:(pkg,worker,gen,folder,parent,photos,manifest)=>rpc(
+      'service_reserve_delivery_file_set',{
+        p_package:pkg,p_worker:worker,p_generation:gen,
+        p_folder_id:folder,p_parent_id:parent,
+        p_photos:photos,p_manifest_id:manifest}),
     // Exact company/destination mapping lookup precedes generateIds. The
     // server freezes both original IDs and authoritative parent IDs.
     readParent:(pkg,worker,gen,kind)=>rpc(
