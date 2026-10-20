@@ -14,7 +14,8 @@ export async function reserveProviderIdentities({
  if(!UUID.test(workerId??'')||!ledger||!drive||!expectedEmail
    ||typeof ledger.claim!=='function'||typeof ledger.heartbeat!=='function'
    ||typeof ledger.readParent!=='function'||typeof ledger.reserveParent!=='function'
-   ||typeof ledger.reserve!=='function')
+   ||typeof ledger.reserveBatch!=='function'
+   ||typeof ledger.nextReservedItem!=='function')
    fail('TRUSTED_WORKER_NOT_CONFIGURED');
  const claim=await ledger.claim(workerId);
  if(!claim||claim.claimed===false)return {claimed:false};
@@ -108,6 +109,14 @@ export async function reserveProviderIdentities({
  // Even after both database receipts, the current provider token must
  // independently prove the saved exact client WORK_ORDER destination.
  await drive.verifyDestination({folderId:wo.id,expectedDriveId});
+ // Read the original durable set under this exact lease BEFORE allocating.
+ // Existing complete or partially saved IDs must not be replaced after a
+ // lost response. With zero rows, a new Google generateIds is harmless:
+ // no provider object creation can yet have occurred for those unused IDs.
+ await heartbeat();
+ const next=await ledger.nextReservedItem(pkg,workerId,gen);
+ if(next?.state!=='UNRESERVED')
+   fail('ORIGINAL_FILE_RESERVATION_REQUIRES_RECONCILIATION');
  await heartbeat();
  const preallocated=await drive.generateIds(photos.length+2);
  if(!Array.isArray(preallocated)||preallocated.length!==photos.length+2
@@ -116,13 +125,14 @@ export async function reserveProviderIdentities({
    ||preallocated.some(id=>usedParentIds.has(id)))
    fail('REMOTE_IDS_UNAVAILABLE');
  const folder=preallocated[0],manifestFile=preallocated.at(-1);
- await ledger.reserve(pkg,workerId,gen,'FOLDER',null,folder,wo.id);
- for(let i=0;i<photos.length;i++){
-   await heartbeat();
-   await ledger.reserve(pkg,workerId,gen,'PHOTO',photos[i].photo_id,preallocated[i+1],folder);
- }
  await heartbeat();
- await ledger.reserve(pkg,workerId,gen,'MANIFEST',null,manifestFile,folder);
+ const receipt=await ledger.reserveBatch(pkg,workerId,gen,folder,wo.id,
+   photos.map((p,i)=>({photo_id:p.photo_id,file_id:preallocated[i+1]})),
+   manifestFile);
+ if(receipt?.reserved!==true||receipt.package_id!==pkg
+   ||receipt.folder_id!==folder||receipt.manifest_id!==manifestFile
+   ||receipt.reserved_count!==photos.length+2)
+   fail('ATOMIC_FILE_RESERVATION_UNCONFIRMED');
  return {claimed:true,package_id:pkg,generation:gen,
    reserved_count:photos.length+2,
    ready_for_provider_reconciliation:true,provider_writes_performed:false};
