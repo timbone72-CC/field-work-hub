@@ -89,8 +89,9 @@ test('TEST preflight requires separate explicit flag and keeps Send/preallocate 
  const transport=provider();
  const handler=createDeliveryHandler({...base,fetcher:transport.fetcher});
  const preallocate=await handler(invoke({operation:'preallocate'}));
- assert.equal(preallocate.status,503);
- assert.equal((await preallocate.json()).status,'WORKER_NOT_ACTIVATED');
+ // Preserve deployed v11's read-only exact-operation contract.
+ assert.equal(preallocate.status,400);
+ assert.equal((await preallocate.json()).status,'EXACT_REQUEST_REQUIRED');
  for(const payload of [{operation:'send'},
   {operation:'verify_test_connection',folderId:ROOT},
   {operation:'verify_test_connection',company:'another-company'},
