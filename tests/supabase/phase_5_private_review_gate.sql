@@ -563,6 +563,21 @@ begin
   if public.service_confirm_delivery_folder(pkg_id,delivery_worker,delivery_gen,
      folder_plan,folder_proof)->>'replayed'<>'true' then
     raise exception 'Same package folder receipt not idempotent';end if;
+  -- Frozen checked provider plan must carry EVERY verified ancestor,
+  -- the originally allocated folder, one selected JPEG and the manifest.
+  target:=public.service_delivery_final_provider_snapshot(
+    pkg_id,delivery_worker,delivery_gen);
+  if target->>'package_id'<>pkg_id::text
+    or target->>'root_id'<>'DISPOSABLE-ONLY'
+    or jsonb_array_length(target->'ancestors')<>2
+    or target->'ancestors'->0->>'id'<>wo_folder_id
+    or target->'ancestors'->1->>'id'<>address_folder_id
+    or jsonb_array_length(target->'files')<>3
+    or target->'files'->0->>'id'<>folder_id
+    or target->'files'->1->>'id'<>photo_file_id
+    or target->'files'->2->>'id'<>manifest_file_id
+    or target->'files'->2->>'sha256'<>(pkg_preview->>'manifest_sha256')
+  then raise exception 'Final provider snapshot omitted frozen chain or receipt';end if;
   delivery_done:=public.service_finish_delivery(pkg_id,delivery_worker,delivery_gen);
   if delivery_done->>'status'<>'DELIVERED'
     or (select count(*) from private.client_delivery_final_receipts where package_id=pkg_id)<>1
