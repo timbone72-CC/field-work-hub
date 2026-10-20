@@ -120,10 +120,34 @@ export function createDeliveryHandler({
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
     return reply(503,'BACKEND_NOT_CONFIGURED');
+  // The original SQL lease protects each transaction, not simultaneous
+  // Edge processes while their Google HTTP operations are in flight. Every
+  // mutating worker route shares ONE persisted dispatch permit, across all
+  // Supabase Edge instances. Read-only TEST mode never takes the permit.
+  if(payload.operation==='transfer_one_chunk'
+    &&(!sessionVaultKey||typeof sessionVaultKey!=='string'))
+    return reply(503,'SESSION_KEY_NOT_CONFIGURED');
+  let ledger,dispatchId;
+  try{
+    dispatchId=makeWorkerId();
+    if(!UUID.test(dispatchId))throw Error('INVALID_DISPATCH_ID');
+    ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+    const acquired=await ledger.acquireDispatch(dispatchId);
+    if(acquired?.acquired===false)return reply(503,'WORKER_BUSY');
+    if(acquired?.acquired!==true)throw Error('DISPATCH_PERMIT_UNVERIFIED');
+  }catch{return reply(503,'DISPATCH_PERMIT_UNAVAILABLE');}
+  // Only a positively verified step may release the permit. On crash,
+  // unexpected response, lease expiry or ambiguous provider outcome it
+  // intentionally persists until the original identities are reconciled.
+  // No TTL, finally{} release, or automatic second attempt is allowed.
+  const complete=async status=>{
+    const receipt=await ledger.releaseDispatch(dispatchId);
+    if(receipt?.released!==true)throw Error('DISPATCH_RELEASE_UNVERIFIED');
+    return reply(200,status);
+  };
   try{
     const tokenProvider=createWorkspaceTokenProvider({
       clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
-    const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
     if(payload.operation==='advance_once'){
       // Leases are recovered exclusively from the service-only immutable
       // outbox; callers supply NO package/user/worker/file identities.
@@ -138,21 +162,21 @@ export function createDeliveryHandler({
         }
       });
       if(result.state==='NO_ELIGIBLE_PACKAGES')
-        return reply(200,'NO_ELIGIBLE_PACKAGES');
+        return await complete('NO_ELIGIBLE_PACKAGES');
       if(result.state==='PARENT_STEP_VERIFIED')
-        return reply(200,'PARENT_STEP_VERIFIED');
+        return await complete('PARENT_STEP_VERIFIED');
       if(result.state==='PACKAGE_IDENTITIES_PREALLOCATED')
-        return reply(200,'PREALLOCATED_ONLY');
+        return await complete('PREALLOCATED_ONLY');
       if(result.state==='PACKAGE_FOLDER_STEP_VERIFIED')
-        return reply(200,'FOLDER_STEP_VERIFIED');
+        return await complete('FOLDER_STEP_VERIFIED');
       if(result.state==='FILE_STEP_VERIFIED')
-        return reply(200,'FILE_STEP_VERIFIED');
+        return await complete('FILE_STEP_VERIFIED');
       if(result.state==='FILE_STEP_PENDING')
-        return reply(200,'FILE_STEP_PENDING');
+        return await complete('FILE_STEP_PENDING');
       if(result.state==='PACKAGE_DELIVERED')
-        return reply(200,'FINAL_DELIVERY_VERIFIED');
+        return await complete('FINAL_DELIVERY_VERIFIED');
       if(result.state==='FINAL_PROVIDER_RECHECK_REQUIRED')
-        return reply(200,'FINAL_PROVIDER_RECHECK_REQUIRED');
+        return await complete('FINAL_PROVIDER_RECHECK_REQUIRED');
       return reply(503,'TRUSTED_STEP_UNVERIFIED');
     }
     if(payload.operation==='preallocate'){
@@ -160,10 +184,10 @@ export function createDeliveryHandler({
         tokenProvider,ledger,workerId:makeWorkerId(),
         expectedEmail:expectedAccount,expectedDriveId,fetcher
       });
-      if(result.claimed===false)return reply(200,'NO_ELIGIBLE_PACKAGES');
+      if(result.claimed===false)return await complete('NO_ELIGIBLE_PACKAGES');
       if(result.provider_writes_performed!==false)
         return reply(503,'PROVIDER_NOT_READY');
-      return reply(200,'PREALLOCATED_ONLY');
+      return await complete('PREALLOCATED_ONLY');
     }
     const lease={
       tokenProvider,ledger,workerId:payload.worker_id,
@@ -187,9 +211,9 @@ export function createDeliveryHandler({
         projectUrl:supabaseUrl,serviceRoleJwt,vault});
     }
     if(result?.state==='PARENT_VERIFIED'
-      ||result?.state==='FOLDER_VERIFIED')return reply(200,'FOLDER_STEP_VERIFIED');
+      ||result?.state==='FOLDER_VERIFIED')return await complete('FOLDER_STEP_VERIFIED');
     if(['FILE_VERIFIED','PROGRESS','NEEDS_INDEPENDENT_GET'].includes(result?.state))
-      return reply(200,result.state==='FILE_VERIFIED'?'FILE_STEP_VERIFIED':'FILE_STEP_PENDING');
+      return await complete(result.state==='FILE_VERIFIED'?'FILE_STEP_VERIFIED':'FILE_STEP_PENDING');
     return reply(503,'TRUSTED_STEP_UNVERIFIED');
   }catch {
     // Never expose a live OAuth token, session URI, Supabase key, package ID
