@@ -174,3 +174,21 @@ test('final provider verification snapshot is service-only and lease-fenced',asy
   p_package:pkg,p_worker:worker,p_generation:generation});
  assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
 });
+
+test('single-flight permit RPCs carry a server-generated request only, no package or remote ID',async()=>{
+ const dispatch=uuid(23);
+ const {ledger,calls}=mock(url=>Response.json(
+  url.pathname.endsWith('/service_acquire_delivery_dispatch')
+    ? {acquired:true} : {released:true}));
+ assert.deepEqual(await ledger.acquireDispatch(dispatch),{acquired:true});
+ assert.deepEqual(await ledger.releaseDispatch(dispatch),{released:true});
+ assert.deepEqual(calls.map(x=>new URL(x.url).pathname),[
+  '/rest/v1/rpc/service_acquire_delivery_dispatch',
+  '/rest/v1/rpc/service_release_delivery_dispatch'
+ ]);
+ for(const c of calls){
+  assert.deepEqual(JSON.parse(c.options.body),{p_request:dispatch});
+  assert.equal(c.options.headers.Authorization,'Bearer '+token);
+  assert.equal(c.options.redirect,'error');
+ }
+});
