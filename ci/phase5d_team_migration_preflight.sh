@@ -8,7 +8,7 @@ branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
 expected_count=107
 pending=(
-  "20261019200000_phase_5_original_delivery_lease_recovery.sql"
+  "20261019170000_phase_5_delivery_active_lease_resume_read.sql"
   "20261019210000_phase_5_delivery_next_reserved_item_read.sql"
   "20261020003000_phase_5_atomic_delivery_file_reservation.sql"
   "20261020010000_phase_5_final_delivery_provider_snapshot.sql"
