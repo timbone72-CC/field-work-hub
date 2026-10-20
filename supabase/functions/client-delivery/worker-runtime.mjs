@@ -92,8 +92,117 @@ export async function advanceTrustedDeliveryOneStep({
     if(!item||!['UNRESERVED','FOLDER','FILE',
       'RECEIPTS_READY_FOR_FINAL_RECHECK'].includes(item.state))
       throw new DriveUncertain('FROZEN_DELIVERY_ITEM_UNVERIFIED');
-    if(item.state==='RECEIPTS_READY_FOR_FINAL_RECHECK')
-      return Object.freeze({state:'FINAL_PROVIDER_RECHECK_REQUIRED'});
+    if(item.state==='RECEIPTS_READY_FOR_FINAL_RECHECK'){
+      if(typeof ledger.finalProviderSnapshot!=='function'
+        ||typeof ledger.finish!=='function')
+        throw new DriveUncertain('FINAL_PROVIDER_RECHECK_NOT_CONFIGURED');
+      const pkg=originalClaim.package_id,gen=originalClaim.generation;
+      const frozen=originalClaim.manifest;
+      const snap=await ledger.finalProviderSnapshot(pkg,workerId,gen);
+      const layout=frozen.folder_layout??'ADDRESS_WORK_ORDER';
+      const sequence=layout==='ADDRESS_WORK_ORDER'?['WORK_ORDER','ADDRESS']
+        :layout==='STATE_CITY_ADDRESS'?['WORK_ORDER','ADDRESS','CITY','STATE']
+        :layout==='STATE_COUNTY_CITY_ADDRESS'
+          ?['WORK_ORDER','ADDRESS','CITY','COUNTY','STATE']:null;
+      const id=/^[A-Za-z0-9_-]{10,160}$/;
+      const sha=/^[a-f0-9]{64}$/;
+      const photos=frozen.selected_photos;
+      if(!sequence||snap?.package_id!==pkg
+        ||snap?.approved_sha256!==originalClaim.approved_sha256
+        ||snap?.destination_id!==originalClaim.destination_id
+        ||snap?.root_id!==frozen.destination_root
+        ||!id.test(snap?.root_id??'')
+        ||!Array.isArray(snap.ancestors)||snap.ancestors.length!==sequence.length
+        ||!Array.isArray(snap.files)||snap.files.length!==photos.length+2
+        ||snap.files.length>202)
+        throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+      const identity={
+        fwh_package:pkg,fwh_manifest:originalClaim.approved_sha256
+      };
+      const used=new Set([snap.root_id]);
+      let requiredParent=snap.files[0]?.parent;
+      for(let i=0;i<snap.ancestors.length;i++){
+        const p=snap.ancestors[i];
+        if(!p||!id.test(p.id??'')||!id.test(p.parent??'')
+          ||p.id!==requiredParent||used.has(p.id)
+          ||p.mime!=='application/vnd.google-apps.folder'
+          ||p.sha256!==null||p.size!==null
+          ||p.appProperties?.fwh_kind!==sequence[i]
+          ||p.appProperties?.fwh_destination!==originalClaim.destination_id
+          ||p.appProperties?.fwh_org!==frozen.organization_id
+          ||p.appProperties?.fwh_company!==frozen.client_company_id
+          ||Object.keys(p.appProperties).length!==5)
+          throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+        used.add(p.id);requiredParent=p.parent;
+      }
+      if(requiredParent!==snap.root_id)
+        throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+      const folder=snap.files[0];
+      if(!folder||!id.test(folder.id??'')||used.has(folder.id)
+        ||folder.parent!==snap.ancestors[0].id
+        ||folder.name!=='package-'+pkg
+        ||folder.mime!=='application/vnd.google-apps.folder'
+        ||folder.sha256!==null||folder.size!==null)
+        throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+      used.add(folder.id);
+      const photoSet=new Map(photos.map(p=>[
+        'field-photo-'+p.photo_id+'.jpg',p]));
+      const seenPhotos=new Set();
+      for(let i=0;i<snap.files.length;i++){
+        const f=snap.files[i];
+        if(!f||!id.test(f.id??'')||i>0&&(used.has(f.id)||f.parent!==folder.id)
+          ||f.appProperties?.fwh_package!==identity.fwh_package
+          ||f.appProperties?.fwh_manifest!==identity.fwh_manifest
+          ||Object.keys(f.appProperties).length!==2)
+          throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+        if(i===0)continue;
+        used.add(f.id);
+        if(f.name==='submission.json'){
+          if(i!==snap.files.length-1
+            ||f.mime!=='application/json'
+            ||f.sha256!==identity.fwh_manifest
+            ||!Number.isSafeInteger(f.size)||f.size<=0)
+            throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+        }else{
+          const photo=photoSet.get(f.name);
+          if(!photo||seenPhotos.has(f.name)||f.mime!=='image/jpeg'
+            ||!sha.test(f.sha256??'')
+            ||f.sha256!==photo.observed_sha256
+            ||f.size!==photo.observed_size)
+            throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+          seenPhotos.add(f.name);
+        }
+      }
+      if(seenPhotos.size!==photos.length)
+        throw new DriveUncertain('FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+      // The final stage is READ-ONLY at Google: fresh GETs of every frozen
+      // ancestor and remote byte receipt. No stale stored SQL receipt alone
+      // can reach the final database transition from this coordinator.
+      let auth;
+      try{auth=await tokenProvider();}
+      catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+      if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+        ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+        throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+      const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+      const account=await drive.verifyProviderIdentity(expectedEmail);
+      if(account.account.toLowerCase()!==expectedEmail.toLowerCase())
+        throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
+      const beat=()=>ledger.heartbeat(pkg,workerId,gen);
+      await beat();
+      await drive.verifyDestination({folderId:snap.root_id,expectedDriveId});
+      for(const item of [...snap.ancestors,...snap.files]){
+        await beat();
+        await drive.verifyFile({...item,expectedDriveId});
+      }
+      await beat();
+      const result=await ledger.finish(pkg,workerId,gen);
+      if(result?.package_id!==pkg||result?.status!=='DELIVERED'
+        ||result?.manifest_sha256!==originalClaim.approved_sha256
+        ||result?.verified_file_count!==photos.length+2)
+        throw new DriveUncertain('FINAL_PROVIDER_RECEIPT_UNVERIFIED');
+      return Object.freeze({state:'PACKAGE_DELIVERED'});
+    }
     if(item.state==='FOLDER'||item.state==='FILE'){
       if(!UUID.test(item.plan_id??'')
         ||(item.state==='FILE'&&!['PHOTO','MANIFEST'].includes(item.kind))
