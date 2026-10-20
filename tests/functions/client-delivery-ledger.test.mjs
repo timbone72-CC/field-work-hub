@@ -146,3 +146,20 @@ test('next reserved item lookup is service-only and bound to original lease IDs'
  assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
  assert.equal(calls[0].options.redirect,'error');
 });
+
+test('atomic file set RPC preserves ordered immutable IDs under original lease',async()=>{
+ const pkg=uuid(1),worker=uuid(2),g=3;
+ const photos=[{photo_id:uuid(4),file_id:'google_0123456789012345'}];
+ const {ledger,calls}=mock(()=>Response.json({reserved:true,package_id:pkg,
+  folder_id:'folder_012345678901234',manifest_id:'manifest_012345678901',reserved_count:3}));
+ const ack=await ledger.reserveBatch(pkg,worker,g,'folder_012345678901234',
+  'wo_012345678901234567',photos,'manifest_012345678901');
+ assert.equal(ack.reserved,true);
+ assert.equal(new URL(calls[0].url).pathname,
+  '/rest/v1/rpc/service_reserve_delivery_file_set');
+ assert.deepEqual(JSON.parse(calls[0].options.body),{
+  p_package:pkg,p_worker:worker,p_generation:g,
+  p_folder_id:'folder_012345678901234',p_parent_id:'wo_012345678901234567',
+  p_photos:photos,p_manifest_id:'manifest_012345678901'});
+ assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
+});
