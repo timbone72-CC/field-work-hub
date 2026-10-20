@@ -53,7 +53,7 @@ declare
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
   pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
-  delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb;
+  delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb; atomic_receipt jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
   address_map uuid; wo_map uuid; address_name text; wo_name text; address_proof jsonb; wo_proof jsonb;
@@ -440,13 +440,13 @@ begin
       where package_id=pkg_id) then
     raise exception 'Rejected atomic reservation left partial IDs';
   end if;
-  response:=public.service_reserve_delivery_file_set(
+  atomic_receipt:=public.service_reserve_delivery_file_set(
     pkg_id,delivery_worker,delivery_gen,folder_id,wo_folder_id,
     jsonb_build_array(jsonb_build_object('photo_id',photo,
       'file_id',photo_file_id)),manifest_file_id);
-  if response->>'reserved'<>'true' or response->>'reserved_count'<>'3'
-    or response->>'folder_id'<>folder_id
-    or response->>'manifest_id'<>manifest_file_id
+  if atomic_receipt->>'reserved'<>'true' or atomic_receipt->>'reserved_count'<>'3'
+    or atomic_receipt->>'folder_id'<>folder_id
+    or atomic_receipt->>'manifest_id'<>manifest_file_id
     or (select count(*) from private.client_delivery_file_plans
         where package_id=pkg_id)<>3 then
     raise exception 'Three original Drive IDs did not commit together';
