@@ -217,8 +217,10 @@ begin
     perform public.service_release_delivery_dispatch(req2);
   exception when insufficient_privilege then denied:=true;end;
   if not denied then raise exception 'Foreign dispatch released original owner';end if;
+  execute 'reset role';
   if (select request_id from private.client_delivery_dispatch_permit) is distinct from req1
     then raise exception 'Wrong-worker release erased the permit';end if;
+  execute 'set local role service_role';
   last:=public.service_release_delivery_dispatch(req1);
   if last->>'released'<>'true' then raise exception 'Owner failed to release';end if;
   last:=public.service_acquire_delivery_dispatch(req2);
