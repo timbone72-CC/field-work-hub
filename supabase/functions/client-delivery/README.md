@@ -225,3 +225,44 @@ The file-continuation operation additionally requires a protected, separate **32
 The same candidate `handler.mjs` adds exact worker-secret-only `{ "operation": "advance_once" }` while `enabled=true` **only**. The caller cannot supply a package, company, folder, plan or remote ID. `worker-runtime.mjs` `advanceTrustedDeliveryOneStep` reads the original active lease first; when none exists, it uses the existing fenced one-shot `service_claim_delivery`. It reuses the same provider preallocation owner and advances **at most one existing guarded STATE/COUNTY/CITY/ADDRESS/WORK_ORDER folder step**, honoring frozen geographic vs legacy layout and one-shot ATTEMPTED/GET receipts. Inactive/uncertain/stale/changed work remains blocked. Final package-folder creation, photo and manifest uploads, and terminal `DELIVERED` are **NOT** performed by `advance_once` and require the separately approved, still-incomplete source scheduler/provider testing. A surviving lease is read back from SQL on a new process; no new local or browser-owned session journal is introduced. Multiple wakeups must still be serialized by the private scheduler at the release gate; this pilot candidate is not proof of safe parallel production dispatch.
 
 **Current reality:** Hosted `client-delivery` v11 is still the separate read-only TEST verifier, not this source. Team has 103 applied versions; this is the **104th source migration, deliberately unapplied** pending the governed exact-filename CLI deployment and TEST release evidence gate. One TEST destination remains verified but inactive; zero worker-ready, packages, outbox deliveries, final receipts or scheduled Send. The existing runtime's two-minute lease cannot be recovered after expiry by this RPC; an expired attempt becomes BLOCKED and requires the existing explicit same-ID UNCERTAIN reconciliation. This is not a retry feature. No Google folder/photo operation was performed by adding this source.
+
+
+## Phase 5D — one-slot hosted delivery dispatch (SOURCE ONLY, 2026-10-19 CDT)
+
+The original `service_claim_delivery` / `service_delivery_guard` outbox lease fences each
+database operation but it does **not** hold a PostgreSQL transaction lock during a
+Google HTTP request. Since `pg_net` HTTP delivery is asynchronous, cron's
+one-minute cadence does not guarantee non-overlapping Edge requests.
+
+The new **additive and unapplied** canonical migration
+`20261020020000_phase_5_delivery_dispatch_singleflight.sql` introduces one
+private, global, RLS-enabled singleton permit row for the **existing** worker.
+Only `service_role` can call its two narrow atomic RPCs. Every activated,
+worker-secret-validated mutating operation (`advance_once`, legacy guarded
+`preallocate`, and the fenced parent/folder/chunk continuations) must acquire
+a freshly generated private request UUID **before** fetching Workspace OAuth
+or reading/claiming the original outbox. An overlapping request gets a
+generic `WORKER_BUSY` without OAuth or provider calls. The original step
+releases only on a positively verified completion response; wrong-owner
+release cannot clear the row.
+
+**No automatic expiry, takeover or reset.** On crash, uncertain provider
+outcome, failed OAuth, unexpected SQL response or missing verification the
+permit remains occupied across Edge process restarts. Operator recovery
+requires an explicit inspection of the **original** frozen IDs, folder/file
+attempt receipts, lease/outbox, uploaded bytes and last Google outcome before
+any DBA-managed release. Never simply delete the permit to restart delivery,
+and never allocate replacement Google IDs. This is a conservative safety
+fence, not a scheduler, second queue, customer delivery activation or
+complete recovery operator UI.
+
+Tests are source-only Node HTTP overlap / blocked failure checks plus a
+rollback-only real PostgreSQL service-role/permission/singleton fixture in
+the existing test suite. A mock cannot prove an actual hosted crash,
+`pg_net` retry behavior or a real Google delivery. Current Team TEST
+has **107** installed migrations and still runs read-only
+`client-delivery` v11; the new migration is **108th source-only** and is
+not applied or deployed by this documentation. A modified exact-head
+`ci/phase5d_team_migration_preflight.sh` previews **only** this one new
+canonical migration. Do not apply/activate before the governed TEST rollout,
+final CI and real provider/device gates.
