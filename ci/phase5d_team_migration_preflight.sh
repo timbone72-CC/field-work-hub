@@ -6,12 +6,9 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=107
+expected_count=108
 pending=(
-  "20261019170000_phase_5_delivery_active_lease_resume_read.sql"
-  "20261019210000_phase_5_delivery_next_reserved_item_read.sql"
-  "20261020003000_phase_5_atomic_delivery_file_reservation.sql"
-  "20261020010000_phase_5_final_delivery_provider_snapshot.sql"
+  "20261020020000_phase_5_delivery_dispatch_singleflight.sql"
 )
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
@@ -61,7 +58,7 @@ done
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: dry-run includes all four expected unapplied canonical migrations:\n'
+printf 'PASS: dry-run includes the one expected unapplied canonical migration:\n'
 printf '  %s\n' "${pending[@]}"
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
 printf 'This does not replace a manual full dry-run review, live-state safety check,\n'
