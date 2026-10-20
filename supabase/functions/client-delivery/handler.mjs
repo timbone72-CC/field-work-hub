@@ -149,6 +149,8 @@ export function createDeliveryHandler({
         return reply(200,'FILE_STEP_VERIFIED');
       if(result.state==='FILE_STEP_PENDING')
         return reply(200,'FILE_STEP_PENDING');
+      if(result.state==='PACKAGE_DELIVERED')
+        return reply(200,'FINAL_DELIVERY_VERIFIED');
       if(result.state==='FINAL_PROVIDER_RECHECK_REQUIRED')
         return reply(200,'FINAL_PROVIDER_RECHECK_REQUIRED');
       return reply(503,'TRUSTED_STEP_UNVERIFIED');
