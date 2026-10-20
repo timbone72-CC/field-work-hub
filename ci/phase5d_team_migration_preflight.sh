@@ -48,8 +48,13 @@ trap 'rm -f "$out"' EXIT
 if ! supabase db push --dry-run --linked >"$out" 2>&1; then
   stop "Supabase canonical dry-run failed. Inspect the local CLI output; no migration was applied by this script."
 fi
+mapfile -t dry_run_migrations < <(
+  grep -Eo '20[0-9]{12}_[a-zA-Z0-9_]+\\.sql' "$out" | sort -u
+)
+[[ "${#dry_run_migrations[@]}" -eq "${#pending[@]}" ]] ||
+  stop "Dry-run migration set is not exactly the four reviewed canonical versions."
 for name in "${pending[@]}"; do
-  if ! grep -Fq "$name" "$out"; then
+  if ! printf '%s\n' "${dry_run_migrations[@]}" | grep -Fxq "$name"; then
     stop "Pending canonical migration $name not listed by the dry-run."
   fi
 done
