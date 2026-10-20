@@ -163,3 +163,14 @@ test('atomic file set RPC preserves ordered immutable IDs under original lease',
   p_photos:photos,p_manifest_id:'manifest_012345678901'});
  assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
 });
+
+test('final provider verification snapshot is service-only and lease-fenced',async()=>{
+ const pkg=uuid(1),worker=uuid(2),generation=3;
+ const {ledger,calls}=mock(()=>Response.json({package_id:pkg,ancestors:[],files:[]}));
+ await ledger.finalProviderSnapshot(pkg,worker,generation);
+ assert.equal(new URL(calls[0].url).pathname,
+  '/rest/v1/rpc/service_delivery_final_provider_snapshot');
+ assert.deepEqual(JSON.parse(calls[0].options.body),{
+  p_package:pkg,p_worker:worker,p_generation:generation});
+ assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
+});
