@@ -96,3 +96,12 @@ grant execute on function
  private.service_reserve_delivery_file_set(uuid,uuid,bigint,text,text,jsonb,text),
  public.service_reserve_delivery_file_set(uuid,uuid,bigint,text,text,jsonb,text)
  to service_role;
+
+-- Retire the old externally callable one-file reservation RPC at the same
+-- source migration boundary. Its private implementation remains callable
+-- ONLY inside the new trusted transaction (under the function owner).
+-- Otherwise an elevated service caller could strand a partial package.
+revoke execute on function
+ public.service_reserve_delivery_file(uuid,uuid,bigint,text,uuid,text,text),
+ private.service_reserve_delivery_file(uuid,uuid,bigint,text,uuid,text,text)
+ from service_role;
