@@ -56,7 +56,7 @@ test('provider/token errors are redacted and cannot claim a delivered package',a
  assert.equal(body.includes('DO_NOT_LEAK'),false);
  assert.equal(body.includes('refresh'),false);
  assert.equal(body.includes('DELIVERED'),false);
- assert.equal(body,'{"status":"TRUSTED_PROVIDER_UNAVAILABLE"}');
+ assert.equal(body,'{"status":"DISPATCH_PERMIT_UNAVAILABLE"}');
 });
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const leased={package_id:uuid(1),worker_id:uuid(2),generation:1};
@@ -125,7 +125,10 @@ test('leased file chunk requires server-only AES-GCM secret, never a substitute 
 test('private continuation errors are redacted with no new Google write on OAuth failure',async()=>{
  const paths=[];
  const h=createDeliveryHandler({...candidateConfig,
-   fetcher:(raw,opts)=>{paths.push([new URL(raw).pathname,opts.method||'GET']);
+   fetcher:(raw,opts)=>{const pathname=new URL(raw).pathname;
+      paths.push([pathname,opts.method||'GET']);
+      if(pathname==='/rest/v1/rpc/service_acquire_delivery_dispatch')
+        return Response.json({acquired:true});
       throw Error('DO_NOT_LEAK_AUTH_OR_IDENTITY');}});
  const result=await h(request(secret,{operation:'reconcile_parent',
    ...leased,kind:'STATE'}));
@@ -134,7 +137,10 @@ test('private continuation errors are redacted with no new Google write on OAuth
  assert.equal(text,'{"status":"TRUSTED_PROVIDER_UNAVAILABLE"}');
  assert.equal(text.includes('DO_NOT_LEAK'),false);
  assert.equal(text.includes(leased.package_id),false);
- assert.deepEqual(paths,[['/token','POST']]);
+ assert.deepEqual(paths,[
+  ['/rest/v1/rpc/service_acquire_delivery_dispatch','POST'],
+  ['/token','POST']
+ ]);
 });
 test('advance_once accepts no caller-controlled work or folder identity',async()=>{
  let touched=0;
@@ -157,15 +163,20 @@ test('expired original lease blocks advance_once without Google OAuth or new cla
  const calls=[];
  const h=createDeliveryHandler({...candidateConfig,fetcher:async(raw,opts)=>{
   const u=new URL(raw);calls.push([u.pathname,opts.method]);
-  assert.equal(u.pathname,'/rest/v1/rpc/service_read_active_delivery_lease');
   assert.equal(opts.headers.Authorization,'Bearer '+candidateConfig.serviceRoleJwt);
+  if(u.pathname==='/rest/v1/rpc/service_acquire_delivery_dispatch')
+    return Response.json({acquired:true});
+  assert.equal(u.pathname,'/rest/v1/rpc/service_read_active_delivery_lease');
   return Response.json({state:'BLOCKED_UNCERTAIN'});
  }});
  const r=await h(request(secret,{operation:'advance_once'}));
  assert.equal(r.status,503);
  const text=await r.text();
  assert.equal(text,'{"status":"TRUSTED_PROVIDER_UNAVAILABLE"}');
- assert.deepEqual(calls,[['/rest/v1/rpc/service_read_active_delivery_lease','POST']]);
+ assert.deepEqual(calls,[
+  ['/rest/v1/rpc/service_acquire_delivery_dispatch','POST'],
+  ['/rest/v1/rpc/service_read_active_delivery_lease','POST']
+ ]);
 });
 test('default-off scheduler wakeup performs no claim, Google GET or file write',async()=>{
  let count=0;
