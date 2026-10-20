@@ -14,8 +14,7 @@ export async function reserveProviderIdentities({
  if(!UUID.test(workerId??'')||!ledger||!drive||!expectedEmail
    ||typeof ledger.claim!=='function'||typeof ledger.heartbeat!=='function'
    ||typeof ledger.readParent!=='function'||typeof ledger.reserveParent!=='function'
-   ||typeof ledger.reserveBatch!=='function'
-   ||typeof ledger.nextReservedItem!=='function')
+)
    fail('TRUSTED_WORKER_NOT_CONFIGURED');
  const claim=await ledger.claim(workerId);
  if(!claim||claim.claimed===false)return {claimed:false};
@@ -109,6 +108,9 @@ export async function reserveProviderIdentities({
  // Even after both database receipts, the current provider token must
  // independently prove the saved exact client WORK_ORDER destination.
  await drive.verifyDestination({folderId:wo.id,expectedDriveId});
+ if(typeof ledger.reserveBatch!=='function'
+   ||typeof ledger.nextReservedItem!=='function')
+   fail('TRUSTED_WORKER_NOT_CONFIGURED');
  // Read the original durable set under this exact lease BEFORE allocating.
  // Existing complete or partially saved IDs must not be replaced after a
  // lost response. With zero rows, a new Google generateIds is harmless:
