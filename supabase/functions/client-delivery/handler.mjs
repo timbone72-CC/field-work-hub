@@ -100,9 +100,15 @@ export function createDeliveryHandler({
   // Edge processes while their Google HTTP operations are in flight. Every
   // mutating worker route shares ONE persisted dispatch permit, across all
   // Supabase Edge instances. Read-only TEST mode never takes the permit.
-  if(payload.operation==='transfer_one_chunk'
-    &&(!sessionVaultKey||typeof sessionVaultKey!=='string'))
-    return reply(503,'SESSION_KEY_NOT_CONFIGURED');
+  // Check the current encrypted-session key BEFORE the durable permit is
+  // acquired. advance_once may select a file step even if the caller supplies
+  // no plan identity; an absent/malformed key must not strand the singleton.
+  // This does not decrypt prior sessions or authorize replacement keys/IDs.
+  let vault;
+  if(payload.operation==='advance_once'||payload.operation==='transfer_one_chunk'){
+    try{vault=await createSessionVault({base64Key:sessionVaultKey});}
+    catch{return reply(503,'SESSION_KEY_NOT_CONFIGURED');}
+  }
   let ledger,dispatchId;
   try{
     dispatchId=makeWorkerId();
@@ -131,11 +137,8 @@ export function createDeliveryHandler({
         tokenProvider,ledger,makeWorkerId,
         expectedEmail:expectedAccount,expectedDriveId,fetcher,
         projectUrl:supabaseUrl,serviceRoleJwt,
-        makeVault:async()=>{
-          if(typeof sessionVaultKey!=='string'||!sessionVaultKey)
-            throw Error('SESSION_KEY_NOT_CONFIGURED');
-          return createSessionVault({base64Key:sessionVaultKey});
-        }
+        // The vault was validated before the original dispatch permit.
+        makeVault:async()=>vault
       });
       if(result.state==='NO_ELIGIBLE_PACKAGES')
         return await complete('NO_ELIGIBLE_PACKAGES');
@@ -178,11 +181,8 @@ export function createDeliveryHandler({
     else if(payload.operation==='reconcile_package_folder')
       result=await continueTrustedPackageFolder({...lease,planId:payload.plan_id});
     else if(payload.operation==='transfer_one_chunk'){
-      // A missing, wrong or lost encryption key is a hard stop, never a
-      // reason to allocate a replacement Google Drive file or session.
-      if(typeof sessionVaultKey!=='string'||!sessionVaultKey)
-        return reply(503,'SESSION_KEY_NOT_CONFIGURED');
-      const vault=await createSessionVault({base64Key:sessionVaultKey});
+      // The protected AES-GCM key was validated before taking the permit.
+      // A wrong historical key still fails closed on original ciphertext.
       result=await continueTrustedDeliveryFile({...lease,planId:payload.plan_id,
         projectUrl:supabaseUrl,serviceRoleJwt,vault});
     }
