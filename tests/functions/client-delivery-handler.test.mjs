@@ -122,6 +122,22 @@ test('leased file chunk requires server-only AES-GCM secret, never a substitute 
  assert.deepEqual(await r.json(),{status:'SESSION_KEY_NOT_CONFIGURED'});
  assert.equal(calls,0);
 });
+test('invalid encrypted-session key stops all active chunk-capable worker operations before persistent dispatch',async()=>{
+ for(const operation of ['advance_once','transfer_one_chunk']){
+  for(const key of [undefined,'not-base64', 'A'.repeat(22)]){
+   let calls=0;
+   const h=createDeliveryHandler({...candidateConfig,sessionVaultKey:key,
+     fetcher:()=>{calls++;throw Error('UNEXPECTED_NETWORK_CALL');}});
+   const body=operation==='advance_once'?{operation}:{
+     operation,...leased,plan_id:uuid(3)
+   };
+   const r=await h(request(secret,body));
+   assert.equal(r.status,503,operation);
+   assert.deepEqual(await r.json(),{status:'SESSION_KEY_NOT_CONFIGURED'});
+   assert.equal(calls,0,'no global permit, provider or OAuth is touched');
+  }
+ }
+});
 test('private continuation errors are redacted with no new Google write on OAuth failure',async()=>{
  const paths=[];
  const h=createDeliveryHandler({...candidateConfig,
@@ -161,7 +177,9 @@ test('advance_once accepts no caller-controlled work or folder identity',async()
 });
 test('expired original lease blocks advance_once without Google OAuth or new claim',async()=>{
  const calls=[];
- const h=createDeliveryHandler({...candidateConfig,fetcher:async(raw,opts)=>{
+ const h=createDeliveryHandler({...candidateConfig,
+  sessionVaultKey:'A'.repeat(43), // valid disposable 32-byte AES-GCM key
+  fetcher:async(raw,opts)=>{
   const u=new URL(raw);calls.push([u.pathname,opts.method]);
   assert.equal(opts.headers.Authorization,'Bearer '+candidateConfig.serviceRoleJwt);
   if(u.pathname==='/rest/v1/rpc/service_acquire_delivery_dispatch')
