@@ -37,7 +37,12 @@ function rig({states={},unsupported=false,foreign=false,cityUnderState=false}={}
    reserveParent:async(_p,_w,_g,k,id,p)=>reserve('reserveParent',k,id,p),
    readGeographicLeaf:async(_p,_w,_g,k)=>read('readGeographicLeaf',k),
    reserveGeographicLeaf:async(_p,_w,_g,k,id,p)=>reserve('reserveGeographicLeaf',k,id,p),
-   reserve:async(...args)=>{calls.push('reserveFile:'+args[3])}
+   nextReservedItem:async()=>({state:'UNRESERVED'}),
+   reserveBatch:async(pkg,worker,gen,folder,parent,photos,manifest)=>{
+     calls.push('reserveFileSet');
+     return {reserved:true,package_id:pkg,folder_id:folder,
+       manifest_id:manifest,reserved_count:photos.length+2};
+   }
  };
  const drive={
    verifyProviderIdentity:async expected=>({account:expected}),
@@ -74,14 +79,14 @@ test('verified geographic hierarchy reserves package beneath exact work order',a
  assert.equal(result.provider_writes_performed,false);
  assert.ok(r.calls.includes('readGeographicLeaf:ADDRESS'));
  assert.ok(r.calls.includes('readGeographicLeaf:WORK_ORDER'));
- assert.ok(r.calls.includes('reserveFile:FOLDER'));
+ assert.ok(r.calls.includes('reserveFileSet'));
  assert.ok(!r.calls.includes('reserveParent:ADDRESS'));
 });
 test('wrong ancestor and unsupported layout fail closed',async()=>{
  const r=rig({states:Object.fromEntries(kinds.map(k=>[k,'VERIFIED'])),foreign:true});
  await assert.rejects(()=>run(r),e=>e instanceof DriveUncertain
   &&e.code==='FROZEN_PARENT_IDENTITY_UNCERTAIN');
- assert.ok(!r.calls.some(c=>c.startsWith('reserveFile:')));
+ assert.ok(!r.calls.some(c=>c.startsWith('reserveFileSet')));
  const unsupported=rig({unsupported:true});
  await assert.rejects(()=>run(unsupported),e=>e instanceof DriveUncertain
   &&e.code==='FROZEN_FOLDER_LAYOUT_UNSUPPORTED');
