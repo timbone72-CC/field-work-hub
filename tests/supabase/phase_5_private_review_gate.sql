@@ -426,8 +426,10 @@ begin
   -- Even after an independently verified address/WO chain, the old
   -- direct-root path must fail. No package folder can bypass company isolation.
   perform pg_temp.expect_photo_review_error('42501',format(
-    'select public.service_reserve_delivery_file(%L,%L,%s,%L,null,%L,%L)',
-    pkg_id,delivery_worker,delivery_gen,'FOLDER',folder_id,'DISPOSABLE-ONLY'));
+    'select public.service_reserve_delivery_file_set(%L,%L,%s,%L,%L,%L::jsonb,%L)',
+    pkg_id,delivery_worker,delivery_gen,folder_id,'DISPOSABLE-ONLY',
+    jsonb_build_array(jsonb_build_object('photo_id',photo,
+      'file_id',photo_file_id))::text,manifest_file_id));
   -- Entire immutable package set now commits atomically. A changed
   -- selected photo identity must reject without any partial remote plans.
   perform pg_temp.expect_photo_review_error('22023',format(
@@ -492,7 +494,8 @@ begin
   if (select count(*) from private.client_delivery_file_plans
        where package_id=pkg_id and kind in ('PHOTO','MANIFEST'))<>2 then
     raise exception 'Atomic file set lost selected photo or manifest';end if;
-  perform pg_temp.expect_photo_review_error('40001',format(
+  -- The retired one-file RPC is no longer a service-role escape hatch.
+  perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_reserve_delivery_file(%L,%L,%s,%L,%L,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,'OTHER-GENERATED-ID',folder_id));
   select id into upload_plan from private.client_delivery_file_plans
