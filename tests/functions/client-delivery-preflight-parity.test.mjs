@@ -77,7 +77,11 @@ async function compare(raw,override={},options={}){
  const previous=createReadOnlyTestHandler({...oldOptions,
   ...toOld(override),fetcher:a.fetcher});
  const current=createDeliveryHandler({...expected,
-  enabled:false,testPreflightEnabled:true,...override,fetcher:b.fetcher});
+  enabled:false,testPreflightEnabled:true,...override,
+  // The original read-only adapter names this argument expectedEmail;
+  // the joined worker's existing option is named expectedAccount.
+  expectedAccount:override.expectedEmail??expected.expectedEmail,
+  fetcher:b.fetcher});
  const old=await previous(request(raw)),now=await current(request(raw));
  assert.equal(now.status,old.status);
  assert.equal(await now.text(),await old.text());
