@@ -149,4 +149,32 @@ begin
  raise notice 'Atomic file-set service-only and stale-lease denial PASS';
 end;
 $atomic_acl$;
+do $final_acl$
+declare denied boolean:=false;
+begin
+ if has_function_privilege('anon',
+   'public.service_delivery_final_provider_snapshot(uuid,uuid,bigint)','execute')
+   or has_function_privilege('authenticated',
+   'public.service_delivery_final_provider_snapshot(uuid,uuid,bigint)','execute')
+   or not has_function_privilege('service_role',
+   'public.service_delivery_final_provider_snapshot(uuid,uuid,bigint)','execute')
+ then raise exception 'Final provider snapshot grants are unsafe';end if;
+ execute 'set local role authenticated';
+ begin
+   perform public.service_delivery_final_provider_snapshot(
+     gen_random_uuid(),gen_random_uuid(),1);
+ exception when insufficient_privilege then denied:=true;end;
+ execute 'reset role';
+ if not denied then raise exception 'Ordinary user obtained final delivery verification snapshot';end if;
+ denied:=false;
+ execute 'set local role service_role';
+ begin
+   perform public.service_delivery_final_provider_snapshot(
+     gen_random_uuid(),gen_random_uuid(),1);
+ exception when serialization_failure then denied:=true;end;
+ execute 'reset role';
+ if not denied then raise exception 'Unknown worker obtained final delivery snapshot';end if;
+ raise notice 'Final provider projection service-only and original lease gated PASS';
+end;
+$final_acl$;
 rollback;
