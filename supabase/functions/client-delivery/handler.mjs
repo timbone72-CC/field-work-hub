@@ -9,6 +9,7 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
  continueTrustedDeliveryFile} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
+import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
 function reply(status,code) {
  return new Response(JSON.stringify({status:code}),{status,headers:{
@@ -42,7 +43,19 @@ export function createDeliveryHandler({
   // No provider work is permitted when both capabilities are disabled.
   if(enabled===true&&testPreflightEnabled===true)
     return reply(503,'CONFLICTING_WORKER_MODES');
-  if(enabled!==true&&testPreflightEnabled!==true)
+  // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
+  // rollout. No second OAuth/root-check implementation and no database RPC.
+  // The existing adapter independently rejects preallocate, Send and every
+  // mutating operation before touching Google or Supabase.
+  if(enabled!==true&&testPreflightEnabled===true)
+    return createReadOnlyTestHandler({
+      deliveryActive:false,testEnabled:true,testEvidenceClass,workerSecret,
+      expectedEmail:expectedAccount,expectedDriveId,
+      clientRootId:testRootFolderId,internalDriveId,
+      workspaceDomain:testWorkspaceDomain,clientId,clientSecret,
+      refreshToken,oauthScope,fetcher
+    })(request);
+  if(enabled!==true)
     return reply(503,'WORKER_NOT_ACTIVATED');
   let payload;
   try{
@@ -60,7 +73,6 @@ export function createDeliveryHandler({
   const fields={
     preallocate:['operation'],
     advance_once:['operation'],
-    verify_test_connection:['operation'],
     reconcile_parent:['operation','package_id','worker_id','generation','kind'],
     reconcile_geographic_leaf:['operation','package_id','worker_id','generation','kind'],
     reconcile_package_folder:['operation','package_id','worker_id','generation','plan_id'],
@@ -71,7 +83,7 @@ export function createDeliveryHandler({
     ||Object.keys(payload).length!==required.length
     ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
-  if(!['preallocate','advance_once','verify_test_connection'].includes(payload.operation)){
+  if(!['preallocate','advance_once'].includes(payload.operation)){
     if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
       ||!Number.isSafeInteger(payload.generation)||payload.generation<1
       ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
@@ -81,42 +93,6 @@ export function createDeliveryHandler({
         &&!['ADDRESS','WORK_ORDER'].includes(payload.kind)))
       return reply(400,'EXACT_REQUEST_REQUIRED');
   }
-  if(payload.operation==='verify_test_connection'){
-    // TEST probe and delivery must never be active together. The operator
-    // controls TEST-only roots in trusted server environment, not payload.
-    if(testPreflightEnabled!==true||enabled===true)
-      return reply(503,'TEST_PREFLIGHT_NOT_ENABLED');
-    const id=/^[A-Za-z0-9_-]{10,160}$/;
-    if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
-      ||!id.test(testRootFolderId??'')||!id.test(expectedDriveId??'')
-      ||!id.test(internalDriveId??'')
-      ||testRootFolderId===expectedDriveId
-      ||internalDriveId===expectedDriveId
-      ||testRootFolderId===internalDriveId
-      ||typeof testWorkspaceDomain!=='string'
-      ||!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(testWorkspaceDomain)
-      ||typeof expectedAccount!=='string'
-      ||expectedAccount.toLowerCase().split('@')[1]!==testWorkspaceDomain
-      ||!clientId||!clientSecret||!refreshToken||!oauthScope)
-      return reply(503,'TEST_PROVIDER_NOT_CONFIGURED');
-    try{
-      const tokenProvider=createWorkspaceTokenProvider({
-        clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
-      const auth=await tokenProvider();
-      const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
-      await drive.verifyProviderIdentity(expectedAccount);
-      const folder=await drive.verifyDestination({
-        folderId:testRootFolderId,expectedDriveId
-      });
-      if(folder.id!==testRootFolderId||folder.drive_id!==expectedDriveId
-        ||folder.can_add_children!==true)throw Error('TEST_ROOT_NOT_VERIFIED');
-      return reply(200,'TEST_PROVIDER_VERIFIED_READ_ONLY');
-    }catch{
-      // Never emit provider/token error details or configured object identity.
-      return reply(503,'TEST_PROVIDER_UNAVAILABLE');
-    }
-  }
-  if(enabled!==true)return reply(503,'WORKER_NOT_ACTIVATED');
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
     return reply(503,'BACKEND_NOT_CONFIGURED');
