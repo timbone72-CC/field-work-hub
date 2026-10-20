@@ -177,4 +177,57 @@ begin
  raise notice 'Final provider projection service-only and original lease gated PASS';
 end;
 $final_acl$;
+
+-- Same-host and cross-Edge races must use one global durable dispatch permit.
+-- This entire fixture rolls back; no hosted permit or customer row changes.
+do $dispatch_acl$
+declare
+  req1 uuid:=gen_random_uuid();
+  req2 uuid:=gen_random_uuid();
+  first jsonb; busy jsonb; last jsonb;
+  denied boolean:=false;
+begin
+  if has_table_privilege('service_role','private.client_delivery_dispatch_permit','insert')
+     or has_table_privilege('authenticated','private.client_delivery_dispatch_permit','select')
+     or has_function_privilege('anon','public.service_acquire_delivery_dispatch(uuid)','execute')
+     or has_function_privilege('authenticated','public.service_release_delivery_dispatch(uuid)','execute')
+     or not has_function_privilege('service_role','public.service_acquire_delivery_dispatch(uuid)','execute')
+     or not has_function_privilege('service_role','public.service_release_delivery_dispatch(uuid)','execute') then
+    raise exception 'Single-flight dispatch ACL unsafe';
+  end if;
+  execute 'set local role authenticated';
+  begin
+    perform public.service_acquire_delivery_dispatch(req1);
+  exception when insufficient_privilege then denied:=true;end;
+  execute 'reset role';
+  if not denied then raise exception 'Ordinary user acquired worker dispatch';end if;
+  execute 'set local role service_role';
+  first:=public.service_acquire_delivery_dispatch(req1);
+  busy:=public.service_acquire_delivery_dispatch(req2);
+  if first->>'acquired'<>'true' or busy->>'acquired'<>'false' then
+    raise exception 'Concurrent dispatch was not excluded';
+  end if;
+  -- Even the same UUID cannot reenter and circumvent the original claim.
+  busy:=public.service_acquire_delivery_dispatch(req1);
+  if busy->>'acquired'<>'false' then
+    raise exception 'Reentrant dispatch bypassed singleton';
+  end if;
+  denied:=false;
+  begin
+    perform public.service_release_delivery_dispatch(req2);
+  exception when insufficient_privilege then denied:=true;end;
+  if not denied then raise exception 'Foreign dispatch released original owner';end if;
+  if (select request_id from private.client_delivery_dispatch_permit) is distinct from req1
+    then raise exception 'Wrong-worker release erased the permit';end if;
+  last:=public.service_release_delivery_dispatch(req1);
+  if last->>'released'<>'true' then raise exception 'Owner failed to release';end if;
+  last:=public.service_acquire_delivery_dispatch(req2);
+  if last->>'acquired'<>'true' then raise exception 'Verified completion did not free slot';end if;
+  perform public.service_release_delivery_dispatch(req2);
+  execute 'reset role';
+  if exists(select 1 from private.client_delivery_dispatch_permit) then
+    raise exception 'Successful completion left a stale dispatch';end if;
+  raise notice 'Exact one-slot service-only dispatch and wrong-owner denial PASS';
+end;
+$dispatch_acl$;
 rollback;
