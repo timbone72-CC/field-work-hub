@@ -39,7 +39,14 @@ function rig(overrides={}){
      stored[kind]={exists:true,kind,remote_folder_id:id,parent_remote_id:parent,state:'RESERVED'};
      return {...stored[kind]};
    },
-   async reserve(...args){calls.push(['reserve',...args]);if(overrides.blockReserve)throw Error('RESERVATION_FAILED');}
+   async nextReservedItem(...args){calls.push(['nextReservedItem',...args]);return {state:overrides.nextState??'UNRESERVED'};},
+   async reserveBatch(...args){
+     calls.push(['reserveBatch',...args]);
+     if(overrides.blockReserve)throw Error('RESERVATION_FAILED');
+     const [pkg,, ,folder,,photos,manifest]=args;
+     return {reserved:true,package_id:pkg,folder_id:folder,
+       manifest_id:manifest,reserved_count:photos.length+2};
+   }
  };
  const drive={
    async verifyProviderIdentity(expected){calls.push(['verifyAccount',expected]);
@@ -68,7 +75,7 @@ test('wrong Workspace or root client destination cannot generate IDs',async()=>{
    await assert.rejects(()=>run(r),e=>e instanceof DriveUncertain);
    assert.equal(r.calls.some(x=>x[0]==='generateIds'),false);
    assert.equal(r.calls.some(x=>x[0]==='reserveParent'),false);
-   assert.equal(r.calls.some(x=>x[0]==='reserve'),false);
+   assert.equal(r.calls.some(x=>x[0]==='reserveBatch'),false);
  }
 });
 test('first pass reserves address only; never jumps to WO or package',async()=>{
@@ -80,7 +87,7 @@ test('first pass reserves address only; never jumps to WO or package',async()=>{
    'heartbeat','readParent','heartbeat','generateIds','heartbeat','reserveParent']);
  assert.deepEqual(r.calls.find(x=>x[0]==='reserveParent').slice(1,2),['ADDRESS']);
  assert.equal(r.calls.find(x=>x[0]==='reserveParent')[3],root);
- assert.equal(r.calls.some(x=>x[0]==='reserve'),false);
+ assert.equal(r.calls.some(x=>x[0]==='reserveBatch'),false);
 });
 test('existing RESERVED/ATTEMPTED address ID reuses original without replacement generateIds',async()=>{
  for(const state of ['RESERVED','ATTEMPTED']){
@@ -89,7 +96,7 @@ test('existing RESERVED/ATTEMPTED address ID reuses original without replacement
    assert.equal(out.next_parent_kind,'ADDRESS');
    assert.equal(out.reserved_count,0);
    assert.equal(r.calls.some(x=>x[0]==='generateIds'),false);
-   assert.equal(r.calls.some(x=>x[0]==='reserve'),false);
+   assert.equal(r.calls.some(x=>x[0]==='reserveBatch'),false);
  }
 });
 test('verified address reserves WO ID exactly once; package files still blocked',async()=>{
@@ -101,7 +108,7 @@ test('verified address reserves WO ID exactly once; package files still blocked'
  const parent=r.calls.find(x=>x[0]==='reserveParent');
  assert.equal(parent[1],'WORK_ORDER');
  assert.equal(parent[3],addressId);
- assert.equal(r.calls.some(x=>x[0]==='reserve'),false);
+ assert.equal(r.calls.some(x=>x[0]==='reserveBatch'),false);
 });
 test('verified address and WO reserve package and selected immutable files only under WO',async()=>{
  const r=rig({addressState:'VERIFIED',woState:'VERIFIED'});
@@ -109,13 +116,15 @@ test('verified address and WO reserve package and selected immutable files only 
  assert.deepEqual(data,{claimed:true,package_id:uuid(3),generation:1,
    reserved_count:3,ready_for_provider_reconciliation:true,
    provider_writes_performed:false});
- const reserves=r.calls.filter(x=>x[0]==='reserve');
- assert.deepEqual(reserves.map(x=>x[4]),['FOLDER','PHOTO','MANIFEST']);
- assert.equal(reserves[0][7],woId);
- assert.equal(reserves[1][7],reserves[0][6]);
- assert.equal(reserves[2][7],reserves[0][6]);
+ const reserves=r.calls.filter(x=>x[0]==='reserveBatch');
+ assert.equal(reserves.length,1);
+ const [_,pkg,worker,gen,folder,parent,photos,manifest]=reserves[0];
+ assert.deepEqual([pkg,worker,gen],[uuid(3),uuid(1),1]);
+ assert.equal(parent,woId);
+ assert.deepEqual(photos,[{photo_id:uuid(9),file_id:'generated_00000000000000000002'}]);
+ assert.notEqual(folder,manifest);
  assert.equal(r.calls.filter(x=>x[0]==='verifyDestination').length,2);
- assert.equal(r.calls.at(-1)[0],'reserve');
+ assert.equal(r.calls.at(-1)[0],'reserveBatch');
  assert.equal(r.calls.some(x=>x[0]==='reserveParent'),false);
  assert.equal(r.calls.find(x=>x[0]==='generateIds')[1],3);
  assert.equal(JSON.stringify(data).includes('office@example.invalid'),false);
@@ -129,7 +138,7 @@ test('wrong ADDRESS/WO parent and uncertain mapping stop before any ID generatio
    await assert.rejects(()=>run(r),e=>
      e instanceof DriveUncertain&&e.code==='FROZEN_PARENT_IDENTITY_UNCERTAIN');
    assert.equal(r.calls.some(x=>x[0]==='generateIds'),false);
-   assert.equal(r.calls.some(x=>x[0]==='reserve'),false);
+   assert.equal(r.calls.some(x=>x[0]==='reserveBatch'),false);
  }
 });
 test('duplicate generated photo IDs and stale lease never reserve replacement IDs',async()=>{
@@ -139,7 +148,7 @@ test('duplicate generated photo IDs and stale lease never reserve replacement ID
  const dup=rig({addressState:'VERIFIED',woState:'VERIFIED',duplicateIds:true});
  await assert.rejects(()=>run(dup),e=>
    e instanceof DriveUncertain&&e.code==='REMOTE_IDS_UNAVAILABLE');
- assert.equal(dup.calls.some(x=>x[0]==='reserve'),false);
+ assert.equal(dup.calls.some(x=>x[0]==='reserveBatch'),false);
 });
 test('failed parent or file reservation does not blind retry and create another ID',async()=>{
  const parent=rig({blockReserveParent:true});
@@ -149,7 +158,7 @@ test('failed parent or file reservation does not blind retry and create another 
  const files=rig({addressState:'VERIFIED',woState:'VERIFIED',blockReserve:true});
  await assert.rejects(()=>run(files),/RESERVATION_FAILED/);
  assert.equal(files.calls.filter(x=>x[0]==='generateIds').length,1);
- assert.equal(files.calls.filter(x=>x[0]==='reserve').length,1);
+ assert.equal(files.calls.filter(x=>x[0]==='reserveBatch').length,1);
 });
 test('duplicated, invalid or non-accepted photo identity is rejected before provider access',async()=>{
  for(const bad of [
@@ -163,4 +172,19 @@ test('duplicated, invalid or non-accepted photo identity is rejected before prov
      e instanceof DriveUncertain&&e.code==='FROZEN_PHOTO_INVALID');
    assert.deepEqual(r.calls.map(x=>x[0]),['claim']);
  }
+});
+
+test('original existing reservations are never replaced on a later preallocation attempt',async()=>{
+ const r=rig({addressState:'VERIFIED',woState:'VERIFIED',nextState:'FOLDER'});
+ await assert.rejects(()=>run(r),e=>e instanceof DriveUncertain
+  &&e.code==='ORIGINAL_FILE_RESERVATION_REQUIRES_RECONCILIATION');
+ assert.equal(r.calls.filter(x=>x[0]==='generateIds').length,0);
+ assert.equal(r.calls.filter(x=>x[0]==='reserveBatch').length,0);
+});
+test('one atomic reservation response must match all original preallocated IDs',async()=>{
+ const r=rig({addressState:'VERIFIED',woState:'VERIFIED'});
+ r.ledger.reserveBatch=async()=>({reserved:true,package_id:uuid(3),
+   folder_id:'foreign_generated_id',manifest_id:'foreign_manifest_id',reserved_count:3});
+ await assert.rejects(()=>run(r),e=>e instanceof DriveUncertain
+  &&e.code==='ATOMIC_FILE_RESERVATION_UNCONFIRMED');
 });
