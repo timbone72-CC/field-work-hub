@@ -270,3 +270,30 @@ not applied or deployed by this documentation. A modified exact-head
 `ci/phase5d_team_migration_preflight.sh` previews **only** this one new
 canonical migration. Do not apply/activate before the governed TEST rollout,
 final CI and real provider/device gates.
+
+## Phase 5D — installed-permit operator inspection (read-only, 2026-10-19 CDT)
+
+Use the existing `ci/phase5d_delivery_reconciliation_readonly.sql` in the
+authorized **FWH Team** Supabase SQL editor for a bounded, no-write snapshot
+when a genuine delivery attempt or crash leaves the *single existing*
+dispatcher occupied. The six SELECT statements were independently executed
+on Team TEST after migration **108** was installed: **PASS**, one summary row
+showing zero occupied permits/outbox/file plans/sessions/receipts, no ready
+workers/active destinations/scheduler, and exactly one verified inactive TEST
+destination; the five bounded private detail queries returned zero records.
+
+The script deliberately does **not** contain an emergency unlock or perform
+`acquire`, `release`, `DELETE`, `UPDATE`, `INSERT`, `TRUNCATE`,
+`cron`, provider retry, or Edge deployment. Do not share its private UUIDs,
+Drive IDs, or receipt details in GitHub/CI. A missing row in its bounded
+output is not proof that no older record exists. If a permit is occupied,
+pause the governed scheduler if provisioned, inspect the original outbox,
+original lease, immutable file/folder IDs and real provider status before a
+separately evidenced **same-ID** reconciliation. If any provider outcome
+remains ambiguous, retain the permit and hard stop rather than clearing it
+to create a duplicate client delivery.
+
+This is an **operator diagnostic**, not real Google/Android provider evidence
+and not authorization to deploy the pending mutating hosted worker. The
+current hosted function remains read-only v11; real hosted execution and
+Vault-backed scheduler provisioning remain pending under the existing plan.
