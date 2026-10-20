@@ -2,7 +2,8 @@
 // on Contractor Android. Only the enumerated service-role RPCs are accessible.
 import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const METHODS=new Set(['service_read_active_delivery_lease','service_next_delivery_item','service_claim_delivery','service_heartbeat_delivery',
+const METHODS=new Set(['service_read_active_delivery_lease','service_next_delivery_item',
+ 'service_delivery_final_provider_snapshot','service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file','service_reserve_delivery_file_set','service_read_delivery_parent',
  'service_reserve_delivery_parent','service_read_geographic_parent',
  'service_reserve_geographic_parent','service_read_geographic_leaf',
@@ -75,6 +76,9 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     // Read-only ORIGINAL unexpired lease from durable outbox; never reclaim.
     readActiveLease:()=>rpc('service_read_active_delivery_lease',{}),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
+      {p_package:pkg,p_worker:worker,p_generation:gen}),
+    finalProviderSnapshot:(pkg,worker,gen)=>rpc(
+      'service_delivery_final_provider_snapshot',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
     claim:worker=>rpc('service_claim_delivery',{p_worker:worker}),
     heartbeat:(pkg,worker,gen)=>rpc('service_heartbeat_delivery',
