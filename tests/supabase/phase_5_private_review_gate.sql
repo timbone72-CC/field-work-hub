@@ -428,8 +428,34 @@ begin
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_reserve_delivery_file(%L,%L,%s,%L,null,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'FOLDER',folder_id,'DISPOSABLE-ONLY'));
-  perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
-    'FOLDER',null,folder_id,wo_folder_id);
+  -- Entire immutable package set now commits atomically. A changed
+  -- selected photo identity must reject without any partial remote plans.
+  perform pg_temp.expect_photo_review_error('22023',format(
+    'select public.service_reserve_delivery_file_set(%L,%L,%s,%L,%L,%L::jsonb,%L)',
+    pkg_id,delivery_worker,delivery_gen,folder_id,wo_folder_id,
+    jsonb_build_array(jsonb_build_object(
+      'photo_id',gen_random_uuid(),'file_id',photo_file_id))::text,
+    manifest_file_id));
+  if exists(select 1 from private.client_delivery_file_plans
+      where package_id=pkg_id) then
+    raise exception 'Rejected atomic reservation left partial IDs';
+  end if;
+  response:=public.service_reserve_delivery_file_set(
+    pkg_id,delivery_worker,delivery_gen,folder_id,wo_folder_id,
+    jsonb_build_array(jsonb_build_object('photo_id',photo,
+      'file_id',photo_file_id)),manifest_file_id);
+  if response->>'reserved'<>'true' or response->>'reserved_count'<>'3'
+    or response->>'folder_id'<>folder_id
+    or response->>'manifest_id'<>manifest_file_id
+    or (select count(*) from private.client_delivery_file_plans
+        where package_id=pkg_id)<>3 then
+    raise exception 'Three original Drive IDs did not commit together';
+  end if;
+  perform pg_temp.expect_photo_review_error('40001',format(
+    'select public.service_reserve_delivery_file_set(%L,%L,%s,%L,%L,%L::jsonb,%L)',
+    pkg_id,delivery_worker,delivery_gen,'different_generated_folder',
+    wo_folder_id,jsonb_build_array(jsonb_build_object(
+      'photo_id',photo,'file_id',photo_file_id))::text,manifest_file_id));
   select id into folder_plan from private.client_delivery_file_plans
      where package_id=pkg_id and kind='FOLDER' and photo_id is null;
   folder_plan_projection:=public.service_get_delivery_folder_plan(
@@ -462,10 +488,10 @@ begin
      'select public.service_confirm_delivery_folder(%L,%L,%s,%L,%L::jsonb)',
      pkg_id,delivery_worker,delivery_gen,folder_plan,
      (folder_proof||jsonb_build_object('drive_id','foreign-drive'))::text));
-  perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
-    'PHOTO',photo,photo_file_id,folder_id);
-  perform public.service_reserve_delivery_file(pkg_id,delivery_worker,delivery_gen,
-    'MANIFEST',null,manifest_file_id,folder_id);
+  -- PHOTO and MANIFEST were included in the same initial SQL transaction.
+  if (select count(*) from private.client_delivery_file_plans
+       where package_id=pkg_id and kind in ('PHOTO','MANIFEST'))<>2 then
+    raise exception 'Atomic file set lost selected photo or manifest';end if;
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_reserve_delivery_file(%L,%L,%s,%L,%L,%L,%L)',
     pkg_id,delivery_worker,delivery_gen,'PHOTO',photo,'OTHER-GENERATED-ID',folder_id));
