@@ -113,4 +113,40 @@ begin
  raise notice 'Service-only next reserved item and missing lease denial PASS';
 end;
 $next_acl$;
+-- Atomic remote-ID set is service-only, and stale/wrong workers can
+-- never create even a partial package plan. Outer fixture ROLLBACK preserves data.
+do $atomic_acl$
+declare denied boolean:=false;
+begin
+ if has_function_privilege('authenticated',
+   'public.service_reserve_delivery_file_set(uuid,uuid,bigint,text,text,jsonb,text)','EXECUTE')
+   or has_function_privilege('anon',
+   'public.service_reserve_delivery_file_set(uuid,uuid,bigint,text,text,jsonb,text)','EXECUTE')
+   or not has_function_privilege('service_role',
+   'public.service_reserve_delivery_file_set(uuid,uuid,bigint,text,text,jsonb,text)','EXECUTE') then
+   raise exception 'Atomic reservation RPC grants are unsafe';
+ end if;
+ execute 'set local role authenticated';
+ begin
+   perform public.service_reserve_delivery_file_set(gen_random_uuid(),
+     gen_random_uuid(),1,'folder_1234567890123456','parent_123456789012345',
+     '[]'::jsonb,'manifest_123456789012');
+ exception when insufficient_privilege then denied:=true;end;
+ execute 'reset role';
+ if not denied then raise exception 'Ordinary caller reserved Drive identities';end if;
+ denied:=false;
+ execute 'set local role service_role';
+ begin
+   perform public.service_reserve_delivery_file_set(gen_random_uuid(),
+     gen_random_uuid(),1,'folder_1234567890123456','parent_123456789012345',
+     '[]'::jsonb,'manifest_123456789012');
+ exception when serialization_failure then denied:=true;end;
+ execute 'reset role';
+ if not denied then raise exception 'Unknown original lease reserved Drive identities';end if;
+ if exists(select 1 from private.client_delivery_file_plans) then
+   raise exception 'Stale lease left a partial file ID set';
+ end if;
+ raise notice 'Atomic file-set service-only and stale-lease denial PASS';
+end;
+$atomic_acl$;
 rollback;
