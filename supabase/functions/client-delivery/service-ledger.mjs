@@ -2,7 +2,8 @@
 // on Contractor Android. Only the enumerated service-role RPCs are accessible.
 import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const METHODS=new Set(['service_read_active_delivery_lease','service_next_delivery_item',
+const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
+ 'service_read_active_delivery_lease','service_next_delivery_item',
  'service_delivery_final_provider_snapshot','service_claim_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file_set','service_read_delivery_parent',
  'service_reserve_delivery_parent','service_read_geographic_parent',
@@ -73,6 +74,12 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_preflight:preflight,p_revision:candidate.revision,
         p_file_id:fileId,p_drive_id:driveId
       }),
+    // The only dispatch permit. It spans all provider network awaits across
+    // hosted processes; a crashed/ambiguous invocation stays blocked.
+    acquireDispatch:request=>rpc('service_acquire_delivery_dispatch',
+      {p_request:request}),
+    releaseDispatch:request=>rpc('service_release_delivery_dispatch',
+      {p_request:request}),
     // Read-only ORIGINAL unexpired lease from durable outbox; never reclaim.
     readActiveLease:()=>rpc('service_read_active_delivery_lease',{}),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
