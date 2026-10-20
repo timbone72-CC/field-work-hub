@@ -363,12 +363,12 @@ test('all recorded receipts do not imply Google recheck or a final delivery rece
    return {state:'RECEIPTS_READY_FOR_FINAL_RECHECK'};},
   finish:async()=>{throw Error('MUST_NOT_FINISH_WITHOUT_REMOTE_RECHECK');}
  };
- const result=await advanceTrustedDeliveryOneStep({
+ await assert.rejects(()=>advanceTrustedDeliveryOneStep({
   ledger,tokenProvider:async()=>{throw Error('MUST_NOT_USE_OAUTH');},
   makeWorkerId:()=>{throw Error('MUST_NOT_NEW_WORKER');},
   expectedEmail:scope,expectedDriveId:driveId
- });
- assert.deepEqual(result,{state:'FINAL_PROVIDER_RECHECK_REQUIRED'});
+ }),e=>e instanceof DriveUncertain
+  &&e.code==='FINAL_PROVIDER_RECHECK_NOT_CONFIGURED');
  assert.deepEqual(events,['next']);
 });
 test('invalid server-supplied next plan is denied before provider access',async()=>{
@@ -389,4 +389,94 @@ test('invalid server-supplied next plan is denied before provider access',async(
    expectedEmail:scope,expectedDriveId:driveId
   }),e=>e instanceof DriveUncertain&&e.code==='FROZEN_DELIVERY_ITEM_UNVERIFIED');
  }
+});
+
+function finalRig({moved=false,changedChecksum=false,badSnapshot=false}={}){
+ const seen=[],org=uuid(31),company=uuid(32);
+ const addr='address_'+'a'.repeat(20),wo='workorder_'+'b'.repeat(20);
+ const folder='package_'+'c'.repeat(20),manifestFile='manifest_'+'d'.repeat(20);
+ const sha='a'.repeat(64);
+ const props={fwh_package:uuid(3),fwh_manifest:sha};
+ const app=(kind,key)=>({
+   fwh_org:org,fwh_company:company,fwh_destination:uuid(4),
+   fwh_kind:kind,fwh_key:key
+ });
+ const ancestor=[{
+  id:wo,parent:addr,name:'work-order-'+uuid(33),
+  mime:'application/vnd.google-apps.folder',sha256:null,size:null,
+  appProperties:app('WORK_ORDER',uuid(33))
+ },{
+  id:addr,parent:rootId,name:'property address',
+  mime:'application/vnd.google-apps.folder',sha256:null,size:null,
+  appProperties:app('ADDRESS',sha)
+ }];
+ const files=[{
+  id:folder,parent:wo,name:'package-'+uuid(3),
+  mime:'application/vnd.google-apps.folder',sha256:null,size:null,appProperties:props
+ },{
+  id:manifestFile,parent:folder,name:'submission.json',
+  mime:'application/json',sha256:sha,size:42,appProperties:props
+ }];
+ const frozen={...claim.manifest,selected_photos:[],
+   organization_id:org,client_company_id:company};
+ const original={state:'ACTIVE',package_id:uuid(3),worker_id:uuid(1),
+  destination_id:uuid(4),generation:1,approved_sha256:sha,manifest:frozen};
+ const snapshot={package_id:uuid(3),approved_sha256:sha,destination_id:uuid(4),
+  root_id:rootId,ancestors:ancestor,files};
+ const ledger={
+  readActiveLease:async()=>{seen.push('read-lease');return original;},
+  claim:async()=>{throw Error('NO_REPLACEMENT_CLAIM');},
+  heartbeat:async()=>{seen.push('heartbeat');},
+  nextReservedItem:async()=>{seen.push('next');return {
+   state:'RECEIPTS_READY_FOR_FINAL_RECHECK'};},
+  finalProviderSnapshot:async()=>{seen.push('snapshot');return badSnapshot
+    ?{...snapshot,root_id:'foreign_root_1234567'}:snapshot;},
+  finish:async()=>{seen.push('finish');
+   return {package_id:uuid(3),status:'DELIVERED',
+    manifest_sha256:sha,verified_file_count:2};}
+ };
+ const specs=[
+  ...ancestor,...files,
+  {id:rootId,mime:'application/vnd.google-apps.folder',trashed:false,
+   driveId,capabilities:{canAddChildren:true}}
+ ];
+ const fetcher=async(raw,opts)=>{
+  const path=new URL(raw).pathname;seen.push((opts.method||'GET')+' '+path);
+  if(path==='/drive/v3/about')return Response.json({
+   user:{emailAddress:scope,me:true,permissionId:'perm-123'}});
+  const item=specs.find(p=>path==='/drive/v3/files/'+p.id);
+  if(!item)throw Error('UNEXPECTED_URL');
+  return Response.json({id:item.id,name:item.name,mimeType:item.mime,
+   parents:item.parent?[moved&&item.id===manifestFile?rootId:item.parent]:undefined,
+   driveId,trashed:false,appProperties:item.appProperties,
+   sha256Checksum:item.mime==='application/json'
+     ?changedChecksum?'0'.repeat(64):item.sha256:undefined,
+   size:item.size,capabilities:item.capabilities});
+ };
+ const args={ledger,tokenProvider:async()=>({accessToken:'private-token-not-for-client',
+   expiresInSeconds:3600}),makeWorkerId:()=>{throw Error('NO_NEW_WORKER');},
+   expectedEmail:scope,expectedDriveId:driveId,fetcher};
+ return {seen,args};
+}
+test('final trusted wakeup GET-rechecks every ancestor and manifest before SQL receipt',async()=>{
+ const r=finalRig();
+ assert.deepEqual(await advanceTrustedDeliveryOneStep(r.args),{state:'PACKAGE_DELIVERED'});
+ assert.equal(r.seen.filter(v=>v==='finish').length,1);
+ assert.equal(r.seen.filter(v=>v.startsWith('GET /drive/v3/files/')).length,5);
+ assert.equal(r.seen.some(v=>v.startsWith('POST /drive/')),false);
+ assert.equal(r.seen.at(-1),'finish');
+});
+test('moved remote manifest or altered provider content blocks terminal receipt',async()=>{
+ for(const mode of [{moved:true},{changedChecksum:true}]){
+  const r=finalRig(mode);
+  await assert.rejects(()=>advanceTrustedDeliveryOneStep(r.args),DriveUncertain);
+  assert.equal(r.seen.includes('finish'),false);
+  assert.equal(r.seen.some(v=>v.startsWith('POST /drive/')),false);
+ }
+});
+test('final snapshot changed remote root blocks before OAuth or Google GET',async()=>{
+ const r=finalRig({badSnapshot:true});
+ await assert.rejects(()=>advanceTrustedDeliveryOneStep(r.args),e=>
+  e instanceof DriveUncertain&&e.code==='FINAL_PROVIDER_SNAPSHOT_UNVERIFIED');
+ assert.deepEqual(r.seen,['read-lease','next','snapshot']);
 });
