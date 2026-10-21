@@ -1179,6 +1179,13 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('#release-status').textContent.includes('No package saved'));
 
     await page.locator('#client-folder-settings > summary').click();
+    const existingRegistrationNotice=await page.locator('#folder-existing-registration-notice').innerText();
+    assert.match(existingRegistrationNotice,/only active, verified destinations/i,
+      'The destination selector must not imply it includes registered inactive roots.');
+    assert.match(existingRegistrationNotice,/blank proposal form does not mean the folder is unregistered/i,
+      'The browser must not suggest a duplicate proposal just because the form is blank.');
+    assert.match(await page.locator('#folder-proposal-status').innerText(),/NEW, unregistered client root only/i,
+      'The proposal action must explain that an existing inactive root cannot be proposed again.');
     await page.locator('#folder-layout-refresh').click();
     await wait(page,()=>document.querySelector('#folder-layout-destination option:nth-child(2)'));
     await page.locator('#folder-layout-destination').selectOption(uuid(9892));

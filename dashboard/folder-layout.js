@@ -41,7 +41,7 @@ const ClientFolderLayout = (() => {
     if (!layoutPending) choiceEl.value = e?.layout || 'ADDRESS_WORK_ORDER';
     updateLayoutButtons();
     message(e ? 'Applies to new packages only. Existing deliveries will not move.'
-      : 'No verified client storage destinations are available.');
+      : 'No active, verified client destinations are available. An inactive registered destination may exist; check before proposing a new root.');
   }
   function clearVerified() {
     revision++; busy = false; layoutPending = null; entries = [];
@@ -193,7 +193,7 @@ const ClientFolderLayout = (() => {
     const want=pending?.company||existing||choice.client_company_id||'';
     pe('company').value=proposalCompanies.some(c=>c.id===want)?want:'';
     pe('area').hidden=false;
-    if(!pending&&!confirmed) say('Records an INACTIVE, UNVERIFIED candidate only. Delivery remains blocked.');
+    if(!pending&&!confirmed) say('For a NEW, unregistered client root only. Saves an INACTIVE, UNVERIFIED candidate; no delivery is enabled. Existing inactive destinations are not listed above.');
     buttons();
   }
   async function submitProposal(){
