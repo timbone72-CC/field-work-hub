@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Read-only Phase 5D canonical Team migration staging preflight.
-# Does not install migrations, create cron jobs, deploy workers, or enable Send.
+# Read-only Phase 5D canonical Team migration parity preflight.
+# The 108th canonical migration was installed in TEST on 2026-10-19.
+# This checks that NO further migrations are pending. It does not install
+# migrations, create cron jobs, deploy workers, or enable Send.
 set -euo pipefail
 
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
 expected_count=108
-pending=(
-  "20261020020000_phase_5_delivery_dispatch_singleflight.sql"
-)
+last_installed="20261020020000_phase_5_delivery_dispatch_singleflight.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -35,10 +35,8 @@ pr_sha="$(gh api "repos/$repo/pulls/40" --jq '.head.sha')"
 count="$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr -d ' ')"
 [[ "$count" == "$expected_count" ]] ||
   stop "Canonical source migration count changed; re-reconcile before rollout."
-for name in "${pending[@]}"; do
-  [[ -f "supabase/migrations/$name" ]] ||
-    stop "Missing canonical pending migration $name."
-done
+[[ -f "supabase/migrations/$last_installed" ]] ||
+  stop "Missing known-installed canonical migration $last_installed."
 
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
@@ -48,18 +46,17 @@ fi
 mapfile -t dry_run_migrations < <(
   grep -Eo '20[0-9]{12}_[a-zA-Z0-9_]+[.]sql' "$out" | sort -u
 )
-[[ "${#dry_run_migrations[@]}" -eq "${#pending[@]}" ]] ||
-  stop "Dry-run migration set is not exactly the four reviewed canonical versions."
-for name in "${pending[@]}"; do
-  if ! printf '%s\n' "${dry_run_migrations[@]}" | grep -Fxq "$name"; then
-    stop "Pending canonical migration $name not listed by the dry-run."
-  fi
-done
+# A successful CLI process alone is not proof of parity: insist on BOTH
+# an empty pending set and the CLI's positive up-to-date confirmation.
+[[ "${#dry_run_migrations[@]}" -eq 0 ]] ||
+  stop "Unexpected pending canonical migrations; stop and reconcile with the current approved plan."
+grep -Eq '^[[:space:]]*Remote database is up to date[.][[:space:]]*
+ "$out" ||
+  stop "Dry-run did not positively confirm installed migrations are up to date."
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: dry-run includes the one expected unapplied canonical migration:\n'
-printf '  %s\n' "${pending[@]}"
+printf 'PASS: linked dry-run confirms zero pending migrations after the installed dispatch migration.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
-printf 'This does not replace a manual full dry-run review, live-state safety check,\n'
-printf 'advisor review, or the governed physical provider/Android evidence gate.\n'
+printf 'This does not replace separate live SQL permission/worker readiness checks,\n'
+printf 'provider and Android evidence, or the governed activation gate.\n'
