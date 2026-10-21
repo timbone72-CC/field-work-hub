@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {verifyBrowserPrivatePhoto}=require('../../dashboard/phase5-private-photo-check.js');
@@ -199,4 +200,11 @@ test('all request methods are reads or authorized read-only POST, never Send',as
  assert.equal(r.requests.some(x=>!['GET','HEAD','POST'].includes(x.method)),false);
  assert.equal(r.requests.some(x=>/send|upload|create|delete|activate|cleanup|grant/i.test(x.url)),false);
  assert.equal(r.requests.filter(x=>x.method==='POST').length,3);
+});
+
+test('browser summary keeps distinct-company security evidence separate from this read-only byte check',()=>{
+ const ui=readFileSync(new URL('../../dashboard/phase5-private-photo-check.js',import.meta.url),'utf8');
+ assert.match(ui,/This button did not recheck a separate user/);
+ assert.match(ui,/separately recorded TEST company-denial gate/);
+ assert.doesNotMatch(ui,/Foreign-user check remains pending/);
 });

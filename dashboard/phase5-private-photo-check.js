@@ -226,7 +226,7 @@ if(root&&root.document&&root.location){
          '; anonymous signer: '+
          (result.anonymous_signer==='DENIED'?'DENIED':
            'REJECTED 400 (authorization denial not proved)')+
-         '. Foreign-user check remains pending. No photo or Send changed.';
+         '. This button did not recheck a separate user; see the separately recorded TEST company-denial gate. No photo or Send changed.';
      }catch(e){
        const allow=new Set(['SIGN_IN_TO_TEST_DASHBOARD','TEST_RUNTIME_UNAVAILABLE',
          'TEST_WORK_ORDER_UNAVAILABLE','TEST_PHOTO_NOT_AVAILABLE','NETWORK_UNAVAILABLE',
