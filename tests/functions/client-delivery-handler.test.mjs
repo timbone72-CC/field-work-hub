@@ -138,6 +138,32 @@ test('invalid encrypted-session key stops all active chunk-capable worker operat
   }
  }
 });
+test('invalid local OAuth adapter config cannot reserve persistent dispatch for any active operation',async()=>{
+ const goodVault=Buffer.alloc(32,7).toString('base64');
+ const operations=[
+   {operation:'preallocate'}, {operation:'advance_once'},
+   {operation:'reconcile_parent',...leased,kind:'STATE'},
+   {operation:'reconcile_geographic_leaf',...leased,kind:'ADDRESS'},
+   {operation:'reconcile_package_folder',...leased,plan_id:uuid(3)},
+   {operation:'transfer_one_chunk',...leased,plan_id:uuid(3)}
+ ];
+ const badConfigs=[
+   {clientId:'too-short'},
+   {clientSecret:'too-short'},
+   {refreshToken:'invalid token with spaces'},
+   {oauthScope:'https://www.googleapis.com/auth/drive.readonly'}
+ ];
+ for(const bad of badConfigs)for(const operation of operations){
+   let network=0;
+   const h=createDeliveryHandler({...candidateConfig,...bad,
+     sessionVaultKey:goodVault,
+     fetcher:()=>{network++;throw Error('UNEXPECTED_DISPATCH_OR_PROVIDER_NETWORK');}});
+   const response=await h(request(secret,operation));
+   assert.equal(response.status,503,operation.operation);
+   assert.deepEqual(await response.json(),{status:'BACKEND_OAUTH_NOT_CONFIGURED'});
+   assert.equal(network,0,'no network, singleton permit, token or Google request');
+ }
+});
 test('private continuation errors are redacted with no new Google write on OAuth failure',async()=>{
  const paths=[];
  const h=createDeliveryHandler({...candidateConfig,

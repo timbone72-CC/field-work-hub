@@ -96,6 +96,15 @@ export function createDeliveryHandler({
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
     return reply(503,'BACKEND_NOT_CONFIGURED');
+  // Validate the original OAuth adapter before the durable dispatch permit.
+  // Bad local client credentials/scope cannot perform a provider write and
+  // must not leave the non-expiring single-flight permit held. Constructing
+  // the adapter refreshes NO token and performs NO network request.
+  let tokenProvider;
+  try {
+    tokenProvider=createWorkspaceTokenProvider({
+      clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
+  } catch {return reply(503,'BACKEND_OAUTH_NOT_CONFIGURED');}
   // The original SQL lease protects each transaction, not simultaneous
   // Edge processes while their Google HTTP operations are in flight. Every
   // mutating worker route shares ONE persisted dispatch permit, across all
@@ -128,8 +137,6 @@ export function createDeliveryHandler({
     return reply(200,status);
   };
   try{
-    const tokenProvider=createWorkspaceTokenProvider({
-      clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
     if(payload.operation==='advance_once'){
       // Leases are recovered exclusively from the service-only immutable
       // outbox; callers supply NO package/user/worker/file identities.
