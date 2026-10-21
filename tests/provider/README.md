@@ -1,6 +1,6 @@
 # Phase 5: real private Storage provider gate — READ ONLY
 
-**Current boundary:** One independent fourth disposable Google Drive resumable TEST file is confirmed by real provider SHA-256 (2026-10-17). That PASS does not establish FWH's protected received-photo content, Admin review or final client Send. The real authenticated Supabase photo-byte gate in this document remains **NOT RUN**.
+**Current boundary:** One independent fourth disposable Google Drive resumable TEST file is confirmed by real provider SHA-256 (2026-10-17). That PASS does not establish FWH's protected received-photo content, Admin review or final client Send. The real authenticated Supabase photo-byte gate in this document remains **NOT RUN**; do not call source mocks, metadata reconciliation or the already-accepted Drive JSON proof an HTTP 206/JPEG success.
 
 ## Why the received-photo gate uses Admin signed preview
 
@@ -13,6 +13,22 @@ The existing phase5-private-range.mjs read-only test now checks this actual path
 ## Existing TEST evidence
 
 Operator classified **all 10** existing FWH Team private review photos as TEST-only on 2026-10-17. Read-only catalog/receipt/Finish reconciliation verified 10/10 exact received transfer + receipt + active object identity/version/key, SHA-256 and size, Storage JPEG metadata, canonical org/WO/run/photo path, capture owner and accepted Finish provenance. There is **one original TEST capturing owner and one TEST organization**. Metadata proves fixture suitability, not actual HTTP content or Admin authorization. No photo bytes were inspected in that metadata reconciliation. Do not ask whether these original photos are customer photos again absent contradicting evidence. Choose one privately from the already verified ledger; no new photo is needed for this preflight.
+
+## Existing signed-in TEST dashboard gate (no JWT copying)
+
+An approved **read-only TEST browser helper already exists** in `dashboard/phase5-private-photo-check.js`, is referenced by the PR #40 dashboard's `index.html`, and has dedicated mocked browser-helper coverage. The next smallest real provider step is to open this exact opt-in URL **in the already signed-in TEST Admin Chrome profile**:
+
+`https://timbone72-cc.github.io/field-work-hub/phase56-review/?phase5PrivatePhotoTest=1`
+
+If the deployed preview includes that source, the **TEST-only private photo verification** panel appears near the top of the page. Click **Verify TEST photo bytes** once. It uses the current tab's normal Admin Auth session and scoped `TEST-0003-DASHBOARD` review-page RPC to select one already-approved existing TEST photo. It checks anonymous direct Storage and unsigned signer denial, then attempts exact 256 KiB signed HTTP **206** Range reads and independently hashes the complete received JPEG against the immutable observed SHA-256 receipt. It performs **no writes** to photos, review, packages, Drive, Send, worker, SQL, or Android. No bearer/JWT, signed URL, photo ID or image should be copied into chat or GitHub.
+
+**The operator reports only the panel's safe summary**:
+- **PASS:** authorized scoped sign, exact JPEG SHA-256, HTTP 206 Range and CORS-visible `Content-Range`, plus both anonymous endpoints denied; this is NOT an independent foreign-user or original-owner denial pass.
+- **PARTIAL:** bytes/hash/206 may match, but an anonymous response was HTTP 400 rather than proven RLS denial, or `Content-Range` was not exposed to the browser; preserve that limitation and do not infer full security PASS.
+- **BLOCKED:** a named gate failed (for example HEAD, CORS, signer, receipt mismatch or Auth). Preserve the evidence; do not weaken RLS, issue a new JWT, replace the photo or retry blindly.
+- **Panel missing:** preview publication was not independently verified by the documentation session. Report that fact; use the existing governed GitHub Pages TEST-preview staging/check process to reconcile published source. Do not change the normal Admin root to work around it.
+
+**Independent FWH Team TEST readiness checked 2026-10-20 CDT:** 10 existing operator-classified disposable private receipt objects, with registered JPEG sizes **283,294–423,874 bytes**; all exceed the browser test's 256 KiB two-chunk minimum. The installed private `admin_review_photo_page` RPC includes the required immutable `transfer_version` and `observed_sha256` fields. This confirms safe fixture/projection readiness, **not HTTP byte access or completion of the gate**. The separate Node CLI below remains useful for explicit optional original-owner and unrelated-user denial tests that the browser helper correctly labels `NOT_TESTED`; a separate unauthorized user/organization is still needed for the independent isolation gate.
 
 ## Private operator-side prerequisites
 
@@ -42,7 +58,7 @@ The output reports only pass/fail class, verified whole content bytes and chunk 
 - Real read-only scoped TEST gate: Admin/other-user signed-URL authorization and actual 206/Content-Range/bytes/SHA-256 against one preexisting received TEST photo. A separate denied anonymous direct URL is checked; owner_direct=NOT_SUPPLIED or other_office=NOT_SUPPLIED means that optional check is not proven.
 - **Already accepted, do not repeat for reassurance:** the operator's real signed-in Chrome Admin preview displayed the original TEST photo on 2026-10-13 and Run-2 photo on 2026-10-14; the existing authoritative implementation record also confirms persisted individual Approve, Reject-with-reason, restored Approve and Review-required On→Off→On without client Send. These are true UI/SQL PASS boundaries, not claimed signed Range 206/hash or wrong-user live denial. Pending separate Phase 5/6 gates still include review-to-client-package Send, corrections, protected delivery, cleanup and device/account evidence.
 - Existing accepted independent Google TEST upload PASS must **not** be rerun for reassurance; three earlier ambiguous provider journals stay frozen.
-- Live holding remains private; as of the last read-only parity check, 10 operator-confirmed TEST held objects and receipts, **0** client destinations, **0** ready delivery workers, **0** queued Send attempts, **0** final client receipts. Hosted client-delivery is TEST read-only, not active delivery. Two planned client proposal/upload-fence migrations remain deliberately unapplied pending the governed release gate.
+- Live holding remains private. **Latest independently checked FWH Team TEST parity (2026-10-20 CDT):** 10 operator-confirmed disposable TEST receipts; **108 canonical migrations installed**; **one provider-verified TEST client destination registered but inactive**, zero active destinations, zero ready delivery workers, zero queued Send attempts/outbox, zero held dispatch permits and zero final client receipts. Hosted `client-delivery` remains v11 TEST **read-only**, not the active mutating worker. Earlier paragraphs reporting zero destinations/two unapplied migrations are historical and superseded. No provider or client-delivery operation was performed by this documentation update.
 - Remaining real Phase 5/6 workflow, TUS/recovery, device, verified recovery-email, Web Push and explicit Level-3 merge/integration gates follow the approved parent-phase plans. The internal company Shared Drive is **never** automatically an approved client destination. Protected phone originals cannot be removed on a private receipt alone.
 
 Do not invent a privileged temporary policy, receive-time bypass, service-role client, new photo, alternate test endpoint or manual provider upload to force PASS. Keep the existing implementation record and PR #40 as sole authoritative handoff.
