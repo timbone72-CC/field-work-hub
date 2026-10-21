@@ -50,8 +50,7 @@ mapfile -t dry_run_migrations < <(
 # an empty pending set and the CLI's positive up-to-date confirmation.
 [[ "${#dry_run_migrations[@]}" -eq 0 ]] ||
   stop "Unexpected pending canonical migrations; stop and reconcile with the current approved plan."
-grep -Eq '^[[:space:]]*Remote database is up to date[.][[:space:]]*
- "$out" ||
+grep -Fqx 'Remote database is up to date.' "$out" ||
   stop "Dry-run did not positively confirm installed migrations are up to date."
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"

@@ -43,7 +43,7 @@ test('read-only exact-head Team dry-run accepts zero pending; all uncertain and 
   *) exit 3;;
  esac`);
  stub(join(bin,'supabase'),`[[ "$*" == 'db push --dry-run --linked' ]] || exit 3
- printf '%s\\n' "$FWH_STUB_DRYRUN"
+ printf '%b\\n' "$FWH_STUB_DRYRUN"
  exit "$FWH_STUB_EXIT"`);
  const base={
    ...process.env,PATH:bin+':'+process.env.PATH,
