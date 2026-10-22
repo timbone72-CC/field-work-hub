@@ -297,9 +297,6 @@ begin
    'office@disposable.invalid',root_id,proof_file,true);
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Stale root revision activated';end if;
- if exists(select 1 from private.client_destination_activation_actions) then
-   raise exception 'Failed activation left an action journal';end if;
-
  activated:=public.service_set_client_destination_active(activation_action,
    proposed_id,(first_result->>'revision')::uuid,explicit_revision,
    'office@disposable.invalid',root_id,proof_file,true);
@@ -317,10 +314,6 @@ begin
    'office@disposable.invalid',root_id,proof_file,false);
  exception when serialization_failure then denied:=true;end;
  if not denied then raise exception 'Action UUID was reused for a different request';end if;
- if exists(select 1 from private.client_delivery_outbox)
-   or exists(select 1 from private.client_delivery_final_receipts)
- then raise exception 'Client root activation falsely created delivery';end if;
-
  paused:=public.service_set_client_destination_active(pause_action,
    proposed_id,(first_result->>'revision')::uuid,explicit_revision,
    'office@disposable.invalid',root_id,proof_file,false);
@@ -332,6 +325,9 @@ begin
  if proof_replay->>'replayed'<>'true' or proof_replay->>'active'<>'false'
  then raise exception 'Pause replay was not idempotent';end if;
  execute 'reset role';
+ if exists(select 1 from private.client_delivery_outbox)
+   or exists(select 1 from private.client_delivery_final_receipts)
+ then raise exception 'Activation/pause falsely created delivery';end if;
  if (select count(*) from private.client_destination_activation_actions
      where destination_id=proposed_id)<>2
    or (select active from private.client_delivery_destinations where id=proposed_id)
