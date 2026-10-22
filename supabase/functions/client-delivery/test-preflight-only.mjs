@@ -4,6 +4,7 @@
 // Imports only the existing trusted OAuth and Google Drive GET owners.
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
 import {createDriveClient} from './drive-client.mjs';
+import {createSessionVault} from './session-vault.mjs';
 
 function reply(status,code){
   return new Response(JSON.stringify({status:code}),{status,headers:{
@@ -25,7 +26,7 @@ export function createReadOnlyTestHandler({
   deliveryActive=false,testEnabled=false,testEvidenceClass='',
   workerSecret='',expectedEmail='',expectedDriveId='',clientRootId='',
   internalDriveId='',workspaceDomain='',clientId='',clientSecret='',
-  refreshToken='',oauthScope='',fetcher=fetch
+  refreshToken='',oauthScope='',sessionVaultKey='',fetcher=fetch
 }={}){
   return async request=>{
     if(request.method!=='POST')return reply(405,'POST_ONLY');
@@ -44,7 +45,7 @@ export function createReadOnlyTestHandler({
       body=JSON.parse(raw);
     }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
     if(!body||Array.isArray(body)||Object.keys(body).length!==1
-       ||body.operation!=='verify_test_connection')
+       ||!['verify_test_connection','verify_test_worker_config'].includes(body.operation))
       return reply(400,'EXACT_REQUEST_REQUIRED');
     // Authenticated diagnostics disclose only the *names* of invalid host
     // configuration keys. Never echo provider IDs, emails, credential values,
@@ -71,6 +72,19 @@ export function createReadOnlyTestHandler({
         invalid_fields:invalid}),{status:503,headers:{
           'Content-Type':'application/json','Cache-Control':'no-store, private'
         }});
+    // Read-only TEST check of the *hosted* AES key's actual crypto usability.
+    // Disposable in-memory plaintext and IDs only: no stored Drive session is
+    // opened, no remote file or SQL permit is touched, no key material returned.
+    if(body.operation==='verify_test_worker_config'){
+      try{
+        const vault=await createSessionVault({base64Key:sessionVaultKey});
+        const disposableUrl='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
+        const identity={packageId:'fwh_test_package_identity',fileId:'fwh_test_file_identity'};
+        const sealed=await vault.seal(disposableUrl,identity);
+        if(await vault.open(sealed,identity)!==disposableUrl)
+          return reply(503,'TEST_SESSION_VAULT_UNAVAILABLE');
+      }catch{return reply(503,'TEST_SESSION_VAULT_UNAVAILABLE');}
+    }
     try{
       const getToken=createWorkspaceTokenProvider({
         clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
@@ -84,7 +98,8 @@ export function createReadOnlyTestHandler({
       if(root.id!==clientRootId||root.drive_id!==expectedDriveId
         ||root.can_add_children!==true)
         return reply(503,'TEST_PROVIDER_UNAVAILABLE');
-      return reply(200,'TEST_PROVIDER_VERIFIED_READ_ONLY');
+      return reply(200,body.operation==='verify_test_worker_config'
+        ?'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY':'TEST_PROVIDER_VERIFIED_READ_ONLY');
     }catch{
       return reply(503,'TEST_PROVIDER_UNAVAILABLE');
     }
