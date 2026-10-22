@@ -1190,6 +1190,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#folder-layout-refresh').click();
     await wait(page,()=>document.querySelector('#folder-layout-destination option:nth-child(2)'));
     await page.locator('#folder-layout-destination').selectOption(uuid(9892));
+    assert.equal(await page.locator('#folder-layout-save').isDisabled(),false,
+      'Unconfigured verified inactive client must permit explicit ADDRESS_WORK_ORDER selection.');
+    assert.match(await page.locator('#folder-layout-status').innerText(),/INACTIVE/,
+      'Setting layout must not imply client delivery has been activated.');
     await page.locator('#folder-layout-choice').selectOption('STATE_CITY_ADDRESS');
     await Promise.all([
       page.waitForEvent('dialog').then(dialog=>dialog.accept()),
