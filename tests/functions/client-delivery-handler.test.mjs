@@ -44,7 +44,7 @@ test('only an explicit internal preallocation command can be recognized',async()
  }
  const missing=await handler(request());
  assert.equal(missing.status,503);
- assert.equal((await missing.json()).status,'BACKEND_NOT_CONFIGURED');
+ assert.equal((await missing.json()).status,'TEST_RELEASE_SCOPE_NOT_CONFIGURED');
 });
 test('provider/token errors are redacted and cannot claim a delivered package',async()=>{
  const handler=createDeliveryHandler({enabled:true,...isolatedTest,workerSecret:secret,
