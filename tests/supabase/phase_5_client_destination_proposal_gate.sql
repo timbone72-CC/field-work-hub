@@ -11,6 +11,9 @@ declare
  proposed_id uuid; d private.client_delivery_destinations%rowtype;
  proof_action uuid:=gen_random_uuid(); proof_plan jsonb; proof_replay jsonb; proof_file text:='fwh_disposable_client_proof_123456789';
  proof jsonb; proof2 jsonb; preflight_action uuid:=gen_random_uuid();
+ layout_saved jsonb; destinations jsonb; activated jsonb; paused jsonb;
+ activation_action uuid:=gen_random_uuid(); pause_action uuid:=gen_random_uuid();
+ layout_action uuid:=gen_random_uuid(); explicit_revision uuid;
  root_id text:='fwh_disposable_root_123456789';
  denied boolean;
 begin
@@ -213,6 +216,127 @@ begin
    'changed_proof_id_123456789','fwh_distinct_drive_123456');
  exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Conflicting confirmed file identity accepted';end if;
+
+ -- A proof-verified but inactive destination must now be eligible for an
+ -- EXPLICIT Admin layout selection. No implicit Address default is persisted.
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',admin1,'session_id',admin1,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org1))::text,true);
+ execute 'set local role authenticated';
+ destinations:=public.admin_list_client_folder_destinations();
+ if jsonb_array_length(destinations->'destinations')<>1
+   or destinations->'destinations'->0->>'destination_id'<>proposed_id::text
+   or destinations->'destinations'->0->>'active'<>'false'
+   or destinations->'destinations'->0->>'verified'<>'true'
+   or destinations->'destinations'->0->>'layout_configured'<>'false'
+ then raise exception 'Verified inactive root not independently listable to scoped Admin';end if;
+ layout_saved:=public.admin_set_client_folder_layout(
+    layout_action,proposed_id,null,'ADDRESS_WORK_ORDER');
+ explicit_revision:=(layout_saved->>'revision')::uuid;
+ if layout_saved->>'layout'<>'ADDRESS_WORK_ORDER' or explicit_revision is null
+ then raise exception 'Explicit address-only layout not saved before activation';end if;
+ proof_replay:=public.admin_set_client_folder_layout(
+    layout_action,proposed_id,null,'ADDRESS_WORK_ORDER');
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'revision'<>explicit_revision::text
+ then raise exception 'Verified-inactive layout action was not replay-safe';end if;
+ if (select active from private.client_delivery_destinations where id=proposed_id)
+ then raise exception 'Saving layout activated client Send';end if;
+
+ -- Even a legitimate Admin must never be able to activate or pause a root.
+ if has_function_privilege('authenticated',
+  'public.service_set_client_destination_active(uuid,uuid,uuid,uuid,text,text,text,boolean)','execute')
+ or has_function_privilege('anon',
+  'public.service_set_client_destination_active(uuid,uuid,uuid,uuid,text,text,text,boolean)','execute')
+ or not has_function_privilege('service_role',
+  'public.service_set_client_destination_active(uuid,uuid,uuid,uuid,text,text,text,boolean)','execute')
+ then raise exception 'Client destination activation grants are unsafe';end if;
+ denied:=false;
+ begin
+  perform public.service_set_client_destination_active(activation_action,
+    proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+    'office@disposable.invalid',root_id,proof_file,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Authenticated Admin activated Google Send';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',contractor,'session_id',contractor,
+  'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org1))::text,true);
+ denied:=false;
+ begin
+  perform public.admin_set_client_folder_layout(
+    gen_random_uuid(),proposed_id,explicit_revision,'STATE_CITY_ADDRESS');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Contractor changed another client folder layout';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',admin2,'session_id',admin2,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org2))::text,true);
+ denied:=false;
+ begin
+  perform public.admin_set_client_folder_layout(
+    gen_random_uuid(),proposed_id,explicit_revision,'STATE_CITY_ADDRESS');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Cross-org Admin changed client folder layout';end if;
+
+ -- The service-only activation MUST compare exact original Google identity,
+ -- proof and approved client layout. No fallback or blind branch activation.
+ execute 'set local role service_role';
+ denied:=false;
+ begin perform public.service_set_client_destination_active(gen_random_uuid(),
+   proposed_id,(first_result->>'revision')::uuid,gen_random_uuid(),
+   'office@disposable.invalid',root_id,proof_file,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Unselected layout revision activated root';end if;
+ denied:=false;
+ begin perform public.service_set_client_destination_active(gen_random_uuid(),
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,'different_proof_123456789',true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Forged Google proof activated root';end if;
+ denied:=false;
+ begin perform public.service_set_client_destination_active(gen_random_uuid(),
+   proposed_id,gen_random_uuid(),explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale root revision activated';end if;
+ if exists(select 1 from private.client_destination_activation_actions) then
+   raise exception 'Failed activation left an action journal';end if;
+
+ activated:=public.service_set_client_destination_active(activation_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,true);
+ if activated->>'active'<>'true' or activated->>'verified'<>'true'
+   or activated->>'replayed'<>'false'
+ then raise exception 'Trusted exact activation failed';end if;
+ proof_replay:=public.service_set_client_destination_active(activation_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,true);
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'active'<>'true'
+ then raise exception 'Activation replay failed';end if;
+ denied:=false;
+ begin perform public.service_set_client_destination_active(activation_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,false);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Action UUID was reused for a different request';end if;
+ if exists(select 1 from private.client_delivery_outbox)
+   or exists(select 1 from private.client_delivery_final_receipts)
+ then raise exception 'Client root activation falsely created delivery';end if;
+
+ paused:=public.service_set_client_destination_active(pause_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,false);
+ if paused->>'active'<>'false' or paused->>'replayed'<>'false'
+ then raise exception 'Authorized pause did not disable new Send';end if;
+ proof_replay:=public.service_set_client_destination_active(pause_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,false);
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'active'<>'false'
+ then raise exception 'Pause replay was not idempotent';end if;
+ execute 'reset role';
+ if (select count(*) from private.client_destination_activation_actions
+     where destination_id=proposed_id)<>2
+   or (select active from private.client_delivery_destinations where id=proposed_id)
+ then raise exception 'Activation/pause ledger or final off state incorrect';end if;
+ raise notice 'Service-only exact provider activation/pause and inactive Admin layout PASS';
  execute 'reset role';
  if (select count(*) from private.client_destination_provider_proof_receipts
     where destination_id=proposed_id)<>1
