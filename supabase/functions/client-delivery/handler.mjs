@@ -53,7 +53,7 @@ export function createDeliveryHandler({
       expectedEmail:expectedAccount,expectedDriveId,
       clientRootId:testRootFolderId,internalDriveId,
       workspaceDomain:testWorkspaceDomain,clientId,clientSecret,
-      refreshToken,oauthScope,sessionVaultKey,fetcher
+      refreshToken,oauthScope,makeVault:()=>createSessionVault({base64Key:sessionVaultKey}),fetcher
     })(request);
   if(enabled!==true)
     return reply(503,'WORKER_NOT_ACTIVATED');
