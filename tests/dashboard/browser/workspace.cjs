@@ -617,7 +617,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           await new Promise(resolve => {resolveLayoutList=resolve;});
         }
         return reply({destinations:[{destination_id:uuid(9892),company_id:uuid(9981),
-          company_name:'DISPOSABLE VERIFIED CLIENT',layout:'ADDRESS_WORK_ORDER',revision:null}]});
+          company_name:'DISPOSABLE VERIFIED CLIENT',layout:'ADDRESS_WORK_ORDER',revision:null,
+          verified:true,active:false,layout_configured:false}]});
       }
       if (url.pathname.endsWith('/admin_set_client_folder_layout')) {
         const p=req.postDataJSON();layoutWrites.push(p);
@@ -1180,10 +1181,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
 
     await page.locator('#client-folder-settings > summary').click();
     const existingRegistrationNotice=await page.locator('#folder-existing-registration-notice').innerText();
-    assert.match(existingRegistrationNotice,/only active, verified destinations/i,
-      'The destination selector must not imply it includes registered inactive roots.');
-    assert.match(existingRegistrationNotice,/blank proposal form does not mean the folder is unregistered/i,
-      'The browser must not suggest a duplicate proposal just because the form is blank.');
+    assert.match(existingRegistrationNotice,/verified active and verified inactive client destinations/i,
+      'Provider-verified inactive roots must be eligible for explicit layout staging.');
+    assert.match(existingRegistrationNotice,/never propose a second root for an already registered client/i,
+      'The browser must not suggest a duplicate proposal for an already registered client root.');
     assert.match(await page.locator('#folder-proposal-status').innerText(),/NEW, unregistered client root only/i,
       'The proposal action must explain that an existing inactive root cannot be proposed again.');
     await page.locator('#folder-layout-refresh').click();
