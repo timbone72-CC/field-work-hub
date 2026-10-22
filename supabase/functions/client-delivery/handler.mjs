@@ -53,7 +53,7 @@ export function createDeliveryHandler({
       expectedEmail:expectedAccount,expectedDriveId,
       clientRootId:testRootFolderId,internalDriveId,
       workspaceDomain:testWorkspaceDomain,clientId,clientSecret,
-      refreshToken,oauthScope,fetcher
+      refreshToken,oauthScope,sessionVaultKey,fetcher
     })(request);
   if(enabled!==true)
     return reply(503,'WORKER_NOT_ACTIVATED');
