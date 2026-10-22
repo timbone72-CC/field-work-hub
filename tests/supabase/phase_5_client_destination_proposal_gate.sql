@@ -13,6 +13,7 @@ declare
  proof jsonb; proof2 jsonb; preflight_action uuid:=gen_random_uuid();
  layout_saved jsonb; destinations jsonb; activated jsonb; paused jsonb;
  activation_action uuid:=gen_random_uuid(); pause_action uuid:=gen_random_uuid();
+ readiness_action uuid:=gen_random_uuid(); readiness_pause uuid:=gen_random_uuid(); readiness jsonb;
  layout_action uuid:=gen_random_uuid(); explicit_revision uuid;
  root_id text:='fwh_disposable_root_123456789';
  denied boolean;
@@ -314,6 +315,84 @@ begin
    'office@disposable.invalid',root_id,proof_file,false);
  exception when serialization_failure then denied:=true;end;
  if not denied then raise exception 'Action UUID was reused for a different request';end if;
+ -- Fresh service-only readiness attestation: source-only synthetic evidence
+ -- exercises authority and state, never claims a real Google/Storage probe.
+ if has_function_privilege('authenticated',
+   'public.service_set_delivery_worker_ready(uuid,uuid,uuid,text,text,text,text,text,text,text,boolean)','execute')
+   or has_function_privilege('anon',
+   'public.service_set_delivery_worker_ready(uuid,uuid,uuid,text,text,text,text,text,text,text,boolean)','execute')
+   or not has_function_privilege('service_role',
+   'public.service_set_delivery_worker_ready(uuid,uuid,uuid,text,text,text,text,text,text,text,boolean)','execute')
+ then raise exception 'Worker readiness grant unsafe';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,gen_random_uuid(),
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale destination revision registered worker';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'wrong@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Changed provider identity registered worker';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'WRONG_RESULT',true);
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Unproved worker probe registered worker';end if;
+ readiness:=public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ if readiness->>'worker_ready'<>'true' or readiness->>'replayed'<>'false'
+   or not exists(select 1 from private.client_delivery_runtime rt
+     where rt.organization_id=org1 and rt.worker_ready
+      and rt.worker_identity='test-bundle.worker'
+      and rt.last_verified_at is not null)
+ then raise exception 'Service-only readiness did not bind exact original TEST destination';end if;
+ proof_replay:=public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'worker_ready'<>'true'
+ then raise exception 'Readiness action did not replay safely';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('c',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Changed readiness evidence reused action';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     gen_random_uuid(),proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'replacement.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Second registered worker silently replaced original';end if;
+ readiness:=public.service_set_delivery_worker_ready(
+     readiness_pause,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',false);
+ if readiness->>'worker_ready'<>'false' or readiness->>'replayed'<>'false'
+   or exists(select 1 from private.client_delivery_runtime
+     where organization_id=org1 and worker_ready)
+   or (select worker_identity from private.client_delivery_runtime
+     where organization_id=org1) is distinct from 'test-bundle.worker'
+ then raise exception 'Pause lost registered original identity or left Send enabled';end if;
+ if (select count(*) from private.client_delivery_worker_readiness_actions
+       where destination_id=proposed_id)<>2
+ then raise exception 'Worker readiness action audit incorrect';end if;
  paused:=public.service_set_client_destination_active(pause_action,
    proposed_id,(first_result->>'revision')::uuid,explicit_revision,
    'office@disposable.invalid',root_id,proof_file,false);
