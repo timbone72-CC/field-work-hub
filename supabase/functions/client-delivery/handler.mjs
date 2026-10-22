@@ -87,10 +87,18 @@ export function createDeliveryHandler({
   // TEST package. Other packages/destinations never reach Google writes.
   // Fail before the durable dispatch permit for malformed/out-of-scope input.
   const testOnly=testEvidenceClass==='DISPOSABLE_FWH_TEST_ONLY';
-  if(testOnly&&(!UUID.test(testReleasePackageId??'')
+  const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+  // No production/general-client activation in this approved TEST rollout.
+  if(!testOnly||!UUID.test(testReleasePackageId??'')
     ||!UUID.test(testReleaseDestinationId??'')
-    ||!testRootFolderId||testRootFolderId===expectedDriveId
-    ||testRootFolderId===internalDriveId||expectedDriveId===internalDriveId))
+    ||!DRIVE_ID.test(testRootFolderId??'')
+    ||!DRIVE_ID.test(expectedDriveId??'')
+    ||!DRIVE_ID.test(internalDriveId??'')
+    ||!testWorkspaceDomain
+    ||typeof expectedAccount!=='string'
+    ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain)
+    ||testRootFolderId===expectedDriveId
+    ||testRootFolderId===internalDriveId||expectedDriveId===internalDriveId)
     return reply(503,'TEST_RELEASE_SCOPE_NOT_CONFIGURED');
   if(testOnly&&payload.package_id!==undefined
      &&payload.package_id!==testReleasePackageId)
