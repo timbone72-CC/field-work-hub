@@ -32,7 +32,7 @@ const ClientFolderLayout = (() => {
     const e = selected();
     destinationEl.disabled = busy || !!layoutPending || !entries.length;
     choiceEl.disabled = !e || busy || !!layoutPending;
-    saveEl.disabled = !e || busy || (!layoutPending && choiceEl.value === e.layout);
+    saveEl.disabled = !e || busy || (!layoutPending && e.layout_configured === true && choiceEl.value === e.layout);
     saveEl.textContent = layoutPending ? 'Retry exact preference save' : 'Save folder preference';
     refreshEl.disabled = busy || !!layoutPending;
   }
@@ -40,12 +40,14 @@ const ClientFolderLayout = (() => {
     const e = selected();
     if (!layoutPending) choiceEl.value = e?.layout || 'ADDRESS_WORK_ORDER';
     updateLayoutButtons();
-    message(e ? 'Applies to new packages only. Existing deliveries will not move.'
-      : 'No active, verified client destinations are available. An inactive registered destination may exist; check before proposing a new root.');
+    message(e ? (e.active
+      ? 'Verified active client destination. Changes affect new packages only.'
+      : 'Verified but INACTIVE client destination. You can save a layout; approval and Send stay blocked.')
+      : 'No provider-verified client destinations are available. Check registration before proposing a new root.');
   }
   function clearVerified() {
     revision++; busy = false; layoutPending = null; entries = [];
-    destinationEl.replaceChildren(new Option('Load verified destinations', ''));
+    destinationEl.replaceChildren(new Option('Load provider-verified destinations', ''));
     choiceEl.value = 'ADDRESS_WORK_ORDER';
     message('');
     updateLayoutButtons();
@@ -71,6 +73,8 @@ const ClientFolderLayout = (() => {
       for (const e of result.destinations) {
         if (!UUID.test(e?.destination_id || '') || !UUID.test(e?.company_id || '')
           || typeof e.company_name !== 'string' || !layouts.has(e.layout)
+          || typeof e.layout_configured !== 'boolean' || e.verified !== true
+          || typeof e.active !== 'boolean'
           || (e.revision !== null && e.revision !== undefined && !UUID.test(e.revision))
           || ids.has(e.destination_id)) {
           throw Error('Authorized destination list was invalid; no settings were opened.');
@@ -81,7 +85,7 @@ const ClientFolderLayout = (() => {
       entries = fresh;
       destinationEl.replaceChildren(
         new Option('Choose a verified client destination', ''),
-        ...entries.map(e => new Option(e.company_name, e.destination_id)));
+        ...entries.map(e => new Option(e.company_name + (e.active ? ' (active)' : ' (verified inactive)'), e.destination_id)));
       renderSelection();
     } catch (error) {
       if (currentLayout(request, session, actor, job)) {
@@ -100,8 +104,8 @@ const ClientFolderLayout = (() => {
     if (!e || busy || !accessToken || !actor || !job) return;
     if (!layoutPending) {
       const chosen = choiceEl.value;
-      if (!layouts.has(chosen) || chosen === e.layout) return;
-      if (!confirm('Change this client’s folder layout for future approved packages? Existing deliveries stay in place.')) return;
+      if (!layouts.has(chosen) || (e.layout_configured === true && chosen === e.layout)) return;
+      if (!confirm('Save this client’s explicit folder layout for future packages? This will NOT activate an inactive client destination or Send photos.')) return;
       layoutPending = {action: crypto.randomUUID(), destination: e.destination_id,
         company: e.company_id, expectedRevision: e.revision || null, layout: chosen};
     }
@@ -136,9 +140,11 @@ const ClientFolderLayout = (() => {
         message('Save confirmation is incomplete. Retry ONLY the same action to reconcile.');
         return;
       }
-      e.layout = result.layout; e.revision = result.revision;
+      e.layout = result.layout; e.revision = result.revision; e.layout_configured = true;
       layoutPending = null;
-      message('Folder preference saved. No photos or existing folders were moved.');
+      message(e.active
+        ? 'Folder preference saved for new packages. No existing folders were moved.'
+        : 'Folder preference saved; client destination remains INACTIVE. No photos or folders were moved.');
     } catch {
       if (currentLayout(request, session, actor, job))
         message('Connection outcome uncertain. Retry ONLY the same preference action.');
