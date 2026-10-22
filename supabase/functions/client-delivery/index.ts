@@ -11,6 +11,10 @@ Deno.serve(createDeliveryHandler({
  testRootFolderId:Deno.env.get('FWH_CLIENT_TEST_ROOT_FOLDER_ID')??'',
  internalDriveId:Deno.env.get('FWH_INTERNAL_SHARED_DRIVE_ID')??'',
  testWorkspaceDomain:Deno.env.get('FWH_TEST_WORKSPACE_DOMAIN')??'',
+ // TEST-only manual release must pin the original approved package and
+ // verified company destination; an unconfigured active TEST worker fails closed.
+ testReleasePackageId:Deno.env.get('FWH_CLIENT_TEST_RELEASE_PACKAGE_ID')??'',
+ testReleaseDestinationId:Deno.env.get('FWH_CLIENT_TEST_RELEASE_DESTINATION_ID')??'',
  workerSecret:Deno.env.get('FWH_CLIENT_DELIVERY_WORKER_SECRET')??'',
  expectedAccount:Deno.env.get('FWH_CLIENT_DRIVE_ACCOUNT')??'',
  expectedDriveId:Deno.env.get('FWH_CLIENT_SHARED_DRIVE_ID')??'',
