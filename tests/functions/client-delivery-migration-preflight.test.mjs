@@ -25,7 +25,7 @@ test('read-only exact-head Team dry-run accepts one known pending migration; unc
  writeFileSync(join(dir,'supabase','config.toml'),'fixture\n');
  const installed='20261021190000_phase_5_verified_client_destination_activation.sql';
  const expected='20261022154000_phase_5_delivery_worker_readiness_attestation.sql';
- for(let i=0;i<107;i++)writeFileSync(join(dir,'supabase','migrations',
+ for(let i=0;i<108;i++)writeFileSync(join(dir,'supabase','migrations',
    'fixture_'+String(i).padStart(3,'0')+'.sql'),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',installed),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',expected),'-- disposable\n');
