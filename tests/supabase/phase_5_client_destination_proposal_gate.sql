@@ -390,9 +390,13 @@ begin
    or (select worker_identity from private.client_delivery_runtime
      where organization_id=org1) is distinct from 'test-bundle.worker'
  then raise exception 'Pause lost registered original identity or left Send enabled';end if;
+ -- The immutable action journal is deliberately invisible to service_role;
+ -- use the disposable test harness's postgres role for this row-count audit.
+ execute 'reset role';
  if (select count(*) from private.client_delivery_worker_readiness_actions
        where destination_id=proposed_id)<>2
  then raise exception 'Worker readiness action audit incorrect';end if;
+ execute 'set local role service_role';
  paused:=public.service_set_client_destination_active(pause_action,
    proposed_id,(first_result->>'revision')::uuid,explicit_revision,
    'office@disposable.invalid',root_id,proof_file,false);
