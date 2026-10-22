@@ -6,6 +6,12 @@ import {createDeliveryHandler} from '../../supabase/functions/client-delivery/ha
 const secret='test-disposable-private-worker-secret-123456789';
 const settings={
  enabled:true,workerSecret:secret,expectedAccount:'office@example.invalid',
+ testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',
+ testReleasePackageId:'00000000-0000-4000-8000-000000000001',
+ testReleaseDestinationId:'00000000-0000-4000-8000-000000000020',
+ testRootFolderId:'disposable_client_root_0123456789',
+ internalDriveId:'disposable_internal_drive_0123456789',
+ testWorkspaceDomain:'example.invalid',
  expectedDriveId:'clientdrive_12345678901234567890',
  clientId:'private-client-id',clientSecret:'private-client-secret',
  refreshToken:'private-refresh-token',
