@@ -15,7 +15,7 @@ function stub(path,text){
  writeFileSync(path,'#!/usr/bin/env bash\nset -euo pipefail\n'+text+'\n');
  chmodSync(path,0o700);
 }
-test('read-only exact-head Team dry-run accepts zero pending; all uncertain and stale cases fail closed',t=>{
+test('read-only exact-head Team dry-run accepts one known pending migration; uncertain cases fail closed',t=>{
  const tmp=mkdtempSync(join(tmpdir(),'fwh-phase5d-migration-test-'));
  t.after(()=>rmSync(tmp,{recursive:true,force:true}));
  const bin=join(tmp,'bin'),dir=join(tmp,'source');
@@ -23,9 +23,11 @@ test('read-only exact-head Team dry-run accepts zero pending; all uncertain and 
  mkdirSync(join(dir,'supabase','.temp'));
  writeFileSync(join(dir,'AGENTS.md'),'fixture\n');
  writeFileSync(join(dir,'supabase','config.toml'),'fixture\n');
- const expected='20261020020000_phase_5_delivery_dispatch_singleflight.sql';
+ const installed='20261021190000_phase_5_verified_client_destination_activation.sql';
+ const expected='20261022154000_phase_5_delivery_worker_readiness_attestation.sql';
  for(let i=0;i<107;i++)writeFileSync(join(dir,'supabase','migrations',
    'fixture_'+String(i).padStart(3,'0')+'.sql'),'-- disposable\n');
+ writeFileSync(join(dir,'supabase','migrations',installed),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',expected),'-- disposable\n');
  writeFileSync(join(dir,'supabase','.temp','project-ref'),REF+'\n');
  stub(join(bin,'git'),`case "$*" in
@@ -50,7 +52,7 @@ test('read-only exact-head Team dry-run accepts zero pending; all uncertain and 
    FWH_STUB_BRANCH:BRANCH,
    FWH_STUB_REMOTE:'https://github.com/timbone72-CC/field-work-hub.git',
    FWH_STUB_HEAD:HEAD,
-   FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\nRemote database is up to date.',
+   FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n'+expected,
    FWH_STUB_EXIT:'0'
  };
  function execute(extra={}){
@@ -61,12 +63,14 @@ test('read-only exact-head Team dry-run accepts zero pending; all uncertain and 
  }
  let r=execute();
  assert.equal(r.status,0,r.stderr);
- assert.match(r.stdout,/zero pending migrations/);
+ assert.match(r.stdout,/one exact pending worker-readiness migration/);
  assert.match(r.stdout,/NO MIGRATIONS APPLIED/);
  const stops=[
    {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
-   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
-   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.'},code:/STOP: Dry-run did not positively confirm/},
+   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.\\n'+expected},code:/STOP: Dry-run reports no pending work/},
+   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.'},code:/STOP: Unexpected pending/},
+   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n'+expected+'\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
+   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.'},code:/STOP: Unexpected pending/},
    {env:{FWH_STUB_DRYRUN:'Remote database is up to date.',FWH_STUB_EXIT:'1'},code:/STOP: Supabase canonical dry-run failed/},
    {env:{FWH_STUB_BRANCH:'main'},code:/STOP: Not on PR #40/},
    {env:{FWH_STUB_HEAD:'another-head',FWH_STUB_REMOTE:'invalid-example.net'},code:/STOP: Remote is not/}
