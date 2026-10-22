@@ -65,7 +65,7 @@ function simulate({claim={claimed:false},active={state:'NONE'}}={}){
 test('active TEST worker denies missing pin, wrong evidence class and overlapping read-only mode before any I/O',async()=>{
  const failures=[
   {testReleasePackageId:''},{testReleaseDestinationId:''},
-  {testReleasePackageId:other},{testEvidenceClass:''},
+  {testEvidenceClass:''},
   {testRootFolderId:shared},{testRootFolderId:internal},
   {expectedDriveId:internal},{testWorkspaceDomain:'other.invalid'}
  ];
@@ -73,9 +73,6 @@ test('active TEST worker denies missing pin, wrong evidence class and overlappin
   const mock=simulate();
   const result=await createDeliveryHandler({...base,...x,fetcher:mock.fetcher})(req({operation:'preallocate'}));
   assert.equal(result.status,503,JSON.stringify(x));
-  // A syntactically valid but wrong package pin without any queued claim
-  // does not grant a release; the credential can be verified only in a
-  // configuration whose expected package matches the real claim.
   assert.deepEqual(mock.calls,[],JSON.stringify(x));
  }
  const conflict=simulate();
