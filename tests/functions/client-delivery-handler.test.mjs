@@ -3,13 +3,21 @@ import assert from 'node:assert/strict';
 import {createDeliveryHandler}
  from '../../supabase/functions/client-delivery/handler.mjs';
 const secret='disposable-only-worker-secret-1234567890';
+const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+const isolatedTest={
+ testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',
+ testReleasePackageId:uuid(1),testReleaseDestinationId:uuid(20),
+ testRootFolderId:'disposable_client_root_0123456789',
+ internalDriveId:'disposable_internal_drive_0123456789',
+ testWorkspaceDomain:'example.invalid'
+};
 const request=(key=secret,body={operation:'preallocate'})=>new Request('https://any.invalid',{
  method:'POST',headers:{'x-fwh-delivery-secret':key,'content-type':'application/json'},
  body:JSON.stringify(body)
 });
 test('no user, publishable key or wrong worker secret can invoke the provider backend',async()=>{
  let calls=0;
- const handler=createDeliveryHandler({enabled:true,workerSecret:secret,
+ const handler=createDeliveryHandler({enabled:true,...isolatedTest,workerSecret:secret,
   fetcher:()=>{calls++;throw Error('private token');}});
  for(const key of ['', 'sb_publishable_public',secret.slice(0,-1)+'z']){
   const r=await handler(request(key));
@@ -39,7 +47,7 @@ test('only an explicit internal preallocation command can be recognized',async()
  assert.equal((await missing.json()).status,'BACKEND_NOT_CONFIGURED');
 });
 test('provider/token errors are redacted and cannot claim a delivered package',async()=>{
- const handler=createDeliveryHandler({enabled:true,workerSecret:secret,
+ const handler=createDeliveryHandler({enabled:true,...isolatedTest,workerSecret:secret,
    expectedAccount:'office@example.invalid',
    expectedDriveId:'testdrive01234567',
    clientId:'disposable-client-id-123456789',
@@ -58,10 +66,9 @@ test('provider/token errors are redacted and cannot claim a delivered package',a
  assert.equal(body.includes('DELIVERED'),false);
  assert.equal(body,'{"status":"DISPATCH_PERMIT_UNAVAILABLE"}');
 });
-const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const leased={package_id:uuid(1),worker_id:uuid(2),generation:1};
 const candidateConfig={
- enabled:true,workerSecret:secret,expectedAccount:'office@example.invalid',
+ ...isolatedTest,enabled:true,workerSecret:secret,expectedAccount:'office@example.invalid',
  expectedDriveId:'clientdrive_12345678901234567890',
  clientId:'private-client-id',clientSecret:'private-client-secret',
  refreshToken:'private-refresh-token',
