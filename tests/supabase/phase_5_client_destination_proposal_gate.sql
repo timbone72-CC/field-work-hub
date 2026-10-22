@@ -239,7 +239,7 @@ begin
     layout_action,proposed_id,null,'ADDRESS_WORK_ORDER');
  if proof_replay->>'replayed'<>'true' or proof_replay->>'revision'<>explicit_revision::text
  then raise exception 'Verified-inactive layout action was not replay-safe';end if;
- if (select active from private.client_delivery_destinations where id=proposed_id)
+ if public.admin_get_client_folder_layout(proposed_id)->>'active'<>'false'
  then raise exception 'Saving layout activated client Send';end if;
 
  -- Even a legitimate Admin must never be able to activate or pause a root.
