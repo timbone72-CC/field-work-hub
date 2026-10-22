@@ -28,7 +28,7 @@ function sameSecret(x,y){
 export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
   testPreflightEnabled=false,testEvidenceClass,testRootFolderId,internalDriveId,
-  testWorkspaceDomain,
+  testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
   supabaseUrl,serviceRoleJwt,sessionVaultKey,
   fetcher=fetch,makeWorkerId=()=>crypto.randomUUID()
@@ -83,6 +83,18 @@ export function createDeliveryHandler({
     ||Object.keys(payload).length!==required.length
     ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
+  // The currently approved rollout is for ONE isolated, existing two-photo
+  // TEST package. Other packages/destinations never reach Google writes.
+  // Fail before the durable dispatch permit for malformed/out-of-scope input.
+  const testOnly=testEvidenceClass==='DISPOSABLE_FWH_TEST_ONLY';
+  if(testOnly&&(!UUID.test(testReleasePackageId??'')
+    ||!UUID.test(testReleaseDestinationId??'')
+    ||!testRootFolderId||testRootFolderId===expectedDriveId
+    ||testRootFolderId===internalDriveId||expectedDriveId===internalDriveId))
+    return reply(503,'TEST_RELEASE_SCOPE_NOT_CONFIGURED');
+  if(testOnly&&payload.package_id!==undefined
+     &&payload.package_id!==testReleasePackageId)
+    return reply(403,'TEST_RELEASE_SCOPE_DENIED');
   if(!['preallocate','advance_once'].includes(payload.operation)){
     if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
       ||!Number.isSafeInteger(payload.generation)||payload.generation<1
@@ -123,6 +135,35 @@ export function createDeliveryHandler({
     dispatchId=makeWorkerId();
     if(!UUID.test(dispatchId))throw Error('INVALID_DISPATCH_ID');
     ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+    if(testOnly){
+      const original=ledger;
+      const validClaim=claim=>{
+        const m=claim?.manifest;
+        return claim?.package_id===testReleasePackageId
+          &&claim?.destination_id===testReleaseDestinationId
+          &&m?.package_id===testReleasePackageId
+          &&m?.destination_id===testReleaseDestinationId
+          &&m?.destination_root===testRootFolderId
+          &&Array.isArray(m?.selected_photos)
+          &&m.selected_photos.length===2
+          &&m.selected_photos.every(p=>UUID.test(p.photo_id??''));
+      };
+      ledger={
+        ...original,
+        claim:async worker=>{
+          const claim=await original.claim(worker);
+          if(claim?.claimed===false)return claim;
+          if(!validClaim(claim))throw Error('TEST_RELEASE_SCOPE_MISMATCH');
+          return claim;
+        },
+        readActiveLease:async()=>{
+          const old=await original.readActiveLease();
+          if(old?.state==='ACTIVE'&&!validClaim(old))
+            throw Error('TEST_RELEASE_SCOPE_MISMATCH');
+          return old;
+        }
+      };
+    }
     const acquired=await ledger.acquireDispatch(dispatchId);
     if(acquired?.acquired===false)return reply(503,'WORKER_BUSY');
     if(acquired?.acquired!==true)throw Error('DISPATCH_PERMIT_UNVERIFIED');
