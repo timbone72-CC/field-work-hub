@@ -83,7 +83,16 @@ export function createDeliveryHandler({
     ||Object.keys(payload).length!==required.length
     ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
-  // The currently approved rollout is for ONE isolated, existing two-photo
+  if(!['preallocate','advance_once'].includes(payload.operation)){
+    if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
+      ||!Number.isSafeInteger(payload.generation)||payload.generation<1
+      ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
+      ||(payload.operation==='reconcile_parent'
+        &&!['STATE','COUNTY','CITY'].includes(payload.kind))
+      ||(payload.operation==='reconcile_geographic_leaf'
+        &&!['ADDRESS','WORK_ORDER'].includes(payload.kind)))
+      return reply(400,'EXACT_REQUEST_REQUIRED');
+  }  // The currently approved rollout is for ONE isolated, existing two-photo
   // TEST package. Other packages/destinations never reach Google writes.
   // Fail before the durable dispatch permit for malformed/out-of-scope input.
   const testOnly=testEvidenceClass==='DISPOSABLE_FWH_TEST_ONLY';
@@ -103,16 +112,7 @@ export function createDeliveryHandler({
   if(testOnly&&payload.package_id!==undefined
      &&payload.package_id!==testReleasePackageId)
     return reply(403,'TEST_RELEASE_SCOPE_DENIED');
-  if(!['preallocate','advance_once'].includes(payload.operation)){
-    if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
-      ||!Number.isSafeInteger(payload.generation)||payload.generation<1
-      ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
-      ||(payload.operation==='reconcile_parent'
-        &&!['STATE','COUNTY','CITY'].includes(payload.kind))
-      ||(payload.operation==='reconcile_geographic_leaf'
-        &&!['ADDRESS','WORK_ORDER'].includes(payload.kind)))
-      return reply(400,'EXACT_REQUEST_REQUIRED');
-  }
+
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
     return reply(503,'BACKEND_NOT_CONFIGURED');
