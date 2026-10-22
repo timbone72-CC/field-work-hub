@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createReadOnlyTestHandler} from '../../supabase/functions/client-delivery/test-preflight-only.mjs';
 import {createDeliveryHandler} from '../../supabase/functions/client-delivery/handler.mjs';
+import {createSessionVault} from '../../supabase/functions/client-delivery/session-vault.mjs';
 
 const KEY='disposable-private-worker-key-01234567890abcdef';
 const ROOT='disposable_client_root_01234567';
@@ -156,7 +157,7 @@ test('deployed TEST-only entrypoint has no production delivery/database imports'
 
 test('private TEST worker configuration proves AES roundtrip and existing Google GETs with delivery OFF',async()=>{
  const mock=provider();
- const r=await createReadOnlyTestHandler({...base,sessionVaultKey:'A'.repeat(43),
+ const r=await createReadOnlyTestHandler({...base,makeVault:()=>createSessionVault({base64Key:'A'.repeat(43)}),
    fetcher:mock.fetcher})(request('verify_test_worker_config'));
  assert.equal(r.status,200);
  assert.deepEqual(await r.json(),{status:'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY'});
@@ -169,20 +170,20 @@ test('private TEST worker configuration proves AES roundtrip and existing Google
 test('TEST vault probe fails closed before any HTTP or database activity for missing or malformed key',async()=>{
  for(const key of ['', 'not-base64', 'A'.repeat(22)]){
   const mock=provider();
-  const r=await createReadOnlyTestHandler({...base,sessionVaultKey:key,
+  const r=await createReadOnlyTestHandler({...base,makeVault:()=>createSessionVault({base64Key:key}),
     fetcher:mock.fetcher})(request('verify_test_worker_config'));
   assert.equal(r.status,503);
   assert.deepEqual(await r.json(),{status:'TEST_SESSION_VAULT_UNAVAILABLE'});
   assert.deepEqual(mock.calls,[]);
  }
  const oldMock=provider();
- const old=await createReadOnlyTestHandler({...base,sessionVaultKey:'',
+ const old=await createReadOnlyTestHandler({...base,
    fetcher:oldMock.fetcher})(request('verify_test_connection'));
  assert.equal(old.status,200,'previous read-only operation must not require the new key');
 });
 test('TEST vault probe rejects wrong secret, altered fields and delivery-enabled mode without network',async()=>{
  const mock=provider();
- const h=createReadOnlyTestHandler({...base,sessionVaultKey:'A'.repeat(43),fetcher:mock.fetcher});
+ const h=createReadOnlyTestHandler({...base,makeVault:()=>createSessionVault({base64Key:'A'.repeat(43)}),fetcher:mock.fetcher});
  assert.equal((await h(request('verify_test_worker_config','wrong'))).status,401);
  const extra=new Request('https://fixture.invalid/',{
   method:'POST',headers:{'content-type':'application/json','x-fwh-delivery-secret':KEY},
@@ -190,7 +191,7 @@ test('TEST vault probe rejects wrong secret, altered fields and delivery-enabled
  });
  assert.equal((await h(extra)).status,400);
  const active=createReadOnlyTestHandler({...base,deliveryActive:true,
-  sessionVaultKey:'A'.repeat(43),fetcher:mock.fetcher});
+  makeVault:()=>createSessionVault({base64Key:'A'.repeat(43)}),fetcher:mock.fetcher});
  assert.equal((await active(request('verify_test_worker_config'))).status,503);
  assert.deepEqual(mock.calls,[]);
 });
