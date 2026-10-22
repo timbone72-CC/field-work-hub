@@ -4,7 +4,6 @@
 // Imports only the existing trusted OAuth and Google Drive GET owners.
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
 import {createDriveClient} from './drive-client.mjs';
-import {createSessionVault} from './session-vault.mjs';
 
 function reply(status,code){
   return new Response(JSON.stringify({status:code}),{status,headers:{
@@ -26,7 +25,7 @@ export function createReadOnlyTestHandler({
   deliveryActive=false,testEnabled=false,testEvidenceClass='',
   workerSecret='',expectedEmail='',expectedDriveId='',clientRootId='',
   internalDriveId='',workspaceDomain='',clientId='',clientSecret='',
-  refreshToken='',oauthScope='',sessionVaultKey='',fetcher=fetch
+  refreshToken='',oauthScope='',makeVault,fetcher=fetch
 }={}){
   return async request=>{
     if(request.method!=='POST')return reply(405,'POST_ONLY');
@@ -77,7 +76,7 @@ export function createReadOnlyTestHandler({
     // opened, no remote file or SQL permit is touched, no key material returned.
     if(body.operation==='verify_test_worker_config'){
       try{
-        const vault=await createSessionVault({base64Key:sessionVaultKey});
+        const vault=await makeVault();
         const disposableUrl='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable';
         const identity={packageId:'fwh_test_package_identity',fileId:'fwh_test_file_identity'};
         const sealed=await vault.seal(disposableUrl,identity);
