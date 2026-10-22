@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createReadOnlyTestHandler} from '../../supabase/functions/client-delivery/test-preflight-only.mjs';
+import {createDeliveryHandler} from '../../supabase/functions/client-delivery/handler.mjs';
 
 const KEY='disposable-private-worker-key-01234567890abcdef';
 const ROOT='disposable_client_root_01234567';
@@ -151,4 +152,65 @@ test('deployed TEST-only entrypoint has no production delivery/database imports'
  assert.equal(/from '\.\/handler\.mjs'|service-ledger|worker-runtime|SUPABASE_SERVICE_ROLE_KEY|send|upload-one/.test(s),false);
  assert.ok(s.includes("Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true'"));
  assert.ok(s.includes("Deno.env.get('FWH_CLIENT_TEST_PREFLIGHT_ENABLED')==='true'"));
+});
+
+test('private TEST worker configuration proves AES roundtrip and existing Google GETs with delivery OFF',async()=>{
+ const mock=provider();
+ const r=await createReadOnlyTestHandler({...base,sessionVaultKey:'A'.repeat(43),
+   fetcher:mock.fetcher})(request('verify_test_worker_config'));
+ assert.equal(r.status,200);
+ assert.deepEqual(await r.json(),{status:'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY'});
+ assert.deepEqual(mock.calls,[
+  {origin:'https://oauth2.googleapis.com',path:'/token',method:'POST'},
+  {origin:'https://www.googleapis.com',path:'/drive/v3/about',method:'GET'},
+  {origin:'https://www.googleapis.com',path:'/drive/v3/files/'+ROOT,method:'GET'}
+ ]);
+});
+test('TEST vault probe fails closed before any HTTP or database activity for missing or malformed key',async()=>{
+ for(const key of ['', 'not-base64', 'A'.repeat(22)]){
+  const mock=provider();
+  const r=await createReadOnlyTestHandler({...base,sessionVaultKey:key,
+    fetcher:mock.fetcher})(request('verify_test_worker_config'));
+  assert.equal(r.status,503);
+  assert.deepEqual(await r.json(),{status:'TEST_SESSION_VAULT_UNAVAILABLE'});
+  assert.deepEqual(mock.calls,[]);
+ }
+ const oldMock=provider();
+ const old=await createReadOnlyTestHandler({...base,sessionVaultKey:'',
+   fetcher:oldMock.fetcher})(request('verify_test_connection'));
+ assert.equal(old.status,200,'previous read-only operation must not require the new key');
+});
+test('TEST vault probe rejects wrong secret, altered fields and delivery-enabled mode without network',async()=>{
+ const mock=provider();
+ const h=createReadOnlyTestHandler({...base,sessionVaultKey:'A'.repeat(43),fetcher:mock.fetcher});
+ assert.equal((await h(request('verify_test_worker_config','wrong'))).status,401);
+ const extra=new Request('https://fixture.invalid/',{
+  method:'POST',headers:{'content-type':'application/json','x-fwh-delivery-secret':KEY},
+  body:JSON.stringify({operation:'verify_test_worker_config',key:'user-controlled'})
+ });
+ assert.equal((await h(extra)).status,400);
+ const active=createReadOnlyTestHandler({...base,deliveryActive:true,
+  sessionVaultKey:'A'.repeat(43),fetcher:mock.fetcher});
+ assert.equal((await active(request('verify_test_worker_config'))).status,503);
+ assert.deepEqual(mock.calls,[]);
+});
+test('actual OFF-mode worker entry delegates TEST vault proof, not mutating operations',async()=>{
+ const mock=provider();
+ const handler=createDeliveryHandler({
+  enabled:false,testPreflightEnabled:true,
+  workerSecret:KEY,testEvidenceClass:base.testEvidenceClass,
+  testRootFolderId:ROOT,expectedDriveId:DRIVE,internalDriveId:INTERNAL,
+  testWorkspaceDomain:base.workspaceDomain,expectedAccount:ACCOUNT,
+  clientId:base.clientId,clientSecret:base.clientSecret,
+  refreshToken:base.refreshToken,oauthScope:base.oauthScope,
+  sessionVaultKey:'A'.repeat(43),fetcher:mock.fetcher
+ });
+ const r=await handler(request('verify_test_worker_config'));
+ assert.equal(r.status,200);
+ assert.equal((await r.json()).status,'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY');
+ const denied=await handler(request('advance_once'));
+ assert.equal(denied.status,400);
+ assert.deepEqual(mock.calls.map(x=>x.path),[
+  '/token','/drive/v3/about','/drive/v3/files/'+ROOT
+ ]);
 });
