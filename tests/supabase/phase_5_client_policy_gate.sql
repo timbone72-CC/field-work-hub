@@ -232,4 +232,65 @@ begin
   raise notice 'Exact one-slot service-only dispatch and wrong-owner denial PASS';
 end;
 $dispatch_acl$;
+
+-- Original TEST expired-lease inspection/recovery is strictly service-only;
+-- an unrelated package/worker can neither read another tenant nor renew.
+-- This negative gate runs in the same rollback-only synthetic transaction.
+do $test_expired_lease_acl$
+declare
+  pkg uuid:=gen_random_uuid();
+  destination uuid:=gen_random_uuid();
+  worker uuid:=gen_random_uuid();
+  parent_map uuid:=gen_random_uuid();
+  request_id uuid:=gen_random_uuid();
+  root text:='fwh_ci_original_test_root_123456789';
+  remote_id text:='fwh_ci_saved_original_folder_12345';
+  previous_expiry timestamptz:=clock_timestamp()-interval '1 minute';
+  denied boolean;
+begin
+  if has_function_privilege('authenticated',
+      'public.service_read_expired_test_delivery_reservation(uuid,uuid,text)','execute')
+    or has_function_privilege('anon',
+      'public.service_read_expired_test_delivery_reservation(uuid,uuid,text)','execute')
+    or has_function_privilege('authenticated',
+      'public.service_resume_exact_test_expired_delivery(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)','execute')
+    or has_function_privilege('anon',
+      'public.service_resume_exact_test_expired_delivery(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)','execute')
+    or not has_function_privilege('service_role',
+      'public.service_read_expired_test_delivery_reservation(uuid,uuid,text)','execute')
+    or not has_function_privilege('service_role',
+      'public.service_resume_exact_test_expired_delivery(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)','execute')
+    or has_table_privilege('service_role',
+      'private.client_delivery_test_lease_recoveries','insert')
+    or has_table_privilege('authenticated',
+      'private.client_delivery_test_lease_recoveries','select')
+  then raise exception 'Original TEST recovery authority exposed'; end if;
+  denied:=false;
+  execute 'set local role authenticated';
+  begin
+    perform public.service_read_expired_test_delivery_reservation(pkg,destination,root);
+  exception when insufficient_privilege then denied:=true; end;
+  execute 'reset role';
+  if not denied then raise exception 'App role inspected expired worker lease'; end if;
+  denied:=false;
+  execute 'set local role service_role';
+  begin
+    perform public.service_read_expired_test_delivery_reservation(pkg,destination,root);
+  exception when insufficient_privilege then denied:=true; end;
+  execute 'reset role';
+  if not denied then raise exception 'Nonexistent/other-company TEST scope inspected'; end if;
+  denied:=false;
+  execute 'set local role service_role';
+  begin
+    perform public.service_resume_exact_test_expired_delivery(
+      pkg,destination,root,worker,1,parent_map,remote_id,
+      previous_expiry,clock_timestamp(),'GOOGLE_FILE_ID_NOT_FOUND',request_id);
+  exception when insufficient_privilege then denied:=true; end;
+  execute 'reset role';
+  if not denied then raise exception 'Foreign or absent expired lease recovered'; end if;
+  if exists(select 1 from private.client_delivery_test_lease_recoveries)
+  then raise exception 'Denied TEST recovery wrote an immutable audit row'; end if;
+  raise notice 'TEST expired-lease read/CAS role, package, saved-ID and no-write denial PASS';
+end;
+$test_expired_lease_acl$;
 rollback;
