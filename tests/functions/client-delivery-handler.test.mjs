@@ -288,7 +288,15 @@ test('TEST-only backend check redacts adapter, denied, network and response fail
     serviceRoleJwt:'sb_secret_fake-format',fetcher:()=>{throw Error('NO_NETWORK');}});
   const a=await invalid(request(secret,body));
   assert.equal(a.status,503);
-  assert.deepEqual(await a.json(),{status:'BACKEND_ADAPTER_NOT_CONFIGURED'});
+  assert.deepEqual(await a.json(),{status:'BACKEND_KEY_FORMAT_INVALID'});
+  for(const invalidUrl of ['http://fwh-test.supabase.co',
+    'https://fwh-test.supabase.co/unapproved']){
+    const invalidBackend=createDeliveryHandler({...candidateConfig,
+      supabaseUrl:invalidUrl,fetcher:()=>{throw Error('NO_IO_ALLOWED');}});
+    const result=await invalidBackend(request(secret,body));
+    assert.equal(result.status,503);
+    assert.deepEqual(await result.json(),{status:'BACKEND_URL_INVALID'});
+  }
   for(const [response,code] of [
     [()=>Response.json({message:'PRIVATE_TOKEN'},{status:403}),'BACKEND_READ_ONLY_AUTH_DENIED'],
     [()=>Response.json({message:'PRIVATE_TOKEN'},{status:500}),'BACKEND_READ_ONLY_RPC_UNAVAILABLE'],
