@@ -285,7 +285,7 @@ begin
     perform public.service_resume_exact_test_expired_delivery(
       pkg,destination,root,worker,1,parent_map,remote_id,
       previous_expiry,clock_timestamp(),'GOOGLE_FILE_ID_NOT_FOUND',request_id);
-  exception when insufficient_privilege then denied:=true; end;
+  exception when insufficient_privilege or serialization_failure then denied:=true; end;
   execute 'reset role';
   if not denied then raise exception 'Foreign or absent expired lease recovered'; end if;
   if exists(select 1 from private.client_delivery_test_lease_recoveries)
