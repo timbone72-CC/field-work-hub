@@ -1117,6 +1117,55 @@ begin
  perform pg_temp.expect_photo_review_error('42501',format(
    'select public.admin_package_photo_page(%L,25,null,null)',wo));
  execute 'reset role';
+ -- Exercise the new exact service-only TEST claim using the existing two-
+ -- photo cross-run fixture; the entire gate runs under BEGIN/ROLLBACK and
+ -- never writes real customer data, provider IDs or Drive objects.
+ update public.work_orders set wo_number='TEST-0003-DASHBOARD'
+   where id=wo;
+ update private.client_companies set name='FWH TEST CLIENT'
+   where id=old_pkg.company_id and organization_id=org;
+ perform set_config('request.jwt.claims',claims_admin,true);
+ execute 'set local role authenticated';
+ page:=public.admin_preview_package(wo,(next_pkg->>'id')::uuid,
+   (next_pkg->>'revision')::uuid);
+ result:=public.admin_approve_package(gen_random_uuid(),wo,
+   (next_pkg->>'id')::uuid,(next_pkg->>'revision')::uuid,page->>'manifest_sha256');
+ if result->>'status'<>'APPROVED' then
+   raise exception 'Two-photo disposable package approval failed: %',result;end if;
+ result:=public.admin_queue_package(gen_random_uuid(),wo,
+   (next_pkg->>'id')::uuid,(result->>'revision')::uuid,page->>'manifest_sha256');
+ if result->>'status'<>'QUEUED' then
+   raise exception 'Two-photo disposable package queue failed: %',result;end if;
+ execute 'reset role';
+ if (select count(*) from private.client_package_photos
+       where package_id=(next_pkg->>'id')::uuid)<>2 then
+   raise exception 'New exact TEST claim fixture requires two real member identities';end if;
+ execute 'set local role service_role';
+ perform pg_temp.expect_photo_review_error('42501',format(
+   'select public.service_claim_exact_test_delivery(%L,%L,%L,%L)',
+   gen_random_uuid(),next_pkg->>'id',old_pkg.destination_id,'DIFFERENT_TEST_ROOT'));
+ if (select state from private.client_delivery_outbox
+       where package_id=(next_pkg->>'id')::uuid)<>'QUEUED' then
+   raise exception 'Wrong root claimed or modified TEST package';end if;
+ result:=public.service_claim_exact_test_delivery(
+   gen_random_uuid(),(next_pkg->>'id')::uuid,old_pkg.destination_id,
+   'DISPOSABLE-ONLY');
+ if result->>'claimed'<>'true'
+   or result->>'package_id' is distinct from next_pkg->>'id'
+   or result->>'destination_id' is distinct from old_pkg.destination_id::text
+   or jsonb_array_length(result->'manifest'->'selected_photos')<>2
+ then raise exception 'Exact TEST two-photo claim did not retain original lease: %',result;end if;
+ if (select status from private.client_packages
+       where id=(next_pkg->>'id')::uuid)<>'DELIVERING'
+   or (select attempts from private.client_delivery_outbox
+       where package_id=(next_pkg->>'id')::uuid)<>1
+ then raise exception 'Exact TEST claim did not persist one original lease';end if;
+ if public.service_claim_exact_test_delivery(
+   gen_random_uuid(),(next_pkg->>'id')::uuid,old_pkg.destination_id,
+   'DISPOSABLE-ONLY')->>'claimed' is distinct from 'false'
+ then raise exception 'Repeated exact TEST claim acquired a second lease';end if;
+ execute 'reset role';
+ raise notice 'Exact disposable two-photo claim, role and wrong-root safety PASS';
  raise notice 'Phase 6D original/new photo minima, prior confirmed delivery and bounded history PASS';
 end;$phase6_multi_run$;
 rollback;
