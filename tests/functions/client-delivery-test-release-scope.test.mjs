@@ -39,7 +39,7 @@ function req(payload,cred=secret){
   },body:JSON.stringify(payload)
  });
 }
-function simulate({claim={claimed:false},active={state:'NONE'}}={}){
+function simulate({claim={claimed:false},active={state:'NONE'},missingExactRpc=false}={}){
  const calls=[];
  const fetcher=async(url,options={})=>{
   const u=new URL(url),method=options.method??'GET';
@@ -53,7 +53,12 @@ function simulate({claim={claimed:false},active={state:'NONE'}}={}){
    switch(u.pathname.slice('/rest/v1/rpc/'.length)){
     case 'service_acquire_delivery_dispatch': return Response.json({acquired:true});
     case 'service_release_delivery_dispatch': return Response.json({released:true});
-    case 'service_claim_delivery':return Response.json(claim);
+    case 'service_claim_delivery': throw Error('BROAD_CLAIM_MUST_NEVER_BE_CALLED');
+    case 'service_claim_exact_test_delivery': {
+      const body=JSON.parse(options.body);
+      assert.deepEqual(body,{p_worker:worker,p_package:pkg,p_destination:dest,p_root:root});
+      return missingExactRpc?Response.json({code:'PGRST202'},{status:404}):Response.json(claim);
+    }
     case 'service_read_active_delivery_lease':return Response.json(active);
     default:throw Error('UNEXPECTED_SQL_OPERATION:'+u.pathname);
    }
@@ -97,7 +102,7 @@ test('empty original queue releases the singleton permit; no provider files crea
  assert.deepEqual(await r.json(),{status:'NO_ELIGIBLE_PACKAGES'});
  assert.deepEqual(mock.calls.map(c=>c.path),[
   '/rest/v1/rpc/service_acquire_delivery_dispatch',
-  '/token','/rest/v1/rpc/service_claim_delivery',
+  '/token','/rest/v1/rpc/service_claim_exact_test_delivery',
   '/rest/v1/rpc/service_release_delivery_dispatch'
  ]);
  assert.equal(mock.calls.some(c=>c.origin==='https://www.googleapis.com'),false);
@@ -115,9 +120,22 @@ test('different claimed package/destination or photo count cannot reach Google a
   assert.deepEqual(await r.json(),{status:'TRUSTED_PROVIDER_UNAVAILABLE'});
   assert.deepEqual(mock.calls.map(c=>c.path),[
    '/rest/v1/rpc/service_acquire_delivery_dispatch',
-   '/token','/rest/v1/rpc/service_claim_delivery'
+   '/token','/rest/v1/rpc/service_claim_exact_test_delivery'
   ]);
  }
+});
+test('missing exact-package SQL RPC refuses broad claim without Google write',async()=>{
+ const mock=simulate({missingExactRpc:true});
+ const r=await createDeliveryHandler({...base,fetcher:mock.fetcher})(
+   req({operation:'preallocate'}));
+ assert.equal(r.status,503);
+ assert.deepEqual(await r.json(),{status:'TRUSTED_PROVIDER_UNAVAILABLE'});
+ assert.deepEqual(mock.calls.map(x=>x.path),[
+  '/rest/v1/rpc/service_acquire_delivery_dispatch',
+  '/token','/rest/v1/rpc/service_claim_exact_test_delivery'
+ ]);
+ assert.equal(mock.calls.some(x=>x.path==='/rest/v1/rpc/service_claim_delivery'),false);
+ assert.equal(mock.calls.some(x=>x.origin==='https://www.googleapis.com'),false);
 });
 test('restart with foreign active original lease stops before any provider write or new identity',async()=>{
  const mismatch={state:'ACTIVE',package_id:other,destination_id:dest,
