@@ -1172,8 +1172,8 @@ begin
    'Synthetic earlier queued item','QUEUED',
    jsonb_build_object('package_id',other_pkg,'destination_id',old_pkg.destination_id,
      'destination_root','DISPOSABLE-ONLY',
-     'destination_revision',(select revision::text from private.client_delivery_destinations
-       where id=old_pkg.destination_id),'selected_photos','[]'::jsonb),
+     'destination_revision',(select d.revision::text from private.client_delivery_destinations d
+       where d.id=old_pkg.destination_id),'selected_photos','[]'::jsonb),
    other_sha,admin_id,now(),old_pkg.destination_id,'Other TEST address',
    encode(sha256(convert_to(lower('Other TEST address'),'UTF8')),'hex'));
  insert into private.client_package_actions(
