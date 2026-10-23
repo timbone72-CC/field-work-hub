@@ -73,6 +73,7 @@ export function createDeliveryHandler({
   const fields={
     preallocate:['operation'],
     advance_once:['operation'],
+    check_backend_readonly:['operation'],
     reconcile_parent:['operation','package_id','worker_id','generation','kind'],
     reconcile_geographic_leaf:['operation','package_id','worker_id','generation','kind'],
     reconcile_package_folder:['operation','package_id','worker_id','generation','plan_id'],
@@ -83,7 +84,7 @@ export function createDeliveryHandler({
     ||Object.keys(payload).length!==required.length
     ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
-  if(!['preallocate','advance_once'].includes(payload.operation)){
+  if(!['preallocate','advance_once','check_backend_readonly'].includes(payload.operation)){
     if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
       ||!Number.isSafeInteger(payload.generation)||payload.generation<1
       ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
@@ -116,6 +117,29 @@ export function createDeliveryHandler({
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
     return reply(503,'BACKEND_NOT_CONFIGURED');
+  // Explicit worker-secret-only, TEST-scoped connection diagnosis. This
+  // existing service adapter uses ONLY an allowlisted read-only RPC; it never
+  // acquires a dispatch permit, claims work or contacts Google. Always return
+  // redacted fixed statuses rather than an environment value or exception.
+  if(payload.operation==='check_backend_readonly'){
+    let readLedger;
+    try{readLedger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});}
+    catch{return reply(503,'BACKEND_ADAPTER_NOT_CONFIGURED');}
+    try{
+      const observed=await readLedger.readActiveLease();
+      if(['NONE','ACTIVE','BLOCKED_UNCERTAIN'].includes(observed?.state))
+        return reply(200,'BACKEND_READ_ONLY_OK');
+      return reply(503,'BACKEND_READ_ONLY_RESPONSE_INVALID');
+    }catch(error){
+      if(error?.code==='SERVICE_RPC_AUTH_DENIED')
+        return reply(503,'BACKEND_READ_ONLY_AUTH_DENIED');
+      if(error?.code==='SERVICE_RPC_UNAVAILABLE')
+        return reply(503,'BACKEND_READ_ONLY_RPC_UNAVAILABLE');
+      if(error?.code==='SERVICE_RPC_OUTCOME_UNCERTAIN')
+        return reply(503,'BACKEND_READ_ONLY_NETWORK_UNAVAILABLE');
+      return reply(503,'BACKEND_READ_ONLY_UNVERIFIED');
+    }
+  }
   // Validate the original OAuth adapter before the durable dispatch permit.
   // Bad local client credentials/scope cannot perform a provider write and
   // must not leave the non-expiring single-flight permit held. Constructing
