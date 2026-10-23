@@ -1149,6 +1149,7 @@ begin
  if (select state from private.client_delivery_outbox
        where package_id=(next_pkg->>'id')::uuid)<>'QUEUED' then
    raise exception 'Wrong root claimed or modified TEST package';end if;
+ execute 'reset role';
  -- Dispositive rollback proof: a separate disposable queued job sorts
  -- before the pinned package. The original broad claim would choose it,
  -- but the exact wrapper MUST abort and roll back the other row's mutations.
