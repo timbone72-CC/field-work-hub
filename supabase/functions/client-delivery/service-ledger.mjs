@@ -4,6 +4,7 @@ import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_read_active_delivery_lease','service_read_expired_test_delivery_reservation',
+ 'service_resume_exact_test_expired_delivery',
  'service_next_delivery_item',
  'service_delivery_final_provider_snapshot','service_claim_delivery',
  'service_claim_exact_test_delivery','service_heartbeat_delivery',
@@ -118,6 +119,18 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       'service_read_expired_test_delivery_reservation',{
         p_package:pkg,p_destination:destination,p_root:root
       }),
+    // Single-use, TEST-only ORIGINAL-lease CAS after a trusted Drive GET-404.
+    // No generic retry/claim, no worker/generation/file ID replacement.
+    resumeExpiredReservation:(proof)=>rpc('service_resume_exact_test_expired_delivery',{
+      p_package:proof.package_id,p_destination:proof.destination_id,
+      p_root:proof.root_id,p_worker:proof.worker_id,
+      p_generation:proof.generation,p_map:proof.map_id,
+      p_remote_id:proof.remote_folder_id,
+      p_expected_lease_until:proof.lease_until,
+      p_observed_at:proof.observed_at,
+      p_probe_result:'GOOGLE_FILE_ID_NOT_FOUND',
+      p_request:proof.request_id
+    }),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
     finalProviderSnapshot:(pkg,worker,gen)=>rpc(
