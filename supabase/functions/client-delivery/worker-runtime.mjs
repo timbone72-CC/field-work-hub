@@ -44,6 +44,9 @@ export async function inspectExpiredReservedParent({
     ||m.selected_photos.some(x=>!fullUuid.test(x?.photo_id??''))
     ||s.file_plans!==0||s.upload_sessions!==0||s.final_receipts!==0
     ||s.dispatch_permits!==0
+    ||typeof s.lease_until!=='string'
+    ||!Number.isFinite(Date.parse(s.lease_until))
+    ||Date.parse(s.lease_until)>=Date.now()
     ||p?.kind!=='ADDRESS'||p.state!=='RESERVED'
     ||!fullUuid.test(p.map_id??'')||p.create_attempts!==0
     ||!id.test(p.remote_folder_id??'')||p.remote_folder_id===testRootId
@@ -72,7 +75,50 @@ export async function inspectExpiredReservedParent({
     package_id:s.package_id,worker_id:s.worker_id,
     generation:s.generation,map_id:p.map_id,
     remote_folder_id:p.remote_folder_id,
-    approved_sha256:s.approved_sha256});
+    approved_sha256:s.approved_sha256,lease_until:s.lease_until,
+    observed_at:new Date().toISOString()});
+}
+
+/**
+ * Internal trusted worker SOURCE-ONLY one-shot TEST recovery. No Edge route.
+ * Require a new real same-ID Drive read within this invocation, then submit
+ * only original lease/parent IDs to the additive service-role SQL CAS.
+ * The CAS audits precisely one recovery and never increments attempts/gen.
+ * If the RPC response is lost, STOP; never call again on speculation.
+ */
+export async function resumeInspectedExpiredTestLease({
+  ledger,makeRequestId=()=>crypto.randomUUID(),testPackageId,
+  testDestinationId,testRootId,...inspection
+}={}){
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if(typeof ledger?.resumeExpiredReservation!=='function'
+    ||typeof makeRequestId!=='function')
+    throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
+  const report=await inspectExpiredReservedParent({
+    ledger,testPackageId,testDestinationId,testRootId,...inspection
+  });
+  if(report.state!=='ORIGINAL_RESERVED_ID_NOT_FOUND')
+    throw new DriveUncertain('ORIGINAL_REMOTE_ABSENCE_NOT_PROVED');
+  const requestId=makeRequestId();
+  if(!UUID.test(requestId))
+    throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
+  const resumed=await ledger.resumeExpiredReservation({
+    package_id:report.package_id,destination_id:testDestinationId,
+    root_id:testRootId,worker_id:report.worker_id,
+    generation:report.generation,map_id:report.map_id,
+    remote_folder_id:report.remote_folder_id,
+    lease_until:report.lease_until,observed_at:report.observed_at,
+    request_id:requestId
+  });
+  if(resumed?.status!=='ORIGINAL_TEST_LEASE_RESUMED'
+    ||resumed.package_id!==report.package_id
+    ||resumed.worker_id!==report.worker_id
+    ||resumed.generation!==report.generation
+    ||resumed.map_id!==report.map_id
+    ||resumed.remote_folder_id!==report.remote_folder_id
+    ||typeof resumed.expires_at!=='string')
+    throw new DriveUncertain('RECOVERY_CAS_CONFIRMATION_UNCERTAIN');
+  return Object.freeze({state:'ORIGINAL_TEST_LEASE_RESUMED'});
 }
 
 export async function prepareTrustedDelivery({
