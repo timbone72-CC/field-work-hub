@@ -1167,16 +1167,14 @@ begin
    raise exception 'Disposable unrelated WO did not create its original run';end if;
  insert into private.client_packages(
    id,organization_id,work_order_id,run_id,company_id,notes,status,
-   approved_manifest,approved_sha256,approved_by,approved_at,destination_id,
-   folder_address_snapshot,folder_address_key)
+   approved_manifest,approved_sha256,approved_by,approved_at,destination_id)
  values(other_pkg,org,other_wo,other_run,old_pkg.company_id,
    'Synthetic earlier queued item','QUEUED',
    jsonb_build_object('package_id',other_pkg,'destination_id',old_pkg.destination_id,
      'destination_root','DISPOSABLE-ONLY',
      'destination_revision',(select d.revision::text from private.client_delivery_destinations d
        where d.id=old_pkg.destination_id),'selected_photos','[]'::jsonb),
-   other_sha,admin_id,now(),old_pkg.destination_id,'Other TEST address',
-   encode(sha256(convert_to(lower('Other TEST address'),'UTF8')),'hex'));
+   other_sha,admin_id,now(),old_pkg.destination_id);
  insert into private.client_package_actions(
    action_id,package_id,actor_user_id,action_kind,request_fingerprint,result)
  values(other_action,other_pkg,admin_id,'SEND',repeat('f',64),
