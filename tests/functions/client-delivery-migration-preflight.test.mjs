@@ -23,9 +23,9 @@ test('read-only exact-head Team dry-run accepts one known pending migration; unc
  mkdirSync(join(dir,'supabase','.temp'));
  writeFileSync(join(dir,'AGENTS.md'),'fixture\n');
  writeFileSync(join(dir,'supabase','config.toml'),'fixture\n');
- const installed='20261021190000_phase_5_verified_client_destination_activation.sql';
- const expected='20261022154000_phase_5_delivery_worker_readiness_attestation.sql';
- for(let i=0;i<108;i++)writeFileSync(join(dir,'supabase','migrations',
+ const installed='20261022154000_phase_5_delivery_worker_readiness_attestation.sql';
+ const expected='20261023011939_phase_5_exact_disposable_test_delivery_claim.sql';
+ for(let i=0;i<109;i++)writeFileSync(join(dir,'supabase','migrations',
    'fixture_'+String(i).padStart(3,'0')+'.sql'),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',installed),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',expected),'-- disposable\n');
@@ -63,7 +63,7 @@ test('read-only exact-head Team dry-run accepts one known pending migration; unc
  }
  let r=execute();
  assert.equal(r.status,0,r.stderr);
- assert.match(r.stdout,/one exact pending worker-readiness migration/);
+ assert.match(r.stdout,/one exact pending disposable TEST claim migration/);
  assert.match(r.stdout,/NO MIGRATIONS APPLIED/);
  const stops=[
    {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
