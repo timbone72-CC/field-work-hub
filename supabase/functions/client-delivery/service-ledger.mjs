@@ -114,7 +114,10 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     readActiveLease:()=>rpc('service_read_active_delivery_lease',{}),
     // SOURCE ONLY: missing additive service-role-only TEST recovery inspection
     // RPC must deny. No broad claim, lease refresh or direct table query.
-    readExpiredReservation:()=>rpc('service_read_expired_test_delivery_reservation',{}),
+    readExpiredReservation:(pkg,destination,root)=>rpc(
+      'service_read_expired_test_delivery_reservation',{
+        p_package:pkg,p_destination:destination,p_root:root
+      }),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
     finalProviderSnapshot:(pkg,worker,gen)=>rpc(
