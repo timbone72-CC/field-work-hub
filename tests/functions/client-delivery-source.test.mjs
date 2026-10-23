@@ -23,7 +23,7 @@ const photo={
 const unavailable=e=>e instanceof DriveUncertain
    &&e.code==='PROTECTED_SOURCE_CHUNK_UNAVAILABLE';
 function rig({fresh=photo,afterward=null,bytes=new Uint8Array(262144),status=206,
-  headers={},error=false,record=[]}={}){
+  headers={},error=false,record=[],credential=token}={}){
  let projections=0;
  const ledger={getFilePlan:async id=>{
    record.push(['projection',id]);
@@ -39,7 +39,7 @@ function rig({fresh=photo,afterward=null,bytes=new Uint8Array(262144),status=206
      ...headers
    }});
  };
- const read=createPrivateSourceChunkReader({projectUrl,serviceRoleJwt:token,
+ const read=createPrivateSourceChunkReader({projectUrl,serviceRoleJwt:credential,
    ledger,fetcher});
  return {read,record};
 }
@@ -59,6 +59,17 @@ test('reads only the private server-projected object with an exact bounded byte 
  assert.equal(request.headers.apikey,token);
  assert.equal(request.headers['Accept-Encoding'],'identity');
 });
+test('new privileged API key reads exact protected bytes with apikey only',async()=>{
+  const secret='sb_secret_'+'z'.repeat(32),r=rig({credential:secret});
+  const bytes=await r.read(photo,0,262144);
+  assert.equal(bytes.length,262144);
+  assert.deepEqual(r.record.map(x=>x[0]),['projection','storage','projection']);
+  const request=r.record[1][2];
+  assert.equal(request.headers.apikey,secret);
+  assert.equal(Object.hasOwn(request.headers,'Authorization'),false);
+  assert.equal(request.headers.Range,'bytes=0-262143');
+});
+
 test('second photo chunk requires an exact 206 and catalog recheck as well',async()=>{
  const r=rig({bytes:new Uint8Array(37856),
    headers:{'Content-Range':'bytes 262144-299999/300000',
@@ -152,6 +163,7 @@ test('rejects untrusted Supabase origin and missing service lease/JWT at constru
  }
  for(const props of [
   {projectUrl,serviceRoleJwt:'sb_publishable_not_secret',ledger:{getFilePlan:async()=>photo}},
+  {projectUrl,serviceRoleJwt:'sb_secret_short',ledger:{getFilePlan:async()=>photo}},
   {projectUrl,serviceRoleJwt:token,ledger:{}}
  ]){
   assert.throws(()=>createPrivateSourceChunkReader(props),unavailable);
