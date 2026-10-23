@@ -80,7 +80,7 @@ test('expired reservation rejects every changed immutable scope before Google',a
   x=>x.manifest.destination_root='another_root_01234567',
   x=>x.parent.map_id=null,x=>x.parent.kind='WORK_ORDER',
   x=>x.parent.create_attempts=1,x=>x.parent.state='ATTEMPTED',
-  x=>x.parent.remote_folder_id='replacement_google_id_01234',
+  x=>x.parent.remote_folder_id='bad',
   x=>x.parent.parent_remote_id='foreign_parent_0123456789',
   x=>x.file_plans=1,x=>x.upload_sessions=1,
   x=>x.final_receipts=1,x=>x.dispatch_permits=1
