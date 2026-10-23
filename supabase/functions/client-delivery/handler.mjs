@@ -112,15 +112,6 @@ export function createDeliveryHandler({
   if(testOnly&&payload.package_id!==undefined
      &&payload.package_id!==testReleasePackageId)
     return reply(403,'TEST_RELEASE_SCOPE_DENIED');
-  // The existing SQL claim owner selects the NEXT queued package, not
-  // necessarily the one approved for this isolated TEST rollout. Reject new
-  // claims before obtaining the durable singleton permit, until a canonical,
-  // atomic exact-package claim has been installed and verified. A check after
-  // service_claim_delivery is too late: another package may be DELIVERING.
-  // Existing lease-bound continuation routes remain under their original
-  // per-package/worker/generation DB guards and TEST identity checks.
-  if(testOnly&&['preallocate','advance_once'].includes(payload.operation))
-    return reply(503,'EXACT_TEST_CLAIM_NOT_READY');
 
   if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
      ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
