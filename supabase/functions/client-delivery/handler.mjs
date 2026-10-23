@@ -159,7 +159,13 @@ export function createDeliveryHandler({
       ledger={
         ...original,
         claim:async worker=>{
-          const claim=await original.claim(worker);
+          // The original broad service_claim_delivery chooses NEXT queued
+          // work and can mutate an unrelated package before a Node check.
+          // This TEST branch only calls the not-yet-installed service-role
+          // atomic exact-package claim. A missing RPC DENIES, never falls
+          // back to the broad claim or allocates a new remote identity.
+          const claim=await original.claimExactTest(
+            worker,testReleasePackageId,testReleaseDestinationId,testRootFolderId);
           if(claim?.claimed===false)return claim;
           if(!validClaim(claim))throw Error('TEST_RELEASE_SCOPE_MISMATCH');
           return claim;
