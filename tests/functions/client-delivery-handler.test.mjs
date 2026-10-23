@@ -342,3 +342,97 @@ test('TEST-only backend check redacts adapter, denied, network and response fail
     assert.equal(calls,1);
   }
 });
+
+test('exact TEST expired-ID probe calls only read-only SQL, OAuth and three Google GETs',async()=>{
+ const events=[];
+ const orig='reserved_original_id_0123456789';
+ const sha='a'.repeat(64);
+ const snapshot={
+  state:'EXPIRED_RESERVED_PARENT',
+  package_id:isolatedTest.testReleasePackageId,
+  destination_id:isolatedTest.testReleaseDestinationId,
+  worker_id:uuid(90),generation:1,attempts:1,
+  approved_sha256:sha,lease_until:new Date(Date.now()-60000).toISOString(),
+  file_plans:0,upload_sessions:0,final_receipts:0,dispatch_permits:0,
+  manifest:{package_id:isolatedTest.testReleasePackageId,
+   destination_id:isolatedTest.testReleaseDestinationId,
+   destination_root:isolatedTest.testRootFolderId,
+   selected_photos:[{photo_id:uuid(11)},{photo_id:uuid(12)}]},
+  parent:{map_id:uuid(91),kind:'ADDRESS',state:'RESERVED',create_attempts:0,
+   remote_folder_id:orig,parent_remote_id:isolatedTest.testRootFolderId}
+ };
+ const fetcher=async(raw,opts)=>{
+  const target=new URL(raw),path=target.pathname;
+  events.push([target.origin,path,opts.method??'GET']);
+  assert.equal(opts.redirect,'error');
+  if(path==='/rest/v1/rpc/service_read_expired_test_delivery_reservation'){
+   assert.equal(opts.method,'POST');
+   assert.deepEqual(JSON.parse(opts.body),{
+    p_package:isolatedTest.testReleasePackageId,
+    p_destination:isolatedTest.testReleaseDestinationId,
+    p_root:isolatedTest.testRootFolderId
+   });
+   return Response.json(snapshot);
+  }
+  if(target.origin==='https://oauth2.googleapis.com'&&path==='/token'){
+   assert.equal(opts.method,'POST');
+   return Response.json({token_type:'Bearer',
+    access_token:'disposable-token-for-readonly-google-only-123456789',
+    expires_in:3600,scope:candidateConfig.oauthScope});
+  }
+  assert.equal(target.origin,'https://www.googleapis.com');
+  assert.equal(opts.method??'GET','GET');
+  if(path==='/drive/v3/about'){
+   return Response.json({user:{emailAddress:candidateConfig.expectedAccount,
+    me:true,permissionId:'test-only-identity'}});
+  }
+  if(path==='/drive/v3/files/'+isolatedTest.testRootFolderId){
+   return Response.json({id:isolatedTest.testRootFolderId,
+    trashed:false,mimeType:'application/vnd.google-apps.folder',
+    driveId:candidateConfig.expectedDriveId,
+    capabilities:{canAddChildren:true}});
+  }
+  if(path==='/drive/v3/files/'+orig){
+   assert.equal(target.searchParams.get('supportsAllDrives'),'true');
+   return Response.json({error:'No accessible object for original ID'},{status:404});
+  }
+  throw Error('No other provider or backend route allowed');
+ };
+ const handler=createDeliveryHandler({...candidateConfig,fetcher});
+ const response=await handler(request(secret,{operation:'inspect_expired_readonly'}));
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),{status:'ORIGINAL_ID_NOT_FOUND_READ_ONLY'});
+ assert.deepEqual(events,[
+  ['https://fwh-test.supabase.co',
+   '/rest/v1/rpc/service_read_expired_test_delivery_reservation','POST'],
+  ['https://oauth2.googleapis.com','/token','POST'],
+  ['https://www.googleapis.com','/drive/v3/about','GET'],
+  ['https://www.googleapis.com','/drive/v3/files/'+isolatedTest.testRootFolderId,'GET'],
+  ['https://www.googleapis.com','/drive/v3/files/'+orig,'GET']
+ ]);
+ assert.equal(events.some(([,,method])=>method==='PUT'||method==='DELETE'),false);
+ assert.equal(events.some(([,path])=>/dispatch|renew|resume|generateIds|upload/.test(path)),false);
+});
+test('expired-ID probe fails closed for unauthorized, unactivated, malformed or unexpected backend response',async()=>{
+ let calls=0;
+ for(const [cfg,req,status] of [
+  [candidateConfig,request('wrong-secret',{operation:'inspect_expired_readonly'}),401],
+  [{...candidateConfig,enabled:false},request(secret,{operation:'inspect_expired_readonly'}),503],
+  [candidateConfig,request(secret,{operation:'inspect_expired_readonly',package_id:uuid(1)}),400],
+  [{...candidateConfig,testReleasePackageId:uuid(91).slice(0,2)},request(secret,{operation:'inspect_expired_readonly'}),503]
+ ]){
+  const h=createDeliveryHandler({...cfg,fetcher:()=>{calls++;throw Error('FORBIDDEN_IO');}});
+  const r=await h(req);assert.equal(r.status,status);
+ }
+ assert.equal(calls,0);
+ const h=createDeliveryHandler({...candidateConfig,
+  fetcher:async(raw,opts)=>{
+   const u=new URL(raw);
+   assert.equal(u.pathname,'/rest/v1/rpc/service_read_expired_test_delivery_reservation');
+   assert.equal(opts.method,'POST');
+   return Response.json({state:'BLOCKED_UNCERTAIN'});
+  }});
+ const refused=await h(request(secret,{operation:'inspect_expired_readonly'}));
+ assert.equal(refused.status,503);
+ assert.deepEqual(await refused.json(),{status:'ORIGINAL_ID_INSPECTION_UNVERIFIED'});
+});
