@@ -248,3 +248,64 @@ test('Deno source defaults delivery OFF on empty provider configuration',async()
  const response=await installed(request());
  assert.equal(response.status,401); // empty worker secret cannot authenticate.
 });
+
+
+test('TEST-only backend read-only diagnosis uses only original protected read RPC',async()=>{
+  const calls=[];
+  const h=createDeliveryHandler({...candidateConfig,fetcher:async(raw,opts)=>{
+    const url=new URL(raw);
+    calls.push({origin:url.origin,path:url.pathname,method:opts?.method,body:opts?.body});
+    return Response.json({state:'NONE'});
+  }});
+  const r=await h(request(secret,{operation:'check_backend_readonly'}));
+  assert.equal(r.status,200);
+  assert.deepEqual(await r.json(),{status:'BACKEND_READ_ONLY_OK'});
+  assert.deepEqual(calls,[{
+    origin:'https://fwh-test.supabase.co',
+    path:'/rest/v1/rpc/service_read_active_delivery_lease',
+    method:'POST',body:'{}'
+  }]);
+});
+test('TEST-only backend check cannot bypass worker secret, mode, pinning or shape',async()=>{
+  let calls=0;
+  const fetcher=()=>{calls++;throw Error('NO_IO_EXPECTED');};
+  const configs=[
+    [candidateConfig,request('incorrect-worker-secret-1234567890',{operation:'check_backend_readonly'}),401],
+    [{...candidateConfig,enabled:false},request(secret,{operation:'check_backend_readonly'}),503],
+    [{...candidateConfig,testRootFolderId:candidateConfig.expectedDriveId},
+      request(secret,{operation:'check_backend_readonly'}),503],
+    [candidateConfig,request(secret,{operation:'check_backend_readonly',package_id:uuid(1)}),400]
+  ];
+  for(const [cfg,req,expected] of configs){
+    const r=await createDeliveryHandler({...cfg,fetcher})(req);
+    assert.equal(r.status,expected);
+  }
+  assert.equal(calls,0);
+});
+test('TEST-only backend check redacts adapter, denied, network and response failures',async()=>{
+  const body={operation:'check_backend_readonly'};
+  const invalid=createDeliveryHandler({...candidateConfig,
+    serviceRoleJwt:'sb_secret_fake-format',fetcher:()=>{throw Error('NO_NETWORK');}});
+  const a=await invalid(request(secret,body));
+  assert.equal(a.status,503);
+  assert.deepEqual(await a.json(),{status:'BACKEND_ADAPTER_NOT_CONFIGURED'});
+  for(const [response,code] of [
+    [()=>Response.json({message:'PRIVATE_TOKEN'},{status:403}),'BACKEND_READ_ONLY_AUTH_DENIED'],
+    [()=>Response.json({message:'PRIVATE_TOKEN'},{status:500}),'BACKEND_READ_ONLY_RPC_UNAVAILABLE'],
+    [()=>{throw Error('PRIVATE_TOKEN');},'BACKEND_READ_ONLY_NETWORK_UNAVAILABLE'],
+    [()=>Response.json({state:'INVALID'}),'BACKEND_READ_ONLY_RESPONSE_INVALID'],
+    [()=>new Response('not-json'),'BACKEND_READ_ONLY_UNVERIFIED']
+  ]){
+    let calls=0;
+    const h=createDeliveryHandler({...candidateConfig,fetcher:(...args)=>{
+      calls++;assert.equal(new URL(args[0]).pathname,'/rest/v1/rpc/service_read_active_delivery_lease');
+      return response(...args);
+    }});
+    const r=await h(request(secret,body));
+    assert.equal(r.status,503,code);
+    const txt=await r.text();
+    assert.deepEqual(JSON.parse(txt),{status:code});
+    assert.equal(txt.includes('PRIVATE_TOKEN'),false);
+    assert.equal(calls,1);
+  }
+});
