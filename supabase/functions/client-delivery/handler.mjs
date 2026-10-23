@@ -7,7 +7,7 @@ import {createDriveClient} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
 import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeliveryParent,
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
- continueTrustedDeliveryFile} from './worker-runtime.mjs';
+ continueTrustedDeliveryFile,inspectExpiredReservedParent} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
@@ -74,6 +74,7 @@ export function createDeliveryHandler({
     preallocate:['operation'],
     advance_once:['operation'],
     check_backend_readonly:['operation'],
+    inspect_expired_readonly:['operation'],
     reconcile_parent:['operation','package_id','worker_id','generation','kind'],
     reconcile_geographic_leaf:['operation','package_id','worker_id','generation','kind'],
     reconcile_package_folder:['operation','package_id','worker_id','generation','plan_id'],
@@ -84,7 +85,7 @@ export function createDeliveryHandler({
     ||Object.keys(payload).length!==required.length
     ||required.some(k=>!Object.hasOwn(payload,k)))
     return reply(400,'EXACT_REQUEST_REQUIRED');
-  if(!['preallocate','advance_once','check_backend_readonly'].includes(payload.operation)){
+  if(!['preallocate','advance_once','check_backend_readonly','inspect_expired_readonly'].includes(payload.operation)){
     if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
       ||!Number.isSafeInteger(payload.generation)||payload.generation<1
       ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
@@ -155,6 +156,27 @@ export function createDeliveryHandler({
     tokenProvider=createWorkspaceTokenProvider({
       clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
   } catch {return reply(503,'BACKEND_OAUTH_NOT_CONFIGURED');}
+  // Original expired TEST folder inspection: no dispatch permit, SQL write,
+  // worker heartbeat, recovery CAS, remote POST or new file ID. The exact
+  // package/destination/root are server-only settings, not caller fields.
+  if(payload.operation==='inspect_expired_readonly'){
+    try{
+      const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+      const found=await inspectExpiredReservedParent({
+        ledger,tokenProvider,expectedEmail:expectedAccount,
+        expectedDriveId,testPackageId:testReleasePackageId,
+        testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+        fetcher
+      });
+      if(found.state==='ORIGINAL_RESERVED_ID_NOT_FOUND')
+        return reply(200,'ORIGINAL_ID_NOT_FOUND_READ_ONLY');
+    }catch{
+      // Includes present/inaccessible IDs, stale/mismatched TEST state,
+      // backend denial and ambiguous provider failures. No IDs or tokens.
+      return reply(503,'ORIGINAL_ID_INSPECTION_UNVERIFIED');
+    }
+    return reply(503,'ORIGINAL_ID_INSPECTION_UNVERIFIED');
+  }
   // The original SQL lease protects each transaction, not simultaneous
   // Edge processes while their Google HTTP operations are in flight. Every
   // mutating worker route shares ONE persisted dispatch permit, across all
