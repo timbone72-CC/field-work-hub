@@ -105,6 +105,25 @@ export function createDriveClient({accessToken,fetcher=fetch}){
     return boundedJson(response);
   };
   return {
+    // READ ONLY: inspect one database-reserved original ID after a stopped
+    // worker. A 404 is only an observation; it grants no retry/lease authority.
+    // 200 is not a delivery receipt and never permits a replacement ID.
+    async inspectOriginalFolderId(id){
+      valid(id,ID,'REMOTE_ID_REQUIRED');
+      const url=new URL('/drive/v3/files/'+encodeURIComponent(id),DRIVE_ORIGIN);
+      url.searchParams.set('fields','id,name,mimeType,parents,appProperties,trashed,driveId');
+      url.searchParams.set('supportsAllDrives','true');
+      const response=await request(url);
+      if(response.status===404){
+        await response.body?.cancel().catch(()=>{});
+        return Object.freeze({state:'NOT_FOUND'});
+      }
+      handleHttp(response,[200]);
+      const metadata=await boundedJson(response);
+      // Any object under that original ID requires exact reconciliation,
+      // not a new POST or a guessed success.
+      return Object.freeze({state:'PRESENT',metadata});
+    },
     async verifyProviderIdentity(expectedEmail){
       if(typeof expectedEmail!=='string'||!/^[-._+a-z0-9]+@[-.a-z0-9]+\.[a-z]{2,}$/i.test(expectedEmail))
         throw new DriveUncertain('CONFIGURED_ACCOUNT_REQUIRED');
