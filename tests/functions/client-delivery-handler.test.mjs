@@ -266,6 +266,31 @@ test('TEST-only backend read-only diagnosis uses only original protected read RP
     method:'POST',body:'{}'
   }]);
 });
+test('hosted read-only adapter accepts only backend secret key on apikey header',async()=>{
+  const secretKey='sb_secret_'+'k'.repeat(32),requests=[];
+  const h=createDeliveryHandler({...candidateConfig,serviceRoleJwt:secretKey,
+    fetcher:async(url,opts)=>{
+      requests.push({url,opts});
+      return Response.json({state:'NONE'});
+    }});
+  const r=await h(request(secret,{operation:'check_backend_readonly'}));
+  assert.equal(r.status,200);
+  assert.deepEqual(await r.json(),{status:'BACKEND_READ_ONLY_OK'});
+  assert.equal(requests.length,1);
+  assert.equal(new URL(requests[0].url).pathname,
+    '/rest/v1/rpc/service_read_active_delivery_lease');
+  assert.equal(requests[0].opts.headers.apikey,secretKey);
+  assert.equal(Object.hasOwn(requests[0].opts.headers,'Authorization'),false);
+  let calls=0;
+  const rejected=createDeliveryHandler({...candidateConfig,
+    serviceRoleJwt:'sb_publishable_'+'p'.repeat(32),
+    fetcher:()=>{calls++;throw Error('NO_IO_ALLOWED');}});
+  const bad=await rejected(request(secret,{operation:'check_backend_readonly'}));
+  assert.equal(bad.status,503);
+  assert.deepEqual(await bad.json(),{status:'BACKEND_KEY_FORMAT_INVALID'});
+  assert.equal(calls,0);
+});
+
 test('TEST-only backend check cannot bypass worker secret, mode, pinning or shape',async()=>{
   let calls=0;
   const fetcher=()=>{calls++;throw Error('NO_IO_EXPECTED');};
