@@ -50,7 +50,17 @@ function harness({onClaim=()=>Response.json({claimed:false}),onToken=token,
     }
     return out;
   }
-  if(pathname==='/rest/v1/rpc/service_claim_delivery'){
+  if(pathname==='/rest/v1/rpc/service_claim_delivery')
+    throw Error('BROAD_TEST_CLAIM_FORBIDDEN');
+  if(pathname==='/rest/v1/rpc/service_claim_exact_test_delivery'){
+    const params=JSON.parse(options.body);
+    assert.deepEqual(params,{
+      p_worker:params.p_worker,
+      p_package:settings.testReleasePackageId,
+      p_destination:settings.testReleaseDestinationId,
+      p_root:settings.testRootFolderId
+    });
+    assert.match(params.p_worker,/^[a-f0-9-]{36}$/);
     claims++;return await onClaim();
   }
   if(pathname==='/token'){oauth++;return await onToken();}
