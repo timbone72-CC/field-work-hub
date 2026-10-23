@@ -34,6 +34,23 @@ export function serviceCredentialHeaders(serviceRoleJwt){
     ?{apikey:serviceRoleJwt,Authorization:'Bearer '+serviceRoleJwt}
     :{apikey:serviceRoleJwt};
 }
+// Hosted Supabase injects new privileged keys as a JSON dictionary. Use the
+// documented named default when available; never fall back to a legacy value
+// after malformed/nonprivileged modern configuration has been supplied.
+export function selectHostedServiceCredential({legacy,modern}={}){
+  if(typeof modern==='string'&&modern.length>0){
+    let parsed;
+    try{parsed=JSON.parse(modern);}catch{return '';}
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)
+      ||!Object.hasOwn(parsed,'default'))return '';
+    try{
+      const authorization=serviceCredentialHeaders(parsed.default);
+      return Object.hasOwn(authorization,'Authorization')?'':parsed.default;
+    }catch{return '';}
+  }
+  // Existing legacy runtime stays unchanged if no modern key map is injected.
+  return typeof legacy==='string'?legacy:'';
+}
 export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
   let origin;
   try{origin=new URL(url);}catch{throw new DriveUncertain('SERVICE_BACKEND_URL_INVALID');}
