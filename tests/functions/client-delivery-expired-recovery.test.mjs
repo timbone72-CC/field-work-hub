@@ -33,7 +33,10 @@ function rig({snapshot=saved,remoteStatus=404,rootAccess=true,oauthFail=false}={
   events,
   opts:{
    ...args,
-   ledger:{readExpiredReservation:async()=>{events.push('exact-read');return snapshot;}},
+   ledger:{readExpiredReservation:async(p,d,r)=>{
+    assert.deepEqual([p,d,r],[packageId,destinationId,root]);
+    events.push('exact-read');return snapshot;
+   }},
    tokenProvider:async()=>{
     events.push('oauth');if(oauthFail)throw Error('redacted');
     return {accessToken:'disposable-token-0123456789012345',expiresInSeconds:3600};
