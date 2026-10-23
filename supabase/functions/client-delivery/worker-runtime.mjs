@@ -31,7 +31,8 @@ export async function inspectExpiredReservedParent({
     throw new DriveUncertain('RECOVERY_INSPECTION_NOT_CONFIGURED');
   // Only the service-role database can return this exact frozen identity.
   // No caller-selected folder, lease, package or replacement ID is accepted.
-  const s=await ledger.readExpiredReservation();
+  const s=await ledger.readExpiredReservation(
+    testPackageId,testDestinationId,testRootId);
   const p=s?.parent,m=s?.manifest;
   if(s?.state!=='EXPIRED_RESERVED_PARENT'
     ||s.package_id!==testPackageId||s.destination_id!==testDestinationId
