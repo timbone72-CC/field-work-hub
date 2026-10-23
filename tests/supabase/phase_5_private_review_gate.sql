@@ -52,7 +52,7 @@ declare
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
-  pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid;
+  pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid; test_destination uuid;
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb; atomic_receipt jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
@@ -290,6 +290,8 @@ begin
     or (select count(*) from private.client_package_actions where package_id=pkg_id
         and action_kind='SEND')<>1 then
     raise exception 'Send created duplicates or alleged delivered receipt';end if;
+  select id into test_destination from private.client_delivery_destinations
+   where company_id=company and organization_id=org;
   -- New exact disposable TEST claim remains service-only and rejects
   -- this older one-photo package without consuming ANY queued work.
   -- This test complements the later two-photo/rollback-only fixture.
@@ -297,19 +299,16 @@ begin
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_claim_exact_test_delivery(%L,%L,%L,%L)',
     delivery_worker,pkg_id,
-    (select id from private.client_delivery_destinations
-       where company_id=company and organization_id=org),'DISPOSABLE-ONLY'));
+    test_destination,'DISPOSABLE-ONLY'));
   execute 'reset role';
   execute 'set local role service_role';
   perform pg_temp.expect_photo_review_error('22023',format(
     'select public.service_claim_exact_test_delivery(null,%L,%L,%L)',
-    pkg_id,(select id from private.client_delivery_destinations
-      where company_id=company and organization_id=org),'DISPOSABLE-ONLY'));
+    pkg_id,test_destination,'DISPOSABLE-ONLY'));
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.service_claim_exact_test_delivery(%L,%L,%L,%L)',
     delivery_worker,pkg_id,
-    (select id from private.client_delivery_destinations
-       where company_id=company and organization_id=org),'DISPOSABLE-ONLY'));
+    test_destination,'DISPOSABLE-ONLY'));
   if (select state from private.client_delivery_outbox where package_id=pkg_id)<>'QUEUED'
     or (select attempts from private.client_delivery_outbox where package_id=pkg_id)<>0
     or (select status from private.client_packages where id=pkg_id)<>'QUEUED'
