@@ -7,6 +7,73 @@ import {createPrivateSourceChunkReader} from './private-source.mjs';
 import {transferOnePreparedChunk} from './upload-one.mjs';
 import {reconcileOnePreallocatedPackageFolder} from './folder-one.mjs';
 import {reconcileOnePreallocatedParent} from './parent-one.mjs';
+/**
+ * Phase 5D original-ID recovery reconnaissance, SOURCE ONLY / NO route.
+ * This is intentionally not lease recovery: a new service-only read RPC
+ * must be installed and independently checked before anything invokes it.
+ * Exactly one saved TEST ADDRESS identity is inspected; no SQL/Google write.
+ */
+export async function inspectExpiredReservedParent({
+  ledger,tokenProvider,expectedEmail,expectedDriveId,
+  testPackageId,testDestinationId,testRootId,fetcher=fetch
+}={}){
+  const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const fullUuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const id=/^[A-Za-z0-9_-]{10,160}$/;
+  const sha=/^[a-f0-9]{64}$/;
+  if(typeof ledger?.readExpiredReservation!=='function'
+    ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+    ||typeof expectedEmail!=='string'||!expectedEmail
+    ||!id.test(expectedDriveId??'')
+    ||!fullUuid.test(testPackageId??'')
+    ||!fullUuid.test(testDestinationId??'')
+    ||!id.test(testRootId??''))
+    throw new DriveUncertain('RECOVERY_INSPECTION_NOT_CONFIGURED');
+  // Only the service-role database can return this exact frozen identity.
+  // No caller-selected folder, lease, package or replacement ID is accepted.
+  const s=await ledger.readExpiredReservation();
+  const p=s?.parent,m=s?.manifest;
+  if(s?.state!=='EXPIRED_RESERVED_PARENT'
+    ||s.package_id!==testPackageId||s.destination_id!==testDestinationId
+    ||!fullUuid.test(s.worker_id??'')||s.generation!==1||s.attempts!==1
+    ||!sha.test(s.approved_sha256??'')
+    ||m?.package_id!==testPackageId||m?.destination_id!==testDestinationId
+    ||m?.destination_root!==testRootId
+    ||!Array.isArray(m.selected_photos)||m.selected_photos.length!==2
+    ||m.selected_photos.some(x=>!fullUuid.test(x?.photo_id??''))
+    ||s.file_plans!==0||s.upload_sessions!==0||s.final_receipts!==0
+    ||s.dispatch_permits!==0
+    ||p?.kind!=='ADDRESS'||p.state!=='RESERVED'
+    ||!fullUuid.test(p.map_id??'')||p.create_attempts!==0
+    ||!id.test(p.remote_folder_id??'')||p.remote_folder_id===testRootId
+    ||p.parent_remote_id!==testRootId)
+    throw new DriveUncertain('EXPIRED_ORIGINAL_IDENTITY_UNVERIFIED');
+  let auth;
+  try{auth=await tokenProvider();}
+  catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+  if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+    ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+    throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+  const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+  await drive.verifyProviderIdentity(expectedEmail);
+  const root=await drive.verifyDestination({
+    folderId:testRootId,expectedDriveId
+  });
+  if(root.id!==testRootId)
+    throw new DriveUncertain('DESTINATION_NOT_VERIFIED');
+  const found=await drive.inspectOriginalFolderId(p.remote_folder_id);
+  if(found?.state!=='NOT_FOUND')
+    throw new DriveUncertain('ORIGINAL_FOLDER_REQUIRES_RECONCILIATION');
+  // Observation only. A later dedicated service-only transactional CAS must
+  // recheck all saved identities, attempts and remote evidence before any
+  // renewal of the ORIGINAL lease; this result is not that authorization.
+  return Object.freeze({state:'ORIGINAL_RESERVED_ID_NOT_FOUND',
+    package_id:s.package_id,worker_id:s.worker_id,
+    generation:s.generation,map_id:p.map_id,
+    remote_folder_id:p.remote_folder_id,
+    approved_sha256:s.approved_sha256});
+}
+
 export async function prepareTrustedDelivery({
   tokenProvider,ledger,workerId,expectedEmail,expectedDriveId,
   fetcher=fetch
