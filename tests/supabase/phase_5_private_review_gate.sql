@@ -290,6 +290,31 @@ begin
     or (select count(*) from private.client_package_actions where package_id=pkg_id
         and action_kind='SEND')<>1 then
     raise exception 'Send created duplicates or alleged delivered receipt';end if;
+  -- New exact disposable TEST claim remains service-only and rejects
+  -- this older one-photo package without consuming ANY queued work.
+  -- This test complements the later two-photo/rollback-only fixture.
+  execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_claim_exact_test_delivery(%L,%L,%L,%L)',
+    delivery_worker,pkg_id,
+    (select id from private.client_delivery_destinations
+       where company_id=company and organization_id=org),'DISPOSABLE-ONLY'));
+  execute 'reset role';
+  execute 'set local role service_role';
+  perform pg_temp.expect_photo_review_error('22023',format(
+    'select public.service_claim_exact_test_delivery(null,%L,%L,%L)',
+    pkg_id,(select id from private.client_delivery_destinations
+      where company_id=company and organization_id=org),'DISPOSABLE-ONLY'));
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.service_claim_exact_test_delivery(%L,%L,%L,%L)',
+    delivery_worker,pkg_id,
+    (select id from private.client_delivery_destinations
+       where company_id=company and organization_id=org),'DISPOSABLE-ONLY'));
+  if (select state from private.client_delivery_outbox where package_id=pkg_id)<>'QUEUED'
+    or (select attempts from private.client_delivery_outbox where package_id=pkg_id)<>0
+    or (select status from private.client_packages where id=pkg_id)<>'QUEUED'
+  then raise exception 'Denied exact claim mutated the existing outbox';end if;
+  execute 'reset role';
   -- The browser role cannot claim a trusted delivery attempt.
   execute 'set local role authenticated';
   perform pg_temp.expect_photo_review_error('42501',format(
