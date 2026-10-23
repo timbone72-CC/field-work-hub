@@ -2,6 +2,7 @@
 // Never accept object URLs/paths from a browser, Android, or a Drive response.
 // This module alone cannot release packages or authorize phone cleanup.
 import {DriveUncertain} from './drive-client.mjs';
+import {serviceCredentialHeaders} from './service-ledger.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
@@ -67,10 +68,10 @@ export function createPrivateSourceChunkReader({
   if(origin.protocol!=='https:'||!/^[a-z0-9-]+\.supabase\.co$/.test(origin.hostname)
     ||origin.username||origin.password||origin.port||origin.search||origin.hash
     ||(origin.pathname!==''&&origin.pathname!=='/')
-    ||typeof serviceRoleJwt!=='string'
-    ||!/^[-_a-zA-Z0-9]{5,}\.[-_a-zA-Z0-9]+\.[-_a-zA-Z0-9]+$/.test(serviceRoleJwt)
     ||typeof ledger?.getFilePlan!=='function'
     ||typeof fetcher!=='function')unavailable();
+  let authorization;
+  try{authorization=serviceCredentialHeaders(serviceRoleJwt);}catch{unavailable();}
   return async function readProtectedChunk(plan,offset,count){
     if(!Number.isSafeInteger(offset)||offset<0
       ||!Number.isSafeInteger(count)||count<1||count>STEP
@@ -97,7 +98,7 @@ export function createPrivateSourceChunkReader({
       response=await fetcher(target.toString(),{
         method:'GET',redirect:'error',signal:AbortSignal.timeout(20000),
         headers:{
-          apikey:serviceRoleJwt,Authorization:'Bearer '+serviceRoleJwt,
+          ...authorization,
           Range:'bytes='+offset+'-'+(offset+count-1),
           'Accept-Encoding':'identity'
         }
