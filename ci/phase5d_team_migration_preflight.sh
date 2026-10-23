@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The 109th canonical migration is installed. Verify exactly the source-only
-# 110th service-readiness migration is pending; never apply from this helper.
+# The first 110 canonical migrations are installed. Verify exactly the
+# source-only 111th exact disposable TEST claim migration is pending.
+# Never apply from this helper.
 # It does not install
 # migrations, create cron jobs, deploy workers, or enable Send.
 set -euo pipefail
@@ -9,9 +10,9 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=110
-last_installed="20261021190000_phase_5_verified_client_destination_activation.sql"
-expected_pending="20261022154000_phase_5_delivery_worker_readiness_attestation.sql"
+expected_count=111
+last_installed="20261022154000_phase_5_delivery_worker_readiness_attestation.sql"
+expected_pending="20261023011939_phase_5_exact_disposable_test_delivery_claim.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -61,7 +62,7 @@ fi
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: linked dry-run identifies the one exact pending worker-readiness migration; nothing applied.\n'
+printf 'PASS: linked dry-run identifies the one exact pending disposable TEST claim migration; nothing applied.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
-printf 'This does not replace separate live SQL permission/worker readiness checks,\n'
+printf 'This does not replace separate live SQL grant/worker readiness checks,\n'
 printf 'provider and Android evidence, or the governed activation gate.\n'
