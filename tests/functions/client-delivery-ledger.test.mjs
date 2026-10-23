@@ -11,11 +11,14 @@ function mock(reply=()=>Response.json({claimed:false})){
  return {ledger,calls};
 }
 test('only current legacy service JWT can access allowlisted private worker RPCs',async()=>{
- for(const params of [{url:'http://fwh-test.supabase.co',serviceRoleJwt:token},
-  {url:'https://evil.invalid',serviceRoleJwt:token},
-  {url:'https://fwh-test.supabase.co',serviceRoleJwt:'sb_publishable_public'},
-  {url:'https://fwh-test.supabase.co',serviceRoleJwt:token+'\n'}]){
-  assert.throws(()=>createServiceLedger(params),DriveUncertain);
+ for(const [params,code] of [
+  [{url:'http://fwh-test.supabase.co',serviceRoleJwt:token},'SERVICE_BACKEND_URL_INVALID'],
+  [{url:'https://evil.invalid',serviceRoleJwt:token},'SERVICE_BACKEND_URL_INVALID'],
+  [{url:'https://fwh-test.supabase.co',serviceRoleJwt:'sb_publishable_public'},'SERVICE_BACKEND_KEY_FORMAT_INVALID'],
+  [{url:'https://fwh-test.supabase.co',serviceRoleJwt:token+'\n'},'SERVICE_BACKEND_KEY_FORMAT_INVALID']
+ ]){
+  assert.throws(()=>createServiceLedger(params),error=>
+    error instanceof DriveUncertain&&error.code===code);
  }
  const {ledger,calls}=mock();
  assert.deepEqual(await ledger.claim(uuid(1)),{claimed:false});
