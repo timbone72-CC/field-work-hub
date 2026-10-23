@@ -1159,10 +1159,11 @@ begin
    client_company_id,field_status)
  values(other_wo,org,'UNRELATED-CI-ONLY','Other TEST address','TEST',
    current_date,other_run,1,'{}'::jsonb,old_pkg.company_id,'FIELD_COMPLETE');
- insert into public.work_order_runs(
-   id,work_order_id,organization_id,run_sequence,current_assignee_user_id,
-   field_status,requirement_snapshot)
- values(other_run,other_wo,org,1,worker,'FIELD_COMPLETE','{}'::jsonb);
+ -- The work-order server trigger already creates its current run;
+ -- inserting it twice would violate the permanent run UUID boundary.
+ if not exists(select 1 from public.work_order_runs
+               where id=other_run and work_order_id=other_wo) then
+   raise exception 'Disposable unrelated WO did not create its original run';end if;
  insert into private.client_packages(
    id,organization_id,work_order_id,run_id,company_id,notes,status,
    approved_manifest,approved_sha256,approved_by,approved_at,destination_id,
