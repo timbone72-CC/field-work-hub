@@ -120,12 +120,14 @@ test('not-yet-installed service-only recovery snapshot RPC fails closed without 
     return Response.json({code:'PGRST202',details:'private data'},{status:404});
   }
  });
- await assert.rejects(()=>ledger.readExpiredReservation(),
+ await assert.rejects(()=>ledger.readExpiredReservation(packageId,destinationId,root),
   isCode('SERVICE_RPC_UNAVAILABLE'));
  assert.equal(calls.length,1);
  assert.equal(new URL(calls[0].url).pathname,
   '/rest/v1/rpc/service_read_expired_test_delivery_reservation');
- assert.deepEqual(JSON.parse(calls[0].opts.body),{});
+ assert.deepEqual(JSON.parse(calls[0].opts.body),{
+  p_package:packageId,p_destination:destinationId,p_root:root
+ });
 });
 test('hosted worker has no recovery write route before the governed SQL gate',async()=>{
  const handler=createDeliveryHandler({enabled:true,workerSecret:secret});
