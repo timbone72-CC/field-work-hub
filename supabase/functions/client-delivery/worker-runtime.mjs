@@ -90,7 +90,7 @@ export async function resumeInspectedExpiredTestLease({
   ledger,makeRequestId=()=>crypto.randomUUID(),testPackageId,
   testDestinationId,testRootId,...inspection
 }={}){
-  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   if(typeof ledger?.resumeExpiredReservation!=='function'
     ||typeof makeRequestId!=='function')
     throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
