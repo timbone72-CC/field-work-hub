@@ -3,6 +3,7 @@
 // A later authorized rollout needs a private scheduler and dedicated worker
 // secret; hosting the current read-only TEST preflight does not enable Send.
 import {createDeliveryHandler} from './handler.mjs';
+import {selectHostedServiceCredential} from './service-ledger.mjs';
 Deno.serve(createDeliveryHandler({
  enabled:Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true',
  // Independent TEST-only identity/root GET gate; this cannot enable Send.
@@ -23,7 +24,12 @@ Deno.serve(createDeliveryHandler({
  refreshToken:Deno.env.get('FWH_GOOGLE_OAUTH_REFRESH_TOKEN')??'',
  oauthScope:Deno.env.get('FWH_GOOGLE_OAUTH_SCOPE')??'',
  supabaseUrl:Deno.env.get('SUPABASE_URL')??'',
- serviceRoleJwt:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'',
+ // Prefer Supabase's injected named secret API key, while preserving the
+ // existing legacy-only environment when modern keys are not provisioned.
+ serviceRoleJwt:selectHostedServiceCredential({
+   legacy:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'',
+   modern:Deno.env.get('SUPABASE_SECRET_KEYS')??''
+ }),
  // Source-only file continuation needs the separate private AES-GCM key.
  sessionVaultKey:Deno.env.get('FWH_CLIENT_DELIVERY_SESSION_VAULT_KEY')??'',
 }));
