@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inspectExpiredReservedParent}
+import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain}
  from '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -17,6 +17,7 @@ const scope='operator@example.invalid',secret='test-only-worker-secret-012345678
 const saved={
  state:'EXPIRED_RESERVED_PARENT',package_id:packageId,destination_id:destinationId,
  worker_id:workerId,generation:1,attempts:1,approved_sha256:sha,
+ lease_until:new Date(Date.now()-60000).toISOString(),
  file_plans:0,upload_sessions:0,final_receipts:0,dispatch_permits:0,
  manifest:{package_id:packageId,destination_id:destinationId,
   destination_root:root,selected_photos:[{photo_id:uuid(10)},{photo_id:uuid(11)}]},
@@ -128,6 +129,75 @@ test('not-yet-installed service-only recovery snapshot RPC fails closed without 
  assert.deepEqual(JSON.parse(calls[0].opts.body),{
   p_package:packageId,p_destination:destinationId,p_root:root
  });
+});
+test('one-use trusted recovery calls fenced CAS only after same-ID Google 404',async()=>{
+ const r=rig(),savedCalls=[];
+ r.opts.ledger.resumeExpiredReservation=async input=>{
+  savedCalls.push(input);
+  assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
+   '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
+  assert.equal(input.package_id,packageId);
+  assert.equal(input.destination_id,destinationId);
+  assert.equal(input.root_id,root);
+  assert.equal(input.worker_id,workerId);
+  assert.equal(input.generation,1);
+  assert.equal(input.map_id,mapId);
+  assert.equal(input.remote_folder_id,originalId);
+  assert.equal(input.lease_until,saved.lease_until);
+  assert.equal(input.request_id,uuid(88));
+  assert.ok(Date.now()-Date.parse(input.observed_at)<5000);
+  return {status:'ORIGINAL_TEST_LEASE_RESUMED',
+   package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
+   remote_folder_id:originalId,expires_at:new Date(Date.now()+120000).toISOString()};
+ };
+ const result=await resumeInspectedExpiredTestLease({
+  ...r.opts,makeRequestId:()=>uuid(88)
+ });
+ assert.equal(result.state,'ORIGINAL_TEST_LEASE_RESUMED');
+ assert.equal(savedCalls.length,1);
+ assert.equal(r.events.some(x=>/upload|generateIds|POST/.test(x)),false);
+});
+test('ambiguous or wrong-ID provider responses NEVER trigger recovery CAS',async()=>{
+ for(const remoteStatus of [200,401,403,500]){
+  const r=rig({remoteStatus});let calls=0;
+  r.opts.ledger.resumeExpiredReservation=()=>{calls++;throw Error('forbidden CAS');};
+  await assert.rejects(()=>resumeInspectedExpiredTestLease(r.opts));
+  assert.equal(calls,0);
+ }
+ const r=rig({snapshot:{...saved,lease_until:new Date(Date.now()+120000).toISOString()}});
+ let calls=0;
+ r.opts.ledger.resumeExpiredReservation=()=>{calls++;throw Error('forbidden CAS');};
+ await assert.rejects(()=>resumeInspectedExpiredTestLease(r.opts));
+ assert.equal(calls,0);
+});
+test('lost SQL CAS response never triggers second recovery or original-ID replacement',async()=>{
+ const r=rig();let calls=0;
+ r.opts.ledger.resumeExpiredReservation=async()=>{calls++;throw Error('network lost');};
+ await assert.rejects(()=>resumeInspectedExpiredTestLease(r.opts));
+ assert.equal(calls,1);
+});
+test('recovery CAS is one exact service RPC, no generic claim or client authority',async()=>{
+ const seen=[];
+ const {ledger}=(()=>({
+  ledger:createServiceLedger({url:'https://fwh-test.supabase.co',
+   serviceRoleJwt:'header.payload.signature',
+   fetcher:async(url,opts)=>{seen.push({url,opts});return Response.json({status:'UNCERTAIN'});}})
+ }))();
+ await ledger.resumeExpiredReservation({
+  package_id:packageId,destination_id:destinationId,root_id:root,
+  worker_id:workerId,generation:1,map_id:mapId,remote_folder_id:originalId,
+  lease_until:saved.lease_until,observed_at:new Date().toISOString(),
+  request_id:uuid(90)});
+ assert.equal(seen.length,1);
+ assert.equal(new URL(seen[0].url).pathname,
+  '/rest/v1/rpc/service_resume_exact_test_expired_delivery');
+ const body=JSON.parse(seen[0].opts.body);
+ assert.equal(body.p_root,root);
+ assert.equal(body.p_worker,workerId);
+ assert.equal(body.p_remote_id,originalId);
+ assert.equal(body.p_probe_result,'GOOGLE_FILE_ID_NOT_FOUND');
+ assert.equal(body.p_request,uuid(90));
+ assert.equal(seen[0].opts.headers.Authorization,'Bearer header.payload.signature');
 });
 test('hosted worker has no recovery write route before the governed SQL gate',async()=>{
  const handler=createDeliveryHandler({enabled:true,workerSecret:secret});
