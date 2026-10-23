@@ -4,7 +4,8 @@ import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_read_active_delivery_lease','service_next_delivery_item',
- 'service_delivery_final_provider_snapshot','service_claim_delivery','service_heartbeat_delivery',
+ 'service_delivery_final_provider_snapshot','service_claim_delivery',
+ 'service_claim_exact_test_delivery','service_heartbeat_delivery',
  'service_reserve_delivery_file_set','service_read_delivery_parent',
  'service_reserve_delivery_parent','service_read_geographic_parent',
  'service_reserve_geographic_parent','service_read_geographic_leaf',
@@ -88,6 +89,12 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       'service_delivery_final_provider_snapshot',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
     claim:worker=>rpc('service_claim_delivery',{p_worker:worker}),
+    // FWH TEST-only scoped claim MUST be a single backend transaction.
+    // Missing RPC or uncertain result never falls back to broad claim.
+    claimExactTest:(worker,pkg,destination,root)=>rpc(
+      'service_claim_exact_test_delivery',{
+        p_worker:worker,p_package:pkg,p_destination:destination,p_root:root
+      }),
     heartbeat:(pkg,worker,gen)=>rpc('service_heartbeat_delivery',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
     reserveBatch:(pkg,worker,gen,folder,parent,photos,manifest)=>rpc(
