@@ -22,6 +22,18 @@ const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_deli
  'service_read_client_destination_provider_proof',
  'service_reserve_client_destination_provider_proof',
  'service_confirm_client_destination_provider_proof']);
+// Privileged backend-only formats. Supabase secret API keys are NOT JWTs.
+export function serviceCredentialHeaders(serviceRoleJwt){
+  const legacy=typeof serviceRoleJwt==='string'
+    &&/^[-_a-zA-Z0-9]{5,}\.[-_a-zA-Z0-9]+\.[-_a-zA-Z0-9]+$/.test(serviceRoleJwt);
+  const secret=typeof serviceRoleJwt==='string'
+    &&/^sb_secret_[a-zA-Z0-9_-]{16,}$/.test(serviceRoleJwt);
+  if(!legacy&&!secret)
+    throw new DriveUncertain('SERVICE_BACKEND_KEY_FORMAT_INVALID');
+  return legacy
+    ?{apikey:serviceRoleJwt,Authorization:'Bearer '+serviceRoleJwt}
+    :{apikey:serviceRoleJwt};
+}
 export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
   let origin;
   try{origin=new URL(url);}catch{throw new DriveUncertain('SERVICE_BACKEND_URL_INVALID');}
@@ -29,17 +41,14 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     ||origin.username||origin.password||origin.port||origin.search||origin.hash
     ||(origin.pathname!==''&&origin.pathname!=='/'))
     throw new DriveUncertain('SERVICE_BACKEND_URL_INVALID');
-  if(typeof serviceRoleJwt!=='string'
-    ||!/^[-_a-zA-Z0-9]{5,}\.[-_a-zA-Z0-9]+\.[-_a-zA-Z0-9]+$/.test(serviceRoleJwt))
-    throw new DriveUncertain('SERVICE_BACKEND_KEY_FORMAT_INVALID');
+  const authorization=serviceCredentialHeaders(serviceRoleJwt);
   const rpc=async(method,body)=>{
     if(!METHODS.has(method))throw new DriveUncertain('SERVICE_RPC_DENIED');
     let response;
     try{
       response=await fetcher(new URL('/rest/v1/rpc/'+method,origin).toString(),{
         method:'POST',redirect:'error',headers:{
-          'Content-Type':'application/json','apikey':serviceRoleJwt,
-          'Authorization':'Bearer '+serviceRoleJwt},body:JSON.stringify(body)
+          'Content-Type':'application/json',...authorization},body:JSON.stringify(body)
       });
     }catch{throw new DriveUncertain('SERVICE_RPC_OUTCOME_UNCERTAIN');}
     if(!response.ok){
