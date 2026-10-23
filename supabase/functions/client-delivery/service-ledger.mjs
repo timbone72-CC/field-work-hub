@@ -24,12 +24,14 @@ const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_deli
  'service_confirm_client_destination_provider_proof']);
 export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
   let origin;
-  try{origin=new URL(url);}catch{throw new DriveUncertain('SERVICE_BACKEND_NOT_CONFIGURED');}
+  try{origin=new URL(url);}catch{throw new DriveUncertain('SERVICE_BACKEND_URL_INVALID');}
   if(origin.protocol!=='https:'||!/^[a-z0-9-]+\.supabase\.co$/.test(origin.hostname)
     ||origin.username||origin.password||origin.port||origin.search||origin.hash
-    ||(origin.pathname!==''&&origin.pathname!=='/')
-    ||typeof serviceRoleJwt!=='string'||!/^[-_a-zA-Z0-9]{5,}\.[-_a-zA-Z0-9]+\.[-_a-zA-Z0-9]+$/.test(serviceRoleJwt))
-    throw new DriveUncertain('SERVICE_BACKEND_NOT_CONFIGURED');
+    ||(origin.pathname!==''&&origin.pathname!=='/'))
+    throw new DriveUncertain('SERVICE_BACKEND_URL_INVALID');
+  if(typeof serviceRoleJwt!=='string'
+    ||!/^[-_a-zA-Z0-9]{5,}\.[-_a-zA-Z0-9]+\.[-_a-zA-Z0-9]+$/.test(serviceRoleJwt))
+    throw new DriveUncertain('SERVICE_BACKEND_KEY_FORMAT_INVALID');
   const rpc=async(method,body)=>{
     if(!METHODS.has(method))throw new DriveUncertain('SERVICE_RPC_DENIED');
     let response;
