@@ -968,6 +968,7 @@ declare
  new_photo uuid:=gen_random_uuid(); photo_set jsonb;
  other_wo uuid:=gen_random_uuid(); other_run uuid:=gen_random_uuid();
  other_pkg uuid:=gen_random_uuid(); other_action uuid:=gen_random_uuid();
+ other_company uuid:=gen_random_uuid(); other_destination uuid:=gen_random_uuid();
  other_sha text:=repeat('e',64);
  transfer private.photo_transfers%rowtype; new_object uuid:=gen_random_uuid();
  old_decision_revision uuid; old_transfer_version uuid; history jsonb; page jsonb;
@@ -1154,12 +1155,20 @@ begin
  -- before the pinned package. The original broad claim would choose it,
  -- but the exact wrapper MUST abort and roll back the other row's mutations.
  -- This is an intentionally minimal synthetic outbox fixture, never Send.
+ insert into private.client_companies(id,organization_id,name)
+ values(other_company,org,'UNRELATED CI COMPANY');
+ insert into private.client_delivery_destinations(
+   id,organization_id,company_id,provider,provider_identity,root_folder_id,
+   verified,verified_at,verification_receipt,active)
+ values(other_destination,org,other_company,'GOOGLE_DRIVE',
+   'synthetic-other@example.invalid','CI_OTHER_TEST_ROOT_123456789',true,now(),
+   '{"synthetic_test":true}'::jsonb,true);
  insert into public.work_orders(
    id,organization_id,wo_number,property_address,work_type,due_date,
    current_run_id,current_run_sequence,release_requirement_snapshot,
    client_company_id,field_status)
  values(other_wo,org,'UNRELATED-CI-ONLY','Other TEST address','TEST',
-   current_date,other_run,1,'{}'::jsonb,old_pkg.company_id,'FIELD_COMPLETE');
+   current_date,other_run,1,'{}'::jsonb,other_company,'FIELD_COMPLETE');
  -- The work-order server trigger already creates its current run;
  -- inserting it twice would violate the permanent run UUID boundary.
  if not exists(select 1 from public.work_order_runs
@@ -1168,20 +1177,20 @@ begin
  insert into private.client_packages(
    id,organization_id,work_order_id,run_id,company_id,notes,status,
    approved_manifest,approved_sha256,approved_by,approved_at,destination_id)
- values(other_pkg,org,other_wo,other_run,old_pkg.company_id,
+ values(other_pkg,org,other_wo,other_run,other_company,
    'Synthetic earlier queued item','QUEUED',
-   jsonb_build_object('package_id',other_pkg,'destination_id',old_pkg.destination_id,
-     'destination_root','DISPOSABLE-ONLY',
+   jsonb_build_object('package_id',other_pkg,'destination_id',other_destination,
+     'destination_root','CI_OTHER_TEST_ROOT_123456789',
      'destination_revision',(select d.revision::text from private.client_delivery_destinations d
-       where d.id=old_pkg.destination_id),'selected_photos','[]'::jsonb),
-   other_sha,admin_id,now(),old_pkg.destination_id);
+       where d.id=other_destination),'selected_photos','[]'::jsonb),
+   other_sha,admin_id,now(),other_destination);
  insert into private.client_package_actions(
    action_id,package_id,actor_user_id,action_kind,request_fingerprint,result)
  values(other_action,other_pkg,admin_id,'SEND',repeat('f',64),
    '{"status":"QUEUED"}'::jsonb);
  insert into private.client_delivery_outbox(
    package_id,action_id,approved_sha256,destination_id,state,enqueued_at)
- values(other_pkg,other_action,other_sha,old_pkg.destination_id,'QUEUED',
+ values(other_pkg,other_action,other_sha,other_destination,'QUEUED',
    clock_timestamp()-interval '1 hour');
  execute 'set local role service_role';
  perform pg_temp.expect_photo_review_error('42501',format(
