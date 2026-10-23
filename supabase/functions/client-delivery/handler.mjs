@@ -124,7 +124,13 @@ export function createDeliveryHandler({
   if(payload.operation==='check_backend_readonly'){
     let readLedger;
     try{readLedger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});}
-    catch{return reply(503,'BACKEND_ADAPTER_NOT_CONFIGURED');}
+    catch(error){
+      if(error?.code==='SERVICE_BACKEND_URL_INVALID')
+        return reply(503,'BACKEND_URL_INVALID');
+      if(error?.code==='SERVICE_BACKEND_KEY_FORMAT_INVALID')
+        return reply(503,'BACKEND_KEY_FORMAT_INVALID');
+      return reply(503,'BACKEND_ADAPTER_NOT_CONFIGURED');
+    }
     try{
       const observed=await readLedger.readActiveLease();
       if(['NONE','ACTIVE','BLOCKED_UNCERTAIN'].includes(observed?.state))
