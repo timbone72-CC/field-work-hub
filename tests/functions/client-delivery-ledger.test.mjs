@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createServiceLedger} from '../../supabase/functions/client-delivery/service-ledger.mjs';
+import {createServiceLedger,selectHostedServiceCredential} from '../../supabase/functions/client-delivery/service-ledger.mjs';
 import {DriveUncertain} from '../../supabase/functions/client-delivery/drive-client.mjs';
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const token='legacyheader.legacypayload.legacysignature';
@@ -10,6 +10,20 @@ function mock(reply=()=>Response.json({claimed:false})){
   fetcher:async(url,options)=>{calls.push({url,options});return reply(new URL(url),options);}});
  return {ledger,calls};
 }
+test('hosted service-credential selection uses one privileged source and fails closed',()=>{
+ const legacy='head.payload.sig';
+ const secret='sb_secret_'+'q'.repeat(32);
+ const choose=(modern)=>selectHostedServiceCredential({legacy,modern});
+ assert.equal(choose(JSON.stringify({default:secret})),secret);
+ assert.equal(choose(''),legacy);
+ assert.equal(choose(undefined),legacy);
+ for(const invalid of ['not JSON','{}','[]','null',
+   JSON.stringify({default:'sb_publishable_'+'q'.repeat(32)}),
+   JSON.stringify({default:'sb_secret_short'}),
+   JSON.stringify({default:legacy}),
+   JSON.stringify({other:secret})])assert.equal(choose(invalid),'');
+});
+
 test('only current legacy service JWT can access allowlisted private worker RPCs',async()=>{
  for(const [params,code] of [
   [{url:'http://fwh-test.supabase.co',serviceRoleJwt:token},'SERVICE_BACKEND_URL_INVALID'],
