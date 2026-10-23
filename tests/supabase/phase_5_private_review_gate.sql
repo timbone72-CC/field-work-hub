@@ -966,6 +966,9 @@ declare
  selected jsonb; oldrev timestamptz; claims_admin text; claims_worker text;
  set_id uuid:=gen_random_uuid(); digest text;
  new_photo uuid:=gen_random_uuid(); photo_set jsonb;
+ other_wo uuid:=gen_random_uuid(); other_run uuid:=gen_random_uuid();
+ other_pkg uuid:=gen_random_uuid(); other_action uuid:=gen_random_uuid();
+ other_sha text:=repeat('e',64);
  transfer private.photo_transfers%rowtype; new_object uuid:=gen_random_uuid();
  old_decision_revision uuid; old_transfer_version uuid; history jsonb; page jsonb;
 begin
@@ -1146,6 +1149,56 @@ begin
  if (select state from private.client_delivery_outbox
        where package_id=(next_pkg->>'id')::uuid)<>'QUEUED' then
    raise exception 'Wrong root claimed or modified TEST package';end if;
+ -- Dispositive rollback proof: a separate disposable queued job sorts
+ -- before the pinned package. The original broad claim would choose it,
+ -- but the exact wrapper MUST abort and roll back the other row's mutations.
+ -- This is an intentionally minimal synthetic outbox fixture, never Send.
+ insert into public.work_orders(
+   id,organization_id,wo_number,property_address,work_type,due_date,
+   current_run_id,current_run_sequence,release_requirement_snapshot,
+   client_company_id,field_status)
+ values(other_wo,org,'UNRELATED-CI-ONLY','Other TEST address','TEST',
+   current_date,other_run,1,'{}'::jsonb,old_pkg.company_id,'FIELD_COMPLETE');
+ insert into public.work_order_runs(
+   id,work_order_id,organization_id,run_sequence,current_assignee_user_id,
+   field_status,requirement_snapshot)
+ values(other_run,other_wo,org,1,worker,'FIELD_COMPLETE','{}'::jsonb);
+ insert into private.client_packages(
+   id,organization_id,work_order_id,run_id,company_id,notes,status,
+   approved_manifest,approved_sha256,approved_by,approved_at,destination_id,
+   folder_address_snapshot,folder_address_key)
+ values(other_pkg,org,other_wo,other_run,old_pkg.company_id,
+   'Synthetic earlier queued item','QUEUED',
+   jsonb_build_object('package_id',other_pkg,'destination_id',old_pkg.destination_id,
+     'destination_root','DISPOSABLE-ONLY',
+     'destination_revision',(select revision::text from private.client_delivery_destinations
+       where id=old_pkg.destination_id),'selected_photos','[]'::jsonb),
+   other_sha,admin_id,now(),old_pkg.destination_id,'Other TEST address',
+   encode(sha256(convert_to(lower('Other TEST address'),'UTF8')),'hex'));
+ insert into private.client_package_actions(
+   action_id,package_id,actor_user_id,action_kind,request_fingerprint,result)
+ values(other_action,other_pkg,admin_id,'SEND',repeat('f',64),
+   '{"status":"QUEUED"}'::jsonb);
+ insert into private.client_delivery_outbox(
+   package_id,action_id,approved_sha256,destination_id,state,enqueued_at)
+ values(other_pkg,other_action,other_sha,old_pkg.destination_id,'QUEUED',
+   clock_timestamp()-interval '1 hour');
+ execute 'set local role service_role';
+ perform pg_temp.expect_photo_review_error('42501',format(
+   'select public.service_claim_exact_test_delivery(%L,%L,%L,%L)',
+   gen_random_uuid(),next_pkg->>'id',old_pkg.destination_id,'DISPOSABLE-ONLY'));
+ execute 'reset role';
+ if (select state from private.client_delivery_outbox where package_id=other_pkg)<>'QUEUED'
+   or (select attempts from private.client_delivery_outbox where package_id=other_pkg)<>0
+   or (select status from private.client_packages where id=other_pkg)<>'QUEUED'
+   or (select state from private.client_delivery_outbox
+       where package_id=(next_pkg->>'id')::uuid)<>'QUEUED'
+ then raise exception 'Wrong earlier queue claim was not transactionally rolled back';end if;
+ -- Retire ONLY the deliberately synthetic other item so the legitimate
+ -- exact-package success can be proven next, still inside global ROLLBACK.
+ update private.client_delivery_outbox set state='FAILED' where package_id=other_pkg;
+ update private.client_packages set status='FAILED' where id=other_pkg;
+ execute 'set local role service_role';
  result:=public.service_claim_exact_test_delivery(
    gen_random_uuid(),(next_pkg->>'id')::uuid,old_pkg.destination_id,
    'DISPOSABLE-ONLY');
