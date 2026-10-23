@@ -29,6 +29,28 @@ test('only current legacy service JWT can access allowlisted private worker RPCs
  assert.equal(calls[0].options.redirect,'error');
  assert.ok(!JSON.stringify(await ledger.claim(uuid(1))).includes(token));
 });
+test('supported server secret authenticates only as apikey, never bearer JWT',async()=>{
+  const secret='sb_secret_'+ 'm'.repeat(32),calls=[];
+  const ledger=createServiceLedger({url:'https://fwh-test.supabase.co',
+    serviceRoleJwt:secret,fetcher:async(url,options)=>{
+      calls.push({url,options});
+      return Response.json({state:'NONE'});
+    }});
+  assert.deepEqual(await ledger.readActiveLease(),{state:'NONE'});
+  assert.equal(calls.length,1);
+  assert.equal(new URL(calls[0].url).pathname,
+    '/rest/v1/rpc/service_read_active_delivery_lease');
+  assert.equal(calls[0].options.headers.apikey,secret);
+  assert.equal(Object.hasOwn(calls[0].options.headers,'Authorization'),false);
+  for(const key of ['sb_publishable_'+'a'.repeat(32),
+    'sb_secret_short','sb_secret_'+'a'.repeat(32)+'\n',
+    'arbitrary-not-a-service-credential']){
+    assert.throws(()=>createServiceLedger({url:'https://fwh-test.supabase.co',
+      serviceRoleJwt:key}),e=>e instanceof DriveUncertain
+        &&e.code==='SERVICE_BACKEND_KEY_FORMAT_INVALID');
+  }
+});
+
 test('exact TEST claim uses only service RPC with pinned package, destination and root',async()=>{
  const worker=uuid(1),pkg=uuid(2),destination=uuid(3);
  const root='fwh_disposable_client_root_123456789';
