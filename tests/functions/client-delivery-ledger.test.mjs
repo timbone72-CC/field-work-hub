@@ -26,6 +26,25 @@ test('only current legacy service JWT can access allowlisted private worker RPCs
  assert.equal(calls[0].options.redirect,'error');
  assert.ok(!JSON.stringify(await ledger.claim(uuid(1))).includes(token));
 });
+test('exact TEST claim uses only service RPC with pinned package, destination and root',async()=>{
+ const worker=uuid(1),pkg=uuid(2),destination=uuid(3);
+ const root='fwh_disposable_client_root_123456789';
+ const {ledger,calls}=mock(()=>Response.json({claimed:false}));
+ assert.deepEqual(await ledger.claimExactTest(worker,pkg,destination,root),{claimed:false});
+ assert.equal(calls.length,1);
+ assert.equal(new URL(calls[0].url).pathname,
+   '/rest/v1/rpc/service_claim_exact_test_delivery');
+ assert.deepEqual(JSON.parse(calls[0].options.body),{
+   p_worker:worker,p_package:pkg,p_destination:destination,p_root:root
+ });
+ assert.equal(calls[0].options.headers.Authorization,'Bearer '+token);
+ assert.equal(calls.some(x=>new URL(x.url).pathname.endsWith('/service_claim_delivery')),false);
+ const missing=mock(()=>Response.json({code:'PGRST202',details:'PRIVATE_INFO'},{status:404}));
+ await assert.rejects(()=>missing.ledger.claimExactTest(worker,pkg,destination,root),
+   e=>e instanceof DriveUncertain&&e.code==='SERVICE_RPC_UNAVAILABLE'
+   &&!e.message.includes('PRIVATE_INFO'));
+ assert.equal(missing.calls.length,1,'no broad claim retry after missing exact RPC');
+});
 test('recovery reads only original durable active-lease RPC using service JWT',async()=>{
  const {ledger,calls}=mock(()=>Response.json({state:'NONE'}));
  assert.deepEqual(await ledger.readActiveLease(),{state:'NONE'});
