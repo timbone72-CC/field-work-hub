@@ -87,21 +87,20 @@ export async function inspectExpiredReservedParent({
  * If the RPC response is lost, STOP; never call again on speculation.
  */
 export async function resumeInspectedExpiredTestLease({
-  ledger,makeRequestId=()=>crypto.randomUUID(),
-  makeDispatchId=()=>crypto.randomUUID(),testPackageId,
+  ledger,makeRequestId=()=>crypto.randomUUID(),testPackageId,
   testDestinationId,testRootId,...inspection
 }={}){
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   if(typeof ledger?.recoverAndAcquireDispatch!=='function'
-    ||typeof makeRequestId!=='function'||typeof makeDispatchId!=='function')
+    ||typeof makeRequestId!=='function')
     throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
   const report=await inspectExpiredReservedParent({
     ledger,testPackageId,testDestinationId,testRootId,...inspection
   });
   if(report.state!=='ORIGINAL_RESERVED_ID_NOT_FOUND')
     throw new DriveUncertain('ORIGINAL_REMOTE_ABSENCE_NOT_PROVED');
-  const requestId=makeRequestId(),dispatchId=makeDispatchId();
-  if(!UUID.test(requestId)||!UUID.test(dispatchId)||requestId===dispatchId)
+  const requestId=makeRequestId();
+  if(!UUID.test(requestId))
     throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
   const resumed=await ledger.recoverAndAcquireDispatch({
     package_id:report.package_id,destination_id:testDestinationId,
@@ -109,10 +108,10 @@ export async function resumeInspectedExpiredTestLease({
     generation:report.generation,map_id:report.map_id,
     remote_folder_id:report.remote_folder_id,
     lease_until:report.lease_until,observed_at:report.observed_at,
-    request_id:requestId,dispatch_id:dispatchId
+    request_id:requestId
   });
   if(resumed?.status!=='ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED'
-    ||resumed.dispatch_id!==dispatchId
+    ||resumed.dispatch_id!==requestId
     ||resumed.package_id!==report.package_id
     ||resumed.worker_id!==report.worker_id
     ||resumed.generation!==report.generation
@@ -123,7 +122,7 @@ export async function resumeInspectedExpiredTestLease({
   return Object.freeze({state:'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED',
     package_id:report.package_id,worker_id:report.worker_id,
     generation:report.generation,original_map_id:report.map_id,
-    dispatch_id:dispatchId});
+    dispatch_id:requestId});
 }
 
 /**
@@ -138,7 +137,6 @@ export async function recoverAndContinueOriginalTestParentOnce({
   ledger,tokenProvider,expectedEmail,expectedDriveId,
   testPackageId,testDestinationId,testRootId,
   makeRequestId=()=>crypto.randomUUID(),
-  makeDispatchId=()=>crypto.randomUUID(),
   fetcher=fetch
 }={}){
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -147,7 +145,7 @@ export async function recoverAndContinueOriginalTestParentOnce({
     'beginParentCreate','confirmParent'];
   if(!ledger||required.some(k=>typeof ledger[k]!=='function')
     ||typeof tokenProvider!=='function'
-    ||typeof makeDispatchId!=='function')
+    ||typeof makeRequestId!=='function')
     throw new DriveUncertain('ORIGINAL_TEST_RECOVERY_NOT_CONFIGURED');
 
   // The refresh is shared with the subsequent parent continuation. Recheck
@@ -159,8 +157,7 @@ export async function recoverAndContinueOriginalTestParentOnce({
   };
   const proof=await resumeInspectedExpiredTestLease({
     ledger,tokenProvider:once,expectedEmail,expectedDriveId,
-    testPackageId,testDestinationId,testRootId,makeRequestId,
-    makeDispatchId,fetcher
+    testPackageId,testDestinationId,testRootId,makeRequestId,fetcher
   });
   if(proof?.state!=='ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED'
     ||proof.package_id!==testPackageId||!UUID.test(proof.worker_id??'')
