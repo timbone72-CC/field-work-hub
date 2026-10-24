@@ -43,6 +43,49 @@ begin
   raise notice 'Phase 5 exact atomic recovery RPC grants, old bypass denial and no-write failure PASS';
 end;
 $gate$;
+-- The installed real inner CAS must revalidate only the ORIGINAL audited
+-- worker in the exact one-shot transaction. This runs before the isolated
+-- mock CAS below, so source drift is caught by PostgreSQL itself.
+do $ready_guard$
+declare
+  sql_body text:=pg_get_functiondef(
+    'private.service_resume_exact_test_expired_delivery(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)'::regprocedure);
+  before_verified timestamptz;
+  after_verified timestamptz;
+  ready_org uuid;
+  denied boolean:=false;
+begin
+  if position('last_action.requested_ready' in sql_body)=0
+    or position('last_action.worker_identity is distinct from ready.worker_identity' in sql_body)=0
+    or position('last_action.destination_id is distinct from p_destination' in sql_body)=0
+    or position('last_action.destination_revision is distinct from dest.revision' in sql_body)=0
+    or position('last_action.provider_identity is distinct from dest.provider_identity' in sql_body)=0
+    or position('last_action.expected_root_folder_id is distinct from p_root' in sql_body)=0
+    or position('last_action.verified_probe_result is distinct from' in sql_body)=0
+    or position('p_observed_at<clock_timestamp()-interval ''30 seconds''' in sql_body)=0
+    or position('last_verified_at=clock_timestamp()' in sql_body)=0
+    or position('insert into private.client_delivery_test_lease_recoveries' in sql_body)=0
+    or position('last_verified_at>=now()-interval ''24 hours''' in sql_body)>0
+  then raise exception 'Original same-worker readiness renewal boundary missing';end if;
+  select organization_id,last_verified_at into ready_org,before_verified
+    from private.client_delivery_runtime order by organization_id limit 1;
+  begin
+    perform private.service_resume_and_acquire_exact_test_dispatch(
+      gen_random_uuid(),gen_random_uuid(),'synthetic_test_root_00000',
+      gen_random_uuid(),1,gen_random_uuid(),'synthetic_original_id_00000',
+      clock_timestamp()-interval '5 minutes',
+      clock_timestamp(),'GOOGLE_FILE_ID_NOT_FOUND',gen_random_uuid());
+  exception when others then denied:=true;end;
+  if not denied then raise exception 'Unknown TEST identity was revalidated';end if;
+  if ready_org is not null then
+    select last_verified_at into after_verified from private.client_delivery_runtime
+      where organization_id=ready_org;
+    if before_verified is distinct from after_verified
+    then raise exception 'Denied TEST recovery changed worker readiness';end if;
+  end if;
+  raise notice 'Original audited worker revalidation guard and denied no-write PASS';
+end;
+$ready_guard$;
 -- Disposable boundary unit test: temporarily replace only the inner expired
 -- lease CAS inside this rollback transaction with an isolated marker stub.
 -- The real CAS invariants retain their own independent SQL/worker tests.
