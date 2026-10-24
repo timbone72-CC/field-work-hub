@@ -7,7 +7,7 @@ create function private.service_resume_and_acquire_exact_test_dispatch(
   p_package uuid,p_destination uuid,p_root text,p_worker uuid,
   p_generation bigint,p_map uuid,p_remote_id text,
   p_expected_lease_until timestamptz,p_observed_at timestamptz,
-  p_probe_result text,p_request uuid,p_dispatch uuid
+  p_probe_result text,p_request uuid
 )
 returns jsonb language plpgsql security definer set search_path=''
 set lock_timeout='5s' as $atomic$
@@ -15,8 +15,8 @@ declare
   resumed jsonb;
   permitted jsonb;
 begin
-  if p_dispatch is null or p_request is null or p_dispatch=p_request then
-    raise exception 'Separate original TEST recovery and dispatch IDs required'
+  if p_request is null then
+    raise exception 'Original TEST recovery/dispatch request ID required'
       using errcode='22023';
   end if;
 
@@ -35,10 +35,11 @@ begin
       using errcode='40001';
   end if;
 
+  -- Audit and persistent permit share the SAME immutable request UUID.
   -- The existing global non-expiring permit owner arbitrates every worker.
   -- This is the SAME SQL transaction as the one-use recovery above; if
   -- another worker holds the slot, ALL recovery mutations are rolled back.
-  permitted:=private.service_acquire_delivery_dispatch(p_dispatch);
+  permitted:=private.service_acquire_delivery_dispatch(p_request);
   if permitted->>'acquired' is distinct from 'true' then
     raise exception 'Dispatch occupied; TEST recovery rolled back'
       using errcode='42501';
@@ -46,7 +47,7 @@ begin
 
   return resumed || jsonb_build_object(
     'status','ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED',
-    'dispatch_id',p_dispatch);
+    'dispatch_id',p_request);
 end;
 $atomic$;
 
@@ -55,13 +56,13 @@ create function public.service_resume_and_acquire_exact_test_dispatch(
   p_package uuid,p_destination uuid,p_root text,p_worker uuid,
   p_generation bigint,p_map uuid,p_remote_id text,
   p_expected_lease_until timestamptz,p_observed_at timestamptz,
-  p_probe_result text,p_request uuid,p_dispatch uuid
+  p_probe_result text,p_request uuid
 )
 returns jsonb language sql security invoker set search_path='' as $wrap$
   select private.service_resume_and_acquire_exact_test_dispatch(
     p_package,p_destination,p_root,p_worker,p_generation,p_map,
     p_remote_id,p_expected_lease_until,p_observed_at,p_probe_result,
-    p_request,p_dispatch)
+    p_request)
 $wrap$;
 
 -- Retire the old service-visible two-step CAS; only the combined operation
@@ -76,13 +77,13 @@ revoke execute on function
 
 revoke all on function
   private.service_resume_and_acquire_exact_test_dispatch(
-    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid,uuid),
+    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid),
   public.service_resume_and_acquire_exact_test_dispatch(
-    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid,uuid)
+    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)
   from public,anon,authenticated,service_role;
 grant execute on function
   private.service_resume_and_acquire_exact_test_dispatch(
-    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid,uuid),
+    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid),
   public.service_resume_and_acquire_exact_test_dispatch(
-    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid,uuid)
+    uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)
   to service_role;
