@@ -32,7 +32,7 @@ begin
     perform private.service_resume_and_acquire_exact_test_dispatch(
       gen_random_uuid(),gen_random_uuid(),'unused_test_root',gen_random_uuid(),
       1,gen_random_uuid(),'unused_remote_id',now()-interval '1 minute',
-      now(),'GOOGLE_FILE_ID_NOT_FOUND',gen_random_uuid(),gen_random_uuid());
+      now(),'GOOGLE_FILE_ID_NOT_FOUND',gen_random_uuid());
   exception when others then denied:=true;end;
   if not denied then raise exception 'Nonexistent package recovered';end if;
 
