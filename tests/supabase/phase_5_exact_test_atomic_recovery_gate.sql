@@ -15,7 +15,6 @@ begin
     or not has_function_privilege('service_role',combined,'EXECUTE')
     or has_function_privilege('anon',combined,'EXECUTE')
     or has_function_privilege('authenticated',combined,'EXECUTE')
-    or has_function_privilege('PUBLIC',combined,'EXECUTE')
     or has_function_privilege('service_role',old_api,'EXECUTE')
     or has_function_privilege('anon',old_api,'EXECUTE')
     or has_function_privilege('authenticated',old_api,'EXECUTE')
