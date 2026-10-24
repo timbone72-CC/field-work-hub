@@ -41,7 +41,7 @@ begin
     or position('clock_timestamp()' in body)=0
     or position('p_observed_at' in body)=0
     or position('p_proof is distinct from expected' in body)=0
-    or position('f.create_attempts <> 1' in body)=0
+    or body !~ 'f[.]create_attempts[[:space:]]*<>[[:space:]]*1'
   then raise exception 'Atomic original-worker/permit/proof/attempt guard missing';end if;
 
   select count(*) into before_audits from private.client_delivery_test_lease_recoveries;
