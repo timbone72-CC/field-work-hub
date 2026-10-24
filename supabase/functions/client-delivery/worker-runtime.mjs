@@ -87,30 +87,32 @@ export async function inspectExpiredReservedParent({
  * If the RPC response is lost, STOP; never call again on speculation.
  */
 export async function resumeInspectedExpiredTestLease({
-  ledger,makeRequestId=()=>crypto.randomUUID(),testPackageId,
+  ledger,makeRequestId=()=>crypto.randomUUID(),
+  makeDispatchId=()=>crypto.randomUUID(),testPackageId,
   testDestinationId,testRootId,...inspection
 }={}){
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-  if(typeof ledger?.resumeExpiredReservation!=='function'
-    ||typeof makeRequestId!=='function')
+  if(typeof ledger?.recoverAndAcquireDispatch!=='function'
+    ||typeof makeRequestId!=='function'||typeof makeDispatchId!=='function')
     throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
   const report=await inspectExpiredReservedParent({
     ledger,testPackageId,testDestinationId,testRootId,...inspection
   });
   if(report.state!=='ORIGINAL_RESERVED_ID_NOT_FOUND')
     throw new DriveUncertain('ORIGINAL_REMOTE_ABSENCE_NOT_PROVED');
-  const requestId=makeRequestId();
-  if(!UUID.test(requestId))
+  const requestId=makeRequestId(),dispatchId=makeDispatchId();
+  if(!UUID.test(requestId)||!UUID.test(dispatchId)||requestId===dispatchId)
     throw new DriveUncertain('RECOVERY_CAS_NOT_CONFIGURED');
-  const resumed=await ledger.resumeExpiredReservation({
+  const resumed=await ledger.recoverAndAcquireDispatch({
     package_id:report.package_id,destination_id:testDestinationId,
     root_id:testRootId,worker_id:report.worker_id,
     generation:report.generation,map_id:report.map_id,
     remote_folder_id:report.remote_folder_id,
     lease_until:report.lease_until,observed_at:report.observed_at,
-    request_id:requestId
+    request_id:requestId,dispatch_id:dispatchId
   });
-  if(resumed?.status!=='ORIGINAL_TEST_LEASE_RESUMED'
+  if(resumed?.status!=='ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED'
+    ||resumed.dispatch_id!==dispatchId
     ||resumed.package_id!==report.package_id
     ||resumed.worker_id!==report.worker_id
     ||resumed.generation!==report.generation
@@ -118,18 +120,19 @@ export async function resumeInspectedExpiredTestLease({
     ||resumed.remote_folder_id!==report.remote_folder_id
     ||typeof resumed.expires_at!=='string')
     throw new DriveUncertain('RECOVERY_CAS_CONFIRMATION_UNCERTAIN');
-  return Object.freeze({state:'ORIGINAL_TEST_LEASE_RESUMED',
+  return Object.freeze({state:'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED',
     package_id:report.package_id,worker_id:report.worker_id,
-    generation:report.generation,original_map_id:report.map_id});
+    generation:report.generation,original_map_id:report.map_id,
+    dispatch_id:dispatchId});
 }
 
 /**
  * ONE controlled TEST parent step after the original expired lease.
  * No client-chosen worker/ID, no second provider CREATE, no automatic retry.
- * The first Google GET and the recovery CAS occur IN THIS invocation:
- * no operator delay may consume the recovered two-minute lease.
- * The non-expiring singleflight permit spans only the subsequent provider
- * write; SQL refuses recovery if another permit already exists.
+ * Fresh original-ID Google GET then ONE SQL transaction must recover the
+ * lease AND take the non-expiring global dispatch permit. Lost confirmation,
+ * concurrent permit or crash stops; never issue a speculative second CAS.
+ * The permit remains held across the subsequent provider write.
  */
 export async function recoverAndContinueOriginalTestParentOnce({
   ledger,tokenProvider,expectedEmail,expectedDriveId,
@@ -139,8 +142,8 @@ export async function recoverAndContinueOriginalTestParentOnce({
   fetcher=fetch
 }={}){
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-  const required=['readExpiredReservation','resumeExpiredReservation',
-    'acquireDispatch','releaseDispatch','heartbeat','readParent',
+  const required=['readExpiredReservation','recoverAndAcquireDispatch',
+    'releaseDispatch','heartbeat','readParent',
     'beginParentCreate','confirmParent'];
   if(!ledger||required.some(k=>typeof ledger[k]!=='function')
     ||typeof tokenProvider!=='function'
@@ -156,18 +159,15 @@ export async function recoverAndContinueOriginalTestParentOnce({
   };
   const proof=await resumeInspectedExpiredTestLease({
     ledger,tokenProvider:once,expectedEmail,expectedDriveId,
-    testPackageId,testDestinationId,testRootId,makeRequestId,fetcher
+    testPackageId,testDestinationId,testRootId,makeRequestId,
+    makeDispatchId,fetcher
   });
-  if(proof?.state!=='ORIGINAL_TEST_LEASE_RESUMED'
+  if(proof?.state!=='ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED'
     ||proof.package_id!==testPackageId||!UUID.test(proof.worker_id??'')
-    ||proof.generation!==1||!UUID.test(proof.original_map_id??''))
+    ||proof.generation!==1||!UUID.test(proof.original_map_id??'')
+    ||!UUID.test(proof.dispatch_id??''))
     throw new DriveUncertain('ORIGINAL_TEST_RECOVERY_UNVERIFIED');
-  const dispatchId=makeDispatchId();
-  if(!UUID.test(dispatchId))
-    throw new DriveUncertain('DISPATCH_PERMIT_NOT_CONFIGURED');
-  const acquired=await ledger.acquireDispatch(dispatchId);
-  if(acquired?.acquired!==true)
-    throw new DriveUncertain('DISPATCH_PERMIT_UNAVAILABLE');
+  const dispatchId=proof.dispatch_id;
   // If ANY provider or SQL observation becomes uncertain, intentionally
   // leave the durable dispatch permit held: no blind replay or new file ID.
   const result=await continueTrustedDeliveryParent({
