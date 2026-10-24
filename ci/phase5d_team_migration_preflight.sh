@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The first 114 canonical migrations are installed. Verify exactly the
-# 115th narrowly scoped canonical TEST parent receipt correction is pending.
+# The first 115 canonical migrations are installed. Verify exactly the
+# 116th narrowly scoped original attempted TEST parent reconciliation is pending.
 # Never apply from this helper.
 # It does not install
 # migrations, create cron jobs, deploy workers, or enable Send.
@@ -10,9 +10,9 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=115
-last_installed="20261024101916_phase_5_original_test_readiness_revalidation.sql"
-expected_pending="20261024122000_phase_5_canonical_shared_drive_parent_confirm.sql"
+expected_count=116
+last_installed="20261024122000_phase_5_canonical_shared_drive_parent_confirm.sql"
+expected_pending="20261024190000_phase_5_original_attempted_parent_reconciliation.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -41,7 +41,7 @@ count="$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr
 [[ -f "supabase/migrations/$last_installed" ]] ||
   stop "Missing known-installed canonical migration $last_installed."
 [[ -f "supabase/migrations/$expected_pending" ]] ||
-  stop "Missing exact approved pending TEST parent receipt migration $expected_pending."
+  stop "Missing exact approved pending original TEST parent reconciliation migration $expected_pending."
 
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
@@ -51,18 +51,18 @@ fi
 mapfile -t dry_run_migrations < <(
   grep -Eo '20[0-9]{12}_[a-zA-Z0-9_]+[.]sql' "$out" | sort -u
 )
-# Fail closed unless this precise canonical parent-receipt correction is the ONLY
+# Fail closed unless this precise original parent reconciliation is the ONLY
 # pending version. A clean/successful CLI exit by itself proves nothing.
 [[ "${#dry_run_migrations[@]}" -eq 1 &&
    "${dry_run_migrations[0]}" == "$expected_pending" ]] ||
   stop "Unexpected pending canonical migrations; stop and reconcile with the current approved plan."
 if grep -Fqx 'Remote database is up to date.' "$out"; then
-  stop "Dry-run reports no pending work despite the expected parent-receipt correction."
+  stop "Dry-run reports no pending work despite the expected original-parent reconciliation."
 fi
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: linked dry-run identifies the one exact pending canonical TEST parent receipt correction; nothing applied.\n'
+printf 'PASS: linked dry-run identifies the one exact pending original TEST parent reconciliation; nothing applied.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
 printf 'This does not replace separate live SQL grant/worker readiness checks,\n'
 printf 'provider and Android evidence, or the governed activation gate.\n'
