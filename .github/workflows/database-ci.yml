@@ -21,12 +21,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Generate CLI-named TEST recovery migration candidate (temporary, no deploy)
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx --yes supabase@2.122.0 migration new phase_5_atomic_original_lease_dispatch
-          find supabase/migrations -name '*phase_5_atomic_original_lease_dispatch.sql' -print
       - name: Guard private review bucket configuration (source only)
         run: python3 tests/supabase/test_phase5_storage_config.py
       - name: Prepare disposable controlled Auth context
