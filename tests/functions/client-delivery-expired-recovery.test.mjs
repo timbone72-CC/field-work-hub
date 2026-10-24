@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease,
- recoverAndContinueOriginalTestParentOnce}
+ recoverAndContinueOriginalTestParentOnce,
+ reconcileOriginalAttemptedTestParentOnce}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain}
  from '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -394,4 +395,135 @@ test('crash after atomic commit before Google POST holds permit without replay',
  assert.deepEqual(events,['atomic-committed','heartbeat-failed']);
  assert.equal(r.events.includes('/drive/v3/files/'+originalId),true);
  assert.equal(r.events.some(x=>x.includes('upload')),false);
+});
+
+const heldAttempt={
+ state:'ORIGINAL_ATTEMPTED_PARENT_HELD',
+ package_id:packageId,destination_id:destinationId,root_id:root,
+ worker_id:workerId,generation:1,attempts:1,request_id:uuid(88),
+ map_id:mapId,remote_folder_id:originalId,parent_remote_id:root,
+ remote_name:'TEST ONLY - saved original location',drive_id:driveId,
+ approved_sha256:sha,
+ appProperties:{fwh_org:uuid(30),fwh_company:uuid(31),
+   fwh_destination:destinationId,fwh_kind:'ADDRESS',fwh_key:sha}
+};
+function attemptedRig({snapshot=heldAttempt,remoteStatus=200,commitLost=false,
+ releaseLost=false}={}){
+ const events=[];
+ const ledger={
+  readAttemptedExactTestParent:async(p,d,r)=>{
+   events.push('read-attempt');assert.deepEqual([p,d,r],[packageId,destinationId,root]);
+   return structuredClone(snapshot);
+  },
+  commitAttemptedExactTestParent:async(scope,observed,proof)=>{
+   events.push('atomic-confirm');
+   assert.deepEqual(scope,{package_id:packageId,destination_id:destinationId,
+    root_id:root,worker_id:workerId,generation:1,map_id:mapId,request_id:uuid(88)});
+   assert.ok(Math.abs(Date.now()-Date.parse(observed))<5000);
+   assert.deepEqual(proof,{id:originalId,parent:root,
+    mime:'application/vnd.google-apps.folder',name:heldAttempt.remote_name,
+    drive_id:driveId,trashed:false,sha256:null,size:null,
+    appProperties:heldAttempt.appProperties});
+   if(commitLost)throw Error('SIMULATED_LOST_COMMIT_RESPONSE');
+   return {status:'ORIGINAL_TEST_PARENT_RECONCILED',package_id:packageId,
+    worker_id:workerId,generation:1,map_id:mapId,remote_folder_id:originalId,
+    dispatch_id:uuid(88),permit_held:true};
+  },
+  releaseDispatch:async(id)=>{
+   events.push('release-original-permit');assert.equal(id,uuid(88));
+   if(releaseLost)throw Error('SIMULATED_LOST_RELEASE_RESPONSE');
+   return {released:true};
+  }
+ };
+ const fetcher=async(url,init)=>{
+  const u=new URL(url);
+  assert.equal(u.origin,'https://www.googleapis.com');
+  assert.equal(init.method??'GET','GET');
+  assert.equal(init.redirect,'error');
+  events.push(u.pathname);
+  if(u.pathname==='/drive/v3/about')
+   return Response.json({user:{emailAddress:scope,me:true,permissionId:'test-permission'}});
+  if(u.pathname==='/drive/v3/files/'+root)
+   return Response.json({id:root,trashed:false,
+    mimeType:'application/vnd.google-apps.folder',driveId,
+    capabilities:{canAddChildren:true}});
+  if(u.pathname==='/drive/v3/files/'+originalId){
+   if(remoteStatus!==200)return Response.json({error:'redacted'},{status:remoteStatus});
+   return Response.json({id:originalId,trashed:false,driveId,
+    mimeType:'application/vnd.google-apps.folder',name:heldAttempt.remote_name,
+    parents:[root],appProperties:heldAttempt.appProperties});
+  }
+  throw Error('UNEXPECTED_HTTP_REQUEST');
+ };
+ return {events,opts:{...args,ledger,
+  tokenProvider:async()=>({accessToken:'disposable-test-access-0123456789012345',
+    expiresInSeconds:3600}),fetcher}};
+}
+test('existing attempted original Google folder is GET-verified then atomically confirmed, no POST or new lease claim',async()=>{
+ const r=attemptedRig();
+ const result=await reconcileOriginalAttemptedTestParentOnce(r.opts);
+ assert.equal(result.state,'ORIGINAL_TEST_PARENT_RECONCILED');
+ assert.deepEqual(r.events,[
+  'read-attempt','/drive/v3/about','/drive/v3/files/'+root,
+  '/drive/v3/files/'+originalId,'atomic-confirm','release-original-permit']);
+ assert.equal(r.events.some(x=>/POST|generate|new-lease|create/.test(x)),false);
+});
+test('changed attempted identity, missing Google folder or 403 stops before atomic CAS',async()=>{
+ for(const change of [x=>x.state='RESERVED',x=>x.worker_id=uuid(99),
+  x=>x.request_id=null,x=>x.remote_folder_id='wrong',
+  x=>x.drive_id='foreign_drive_123456789',x=>x.attempts=2,
+  x=>x.appProperties.fwh_destination=uuid(99)]){
+  const s=structuredClone(heldAttempt);change(s);
+  const r=attemptedRig({snapshot:s});
+  await assert.rejects(()=>reconcileOriginalAttemptedTestParentOnce(r.opts),
+   isCode('EXACT_TEST_ATTEMPTED_PARENT_CHANGED'));
+  assert.deepEqual(r.events,['read-attempt']);
+ }
+ for(const code of [404,403,500]){
+  const r=attemptedRig({remoteStatus:code});
+  await assert.rejects(()=>reconcileOriginalAttemptedTestParentOnce(r.opts),
+   e=>e instanceof DriveUncertain);
+  assert.equal(r.events.includes('atomic-confirm'),false);
+  assert.equal(r.events.includes('release-original-permit'),false);
+ }
+});
+test('lost atomic confirmation response keeps the original held permit',async()=>{
+ const r=attemptedRig({commitLost:true});
+ await assert.rejects(()=>reconcileOriginalAttemptedTestParentOnce(r.opts),
+  /SIMULATED_LOST_COMMIT_RESPONSE/);
+ assert.equal(r.events.includes('atomic-confirm'),true);
+ assert.equal(r.events.includes('release-original-permit'),false);
+});
+test('lost permit-release reply never reports successful reconciliation',async()=>{
+ const r=attemptedRig({releaseLost:true});
+ await assert.rejects(()=>reconcileOriginalAttemptedTestParentOnce(r.opts),
+  /SIMULATED_LOST_RELEASE_RESPONSE/);
+ assert.equal(r.events.filter(x=>x==='release-original-permit').length,1);
+});
+test('new hosted TEST reconciliation route is default OFF, no ID override, and fails closed',async()=>{
+ const disabled=createDeliveryHandler({...hostedRecoveryOpts,testRecoveryEnabled:false});
+ assert.equal((await disabled(recoveryRequest({
+  operation:'reconcile_original_attempted_parent_once'}))).status,400);
+ let calls=0;
+ const handler=createDeliveryHandler({...hostedRecoveryOpts,
+  reconcileOriginalTestParent:async()=>{calls++;return {state:'ORIGINAL_TEST_PARENT_RECONCILED'};}});
+ for(const body of [
+  {operation:'reconcile_original_attempted_parent_once',remote_id:originalId},
+  {operation:'reconcile_original_attempted_parent_once',worker_id:workerId}
+ ]){
+  const res=await handler(recoveryRequest(body));
+  assert.equal(res.status,400);
+ }
+ assert.equal((await handler(recoveryRequest({
+  operation:'reconcile_original_attempted_parent_once'},'not-the-key'))).status,401);
+ assert.equal(calls,0);
+ const res=await handler(recoveryRequest({
+  operation:'reconcile_original_attempted_parent_once'}));
+ assert.equal(res.status,200);assert.equal(calls,1);
+ const lost=createDeliveryHandler({...hostedRecoveryOpts,
+  reconcileOriginalTestParent:async()=>{throw Error('SIMULATED_LOST_RPC');}});
+ const blocked=await lost(recoveryRequest({
+  operation:'reconcile_original_attempted_parent_once'}));
+ assert.equal(blocked.status,503);
+ assert.deepEqual(await blocked.json(),{status:'ORIGINAL_TEST_RECONCILIATION_UNVERIFIED'});
 });
