@@ -469,7 +469,8 @@ test('existing attempted original Google folder is GET-verified then atomically 
  assert.equal(r.events.some(x=>/POST|generate|new-lease|create/.test(x)),false);
 });
 test('changed attempted identity, missing Google folder or 403 stops before atomic CAS',async()=>{
- for(const change of [x=>x.state='RESERVED',x=>x.worker_id=uuid(99),
+ // Original worker comparison occurs inside the atomic DB audit guard.
+ for(const change of [x=>x.state='RESERVED',
   x=>x.request_id=null,x=>x.remote_folder_id='wrong',
   x=>x.drive_id='foreign_drive_123456789',x=>x.attempts=2,
   x=>x.appProperties.fwh_destination=uuid(99)]){
