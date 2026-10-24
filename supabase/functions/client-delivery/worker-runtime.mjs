@@ -118,7 +118,71 @@ export async function resumeInspectedExpiredTestLease({
     ||resumed.remote_folder_id!==report.remote_folder_id
     ||typeof resumed.expires_at!=='string')
     throw new DriveUncertain('RECOVERY_CAS_CONFIRMATION_UNCERTAIN');
-  return Object.freeze({state:'ORIGINAL_TEST_LEASE_RESUMED'});
+  return Object.freeze({state:'ORIGINAL_TEST_LEASE_RESUMED',
+    package_id:report.package_id,worker_id:report.worker_id,
+    generation:report.generation,original_map_id:report.map_id});
+}
+
+/**
+ * ONE controlled TEST parent step after the original expired lease.
+ * No client-chosen worker/ID, no second provider CREATE, no automatic retry.
+ * The first Google GET and the recovery CAS occur IN THIS invocation:
+ * no operator delay may consume the recovered two-minute lease.
+ * The non-expiring singleflight permit spans only the subsequent provider
+ * write; SQL refuses recovery if another permit already exists.
+ */
+export async function recoverAndContinueOriginalTestParentOnce({
+  ledger,tokenProvider,expectedEmail,expectedDriveId,
+  testPackageId,testDestinationId,testRootId,
+  makeRequestId=()=>crypto.randomUUID(),
+  makeDispatchId=()=>crypto.randomUUID(),
+  fetcher=fetch
+}={}){
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const required=['readExpiredReservation','resumeExpiredReservation',
+    'acquireDispatch','releaseDispatch','heartbeat','readParent',
+    'beginParentCreate','confirmParent'];
+  if(!ledger||required.some(k=>typeof ledger[k]!=='function')
+    ||typeof tokenProvider!=='function'
+    ||typeof makeDispatchId!=='function')
+    throw new DriveUncertain('ORIGINAL_TEST_RECOVERY_NOT_CONFIGURED');
+
+  // The refresh is shared with the subsequent parent continuation. Recheck
+  // the same account and original root from the frozen backend before CAS.
+  let token;
+  const once=async()=>{
+    if(!token)token=await tokenProvider();
+    return token;
+  };
+  const proof=await resumeInspectedExpiredTestLease({
+    ledger,tokenProvider:once,expectedEmail,expectedDriveId,
+    testPackageId,testDestinationId,testRootId,makeRequestId,fetcher
+  });
+  if(proof?.state!=='ORIGINAL_TEST_LEASE_RESUMED'
+    ||proof.package_id!==testPackageId||!UUID.test(proof.worker_id??'')
+    ||proof.generation!==1||!UUID.test(proof.original_map_id??''))
+    throw new DriveUncertain('ORIGINAL_TEST_RECOVERY_UNVERIFIED');
+  const dispatchId=makeDispatchId();
+  if(!UUID.test(dispatchId))
+    throw new DriveUncertain('DISPATCH_PERMIT_NOT_CONFIGURED');
+  const acquired=await ledger.acquireDispatch(dispatchId);
+  if(acquired?.acquired!==true)
+    throw new DriveUncertain('DISPATCH_PERMIT_UNAVAILABLE');
+  // If ANY provider or SQL observation becomes uncertain, intentionally
+  // leave the durable dispatch permit held: no blind replay or new file ID.
+  const result=await continueTrustedDeliveryParent({
+    ledger,tokenProvider:once,expectedEmail,expectedDriveId,
+    workerId:proof.worker_id,packageId:proof.package_id,
+    generation:proof.generation,kind:'ADDRESS',fetcher
+  });
+  if(result?.state!=='PARENT_VERIFIED'
+    ||result.map_id!==proof.original_map_id
+    ||result.kind!=='ADDRESS')
+    throw new DriveUncertain('ORIGINAL_TEST_PARENT_OUTCOME_UNCERTAIN');
+  const released=await ledger.releaseDispatch(dispatchId);
+  if(released?.released!==true)
+    throw new DriveUncertain('DISPATCH_RELEASE_UNVERIFIED');
+  return Object.freeze({state:'ORIGINAL_TEST_PARENT_VERIFIED'});
 }
 
 export async function prepareTrustedDelivery({
