@@ -92,18 +92,18 @@ begin
   exception when insufficient_privilege then denied:=true;end;
   if not denied
     or exists(select 1 from pg_temp.phase5_atomic_marker)
-    or (select request_id from private.client_delivery_dispatch_permit) is distinct from occupied_id
+    or (select permit.request_id from private.client_delivery_dispatch_permit permit) is distinct from occupied_id
   then raise exception 'Busy dispatch did not roll back consumed recovery';end if;
 
-  delete from private.client_delivery_dispatch_permit where request_id=occupied_id;
+  delete from private.client_delivery_dispatch_permit permit where permit.request_id=occupied_id;
   proof:=private.service_resume_and_acquire_exact_test_dispatch(
     package_id,destination_id,root_id,worker_id,1,map_id,remote_id,
     now()-interval '1 minute',now(),'GOOGLE_FILE_ID_NOT_FOUND',request_id);
   if proof->>'status'<>'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED'
     or proof->>'dispatch_id' is distinct from request_id::text
     or (select count(*) from pg_temp.phase5_atomic_marker)<>1
-    or (select request_id from pg_temp.phase5_atomic_marker) is distinct from request_id
-    or (select request_id from private.client_delivery_dispatch_permit) is distinct from request_id
+    or (select marker.request_id from pg_temp.phase5_atomic_marker marker) is distinct from request_id
+    or (select permit.request_id from private.client_delivery_dispatch_permit permit) is distinct from request_id
   then raise exception 'Atomic lease/permit shared-ID receipt failed';end if;
 
   denied:=false;
@@ -114,7 +114,7 @@ begin
   exception when insufficient_privilege then denied:=true;end;
   if not denied
     or (select count(*) from pg_temp.phase5_atomic_marker)<>1
-    or (select request_id from private.client_delivery_dispatch_permit) is distinct from request_id
+    or (select permit.request_id from private.client_delivery_dispatch_permit permit) is distinct from request_id
   then raise exception 'Repeated atomic request changed durable permit or audit';end if;
   raise notice 'Phase 5 atomic CAS/permit rollback on busy slot and shared request UUID PASS (mocked CAS core)';
 end;
