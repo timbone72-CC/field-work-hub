@@ -182,6 +182,97 @@ export async function recoverAndContinueOriginalTestParentOnce({
   return Object.freeze({state:'ORIGINAL_TEST_PARENT_VERIFIED'});
 }
 
+/**
+ * Phase 5D: reconcile ONE already-created, exact original TEST Google folder.
+ * This is NOT the original expired-lease recovery path. It never POSTs to
+ * Google, renews a different worker, creates a new ID or re-acquires a permit.
+ * If the atomic SQL result is lost, STOP with the original permit held.
+ */
+export async function reconcileOriginalAttemptedTestParentOnce({
+  ledger,tokenProvider,expectedEmail,expectedDriveId,
+  testPackageId,testDestinationId,testRootId,fetcher=fetch
+}={}){
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const ID=/^[A-Za-z0-9_-]{10,160}$/;
+  const HASH=/^[0-9a-f]{64}$/;
+  if(!ledger||!['readAttemptedExactTestParent','commitAttemptedExactTestParent',
+        'releaseDispatch'].every(x=>typeof ledger[x]==='function')
+    ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+    ||typeof expectedEmail!=='string'||!expectedEmail
+    ||!ID.test(expectedDriveId??'')||!ID.test(testRootId??'')
+    ||!UUID.test(testPackageId??'')||!UUID.test(testDestinationId??''))
+    throw new DriveUncertain('EXACT_TEST_RECONCILIATION_NOT_CONFIGURED');
+
+  const s=await ledger.readAttemptedExactTestParent(
+    testPackageId,testDestinationId,testRootId);
+  const props=s?.appProperties;
+  if(s?.state!=='ORIGINAL_ATTEMPTED_PARENT_HELD'
+    ||s.package_id!==testPackageId||s.destination_id!==testDestinationId
+    ||s.root_id!==testRootId||s.parent_remote_id!==testRootId
+    ||!UUID.test(s.worker_id??'')||s.generation!==1||s.attempts!==1
+    ||!UUID.test(s.request_id??'')||!UUID.test(s.map_id??'')
+    ||!HASH.test(s.approved_sha256??'')
+    ||!ID.test(s.remote_folder_id??'')||s.remote_folder_id===testRootId
+    ||s.drive_id!==expectedDriveId
+    ||typeof s.remote_name!=='string'||s.remote_name.length<1
+    ||!props||typeof props!=='object'||Array.isArray(props)
+    ||Object.keys(props).sort().join(',')!==
+      ['fwh_org','fwh_company','fwh_destination','fwh_kind','fwh_key'].sort().join(',')
+    ||props.fwh_kind!=='ADDRESS'
+    ||props.fwh_destination!==testDestinationId
+    ||!UUID.test(props.fwh_org??'')||!UUID.test(props.fwh_company??'')
+    ||!HASH.test(props.fwh_key??''))
+    throw new DriveUncertain('EXACT_TEST_ATTEMPTED_PARENT_CHANGED');
+
+  let auth;
+  try{auth=await tokenProvider();}
+  catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+  if(typeof auth?.accessToken!=='string'||auth.accessToken.length<20
+    ||!Number.isInteger(auth.expiresInSeconds)||auth.expiresInSeconds<60)
+    throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+  const drive=createDriveClient({accessToken:auth.accessToken,fetcher});
+  await drive.verifyProviderIdentity(expectedEmail);
+  const root=await drive.verifyDestination({
+    folderId:testRootId,expectedDriveId
+  });
+  if(root?.id!==testRootId||root?.drive_id!==expectedDriveId)
+    throw new DriveUncertain('EXACT_TEST_ROOT_CHANGED');
+
+  const receipt=await drive.verifyFile({
+    id:s.remote_folder_id,parent:s.parent_remote_id,
+    name:s.remote_name,mime:'application/vnd.google-apps.folder',
+    expectedDriveId,sha256:null,size:null,appProperties:props
+  });
+  if(receipt?.id!==s.remote_folder_id
+    ||receipt.parent!==testRootId||receipt.drive_id!==expectedDriveId
+    ||receipt.name!==s.remote_name||receipt.trashed!==false
+    ||receipt.mime!=='application/vnd.google-apps.folder')
+    throw new DriveUncertain('EXACT_TEST_REMOTE_RECEIPT_UNVERIFIED');
+
+  // Captured ONLY AFTER the complete real Google GET; SQL enforces <=30s.
+  const observedAt=new Date().toISOString();
+  const committed=await ledger.commitAttemptedExactTestParent({
+    package_id:testPackageId,destination_id:testDestinationId,root_id:testRootId,
+    worker_id:s.worker_id,generation:1,map_id:s.map_id,
+    request_id:s.request_id
+  },observedAt,receipt);
+  if(committed?.status!=='ORIGINAL_TEST_PARENT_RECONCILED'
+    ||committed.package_id!==testPackageId
+    ||committed.worker_id!==s.worker_id
+    ||committed.generation!==1||committed.map_id!==s.map_id
+    ||committed.remote_folder_id!==s.remote_folder_id
+    ||committed.dispatch_id!==s.request_id
+    ||committed.permit_held!==true)
+    throw new DriveUncertain('ORIGINAL_TEST_RECONCILIATION_UNVERIFIED');
+
+  // This existing singleflight owner may release ONLY the same request's
+  // permit after the atomic ledger receipt is known committed.
+  const released=await ledger.releaseDispatch(s.request_id);
+  if(released?.released!==true)
+    throw new DriveUncertain('ORIGINAL_TEST_PERMIT_RELEASE_UNVERIFIED');
+  return Object.freeze({state:'ORIGINAL_TEST_PARENT_RECONCILED'});
+}
+
 export async function prepareTrustedDelivery({
   tokenProvider,ledger,workerId,expectedEmail,expectedDriveId,
   fetcher=fetch
