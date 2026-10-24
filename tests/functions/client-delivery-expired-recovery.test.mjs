@@ -131,76 +131,96 @@ test('not-yet-installed service-only recovery snapshot RPC fails closed without 
   p_package:packageId,p_destination:destinationId,p_root:root
  });
 });
-test('one-use trusted recovery calls fenced CAS only after same-ID Google 404',async()=>{
+const atomicReceipt=proof=>({
+ status:'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED',
+ package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
+ remote_folder_id:originalId,dispatch_id:proof.dispatch_id,
+ expires_at:new Date(Date.now()+120000).toISOString()
+});
+const noContinuation=r=>{
+ for(const name of ['acquireDispatch','releaseDispatch','heartbeat','readParent',
+  'beginParentCreate','confirmParent']){
+  r.opts.ledger[name]=()=>{throw Error('NO_CONTINUATION_WITHOUT_ATOMIC_PROOF');};
+ }
+};
+
+test('original-ID 404 permits one atomic SQL lease-and-dispatch handoff',async()=>{
  const r=rig(),savedCalls=[];
- r.opts.ledger.resumeExpiredReservation=async input=>{
-  savedCalls.push(input);
+ r.opts.ledger.recoverAndAcquireDispatch=async proof=>{
+  savedCalls.push(proof);
   assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
    '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
-  assert.equal(input.package_id,packageId);
-  assert.equal(input.destination_id,destinationId);
-  assert.equal(input.root_id,root);
-  assert.equal(input.worker_id,workerId);
-  assert.equal(input.generation,1);
-  assert.equal(input.map_id,mapId);
-  assert.equal(input.remote_folder_id,originalId);
-  assert.equal(input.lease_until,saved.lease_until);
-  assert.equal(input.request_id,uuid(88));
-  assert.ok(Date.now()-Date.parse(input.observed_at)<5000);
-  return {status:'ORIGINAL_TEST_LEASE_RESUMED',
-   package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
-   remote_folder_id:originalId,expires_at:new Date(Date.now()+120000).toISOString()};
+  assert.equal(proof.package_id,packageId);
+  assert.equal(proof.destination_id,destinationId);
+  assert.equal(proof.root_id,root);
+  assert.equal(proof.worker_id,workerId);
+  assert.equal(proof.generation,1);
+  assert.equal(proof.map_id,mapId);
+  assert.equal(proof.remote_folder_id,originalId);
+  assert.equal(proof.lease_until,saved.lease_until);
+  assert.equal(proof.request_id,uuid(88));
+  assert.equal(proof.dispatch_id,uuid(89));
+  assert.ok(Date.now()-Date.parse(proof.observed_at)<5000);
+  return atomicReceipt(proof);
  };
  const result=await resumeInspectedExpiredTestLease({
-  ...r.opts,makeRequestId:()=>uuid(88)
+  ...r.opts,makeRequestId:()=>uuid(88),makeDispatchId:()=>uuid(89)
  });
- assert.equal(result.state,'ORIGINAL_TEST_LEASE_RESUMED');
+ assert.equal(result.state,'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED');
+ assert.equal(result.dispatch_id,uuid(89));
  assert.equal(savedCalls.length,1);
  assert.equal(r.events.some(x=>/upload|generateIds|POST/.test(x)),false);
 });
-test('ambiguous or wrong-ID provider responses NEVER trigger recovery CAS',async()=>{
+
+test('ambiguous or wrong-ID provider observations NEVER invoke atomic recovery',async()=>{
  for(const remoteStatus of [200,401,403,500]){
   const r=rig({remoteStatus});let calls=0;
-  r.opts.ledger.resumeExpiredReservation=()=>{calls++;throw Error('forbidden CAS');};
+  r.opts.ledger.recoverAndAcquireDispatch=()=>{calls++;throw Error('forbidden');};
   await assert.rejects(()=>resumeInspectedExpiredTestLease(r.opts));
   assert.equal(calls,0);
  }
  const r=rig({snapshot:{...saved,lease_until:new Date(Date.now()+120000).toISOString()}});
  let calls=0;
- r.opts.ledger.resumeExpiredReservation=()=>{calls++;throw Error('forbidden CAS');};
+ r.opts.ledger.recoverAndAcquireDispatch=()=>{calls++;throw Error('forbidden');};
  await assert.rejects(()=>resumeInspectedExpiredTestLease(r.opts));
  assert.equal(calls,0);
 });
-test('lost SQL CAS response never triggers second recovery or original-ID replacement',async()=>{
+
+test('lost atomic SQL response stops without a second recovery or dispatch',async()=>{
  const r=rig();let calls=0;
- r.opts.ledger.resumeExpiredReservation=async()=>{calls++;throw Error('network lost');};
+ r.opts.ledger.recoverAndAcquireDispatch=async()=>{calls++;throw Error('network lost');};
  await assert.rejects(()=>resumeInspectedExpiredTestLease(r.opts));
  assert.equal(calls,1);
+ assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
+  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
 });
-test('recovery CAS is one exact service RPC, no generic claim or client authority',async()=>{
+
+test('atomic service-role recovery uses one narrowly scoped RPC and frozen permit ID',async()=>{
  const seen=[];
- const {ledger}=(()=>({
-  ledger:createServiceLedger({url:'https://fwh-test.supabase.co',
-   serviceRoleJwt:'header.payload.signature',
-   fetcher:async(url,opts)=>{seen.push({url,opts});return Response.json({status:'UNCERTAIN'});}})
- }))();
- await ledger.resumeExpiredReservation({
+ const ledger=createServiceLedger({url:'https://fwh-test.supabase.co',
+  serviceRoleJwt:'header.payload.signature',
+  fetcher:async(url,opts)=>{seen.push({url,opts});return Response.json({status:'UNCERTAIN'});}
+ });
+ await ledger.recoverAndAcquireDispatch({
   package_id:packageId,destination_id:destinationId,root_id:root,
   worker_id:workerId,generation:1,map_id:mapId,remote_folder_id:originalId,
   lease_until:saved.lease_until,observed_at:new Date().toISOString(),
-  request_id:uuid(90)});
+  request_id:uuid(90),dispatch_id:uuid(91)
+ });
  assert.equal(seen.length,1);
  assert.equal(new URL(seen[0].url).pathname,
-  '/rest/v1/rpc/service_resume_exact_test_expired_delivery');
+  '/rest/v1/rpc/service_resume_and_acquire_exact_test_dispatch');
  const body=JSON.parse(seen[0].opts.body);
  assert.equal(body.p_root,root);
  assert.equal(body.p_worker,workerId);
  assert.equal(body.p_remote_id,originalId);
  assert.equal(body.p_probe_result,'GOOGLE_FILE_ID_NOT_FOUND');
  assert.equal(body.p_request,uuid(90));
+ assert.equal(body.p_dispatch,uuid(91));
  assert.equal(seen[0].opts.headers.Authorization,'Bearer header.payload.signature');
 });
-test('hosted worker rejects all unapproved recovery-write operations',async()=>{
+
+test('hosted worker still refuses all recovery-write operations',async()=>{
  const handler=createDeliveryHandler({enabled:true,workerSecret:secret});
  for(const operation of ['recover_expired_once','recover_original_parent_once']){
   const response=await handler(new Request('https://worker.invalid',{
@@ -213,79 +233,72 @@ test('hosted worker rejects all unapproved recovery-write operations',async()=>{
  }
 });
 
-test('unhosted one-shot coordinator never starts a provider write if durable dispatch is denied after CAS',async()=>{
- const r=rig(),events=[];
- r.opts.ledger.resumeExpiredReservation=async proof=>{
-  events.push('recovery-cas');
+test('unhosted coordinator refuses failed atomic commit before any provider continuation',async()=>{
+ const r=rig(),calls=[];
+ r.opts.ledger.recoverAndAcquireDispatch=async proof=>{
+  calls.push('atomic-denied');
   assert.equal(proof.worker_id,workerId);
   assert.equal(proof.remote_folder_id,originalId);
-  return {status:'ORIGINAL_TEST_LEASE_RESUMED',
-   package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
-   remote_folder_id:originalId,expires_at:new Date(Date.now()+120000).toISOString()};
+  throw new DriveUncertain('ATOMIC_DISPATCH_OCCUPIED');
  };
- r.opts.ledger.acquireDispatch=async req=>{
-  events.push('dispatch-denied');
-  assert.equal(req,uuid(88));
-  return {acquired:false};
- };
- for(const name of ['releaseDispatch','heartbeat','readParent','beginParentCreate','confirmParent']){
-  r.opts.ledger[name]=()=>{throw Error('NO_PROVIDER_CONTINUATION_AFTER_DISPATCH_DENIAL');};
- }
+ noContinuation(r);
  await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
   ...r.opts,makeRequestId:()=>uuid(87),makeDispatchId:()=>uuid(88)
- }),isCode('DISPATCH_PERMIT_UNAVAILABLE'));
- assert.deepEqual(events,['recovery-cas','dispatch-denied']);
+ }),isCode('ATOMIC_DISPATCH_OCCUPIED'));
+ assert.deepEqual(calls,['atomic-denied']);
  assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
   '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
- // Exposes a remaining orchestration gap: the one-use recovery was consumed
- // before the dispatch reservation, so this cannot be treated as a PASS for
- // recover-and-continue atomicity or as authority for an automatic retry.
 });
 
-test('unhosted coordinator stops without dispatch or provider continuation when recovery CAS response is lost',async()=>{
+test('unhosted coordinator cannot recover or dispatch again after lost atomic response',async()=>{
  const r=rig(),calls=[];
- r.opts.ledger.resumeExpiredReservation=async proof=>{
-  calls.push('cas-uncertain');
+ r.opts.ledger.recoverAndAcquireDispatch=async proof=>{
+  calls.push('atomic-uncertain');
   assert.equal(proof.worker_id,workerId);
   assert.equal(proof.remote_folder_id,originalId);
-  throw Error('SIMULATED_RECOVERY_CAS_RESPONSE_LOSS');
+  throw Error('SIMULATED_ATOMIC_RESPONSE_LOSS');
  };
- for(const name of ['acquireDispatch','releaseDispatch','heartbeat',
-  'readParent','beginParentCreate','confirmParent']){
-  r.opts.ledger[name]=()=>{throw Error('FORBIDDEN_STEP_AFTER_UNCERTAIN_RECOVERY');};
+ noContinuation(r);
+ await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
+  ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
+ }),/SIMULATED_ATOMIC_RESPONSE_LOSS/);
+ assert.deepEqual(calls,['atomic-uncertain']);
+ assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
+  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
+});
+
+test('wrong combined result never reaches Google or releases a permit',async()=>{
+ for(const mutate of [r=>({...r,dispatch_id:uuid(99)}),
+  r=>({...r,worker_id:uuid(99)}),r=>({...r,status:'ORIGINAL_TEST_LEASE_RESUMED'})]){
+  const r=rig(),calls=[];
+  r.opts.ledger.recoverAndAcquireDispatch=async proof=>{
+   calls.push('atomic-reply');
+   return mutate(atomicReceipt(proof));
+  };
+  noContinuation(r);
+  await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
+   ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
+  }),isCode('RECOVERY_CAS_CONFIRMATION_UNCERTAIN'));
+  assert.deepEqual(calls,['atomic-reply']);
+ }
+});
+
+test('crash after atomic commit before Google POST holds permit without replay',async()=>{
+ const r=rig(),events=[];
+ r.opts.ledger.recoverAndAcquireDispatch=async proof=>{
+  events.push('atomic-committed');return atomicReceipt(proof);
+ };
+ r.opts.ledger.heartbeat=async()=>{
+  events.push('heartbeat-failed');throw Error('SIMULATED_CRASH_AFTER_COMMIT');
+ };
+ r.opts.ledger.releaseDispatch=()=>{throw Error('MUST_NOT_RELEASE_UNCERTAIN_PERMIT');};
+ for(const name of ['readParent','beginParentCreate','confirmParent']){
+  r.opts.ledger[name]=()=>{throw Error('MUST_NOT_CREATE_AFTER_CRASH');};
  }
  await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
   ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
- }),/SIMULATED_RECOVERY_CAS_RESPONSE_LOSS/);
- assert.deepEqual(calls,['cas-uncertain']);
- assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
-  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
- // A lost CAS reply might follow an actual commit. No blind second CAS.
-});
-
-test('unhosted coordinator stops all provider work on ambiguous dispatch response after one recovery',async()=>{
- const r=rig(),calls=[];
- r.opts.ledger.resumeExpiredReservation=async proof=>{
-  calls.push('cas-confirmed');
-  assert.equal(proof.request_id,uuid(93));
-  return {status:'ORIGINAL_TEST_LEASE_RESUMED',
-   package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
-   remote_folder_id:originalId,expires_at:new Date(Date.now()+120000).toISOString()};
- };
- r.opts.ledger.acquireDispatch=async request=>{
-  calls.push('dispatch-uncertain');
-  assert.equal(request,uuid(94));
-  throw Error('SIMULATED_DISPATCH_RESPONSE_LOSS');
- };
- for(const name of ['releaseDispatch','heartbeat','readParent',
-  'beginParentCreate','confirmParent']){
-  r.opts.ledger[name]=()=>{throw Error('FORBIDDEN_STEP_AFTER_UNCERTAIN_DISPATCH');};
- }
- await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
-  ...r.opts,makeRequestId:()=>uuid(93),makeDispatchId:()=>uuid(94)
- }),/SIMULATED_DISPATCH_RESPONSE_LOSS/);
- assert.deepEqual(calls,['cas-confirmed','dispatch-uncertain']);
- assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
-  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
- // Neither an uncertain permit nor a consumed recovery can authorize retry.
+ }),/SIMULATED_CRASH_AFTER_COMMIT/);
+ assert.deepEqual(events,['atomic-committed','heartbeat-failed']);
+ assert.equal(r.events.includes('/drive/v3/files/'+originalId),true);
+ assert.equal(r.events.some(x=>x.includes('upload')),false);
 });
