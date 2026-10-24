@@ -130,7 +130,7 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       p_expected_lease_until:proof.lease_until,
       p_observed_at:proof.observed_at,
       p_probe_result:'GOOGLE_FILE_ID_NOT_FOUND',
-      p_request:proof.request_id,p_dispatch:proof.dispatch_id
+      p_request:proof.request_id
     }),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
