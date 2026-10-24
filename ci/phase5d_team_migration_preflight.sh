@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The first 112 canonical migrations are installed. Verify exactly the
-# 113th canonical atomic original TEST lease/dispatch migration is pending.
+# The first 113 canonical migrations are installed. Verify exactly the
+# 114th narrowly scoped original TEST readiness revalidation is pending.
 # Never apply from this helper.
 # It does not install
 # migrations, create cron jobs, deploy workers, or enable Send.
@@ -10,9 +10,9 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=113
-last_installed="20261023190447_phase_5_exact_test_expired_lease_recovery.sql"
-expected_pending="20261024020428_phase_5_atomic_original_lease_dispatch.sql"
+expected_count=114
+last_installed="20261024020428_phase_5_atomic_original_lease_dispatch.sql"
+expected_pending="20261024101916_phase_5_original_test_readiness_revalidation.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -51,7 +51,7 @@ fi
 mapfile -t dry_run_migrations < <(
   grep -Eo '20[0-9]{12}_[a-zA-Z0-9_]+[.]sql' "$out" | sort -u
 )
-# Fail closed unless this precise known readiness migration is the ONLY
+# Fail closed unless this precise known readiness-revalidation migration is the ONLY
 # pending version. A clean/successful CLI exit by itself proves nothing.
 [[ "${#dry_run_migrations[@]}" -eq 1 &&
    "${dry_run_migrations[0]}" == "$expected_pending" ]] ||
@@ -62,7 +62,7 @@ fi
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: linked dry-run identifies the one exact pending atomic TEST recovery migration; nothing applied.\n'
+printf 'PASS: linked dry-run identifies the one exact pending same-worker TEST readiness migration; nothing applied.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
 printf 'This does not replace separate live SQL grant/worker readiness checks,\n'
 printf 'provider and Android evidence, or the governed activation gate.\n'
