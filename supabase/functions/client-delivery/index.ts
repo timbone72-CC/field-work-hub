@@ -8,6 +8,9 @@ Deno.serve(createDeliveryHandler({
  enabled:Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true',
  // Independent TEST-only identity/root GET gate; this cannot enable Send.
  testPreflightEnabled:Deno.env.get('FWH_CLIENT_TEST_PREFLIGHT_ENABLED')==='true',
+ // Separate, explicitly enabled original-ID disposable TEST recovery only.
+ // This does NOT turn on generic delivery, scheduler, Send or cleanup.
+ testRecoveryEnabled:Deno.env.get('FWH_CLIENT_TEST_RECOVERY_ENABLED')==='true',
  testEvidenceClass:Deno.env.get('FWH_TEST_EVIDENCE_CLASS')??'',
  testRootFolderId:Deno.env.get('FWH_CLIENT_TEST_ROOT_FOLDER_ID')??'',
  internalDriveId:Deno.env.get('FWH_INTERNAL_SHARED_DRIVE_ID')??'',
