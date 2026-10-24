@@ -8,7 +8,8 @@ import {createServiceLedger} from './service-ledger.mjs';
 import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeliveryParent,
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
  continueTrustedDeliveryFile,inspectExpiredReservedParent,
- recoverAndContinueOriginalTestParentOnce} from './worker-runtime.mjs';
+ recoverAndContinueOriginalTestParentOnce,
+ reconcileOriginalAttemptedTestParentOnce} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
@@ -30,6 +31,7 @@ export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
   testPreflightEnabled=false,testRecoveryEnabled=false,
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
+  reconcileOriginalTestParent=reconcileOriginalAttemptedTestParentOnce,
   testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
@@ -95,6 +97,43 @@ export function createDeliveryHandler({
         // no fallback, retry, permit release, new remote ID or secret leak.
       }
       return reply(503,'ORIGINAL_TEST_RECOVERY_UNVERIFIED');
+    }
+    if(only?.operation==='reconcile_original_attempted_parent_once'){
+      // No caller-supplied IDs, permits, proof or replacement worker identity.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>DRIVE_ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain)
+        ||!workerSecret||workerSecret.length<32)
+        return reply(503,'TEST_RECONCILIATION_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt
+        ||!clientId||!clientSecret||!refreshToken)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const proof=await reconcileOriginalTestParent({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          fetcher
+        });
+        if(proof?.state==='ORIGINAL_TEST_PARENT_RECONCILED')
+          return reply(200,'ORIGINAL_TEST_PARENT_RECONCILED');
+      }catch{
+        // A lost GET/RPC/release reply is an UNCERTAIN original attempt.
+        // Never start a new recovery, release speculatively, or create an ID.
+      }
+      return reply(503,'ORIGINAL_TEST_RECONCILIATION_UNVERIFIED');
     }
   }
   // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
