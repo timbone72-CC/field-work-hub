@@ -200,15 +200,17 @@ test('recovery CAS is one exact service RPC, no generic claim or client authorit
  assert.equal(body.p_request,uuid(90));
  assert.equal(seen[0].opts.headers.Authorization,'Bearer header.payload.signature');
 });
-test('hosted worker has no recovery write route before the governed SQL gate',async()=>{
+test('hosted worker rejects all unapproved recovery-write operations',async()=>{
  const handler=createDeliveryHandler({enabled:true,workerSecret:secret});
- const response=await handler(new Request('https://worker.invalid',{
-  method:'POST',headers:{'content-type':'application/json',
-   'x-fwh-delivery-secret':secret},
-  body:JSON.stringify({operation:'recover_expired_once'})
- }));
- assert.equal(response.status,400);
- assert.deepEqual(await response.json(),{status:'EXACT_REQUEST_REQUIRED'});
+ for(const operation of ['recover_expired_once','recover_original_parent_once']){
+  const response=await handler(new Request('https://worker.invalid',{
+   method:'POST',headers:{'content-type':'application/json',
+    'x-fwh-delivery-secret':secret},
+   body:JSON.stringify({operation})
+  }));
+  assert.equal(response.status,400,operation);
+  assert.deepEqual(await response.json(),{status:'EXACT_REQUEST_REQUIRED'},operation);
+ }
 });
 
 test('unhosted one-shot coordinator never starts a provider write if durable dispatch is denied after CAS',async()=>{
