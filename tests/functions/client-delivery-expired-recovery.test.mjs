@@ -241,3 +241,51 @@ test('unhosted one-shot coordinator never starts a provider write if durable dis
  // before the dispatch reservation, so this cannot be treated as a PASS for
  // recover-and-continue atomicity or as authority for an automatic retry.
 });
+
+test('unhosted coordinator stops without dispatch or provider continuation when recovery CAS response is lost',async()=>{
+ const r=rig(),calls=[];
+ r.opts.ledger.resumeExpiredReservation=async proof=>{
+  calls.push('cas-uncertain');
+  assert.equal(proof.worker_id,workerId);
+  assert.equal(proof.remote_folder_id,originalId);
+  throw Error('SIMULATED_RECOVERY_CAS_RESPONSE_LOSS');
+ };
+ for(const name of ['acquireDispatch','releaseDispatch','heartbeat',
+  'readParent','beginParentCreate','confirmParent']){
+  r.opts.ledger[name]=()=>{throw Error('FORBIDDEN_STEP_AFTER_UNCERTAIN_RECOVERY');};
+ }
+ await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
+  ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
+ }),/SIMULATED_RECOVERY_CAS_RESPONSE_LOSS/);
+ assert.deepEqual(calls,['cas-uncertain']);
+ assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
+  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
+ // A lost CAS reply might follow an actual commit. No blind second CAS.
+});
+
+test('unhosted coordinator stops all provider work on ambiguous dispatch response after one recovery',async()=>{
+ const r=rig(),calls=[];
+ r.opts.ledger.resumeExpiredReservation=async proof=>{
+  calls.push('cas-confirmed');
+  assert.equal(proof.request_id,uuid(93));
+  return {status:'ORIGINAL_TEST_LEASE_RESUMED',
+   package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
+   remote_folder_id:originalId,expires_at:new Date(Date.now()+120000).toISOString()};
+ };
+ r.opts.ledger.acquireDispatch=async request=>{
+  calls.push('dispatch-uncertain');
+  assert.equal(request,uuid(94));
+  throw Error('SIMULATED_DISPATCH_RESPONSE_LOSS');
+ };
+ for(const name of ['releaseDispatch','heartbeat','readParent',
+  'beginParentCreate','confirmParent']){
+  r.opts.ledger[name]=()=>{throw Error('FORBIDDEN_STEP_AFTER_UNCERTAIN_DISPATCH');};
+ }
+ await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
+  ...r.opts,makeRequestId:()=>uuid(93),makeDispatchId:()=>uuid(94)
+ }),/SIMULATED_DISPATCH_RESPONSE_LOSS/);
+ assert.deepEqual(calls,['cas-confirmed','dispatch-uncertain']);
+ assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
+  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
+ // Neither an uncertain permit nor a consumed recovery can authorize retry.
+});
