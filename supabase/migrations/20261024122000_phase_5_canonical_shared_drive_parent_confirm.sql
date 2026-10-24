@@ -1,9 +1,10 @@
 -- Phase 5D: repair the existing canonical immutable TEST destination proof key.
 -- Earlier provider verification/activation stored "shared_drive_id"; the
 -- original parent confirmation function incorrectly read "drive_id".
--- Recreate ONLY that same private owner with those two key references changed.
--- Preserve every package/worker/lease/company/parent/name/appProperties guard,
--- one-shot ATTEMPTED journal and service-role-only wrapper/grants unchanged.
+-- Replace ONLY the two existing private confirmation owners for ADDRESS/WO
+-- parent and PACKAGE folder; each has exactly two canonical-key references.
+-- Preserve package/worker/lease/company/parent/name/appProperties guards,
+-- one-shot journals and service-role-only public wrappers/grants unchanged.
 -- This migration does NOT confirm any folder, release a dispatch permit,
 -- re-claim a lease, call Google, enable Send, or alter a stored provider receipt.
 create or replace function private.service_confirm_delivery_parent(
