@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease}
+import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease,
+ recoverAndContinueOriginalTestParentOnce}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain}
  from '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -208,4 +209,33 @@ test('hosted worker has no recovery write route before the governed SQL gate',as
  }));
  assert.equal(response.status,400);
  assert.deepEqual(await response.json(),{status:'EXACT_REQUEST_REQUIRED'});
+});
+
+test('unhosted one-shot coordinator never starts a provider write if durable dispatch is denied after CAS',async()=>{
+ const r=rig(),events=[];
+ r.opts.ledger.resumeExpiredReservation=async proof=>{
+  events.push('recovery-cas');
+  assert.equal(proof.worker_id,workerId);
+  assert.equal(proof.remote_folder_id,originalId);
+  return {status:'ORIGINAL_TEST_LEASE_RESUMED',
+   package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
+   remote_folder_id:originalId,expires_at:new Date(Date.now()+120000).toISOString()};
+ };
+ r.opts.ledger.acquireDispatch=async req=>{
+  events.push('dispatch-denied');
+  assert.equal(req,uuid(88));
+  return {acquired:false};
+ };
+ for(const name of ['releaseDispatch','heartbeat','readParent','beginParentCreate','confirmParent']){
+  r.opts.ledger[name]=()=>{throw Error('NO_PROVIDER_CONTINUATION_AFTER_DISPATCH_DENIAL');};
+ }
+ await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
+  ...r.opts,makeRequestId:()=>uuid(87),makeDispatchId:()=>uuid(88)
+ }),isCode('DISPATCH_PERMIT_UNAVAILABLE'));
+ assert.deepEqual(events,['recovery-cas','dispatch-denied']);
+ assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
+  '/drive/v3/files/'+root,'/drive/v3/files/'+originalId]);
+ // Exposes a remaining orchestration gap: the one-use recovery was consumed
+ // before the dispatch reservation, so this cannot be treated as a PASS for
+ // recover-and-continue atomicity or as authority for an automatic retry.
 });
