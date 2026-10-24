@@ -175,6 +175,7 @@ begin
     'id',saved->>'remote_folder_id','parent',saved->>'parent_remote_id',
     'name',saved->>'remote_name','mime','application/vnd.google-apps.folder',
     'trashed',false,'drive_id',saved->>'drive_id',
+    'sha256',null,'size',null,
     'appProperties',saved->'appProperties');
  if p_proof is distinct from expected
  then raise exception 'Original exact provider GET proof mismatch'
