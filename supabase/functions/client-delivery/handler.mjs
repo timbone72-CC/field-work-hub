@@ -7,7 +7,8 @@ import {createDriveClient} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
 import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeliveryParent,
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
- continueTrustedDeliveryFile,inspectExpiredReservedParent} from './worker-runtime.mjs';
+ continueTrustedDeliveryFile,inspectExpiredReservedParent,
+ recoverAndContinueOriginalTestParentOnce} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
@@ -27,7 +28,9 @@ function sameSecret(x,y){
 }
 export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
-  testPreflightEnabled=false,testEvidenceClass,testRootFolderId,internalDriveId,
+  testPreflightEnabled=false,testRecoveryEnabled=false,
+  recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
+  testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
   supabaseUrl,serviceRoleJwt,sessionVaultKey,
@@ -43,6 +46,57 @@ export function createDeliveryHandler({
   // No provider work is permitted when both capabilities are disabled.
   if(enabled===true&&testPreflightEnabled===true)
     return reply(503,'CONFLICTING_WORKER_MODES');
+  // This independent capability is OFF unless explicitly enabled for the
+  // original two-photo disposable TEST reservation. Never turn on the
+  // general delivery worker or scheduler to recover an expired lease.
+  if(testRecoveryEnabled===true&&(enabled===true||testPreflightEnabled!==true))
+    return reply(503,'CONFLICTING_WORKER_MODES');
+  if(testRecoveryEnabled===true){
+    let only;
+    try{
+      if(request.headers.get('content-type')!=='application/json')
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const body=await request.clone().text();
+      if(body.length>512)return reply(413,'REQUEST_TOO_LARGE');
+      only=JSON.parse(body);
+    }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
+    if(only?.operation==='recover_original_parent_once'){
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>DRIVE_ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain)
+        ||!workerSecret||workerSecret.length<32)
+        return reply(503,'TEST_RECOVERY_SCOPE_NOT_CONFIGURED');
+      if(!expectedAccount||!oauthScope||!supabaseUrl||!serviceRoleJwt
+        ||!clientId||!clientSecret||!refreshToken)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const proof=await recoverOriginalTestParent({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          makeRequestId:makeWorkerId,fetcher
+        });
+        if(proof?.state==='ORIGINAL_TEST_PARENT_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_PARENT_VERIFIED');
+      }catch{
+        // A lost database/Google response may follow a durable attempt:
+        // no fallback, retry, permit release, new remote ID or secret leak.
+      }
+      return reply(503,'ORIGINAL_TEST_RECOVERY_UNVERIFIED');
+    }
+  }
   // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
   // rollout. No second OAuth/root-check implementation and no database RPC.
   // The existing adapter independently rejects preallocate, Send and every
