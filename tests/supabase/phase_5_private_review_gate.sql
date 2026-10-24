@@ -195,7 +195,7 @@ begin
   insert into private.client_delivery_destinations(organization_id,company_id,provider,
     provider_identity,root_folder_id,verified,verified_at,verification_receipt,active)
   values(org,company,'GOOGLE_DRIVE','sandbox@example.invalid','DISPOSABLE-ONLY',
-    true,now(),jsonb_build_object('synthetic_test',true,'drive_id','client-drive-fixture'),true);
+    true,now(),jsonb_build_object('synthetic_test',true,'shared_drive_id','client-drive-fixture'),true);
   insert into private.client_delivery_runtime(organization_id,worker_ready) values(org,false);
   execute 'set local role authenticated';
   pkg_draft:=public.admin_save_package_draft(gen_random_uuid(),wo,null,'Synthetic client description',array[photo]);
