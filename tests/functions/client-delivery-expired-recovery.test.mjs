@@ -134,7 +134,7 @@ test('not-yet-installed service-only recovery snapshot RPC fails closed without 
 const atomicReceipt=proof=>({
  status:'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED',
  package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
- remote_folder_id:originalId,dispatch_id:proof.dispatch_id,
+ remote_folder_id:originalId,dispatch_id:proof.request_id,
  expires_at:new Date(Date.now()+120000).toISOString()
 });
 const noContinuation=r=>{
@@ -159,15 +159,14 @@ test('original-ID 404 permits one atomic SQL lease-and-dispatch handoff',async()
   assert.equal(proof.remote_folder_id,originalId);
   assert.equal(proof.lease_until,saved.lease_until);
   assert.equal(proof.request_id,uuid(88));
-  assert.equal(proof.dispatch_id,uuid(89));
   assert.ok(Date.now()-Date.parse(proof.observed_at)<5000);
   return atomicReceipt(proof);
  };
  const result=await resumeInspectedExpiredTestLease({
-  ...r.opts,makeRequestId:()=>uuid(88),makeDispatchId:()=>uuid(89)
+  ...r.opts,makeRequestId:()=>uuid(88)
  });
  assert.equal(result.state,'ORIGINAL_TEST_LEASE_AND_DISPATCH_ACQUIRED');
- assert.equal(result.dispatch_id,uuid(89));
+ assert.equal(result.dispatch_id,uuid(88));
  assert.equal(savedCalls.length,1);
  assert.equal(r.events.some(x=>/upload|generateIds|POST/.test(x)),false);
 });
@@ -205,7 +204,7 @@ test('atomic service-role recovery uses one narrowly scoped RPC and frozen permi
   package_id:packageId,destination_id:destinationId,root_id:root,
   worker_id:workerId,generation:1,map_id:mapId,remote_folder_id:originalId,
   lease_until:saved.lease_until,observed_at:new Date().toISOString(),
-  request_id:uuid(90),dispatch_id:uuid(91)
+  request_id:uuid(90)
  });
  assert.equal(seen.length,1);
  assert.equal(new URL(seen[0].url).pathname,
@@ -216,7 +215,7 @@ test('atomic service-role recovery uses one narrowly scoped RPC and frozen permi
  assert.equal(body.p_remote_id,originalId);
  assert.equal(body.p_probe_result,'GOOGLE_FILE_ID_NOT_FOUND');
  assert.equal(body.p_request,uuid(90));
- assert.equal(body.p_dispatch,uuid(91));
+ assert.equal(body.p_request,uuid(90));
  assert.equal(seen[0].opts.headers.Authorization,'Bearer header.payload.signature');
 });
 
@@ -243,7 +242,7 @@ test('unhosted coordinator refuses failed atomic commit before any provider cont
  };
  noContinuation(r);
  await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
-  ...r.opts,makeRequestId:()=>uuid(87),makeDispatchId:()=>uuid(88)
+  ...r.opts,makeRequestId:()=>uuid(87)
  }),isCode('ATOMIC_DISPATCH_OCCUPIED'));
  assert.deepEqual(calls,['atomic-denied']);
  assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
@@ -260,7 +259,7 @@ test('unhosted coordinator cannot recover or dispatch again after lost atomic re
  };
  noContinuation(r);
  await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
-  ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
+  ...r.opts,makeRequestId:()=>uuid(91)
  }),/SIMULATED_ATOMIC_RESPONSE_LOSS/);
  assert.deepEqual(calls,['atomic-uncertain']);
  assert.deepEqual(r.events,['exact-read','oauth','/drive/v3/about',
@@ -277,7 +276,7 @@ test('wrong combined result never reaches Google or releases a permit',async()=>
   };
   noContinuation(r);
   await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
-   ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
+   ...r.opts,makeRequestId:()=>uuid(91)
   }),isCode('RECOVERY_CAS_CONFIRMATION_UNCERTAIN'));
   assert.deepEqual(calls,['atomic-reply']);
  }
@@ -296,7 +295,7 @@ test('crash after atomic commit before Google POST holds permit without replay',
   r.opts.ledger[name]=()=>{throw Error('MUST_NOT_CREATE_AFTER_CRASH');};
  }
  await assert.rejects(()=>recoverAndContinueOriginalTestParentOnce({
-  ...r.opts,makeRequestId:()=>uuid(91),makeDispatchId:()=>uuid(92)
+  ...r.opts,makeRequestId:()=>uuid(91)
  }),/SIMULATED_CRASH_AFTER_COMMIT/);
  assert.deepEqual(events,['atomic-committed','heartbeat-failed']);
  assert.equal(r.events.includes('/drive/v3/files/'+originalId),true);
