@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The first 111 canonical migrations are installed. Verify exactly the
-# source-only 112th original TEST expired-lease recovery migration is pending.
+# The first 112 canonical migrations are installed. Verify exactly the
+# 113th canonical atomic original TEST lease/dispatch migration is pending.
 # Never apply from this helper.
 # It does not install
 # migrations, create cron jobs, deploy workers, or enable Send.
@@ -10,9 +10,9 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=112
-last_installed="20261023011939_phase_5_exact_disposable_test_delivery_claim.sql"
-expected_pending="20261023190447_phase_5_exact_test_expired_lease_recovery.sql"
+expected_count=113
+last_installed="20261023190447_phase_5_exact_test_expired_lease_recovery.sql"
+expected_pending="20261024020428_phase_5_atomic_original_lease_dispatch.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -62,7 +62,7 @@ fi
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: linked dry-run identifies the one exact pending original TEST recovery migration; nothing applied.\n'
+printf 'PASS: linked dry-run identifies the one exact pending atomic TEST recovery migration; nothing applied.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
 printf 'This does not replace separate live SQL grant/worker readiness checks,\n'
 printf 'provider and Android evidence, or the governed activation gate.\n'
