@@ -45,8 +45,72 @@ const saveEditButton = document.getElementById('save-edit');
 const cancelEditButton = document.getElementById('cancel-edit');
 const editStatus = document.getElementById('edit-status');
 
-const createPhotos = new PhotoRequirementEditor(document.getElementById('create-photo-requirements'), () => workTypeInput.value);
-const editPhotos = new PhotoRequirementEditor(document.getElementById('edit-photo-requirements'), () => editWorkTypeInput.value);
+// Template application requests only editable work instructions; it cannot
+// mutate client binding, assigned contractor or any frozen field/run identity.
+function applyTemplateInstructions(input, template) {
+  const next=String(template.instructions||'');
+  if (input.value.trim() && input.value!==next && !window.confirm(
+    'Replace the current work instructions with this template’s instructions?')) return false;
+  input.value=next;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  return true;
+}
+const createPhotos = new PhotoRequirementEditor(
+  document.getElementById('create-photo-requirements'),() => workTypeInput.value,
+  template => applyTemplateInstructions(instructionsInput,template));
+const editPhotos = new PhotoRequirementEditor(
+  document.getElementById('edit-photo-requirements'),() => editWorkTypeInput.value,
+  template => applyTemplateInstructions(editInstructionsInput,template));
+// Phase 6B: copy a server-read prior WO into a NEW, unsent draft only.
+// Never reuse the old client WO number, assignment, due date, photo evidence,
+// package or finished work identity; the user must explicitly create the WO.
+// Two distinct new-WO draft choices, never a same-WO corrective run.
+// The current authorized WO is read again before using even its address.
+function prepareWorkFromSelectedJob(copyPriorDetails) {
+  JobWorkspace.guard(async () => {
+    const oldId=editWorkOrderIdInput.value;
+    const actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+    const epoch=adminSessionEpoch;
+    if (!oldId || !actor || !org) return;
+    try {
+      const old=await fetchWorkOrder(oldId);
+      if (adminSessionEpoch!==epoch || currentUser?.id!==actor
+        || currentUser?.app_metadata?.organization_id!==org
+        || !accessToken || editWorkOrderIdInput.value!==oldId) return;
+      const snapshot=copyPriorDetails ? PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot) : null;
+      const existingCreateDraft=Boolean(propertyAddressInput.value.trim()
+        || workTypeInput.value.trim() || instructionsInput.value.trim()
+        || dueDateInput.value || assigneeSelect.value || woNumberInput.value.trim()
+        || createPhotos.value?.items?.length || createPhotos.value?.total?.enabled);
+      if (existingCreateDraft && !window.confirm(copyPriorDetails
+        ? 'Replace the unfinished Create Work Order draft with the previous job details?'
+        : 'Replace the unfinished Create Work Order draft with a new custom job at this address?')) return;
+      if (adminSessionEpoch!==epoch || currentUser?.id!==actor
+        || currentUser?.app_metadata?.organization_id!==org
+        || !accessToken || editWorkOrderIdInput.value!==oldId) return;
+      if (JobWorkspace.dirty()) throw Error('The current job has unsaved changes. Save or discard them before preparing new work.');
+      closeEditor(true);
+      createForm.reset();
+      applyWoNumberMode('auto');
+      rememberWoNumberMode.checked=false;
+      propertyAddressInput.value=old.property_address;
+      if (copyPriorDetails) {
+        workTypeInput.value=old.work_type;
+        instructionsInput.value=old.instructions || '';
+      }
+      createPhotos.load(snapshot);
+      fillWorkTypes();
+      document.getElementById('create-wo-details').open=true;
+      setCreateStatus(copyPriorDetails
+        ? 'New work-order draft prepared from prior job. Enter a new due date and assignee; review all fields before creating.'
+        : 'New custom work-order draft at this address. Choose work type, instructions, photos, due date and assignee before creating.',false);
+      (copyPriorDetails ? dueDateInput : workTypeInput).focus();
+    } catch(error) { setEditStatus(error.message,true); }
+  });
+}
+document.getElementById('prepare-repeat-work').addEventListener('click', () => prepareWorkFromSelectedJob(true));
+document.getElementById('prepare-custom-work').addEventListener('click', () => prepareWorkFromSelectedJob(false));
+
 function fillWorkTypes() {
   for (const [prefix, input, editor] of [['', workTypeInput, createPhotos], ['edit-', editWorkTypeInput, editPhotos]]) {
     const select = document.getElementById(`${prefix}work-type-choice`);
@@ -55,7 +119,8 @@ function fillWorkTypes() {
     for (const type of types) select.add(new Option(type, type));
     select.value = types.includes(input.value) ? input.value : '';
     input.hidden = !!select.value;
-    select.onchange = () => { input.value = select.value; input.hidden = !!select.value; if (select.value) editor.useDefault(); };
+    select.onchange = () => { input.value = select.value; input.hidden = !!select.value; editor.useDefault(); };
+    input.onchange = () => editor.refreshSuggestions();
   }
 }
 
@@ -76,16 +141,30 @@ loginForm.addEventListener('submit', async (event) => {
   const email = emailInput.value.trim();
   const password = passwordInput.value;
 
+  let loginEpoch;
   try {
-    const session = await signInWithPassword(email, password);
+    const flight = signInWithPassword(email, password);
+    loginEpoch = adminSessionEpoch;
+    const session = await flight;
+    if (loginEpoch !== adminSessionEpoch) return;
     passwordInput.value = '';
     accessToken = session.access_token;
 
     currentUser = await fetchCurrentUser();
     const metadata = currentUser.app_metadata || {};
 
-    if (metadata.role !== 'ADMIN' || !metadata.organization_id) {
-      throw new Error('This account is not authorized as a Team Admin.');
+    if (!metadata.organization_id || !['ADMIN', 'SUPERVISOR'].includes(metadata.role)) {
+      throw new Error('This account is not authorized for Field Work Hub office access.');
+    }
+    if (metadata.role === 'SUPERVISOR') {
+      // The narrow staffing RPC, not Auth metadata, proves current Tier 2/3
+      // authority. No legacy Admin work or photo call runs for this role.
+      await showScopedStaffingPortal(metadata.organization_id);
+      if (pendingAdminSession) {
+        storeAdminSession(pendingAdminSession);
+        pendingAdminSession = null;
+      }
+      return;
     }
 
     const [rows, users] = await Promise.all([
@@ -93,15 +172,53 @@ loginForm.addEventListener('submit', async (event) => {
       fetchAssignableUsers()
     ]);
 
+    if (loginEpoch !== adminSessionEpoch) return;
     verifyAdminRls(rows, metadata.organization_id);
     renderSignedIn(rows, users, metadata.organization_id);
   } catch (error) {
+    // A superseded login must not clear or relabel the newer account's view.
+    // A current HTTP 401 already cleared access and displayed its safe error.
+    if (loginEpoch !== undefined && loginEpoch !== adminSessionEpoch) return;
+    // A denied operational request is not an Auth failure. A fresh server
+    // recovery grant read decides whether this identity can enter read-only mode.
+    if (error?.status === 403 && accessToken && currentUser?.id) {
+      try {
+        await RecoveryGallery.show();
+        if (pendingAdminSession) {
+          storeAdminSession(pendingAdminSession);
+          pendingAdminSession = null;
+        }
+        passwordInput.value = '';
+        return;
+      } catch {
+        // Never treat an unverified photo grant or broken network as authority.
+      }
+    }
+    // If Auth already verified the exact office identity but fetching the
+    // first work page timed out, preserve the tab credential, not its stale
+    // data. A refresh can restore the signed-in screen after connectivity
+    // returns without submitting the password again. Never persist a denied
+    // or unverified identity.
+    const verifiedRole=currentUser?.app_metadata?.role;
+    if (transientAdminConnectionError(error) && pendingAdminSession
+        && currentUser?.app_metadata?.organization_id
+        && ['ADMIN','SUPERVISOR'].includes(verifiedRole)) {
+      storeAdminSession(pendingAdminSession);
+      pendingAdminSession=null;
+    }
+    RecoveryGallery.reset();
     accessToken = null;
     currentUser = null;
     assignableUsers = [];
     workOrderRows = [];
     passwordInput.value = '';
-    setLoginStatus(error instanceof Error ? error.message : 'Sign-in failed.', true);
+    // A browser request timeout is not a password rejection. Do not
+    // misdiagnose the error or suggest resetting an existing account.
+    const message=error instanceof Error ? error.message : 'Sign-in failed.';
+    const timedOut=error?.name==='TimeoutError'||/signal timed out/i.test(message);
+    setLoginStatus(error?.requestStage ? adminLoginFailureMessage(error) : timedOut
+      ? 'Field Work Hub connection timed out while checking sign-in. This does not mean your password is wrong. Wait briefly and try again.'
+      : message,true);
   }
 });
 
@@ -148,8 +265,13 @@ createForm.addEventListener('submit', async (event) => {
 
 editForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (JobWorkspace.needsReload()) { setEditStatus('Reload the latest job before saving again. Your unsaved changes are still here.', true); return; }
   setEditStatus('Saving changes…', false);
   saveEditButton.disabled = true;
+  editForm.inert = true;
+  let committed = false;
+  let afterSave = null;
+  const savedId = editWorkOrderIdInput.value;
 
   try {
     const updatedRows = await updateWorkOrder({
@@ -169,6 +291,9 @@ editForm.addEventListener('submit', async (event) => {
       throw new Error('The server did not return the updated work order.');
     }
 
+    committed = true;
+    JobWorkspace.saved();
+    afterSave = await JobWorkspace.reconcileSaved(savedId);
     await refreshWorkOrders();
 
     if (updated.pending_assignee_user_id) {
@@ -177,21 +302,25 @@ editForm.addEventListener('submit', async (event) => {
       setEditStatus(`Saved ${updated.wo_number}.`, false);
     }
   } catch (error) {
-    setEditStatus(error instanceof Error ? error.message : 'Unable to update work order.', true);
+    if (accessToken) setEditStatus(committed ? (JobWorkspace.needsReload() ? 'Changes saved. Unable to refresh the latest job right now; reload before saving again.' : 'Changes saved. Unable to refresh the job list right now.') : (error instanceof Error ? error.message : 'Unable to update work order.'), true);
   } finally {
     saveEditButton.disabled = false;
+    editForm.inert = false;
+    if (afterSave && accessToken) afterSave();
   }
 });
 
 cancelEditButton.addEventListener('click', closeEditor);
 
 signOutButton.addEventListener('click', () => {
+  RecoveryGallery.reset();
+  PushDevice.signedOut();
+  NotificationCenter.reset();
   accessToken = null;
   currentUser = null;
   assignableUsers = [];
   workOrderRows = [];
-  createPhotos.templates = []; editPhotos.templates = [];
-  createPhotos.load(null); editPhotos.load(null);
+  createPhotos.clearAccount(); editPhotos.clearAccount();
   fillWorkTypes();
   workOrders.replaceChildren();
   rlsResult.textContent = '';
@@ -201,7 +330,8 @@ signOutButton.addEventListener('click', () => {
   fillAssigneeSelect(assigneeSelect, [], 'Sign in to load Team users');
   assigneeSelect.disabled = true;
   createStatus.textContent = '';
-  closeEditor();
+  closeEditor(true);
+  JobWorkspace.reset();
   resultsCard.classList.add('hidden');
   loginCard.classList.remove('hidden');
   emailInput.focus();
@@ -209,20 +339,30 @@ signOutButton.addEventListener('click', () => {
 });
 
 async function signInWithPassword(email, password) {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ email, password })
-  });
-
-  if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to sign in.'));
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, password })
+    });
+  } catch (error) {
+    throw adminConnectionFailure(error, 'signing in', startedAt);
   }
 
-  return response.json();
+  if (!response.ok) {
+    throw await adminHttpFailure(response, 'signing in', startedAt);
+  }
+
+  try {
+    return await response.json();
+  } catch (error) {
+    throw adminConnectionFailure(error, 'signing in', startedAt);
+  }
 }
 
 async function fetchCurrentUser() {
@@ -230,7 +370,7 @@ async function fetchCurrentUser() {
   const response = await adminFetch(`${SUPABASE_URL}/auth/v1/user`, { headers: authHeaders() });
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to verify the signed-in user.'));
+    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
   }
 
   return response.json();
@@ -238,9 +378,12 @@ async function fetchCurrentUser() {
 
 async function fetchWorkOrders() {
   requireAccessToken();
+  JobWorkspace.ensureAccount(currentUser);
+  const page = JobWorkspace.request();
   const select = [
     'id',
     'organization_id',
+    'client_company_id',
     'assigned_user_id',
     'pending_assignee_user_id',
     'reassignment_requested_at',
@@ -259,15 +402,64 @@ async function fetchWorkOrders() {
   // Intentionally broad request: no organization_id or assigned_user_id filter.
   // Supabase RLS is the authorization boundary for rows returned here.
   const response = await adminFetch(
-    `${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&order=created_at.asc`,
-    { headers: authHeaders() }
+    `${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&${JobViewRules.parameters(page)}`,
+    { headers: { ...authHeaders(), Prefer: 'count=exact' } }
   );
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to load work orders.'));
+    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
   }
 
-  return response.json();
+  const rows = await response.json();
+  JobWorkspace.accept(page);
+  if (!Array.isArray(rows) || rows.length > page.size) throw new Error('Unexpected job page response.');
+  rows.page = { ...page, total: JobViewRules.total(response.headers.get('Content-Range')) };
+  return rows;
+}
+
+// Read-only exact-address sibling lookup. The current signed-in user's RLS
+// still authorizes every row, with explicit company and org match checked
+// again before rendering. Never use a fuzzy or cross-company property search.
+async function fetchAddressWorkOrders(row,offset=0) {
+  requireAccessToken();
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(row?.organization_id||'') || !uuid.test(row?.client_company_id||'')
+    || !uuid.test(row?.id||'') || typeof row.property_address!=='string'
+    || row.property_address.length<3 || row.property_address.length>500)
+    throw new Error('Exact company/address identity required.');
+  if (!Number.isSafeInteger(offset)||offset<0||offset>100000) throw new Error('Invalid address page.');
+  // PostgREST quoted exact string; escaped quotes/backslashes are data, not operators.
+  const address='"'+row.property_address.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
+  const params=new URLSearchParams({
+    select:'id,organization_id,client_company_id,wo_number,property_address',
+    organization_id:'eq.'+row.organization_id,
+    client_company_id:'eq.'+row.client_company_id,
+    property_address:'eq.'+address,
+    order:'id.asc',limit:'50',offset:String(offset)
+  });
+  const response=await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?${params}`,{
+    headers:{...authHeaders(),Prefer:'count=exact'}
+  });
+  if (!response.ok) throw new Error(await readableError(response,'Unable to load address work orders.'));
+  const rows=await response.json();
+  if (!Array.isArray(rows)||rows.length>50) throw new Error('Unexpected address-work-order page.');
+  verifyAdminRls(rows,row.organization_id);
+  if (rows.some(item=>item.client_company_id!==row.client_company_id
+    ||item.property_address!==row.property_address))
+    throw new Error('Address/company scope mismatch.');
+  return {rows,total:JobViewRules.total(response.headers.get('Content-Range'))};
+}
+
+async function fetchWorkOrder(id) {
+  requireAccessToken();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid job identity.');
+  const select = 'id,organization_id,client_company_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)';
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&id=eq.${id}&limit=1`, { headers: authHeaders() });
+  if (!response.ok) throw new Error(await readableError(response, 'Unable to open this job.'));
+  const rows = await response.json();
+  verifyAdminRls(rows, currentUser.app_metadata.organization_id);
+  if (rows.length !== 1 || rows[0].id !== id) throw new Error('This job is no longer available to your account.');
+  return rows[0];
 }
 
 async function fetchAssignableUsers() {
@@ -279,7 +471,7 @@ async function fetchAssignableUsers() {
   });
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to load Team users.'));
+    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
   }
 
   return response.json();
@@ -354,10 +546,6 @@ function verifyAdminRls(rows, expectedOrganizationId) {
   }
 
   const numbers = new Set(rows.map((row) => row.wo_number));
-  if (!numbers.has('TEST-0001') || !numbers.has('TEST-0002-ADMIN-ONLY')) {
-    throw new Error('RLS CHECK FAILED: expected in-organization test work orders were not both returned.');
-  }
-
   if (numbers.has('TEST-OTHER-ORG-CONTROL')) {
     throw new Error('RLS CHECK FAILED: the other-organization control work order was returned.');
   }
@@ -371,16 +559,15 @@ function renderSignedIn(rows, users, organizationId) {
   workOrderRows = rows;
   renderRlsSummary(rows);
   renderAssignableUsers(users);
+  JobWorkspace.populateContractors(users);
   renderWorkOrders(rows, organizationId);
+  if(document.getElementById('notification-center').open) NotificationCenter.load();
   Promise.all([createPhotos.reloadTemplates(), editPhotos.reloadTemplates()]).then(fillWorkTypes).catch(e => setCreateStatus(e.message, true));
 }
 
 function renderRlsSummary(rows) {
   rlsResult.className = 'check pass';
-  rlsResult.textContent =
-    `RLS CHECK: PASS\nServer returned ${rows.length} in-organization work order(s). ` +
-    'Required Team control rows are visible to Admin, the other-organization control is hidden, ' +
-    'and no client-side organization filter was used.';
+  rlsResult.textContent = `Work orders updated ${new Date().toLocaleTimeString()}.`;
 }
 
 function renderAssignableUsers(users) {
@@ -402,74 +589,43 @@ function fillAssigneeSelect(select, users, placeholder, selectedUserId = '') {
 }
 
 function renderWorkOrders(rows, organizationId) {
+  JobWorkspace.page(rows);
   workOrders.replaceChildren();
-  const userById = new Map(assignableUsers.map((user) => [user.user_id, user]));
-
-  for (const row of rows) {
-    const article = document.createElement('article');
-    article.className = 'work-order';
-
-    const title = document.createElement('h3');
-    title.textContent = row.wo_number;
-
-    const address = document.createElement('p');
-    address.textContent = row.property_address;
-
-    const details = document.createElement('p');
-    details.className = 'muted';
-    details.textContent = `Work type: ${row.work_type} • Due: ${row.due_date} • Status: ${row.field_status}`;
-
-    const assignedUser = userById.get(row.assigned_user_id);
-    const assignee = document.createElement('p');
-    assignee.className = 'muted';
-    assignee.textContent = `Assigned: ${userLabel(assignedUser)}`;
-
-    const receipt = document.createElement('p');
-    receipt.className = row.assignment_received_at ? 'receipt received' : 'receipt waiting';
-    receipt.textContent = row.assignment_received_at
-      ? `Contractor receipt: Received ${formatTimestamp(row.assignment_received_at)}`
-      : 'Contractor receipt: Not yet received';
-
-    const instructions = document.createElement('p');
-    instructions.className = 'muted';
-    instructions.textContent = `Instructions: ${row.instructions || 'None'}`;
-
-    article.append(title, address, details, assignee, receipt, instructions);
-
-    if (row.pending_assignee_user_id) {
-      const pendingUser = userById.get(row.pending_assignee_user_id);
-      const pending = document.createElement('p');
-      pending.className = 'handoff pending';
-      pending.textContent = `Reassignment requested to ${userLabel(pendingUser)} — waiting for current contractor approval.`;
-      article.append(pending);
-    }
-
-    const actions = document.createElement('div');
-    actions.className = 'work-order-actions';
-
-    const editButton = document.createElement('button');
-    editButton.type = 'button';
-    editButton.className = 'secondary';
-    editButton.textContent = row.field_status === 'IN_PROGRESS'
-      ? 'Edit / Request Reassignment'
-      : row.field_status === 'ASSIGNED'
-        ? 'Edit / Reassign'
-        : 'Edit';
-    editButton.addEventListener('click', () => openEditor(row.id));
-
-    actions.append(editButton);
-    article.append(actions);
-    workOrders.append(article);
+  const userById = new Map(assignableUsers.map(user => [user.user_id, user]));
+  const table = document.createElement('table');
+  table.className = 'job-table';
+  const caption = document.createElement('caption'); caption.textContent = 'Current work orders'; caption.className = 'sr-only'; table.append(caption);
+  const head = table.createTHead().insertRow();
+  for (const title of ['WO / Address', 'Work type', 'Assigned to', 'Due', 'Status / Receipt']) {
+    const th = document.createElement('th'); th.scope = 'col'; th.textContent = title; head.append(th);
   }
-
-  const orgNote = document.createElement('p');
-  orgNote.className = 'tiny muted';
-  orgNote.textContent = `Verified organization: ${organizationId}`;
-  workOrders.append(orgNote);
+  const body = table.createTBody();
+  for (const row of rows) {
+    const tr = body.insertRow();
+    const title = tr.insertCell();
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'job-link';
+    button.textContent = row.wo_number;
+    button.setAttribute('aria-label', `Open ${row.wo_number}, ${row.property_address}`);
+    button.dataset.jobOpenId = row.id;
+    button.addEventListener('click', () => JobWorkspace.choose(row.id));
+    const address = document.createElement('div'); address.textContent = row.property_address;
+    title.append(button, address);
+    tr.insertCell().textContent = row.work_type;
+    tr.insertCell().textContent = userLabel(userById.get(row.assigned_user_id));
+    tr.insertCell().textContent = row.due_date;
+    const status = tr.insertCell();
+    const field = document.createElement('div'); field.textContent = JobOperationalFacts.project(row).label;
+    const receipt = document.createElement('small'); receipt.textContent = row.assignment_received_at ? 'Assignment received' : 'Not yet received';
+    status.append(field, receipt);
+    if (row.pending_assignee_user_id) {
+      const handoff = document.createElement('div'); handoff.className = 'handoff pending'; handoff.textContent = 'Handoff awaiting approval'; status.append(handoff);
+    }
+  }
+  workOrders.append(table);
 }
 
-function openEditor(workOrderId) {
-  const row = workOrderRows.find((item) => item.id === workOrderId);
+function openEditor(workOrderId, selectedRow = null) {
+  const row = selectedRow || workOrderRows.find((item) => item.id === workOrderId);
   if (!row) {
     setEditStatus('Work order is no longer available in the current list.', true);
     return;
@@ -480,6 +636,8 @@ function openEditor(workOrderId) {
   editPropertyAddressInput.value = row.property_address;
   editWorkTypeInput.value = row.work_type;
   editPhotos.load(row.run?.requirement_snapshot || {}, row.field_status !== "ASSIGNED");
+  // Only the server-authorized WO company may scope template suggestions.
+  editPhotos.setCompany(row.client_company_id || null);
   fillWorkTypes();
   editInstructionsInput.value = row.instructions || '';
   editDueDateInput.value = row.due_date;
@@ -502,12 +660,16 @@ function openEditor(workOrderId) {
 
   setEditStatus('', false);
   editSection.classList.remove('hidden');
-  editSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  JobWorkspace.opened(row);
 }
 
-function closeEditor() {
+function closeEditor(force = false) {
+  if (force !== true) { JobWorkspace.guard(() => closeEditor(true)); return; }
+  JobWorkspace.closed();
   editForm.reset();
   editWorkOrderIdInput.value = '';
+  editPhotos.setCompany(null);
+  editPhotos.load(null);
   editAssigneeSelect.replaceChildren(new Option('Choose Team user', ''));
   editAssigneeSelect.disabled = true;
   editReassignNote.textContent = '';
@@ -610,3 +772,5 @@ function setEditStatus(message, isError) {
   editStatus.textContent = message;
   editStatus.classList.toggle('error', isError);
 }
+
+JobWorkspace.init();

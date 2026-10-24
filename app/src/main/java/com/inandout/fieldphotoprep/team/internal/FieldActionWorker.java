@@ -19,7 +19,10 @@ public final class FieldActionWorker extends Worker {
         if (owner == null || org == null) return Result.failure();
         TeamRuntime runtime = TeamRuntime.get(getApplicationContext());
         ActionSyncCoordinator.Outcome outcome = runtime.sync.drain(owner, org, this::isStopped);
-        if (outcome == ActionSyncCoordinator.Outcome.RETRY) return Result.retry();
+        PhotoTransferCoordinator.Outcome transfer =
+                runtime.transfers.drain(owner, org, this::isStopped);
+        if (outcome == ActionSyncCoordinator.Outcome.RETRY
+                || transfer == PhotoTransferCoordinator.Outcome.RETRY) return Result.retry();
         if (outcome == ActionSyncCoordinator.Outcome.DONE && !isStopped()) {
             synchronized (runtime.sync.drainLock) {
                 long gen = runtime.sessions.generation();

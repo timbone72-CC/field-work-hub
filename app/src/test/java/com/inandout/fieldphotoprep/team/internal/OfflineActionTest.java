@@ -51,6 +51,49 @@ public class OfflineActionTest {
     }
 
     @Test
+    public void explicitAckIsOneDurableInstanceActionAndDoesNotPretendStart() throws Exception {
+        FieldAction ack=dao.createAction(a,"1","run-1","ACK","2026-10-11T10:30:00Z");
+        FieldAction repeat=dao.createAction(a,"1","run-1","ACK","2026-10-11T10:31:00Z");
+        assertEquals(ack.actionId,repeat.actionId);
+        assertEquals("2026-10-11T10:30:00Z",repeat.eventTime);
+        assertEquals("ACK",ack.kind);
+        assertEquals("",ack.requirementRevision);
+        assertEquals("ASSIGNED",store.load(a).get(0).fieldStatus);
+        assertTrue(store.load(a).get(0).acceptPending);
+        assertEquals("",store.load(a).get(0).pendingKind);
+        FieldAction start=dao.createAction(a,"1","run-1","START","2026-10-11T10:31:00Z");
+        assertTrue(ack.sequence<start.sequence);
+        dao.claim(ack.actionId,"ack-claim",7);
+        FieldActionResult confirmed=new FieldActionResult(ack,new org.json.JSONObject()
+            .put("action_id",ack.actionId).put("outcome","APPLIED")
+            .put("field_status","ASSIGNED")
+            .put("acknowledgment_received_at","2026-10-11T10:32:00Z")
+            .put("accepted_at","2026-10-11T10:32:00Z")
+            .put("server_updated_at","2026-10-11T10:32:00Z").toString());
+        dao.accept(ack.actionId,"ack-claim",7,confirmed);
+        assertEquals("ACCEPTED",dao.action(ack.actionId).state);
+        assertEquals("2026-10-11T10:32:00Z",store.load(a).get(0).acknowledgmentReceivedAt);
+        assertEquals("ASSIGNED",store.load(a).get(0).fieldStatus);
+        assertFalse(store.load(a).get(0).acceptPending);
+        assertEquals("START",store.load(a).get(0).pendingKind);
+        assertEquals(0,store.load(b).size());
+        // A stale server snapshot cannot erase this phone's confirmed ACK.
+        store.replace(a,List.of(wo("1","instance-a"),wo("2","instance-b")),2);
+        assertEquals("2026-10-11T10:32:00Z",store.load(a).get(0).acknowledgmentReceivedAt);
+    }
+
+    @Test
+    public void offlineAckChangesRunOnlyAsProtectedConflictNotSilentRebind() {
+        FieldAction ack=dao.createAction(a,"1","run-1","ACK","2026-10-11T10:30:00Z");
+        store.replace(a,List.of(wo("1","new-instance"),wo("2","instance-b")),2);
+        assertEquals("instance-a",store.load(a).get(0).assignmentInstanceId);
+        assertEquals("CONFLICT",dao.action(ack.actionId).state);
+        assertFalse(store.load(a).get(0).conflictReason.isEmpty());
+        assertThrows(IllegalStateException.class,
+            ()->dao.createAction(a,"1","run-1","ACK","2026-10-11T10:33:00Z"));
+    }
+
+    @Test
     public void unboundMigratedCacheAndWrongOwnerCannotCreateAction() {
         SupabaseApi.WorkOrder unbound = wo("1", "");
         store.replace(a, List.of(unbound), 1);

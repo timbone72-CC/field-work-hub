@@ -1,0 +1,438 @@
+-- Transactional disposable company/role/destination tests; no hosted writes.
+begin;
+do $gate$
+declare
+ org1 uuid:=gen_random_uuid(); org2 uuid:=gen_random_uuid();
+ team1 uuid:=gen_random_uuid(); team2 uuid:=gen_random_uuid();
+ admin1 uuid:=gen_random_uuid(); admin2 uuid:=gen_random_uuid();
+ contractor uuid:=gen_random_uuid();
+ client1 uuid:=gen_random_uuid(); client2 uuid:=gen_random_uuid();
+ action1 uuid:=gen_random_uuid(); first_result jsonb; second_result jsonb;
+ proposed_id uuid; d private.client_delivery_destinations%rowtype;
+ proof_action uuid:=gen_random_uuid(); proof_plan jsonb; proof_replay jsonb; proof_file text:='fwh_disposable_client_proof_123456789';
+ proof jsonb; proof2 jsonb; preflight_action uuid:=gen_random_uuid();
+ layout_saved jsonb; destinations jsonb; activated jsonb; paused jsonb;
+ activation_action uuid:=gen_random_uuid(); pause_action uuid:=gen_random_uuid();
+ readiness_action uuid:=gen_random_uuid(); readiness_pause uuid:=gen_random_uuid(); readiness jsonb;
+ layout_action uuid:=gen_random_uuid(); explicit_revision uuid;
+ root_id text:='fwh_disposable_root_123456789';
+ denied boolean;
+begin
+ insert into public.organizations(id,name)
+ values(org1,'DESTINATION DISPOSABLE ONE'),(org2,'DESTINATION DISPOSABLE TWO');
+ insert into public.admin_teams(id,organization_id,name)
+ values(team1,org1,'TEST TEAM ONE'),(team2,org2,'TEST TEAM TWO');
+ insert into private.client_companies(id,organization_id,name)
+ values(client1,org1,'TEST CLIENT ONE'),(client2,org2,'TEST CLIENT TWO');
+ insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+ values(admin1,'dest-admin1@disposable.invalid',now(),jsonb_build_object('organization_id',org1,'role','ADMIN')),
+  (admin2,'dest-admin2@disposable.invalid',now(),jsonb_build_object('organization_id',org2,'role','ADMIN')),
+  (contractor,'dest-contractor@disposable.invalid',now(),jsonb_build_object('organization_id',org1,'role','CONTRACTOR'));
+ insert into auth.sessions(id,user_id)
+ values(admin1,admin1),(admin2,admin2),(contractor,contractor);
+ insert into private.account_work_access(organization_id,user_id,work_role,active)
+ values(org1,admin1,'ADMIN',true),(org2,admin2,'ADMIN',true),
+  (org1,contractor,'CONTRACTOR',true);
+ insert into private.admin_team_memberships(organization_id,team_id,user_id,active)
+ values(org1,team1,admin1,true),(org2,team2,admin2,true);
+
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',admin1,'session_id',admin1,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org1))::text,true);
+ execute 'set local role authenticated';
+ first_result:=public.admin_propose_client_delivery_destination(
+  action1,client1,'OFFICE@DISPOSABLE.INVALID',root_id);
+ if first_result->>'verified'<>'false' or first_result->>'active'<>'false'
+  or first_result->>'replayed'<>'false' then
+  raise exception 'Unverified proposal improperly activated';end if;
+ proposed_id:=(first_result->>'destination_id')::uuid;
+ second_result:=public.admin_propose_client_delivery_destination(
+  action1,client1,'office@disposable.invalid',root_id);
+ if second_result->>'destination_id'<>proposed_id::text
+  or second_result->>'replayed'<>'true' then
+  raise exception 'Exact proposal replay created a second destination';end if;
+
+ denied:=false;
+ begin
+  perform public.admin_propose_client_delivery_destination(
+   action1,client1,'office@disposable.invalid','different_test_root_7654321');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Changed payload reused action UUID';end if;
+ denied:=false;
+ begin
+  perform public.admin_propose_client_delivery_destination(
+   gen_random_uuid(),client1,'office@disposable.invalid',root_id);
+ exception when unique_violation then denied:=true;end;
+ if not denied then raise exception 'Duplicate remote root allowed';end if;
+
+ -- Both direct writes and role spoofing must be denied; no Google proof is
+ -- possible in an ordinary authenticated browser.
+ denied:=false;
+ begin
+  update private.client_delivery_destinations set verified=true,active=true
+    where id=proposed_id;
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Authenticated actor could self-verify destination';end if;
+
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',contractor,'session_id',contractor,
+  'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org1))::text,true);
+ denied:=false;
+ begin perform public.admin_propose_client_delivery_destination(
+  gen_random_uuid(),client1,'office@disposable.invalid','contractor_root_123456789');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Contractor registered provider root';end if;
+
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',admin2,'session_id',admin2,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org2))::text,true);
+ denied:=false;
+ begin perform public.admin_propose_client_delivery_destination(
+  gen_random_uuid(),client1,'office@disposable.invalid','cross_company_root_123456789');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Wrong-organization Admin registered client root';end if;
+ denied:=false;
+ begin perform public.admin_propose_client_delivery_destination(
+  gen_random_uuid(),client2,'office@disposable.invalid',root_id);
+ exception when unique_violation then denied:=true;end;
+ if not denied then raise exception 'Same Google root bound to a second company';end if;
+
+ -- An authenticated Admin cannot invoke either trusted service-only RPC.
+ denied:=false;
+ begin perform public.service_read_client_destination_candidate(proposed_id);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Office actor could inspect trusted destination candidate';end if;
+ denied:=false;
+ begin perform public.service_record_client_destination_preflight(
+  preflight_action,proposed_id,(first_result->>'revision')::uuid,
+  'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Office actor could spoof a verified provider read';end if;
+
+ -- An Admin session may not read/reserve/confirm any provider proof.
+ denied:=false;
+ begin perform public.service_read_client_destination_provider_proof(proposed_id);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin inspected reserved Google proof identity';end if;
+ denied:=false;
+ begin perform public.service_reserve_client_destination_provider_proof(
+  proposed_id,gen_random_uuid(),preflight_action,(first_result->>'revision')::uuid,
+  'unauthorized_proof_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin reserved a provider remote ID';end if;
+ denied:=false;
+ begin perform public.service_confirm_client_destination_provider_proof(
+  proposed_id,gen_random_uuid(),preflight_action,(first_result->>'revision')::uuid,
+  'unauthorized_proof_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Admin forged provider verification/activation';end if;
+
+ -- Only the existing service role can read exact same-organization company/root
+ -- and record a preflight. Proof does NOT verify or activate the destination.
+ execute 'set local role service_role';
+ proof:=public.service_read_client_destination_candidate(proposed_id);
+ if proof->>'organization_id'<>org1::text or proof->>'company_id'<>client1::text
+    or proof->>'root_folder_id'<>root_id
+    or proof->>'provider_identity'<>'office@disposable.invalid'
+    or proof->>'active'<>'false' or proof->>'verified'<>'false'
+ then raise exception 'Service read lost immutable TEST client binding';end if;
+ proof:=public.service_record_client_destination_preflight(
+  preflight_action,proposed_id,(first_result->>'revision')::uuid,
+  'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ if proof->>'preflight_recorded'<>'true' or proof->>'active'<>'false'
+    or proof->>'verified'<>'false' or proof->>'replayed'<>'false'
+ then raise exception 'Trusted GET preflight incorrectly activated a destination';end if;
+ proof2:=public.service_record_client_destination_preflight(
+  preflight_action,proposed_id,(first_result->>'revision')::uuid,
+  'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ if proof2->>'replayed'<>'true'
+ then raise exception 'Same verified GET journal did not replay';end if;
+ denied:=false;
+ begin
+  perform public.service_record_client_destination_preflight(
+   preflight_action,proposed_id,(first_result->>'revision')::uuid,
+   'office@disposable.invalid',root_id,'different_drive_123456789');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Changed Drive ID silently reused provider evidence';end if;
+ denied:=false;
+ begin
+  perform public.service_record_client_destination_preflight(
+   gen_random_uuid(),proposed_id,gen_random_uuid(),
+   'office@disposable.invalid',root_id,'fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale destination revision could be attested';end if;
+
+
+ -- Provider proof must be durably reserved before any remote POST.
+ proof_plan:=public.service_read_client_destination_provider_proof(proposed_id);
+ if proof_plan->>'exists'<>'false'
+ then raise exception 'No unreserved proof may appear as existing';end if;
+ proof_plan:=public.service_reserve_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_plan->>'reserved'<>'true' or proof_plan->>'replayed'<>'false'
+    or proof_plan->>'folder_id'<>proof_file
+ then raise exception 'Provider proof reservation failed';end if;
+ proof_replay:=public.service_read_client_destination_provider_proof(proposed_id);
+ if proof_replay->>'completed'<>'false' or proof_replay->>'folder_id'<>proof_file
+    or proof_replay->>'action_id'<>proof_action::text
+ then raise exception 'Reserved file ID was not durable';end if;
+ proof_replay:=public.service_reserve_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_replay->>'replayed'<>'true'
+ then raise exception 'Reservation replay could create duplicate';end if;
+ denied:=false;
+ begin
+  perform public.service_reserve_client_destination_provider_proof(
+   proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+   'different_proof_id_123456789','fwh_distinct_drive_123456');
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Reserved file ID was replaceable';end if;
+ denied:=false;
+ begin
+  perform public.service_reserve_client_destination_provider_proof(
+   proposed_id,gen_random_uuid(),preflight_action,gen_random_uuid(),
+   'another_proof_id_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale destination revision reserved';end if;
+ proof_plan:=public.service_confirm_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_plan->>'verified'<>'true' or proof_plan->>'active'<>'false'
+    or proof_plan->>'replayed'<>'false'
+ then raise exception 'Exact remote receipt did not leave Send inactive';end if;
+ proof_replay:=public.service_confirm_client_destination_provider_proof(
+  proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+  proof_file,'fwh_distinct_drive_123456');
+ if proof_replay->>'replayed'<>'true'
+ then raise exception 'Confirmed provider receipt could not replay';end if;
+ proof_replay:=public.service_read_client_destination_provider_proof(proposed_id);
+ if proof_replay->>'completed'<>'true'
+ then raise exception 'Confirmed provider proof not durable';end if;
+ denied:=false;
+ begin
+  perform public.service_confirm_client_destination_provider_proof(
+   proposed_id,proof_action,preflight_action,(first_result->>'revision')::uuid,
+   'changed_proof_id_123456789','fwh_distinct_drive_123456');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Conflicting confirmed file identity accepted';end if;
+
+ -- A proof-verified but inactive destination must now be eligible for an
+ -- EXPLICIT Admin layout selection. No implicit Address default is persisted.
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',admin1,'session_id',admin1,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org1))::text,true);
+ execute 'set local role authenticated';
+ destinations:=public.admin_list_client_folder_destinations();
+ if jsonb_array_length(destinations->'destinations')<>1
+   or destinations->'destinations'->0->>'destination_id'<>proposed_id::text
+   or destinations->'destinations'->0->>'active'<>'false'
+   or destinations->'destinations'->0->>'verified'<>'true'
+   or destinations->'destinations'->0->>'layout_configured'<>'false'
+ then raise exception 'Verified inactive root not independently listable to scoped Admin';end if;
+ layout_saved:=public.admin_set_client_folder_layout(
+    layout_action,proposed_id,null,'ADDRESS_WORK_ORDER');
+ explicit_revision:=(layout_saved->>'revision')::uuid;
+ if layout_saved->>'layout'<>'ADDRESS_WORK_ORDER' or explicit_revision is null
+ then raise exception 'Explicit address-only layout not saved before activation';end if;
+ proof_replay:=public.admin_set_client_folder_layout(
+    layout_action,proposed_id,null,'ADDRESS_WORK_ORDER');
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'revision'<>explicit_revision::text
+ then raise exception 'Verified-inactive layout action was not replay-safe';end if;
+ if public.admin_get_client_folder_layout(proposed_id)->>'active'<>'false'
+ then raise exception 'Saving layout activated client Send';end if;
+
+ -- Even a legitimate Admin must never be able to activate or pause a root.
+ if has_function_privilege('authenticated',
+  'public.service_set_client_destination_active(uuid,uuid,uuid,uuid,text,text,text,boolean)','execute')
+ or has_function_privilege('anon',
+  'public.service_set_client_destination_active(uuid,uuid,uuid,uuid,text,text,text,boolean)','execute')
+ or not has_function_privilege('service_role',
+  'public.service_set_client_destination_active(uuid,uuid,uuid,uuid,text,text,text,boolean)','execute')
+ then raise exception 'Client destination activation grants are unsafe';end if;
+ denied:=false;
+ begin
+  perform public.service_set_client_destination_active(activation_action,
+    proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+    'office@disposable.invalid',root_id,proof_file,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Authenticated Admin activated Google Send';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',contractor,'session_id',contractor,
+  'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org1))::text,true);
+ denied:=false;
+ begin
+  perform public.admin_set_client_folder_layout(
+    gen_random_uuid(),proposed_id,explicit_revision,'STATE_CITY_ADDRESS');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Contractor changed another client folder layout';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object(
+  'sub',admin2,'session_id',admin2,
+  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org2))::text,true);
+ denied:=false;
+ begin
+  perform public.admin_set_client_folder_layout(
+    gen_random_uuid(),proposed_id,explicit_revision,'STATE_CITY_ADDRESS');
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Cross-org Admin changed client folder layout';end if;
+
+ -- The service-only activation MUST compare exact original Google identity,
+ -- proof and approved client layout. No fallback or blind branch activation.
+ execute 'set local role service_role';
+ denied:=false;
+ begin perform public.service_set_client_destination_active(gen_random_uuid(),
+   proposed_id,(first_result->>'revision')::uuid,gen_random_uuid(),
+   'office@disposable.invalid',root_id,proof_file,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Unselected layout revision activated root';end if;
+ denied:=false;
+ begin perform public.service_set_client_destination_active(gen_random_uuid(),
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,'different_proof_123456789',true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Forged Google proof activated root';end if;
+ denied:=false;
+ begin perform public.service_set_client_destination_active(gen_random_uuid(),
+   proposed_id,gen_random_uuid(),explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale root revision activated';end if;
+ activated:=public.service_set_client_destination_active(activation_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,true);
+ if activated->>'active'<>'true' or activated->>'verified'<>'true'
+   or activated->>'replayed'<>'false'
+ then raise exception 'Trusted exact activation failed';end if;
+ proof_replay:=public.service_set_client_destination_active(activation_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,true);
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'active'<>'true'
+ then raise exception 'Activation replay failed';end if;
+ denied:=false;
+ begin perform public.service_set_client_destination_active(activation_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,false);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Action UUID was reused for a different request';end if;
+ -- Fresh service-only readiness attestation: source-only synthetic evidence
+ -- exercises authority and state, never claims a real Google/Storage probe.
+ if has_function_privilege('authenticated',
+   'public.service_set_delivery_worker_ready(uuid,uuid,uuid,text,text,text,text,text,text,text,boolean)','execute')
+   or has_function_privilege('anon',
+   'public.service_set_delivery_worker_ready(uuid,uuid,uuid,text,text,text,text,text,text,text,boolean)','execute')
+   or not has_function_privilege('service_role',
+   'public.service_set_delivery_worker_ready(uuid,uuid,uuid,text,text,text,text,text,text,text,boolean)','execute')
+ then raise exception 'Worker readiness grant unsafe';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,gen_random_uuid(),
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Stale destination revision registered worker';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'wrong@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Changed provider identity registered worker';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'WRONG_RESULT',true);
+ exception when invalid_parameter_value then denied:=true;end;
+ if not denied then raise exception 'Unproved worker probe registered worker';end if;
+ readiness:=public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ if readiness->>'worker_ready'<>'true' or readiness->>'replayed'<>'false'
+   or not exists(select 1 from private.client_delivery_runtime rt
+     where rt.organization_id=org1 and rt.worker_ready
+      and rt.worker_identity='test-bundle.worker'
+      and rt.last_verified_at is not null)
+ then raise exception 'Service-only readiness did not bind exact original TEST destination';end if;
+ proof_replay:=public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'worker_ready'<>'true'
+ then raise exception 'Readiness action did not replay safely';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     readiness_action,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('c',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Changed readiness evidence reused action';end if;
+ denied:=false;
+ begin
+   perform public.service_set_delivery_worker_ready(
+     gen_random_uuid(),proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'replacement.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',true);
+ exception when serialization_failure then denied:=true;end;
+ if not denied then raise exception 'Second registered worker silently replaced original';end if;
+ readiness:=public.service_set_delivery_worker_ready(
+     readiness_pause,proposed_id,(first_result->>'revision')::uuid,
+     'office@disposable.invalid',root_id,proof_file,'test-bundle.worker',
+     repeat('a',64),repeat('b',64),'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY',false);
+ if readiness->>'worker_ready'<>'false' or readiness->>'replayed'<>'false'
+   or exists(select 1 from private.client_delivery_runtime
+     where organization_id=org1 and worker_ready)
+   or (select worker_identity from private.client_delivery_runtime
+     where organization_id=org1) is distinct from 'test-bundle.worker'
+ then raise exception 'Pause lost registered original identity or left Send enabled';end if;
+ -- The immutable action journal is deliberately invisible to service_role;
+ -- use the disposable test harness's postgres role for this row-count audit.
+ execute 'reset role';
+ if (select count(*) from private.client_delivery_worker_readiness_actions
+       where destination_id=proposed_id)<>2
+ then raise exception 'Worker readiness action audit incorrect';end if;
+ execute 'set local role service_role';
+ paused:=public.service_set_client_destination_active(pause_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,false);
+ if paused->>'active'<>'false' or paused->>'replayed'<>'false'
+ then raise exception 'Authorized pause did not disable new Send';end if;
+ proof_replay:=public.service_set_client_destination_active(pause_action,
+   proposed_id,(first_result->>'revision')::uuid,explicit_revision,
+   'office@disposable.invalid',root_id,proof_file,false);
+ if proof_replay->>'replayed'<>'true' or proof_replay->>'active'<>'false'
+ then raise exception 'Pause replay was not idempotent';end if;
+ execute 'reset role';
+ if exists(select 1 from private.client_delivery_outbox)
+   or exists(select 1 from private.client_delivery_final_receipts)
+ then raise exception 'Activation/pause falsely created delivery';end if;
+ if (select count(*) from private.client_destination_activation_actions
+     where destination_id=proposed_id)<>2
+   or (select active from private.client_delivery_destinations where id=proposed_id)
+ then raise exception 'Activation/pause ledger or final off state incorrect';end if;
+ raise notice 'Service-only exact provider activation/pause and inactive Admin layout PASS';
+ execute 'reset role';
+ if (select count(*) from private.client_destination_provider_proof_receipts
+    where destination_id=proposed_id)<>1
+ then raise exception 'Duplicate/fake provider receipt';end if;
+ if (select count(*) from private.client_delivery_destination_preflights
+     where destination_id=proposed_id and organization_id=org1 and company_id=client1)<>1
+ then raise exception 'Service preflight journal had unexpected rows';end if;
+ select * into d from private.client_delivery_destinations where id=proposed_id;
+ if d.id is null or d.organization_id<>org1 or d.company_id<>client1
+  or d.provider<>'GOOGLE_DRIVE' or d.provider_identity<>'office@disposable.invalid'
+  or d.root_folder_id<>root_id or not d.verified or d.active or d.verified_at is null
+  or d.verification_receipt->>'type'<>'CLIENT_ROOT_DISPOSABLE_FOLDER_GET_LIST_V1'
+  or d.verification_receipt->>'proof_folder_id'<>proof_file then
+  raise exception 'Safe destination proposal persisted unexpected authority';end if;
+ if (select count(*) from private.client_delivery_destinations
+    where organization_id in (org1,org2))<>1 then
+  raise exception 'Proposal negative tests leaked extra destinations';end if;
+end;
+$gate$;
+rollback;

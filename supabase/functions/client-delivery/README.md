@@ -1,0 +1,305 @@
+# FWH Phase 5D — trusted client delivery (SOURCE ONLY)
+
+**2026-10-20 executable migration-parity preflight update (source only):** Existing `ci/phase5d_team_migration_preflight.sh` previously expected migration 108 to be *pending*, contradicting its accepted Team install. It now requires the same clean exact PR #40 head, FWH-only remote, linked Team TEST project and 108 source SQL files; requires the original dispatch migration file to be present; and accepts **only zero pending migrations plus the CLI's explicit `Remote database is up to date.` report** from `supabase db push --dry-run --linked`. An unexpected pending migration, CLI error or ambiguous output stops; it never applies anything. A hermetic test exercises true and conflicting dry-run outcomes. This is an operator-only read-only **source** readiness check, not a new deployment/activation gate or a repeat of the already-accepted 108th migration installation. It does not establish table/RPC authorization or hosted worker parity.
+
+**Current migration/hosting status — independently verified 2026-10-19 CDT:** The operator has installed canonical Team TEST migration `20261020020000_phase_5_delivery_dispatch_singleflight.sql` and independent live Supabase readback verifies **108 of 108 source migrations applied** to FWH project `vyocaujuwrivoqynvitm`. The private single-flight table exists with **zero live permits**, service-only acquire/release grants verified, and direct table rights denied. The **hosted** `client-delivery` function is still read-only TEST v11 (`test-preflight-only.ts`), no active destination/worker/cron/queued Send exists, and the new source worker is not deployed. Earlier sections below describing migration 108 as *unapplied*, 107 as the current Team count, or Team runtime being *source only* are historical pre-rollout evidence and superseded **only for that migration**; all provider/hosted-worker/Android evidence gates remain pending. The one-time migration preflight must not be rerun to apply the already-installed version. See the latest entry in `docs/PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md` for complete evidence.
+
+**2026-10-19 source preflight continuity:** The joined default-OFF candidate worker now delegates its TEST-only provider identity verification to the *same* `test-preflight-only.mjs` implementation deployed in hosted `client-delivery` v11. The existing operation's strict input limits and configuration diagnostics are preserved by parity tests; in activated delivery mode `verify_test_connection` is rejected **before** the single-flight permit. The reviewed source commit `a71b66b7cb9a2362aa2ee48d08252c9a3bcc0775` passed all three CI suites. **This is not a hosted deployment or proof of real client photo delivery**; source and live difference remains until the governed TEST release gate.
+
+**2026-10-20 OAuth configuration/dispatch safety (source only):** Before taking the installed non-expiring global delivery dispatch permit, the candidate now constructs the **existing** Google OAuth token provider to validate local client ID, secret, refresh token format and supported Drive scope. Misconfigured local credentials fail redacted `503 BACKEND_OAUTH_NOT_CONFIGURED` without any HTTP/SQL/permit call. The same provider is reused after the permit; no new OAuth flow, refresh, worker, migration or credential is introduced. Remote-token revocation and network uncertainty cannot be proven by local validation and remain fail-closed reconciliation gates. Hosted read-only TEST v11 is unchanged. Focused synthetic and exact-head CI evidence belongs in the existing implementation record.
+
+**Source guard update (2026-10-19 CDT):** For `advance_once` and `transfer_one_chunk`, the candidate worker validates the configured AES-256-GCM session key using the original vault implementation *before* acquiring the durable dispatch permit. Missing/malformed keys return a generic 503 without making network calls or occupying the permit. Accepted prior ciphertext is not re-keyed and a wrong historical key remains an explicit recovery STOP. Tested at `dcda741587194b40b71b6df8a637f2d9381019f0` with all three CI suites PASS; hosted v11 is unchanged and delivery remains OFF.
+
+**Authoritative line:** existing Phase 5/6 PR #40 and the approved Phase 5 plan. This is not a second queue, a parallel worker, an FPP integration, or a production deployment. The Team production `client_delivery_runtime.worker_ready` must remain **false** until authenticated real-provider evidence is recorded and the Level-3 runtime merge/deployment gate is separately approved.
+
+## Implemented source boundaries
+
+| Owner | File | Proved capability | Not proved |
+| --- | --- | --- | --- |
+| Database | `20261010130000_phase_5_delivery_fencing.sql` | Service-only fenced claim, immutable preallocated remote IDs, exact simulated confirmations and final receipt | Real Google files |
+| Database | `20261010141000_phase_5_encrypted_delivery_sessions.sql` | Private ciphertext journal, monotonic offset, forbidden session replacement, current-lease-only restore | A hosted encryption key or resumable session |
+| Database | `20261010150000_phase_5_delivery_source_projection.sql` | Current-lease-only exact immutable source/photo/manifest projection | Actual protected byte reader |
+| Backend | `workspace-oauth.mjs` | Fixed Google OAuth refresh endpoint, bounded token and scope; no secret in user response | Hosted backend secret provisioning and live trusted worker refresh |
+| Backend | `session-vault.mjs` | AES-256-GCM session capability encrypted and bound to package/file identity | Durable hosted key and key-rotation recovery |
+| Backend | `drive-client.mjs` | OAuth identity, exact writable TEST destination, generated file IDs, resumable status/chunk and independent Drive SHA-256 GET; real synthetic TEST JSON uploaded and independently verified 2026-10-17 | Actual protected photo-byte source and hosted delivery-worker End-to-End Send untested |
+| Backend | `worker-runtime.mjs` + `worker-core.mjs` | Existing protected preflight reserves immutable identities; new **internal-only** `continueTrustedDeliveryFile` checks refreshed Workspace account and exact authorized package folder, reads the current fenced server plan, and composes the same `upload-one.mjs` + private-source reader (not exposed by Edge) | Real provider/Storage bytes, live authorization and deployed file-worker invocation |
+| Backend | `upload-one.mjs` | One 256-KiB protected chunk per call; encrypted session saved before bytes; independent offset/GET verification | Hosted protected source-byte implementation |
+| Backend | `folder-one.mjs` + `parent-one.mjs` | Source-only one-shot provider folder-create/GET reconciliation below verified same-client geographic/ADDRESS/WORK_ORDER ancestors. `worker-runtime.mjs` invokes both under frozen lease, original IDs and installed service-only map/attempt RPCs. | Hosted mutating worker deployment and actual Google client-package folder/ancestor creation, interruption and receipt verification remain unproved |
+| Backend | `private-source.mjs` | Revalidates current lease-bound private catalog projection both before and after each strict 256 KiB Storage GET/206 range; exact object, SHA/size-bound JSON manifest and fixed origin | Live Storage Range/206 behavior and deployed provider credentials |
+| Backend | `service-ledger.mjs` | Fixed Supabase service-only RPC allowlist; fail-closed ambiguous results | End-to-end production worker authorization |
+| Backend | `handler.mjs` + `index.ts` | Candidate private worker-secret-only bounded preallocation, original-lease one-step continuation and frozen parent/package-folder/file reconciliation; default OFF, no browser CORS, redacted failures and global dispatch permit | Hosted candidate is **not deployed**; actual provider Send/recovery, scheduler, worker-ready flag and released customer destination remain unproved |
+
+## Frozen client filename and package-folder dependency
+
+The trusted SQL source projection now names each selected JPEG `field-photo-<permanent-photo-UUID>.jpg`, as required by the approved Phase 5 plan. The photo's selected display order is **not** its file identity; changing the order cannot silently rename or replace remote evidence. The existing manifest remains `submission.json`. The exact projected name, SHA-256, size, parent and preallocated file ID travel through the single existing upload/GET verification path.
+
+**Current source-only, NOT hosted or enabled:** the installed candidate SQL blocks direct-root package placement and requires VERIFIED same-company ADDRESS and WORK_ORDER ancestor records before reserving the PACKAGE folder. The protected preflight reserves only the next missing ancestor ID until its independent provider receipt exists. The existing `parent-one.mjs` and `folder-one.mjs` one-shot create/GET-reconcile executors are already connected to `worker-runtime.mjs`, and their original-ID/attempt service RPCs are installed in Team TEST (108/108). This is **not a live Google client-package folder PASS**: the deployed v11 Edge function is still read-only `test-preflight-only.ts`; the mutating candidate is not deployed, the client destination is inactive, and no Send/queue/final receipt exists. Do not rebuild a second folder executor, bypass the company's authorized client root, or allocate replacement IDs.
+
+## Hard-stop provider gates
+
+1. Verify that the *backend* can legally authorize exactly the recorded Workspace provider identity (not a personal ChatGPT Drive connector). Obtain an approved OAuth flow/refresh token or tightly constrained delegated identity **outside the public repo**. Record provider identity, intended scope and revocation procedure.
+2. Configure the client-company-specific destination and prove folder ID, shared Drive ID and `canAddChildren` **using the actual backend OAuth token**. The internal Workspace Shared Drive is company holding; it is **not** the configured client destination and must never become shared with a client by mistake.
+3. Provision server-only credentials and the **32-byte AES-GCM key** via hosted secrets/Vault; no literal value in GitHub, dashboard, Android, SQL journal or test logs. Distinguish an inaccessible encrypted session from a known-safe nonexistent upload; **never allocate replacement remote IDs automatically**.
+4. Verify the **source-only** `private-source.mjs` trusted chunk reader with a real disposable authenticated Supabase Storage partial GET (`206`, exact `Content-Range`, bytes and current catalog receipt). The internal `continueTrustedDeliveryFile` path is now composed with the **existing** `upload-one.mjs` worker seam and tested against mocked provider/Storage responses, but it has **not** been independently validated against real Storage or Google. It is **not called** by the published/preallocation-only Edge entry, and that entry stays **default-off** with no file upload, Send, or cleanup. Only after real provider/TEST gates can a governed trusted runtime invocation be added. No ordinary JWT/publishable key can invoke it.
+5. Prove on a disposable client TEST destination: partial chunk, app restart/reconnect, provider offset probe, exact Drive file GET including SHA-256/size/parent, missing/foreign folder, wrong user, conflicting ID, and manifest verification. `DELIVERED` needs all exact files and the submission manifest; a 308 or 200 upload alone isn't enough.
+6. Only **after** the above: configure `pg_cron` + `pg_net` with a Vault-held secret, confirm pause/off behavior, validate failed/UNCERTAIN reconciliation and operator recovery. Enable `worker_ready` only after a recorded signed-off provider gate and staged deployment.
+
+## Protected invariants
+
+- No contractor receives Google provider tokens, destination permission or a service-role key.
+- Admin Preview / Approve / queued Send / private receipt cannot delete phone originals.
+- No production cleanup before confirmed applicable final client delivery and durable server/local retention closure.
+- Unknown Google outcome remains `UNCERTAIN`; operator reconciles the **same** remote ID, never a new file/folder ID.
+- There is currently no automatic retry/requeue of expired provider lease. That is intentional and safe until reconciler is tested.
+- All mutating worker/Edge code remains draft/undeployed; **108 canonical SQL migrations are already installed in the FWH Team TEST backend**. Neither installed schema nor CI implies an actual client Google Drive write.
+
+**Testing:** `tests/supabase/phase_5_private_review_gate.sql` and `tests/functions/client-delivery-*.test.mjs` are disposable, non-network tests in the existing database/dashboard CI. CI success is not a live-photo, phone or Workspace-provider PASS.
+
+### One-shot package folder recovery (source only)
+
+The new `folder-one.mjs` accepts only a trusted server-frozen package folder below a verified WORK_ORDER folder. It enforces immutable package UUID, preallocated ID/parent/name, manifest binding, current lease and expected client Shared Drive. Its ledger interface requires an atomic server `beginFolderCreate` transition to ATTEMPTED **before** the first external POST. On any ambiguous POST or restarted attempt, it can only GET/verify the original ID; no replacement ID or blind second create is allowed. An independent authenticated Drive GET checks exact name, ID, parent, MIME and appProperties before a durable confirmation.
+
+**Current installed/source boundary (supersedes the historical `unapplied`/`unimplemented` descriptions):** Team TEST has the 108 canonical migrations including the service-only ADDRESS/WORK_ORDER mapping, one-shot ATTEMPTED/VERIFIED parent and PACKAGE folder RPCs, frozen existing-ID journals and final provider receipt checks. The existing `worker-runtime.mjs` invokes the `parent-one.mjs` and `folder-one.mjs` executors using only frozen service-ledger identities. The hosted v11 read-only TEST Edge entrypoint deliberately imports **none of those mutating owners**. Actual provider folder creation, original-ID interruption/GET recovery, client Send and package final receipt **remain pending physical proof**. SQL and mock tests cannot claim Google folder creation or deletion.
+
+## TEST-only Workspace provider identity preflight (read-only operator helper)
+
+The source-only `ci/verify_phase5_workspace_provider.mjs` invokes the **existing** trusted `workspace-oauth.mjs` and `drive-client.mjs` boundaries without exposing a new server/Android/dashboard endpoint. Run it only once the intended Workspace OAuth refresh credential and a disposable **client-specific** Google Shared Drive/folder have been independently provisioned and protected outside this public repository. It does **not** create consent, obtain a refresh token from an interactive browser, configure the actual FWH backend, create destination rows, deploy a worker, upload photos or enable Send.
+
+Supply these exact values from a **locally protected environment** (never commit a `.env` file, paste credentials into a shell command/chat, screenshot them or put them in GitHub secrets without the approved deployment process):
+
+| Name | Meaning |
+| --- | --- |
+| `FWH_TEST_EVIDENCE_CLASS` | Exact `DISPOSABLE_FWH_TEST_ONLY` safety marker |
+| `FWH_TEST_WORKSPACE_EMAIL`, `FWH_TEST_WORKSPACE_DOMAIN` | Exact intended backend Workspace user and domain, never an assumed ChatGPT Drive connector identity |
+| `FWH_TEST_INTERNAL_SHARED_DRIVE_ID` | Existing *company-internal* Workspace Shared Drive ID; this must differ from the client TEST Drive |
+| `FWH_TEST_CLIENT_SHARED_DRIVE_ID` | Independent disposable client-specific TEST Shared Drive ID |
+| `FWH_TEST_CLIENT_ROOT_FOLDER_ID` | Existing disposable client-specific folder under that exact TEST Shared Drive |
+| `FWH_TEST_WORKSPACE_CLIENT_ID`, `FWH_TEST_WORKSPACE_CLIENT_SECRET`, `FWH_TEST_WORKSPACE_REFRESH_TOKEN` | Backend-approved OAuth refresh credentials, supplied privately |
+| `FWH_TEST_WORKSPACE_SCOPE` | Exact approved `https://www.googleapis.com/auth/drive.file` or `https://www.googleapis.com/auth/drive` scope |
+
+Run from the existing PR #40 checkout: `node ci/verify_phase5_workspace_provider.mjs`. A redacted `PASS` means only: Google OAuth refresh succeeded, Drive `about.get` returned the exact intended Workspace identity, and Drive `files.get` independently verified a writable folder within the exact distinct client Shared Drive. The helper performs only OAuth token refresh POST and Drive **GET** calls; no Google file POST, provider upload, ACL change, database mutation, scheduler action or client Send. A `BLOCKED` is a real operator credential/destination gate; retain the protected original evidence and do not switch to the internal Shared Drive as a workaround. No secrets, file IDs, email, URLs or tokens are printed.
+
+`node --test tests/functions/client-delivery-provider-preflight.test.mjs` runs **synthetic no-network** allow/deny cases and is included in the existing dashboard CI function-test glob. It cannot prove Workspace membership, real OAuth consent, writable client folder or hosted worker configuration. Even a real helper PASS does **not** activate `client_delivery_runtime.worker_ready`; preserve the separate exact provider upload/GET/uncertainty test and signed-off Phase 5/6 release gates.
+
+
+## Operator TEST OAuth bootstrap (one-time local consent; source-only until real Google gate)
+
+The approved Workspace user created an **independent Google Cloud project** (display name `Field Work Hub`, ID `field-work-hub`) with the Google Drive API enabled, a new Internal Google Auth Platform audience and one Web application OAuth client. Its downloaded client JSON is sensitive operator-owned input, **not** a repository asset. At this checkpoint the Web client has **no redirect URIs**, no refresh token and no connection to the protected FWH TEST backend. Its credentials must never be pasted into GitHub, Supabase SQL, code review, a shell command, log output or screenshots.
+
+The current approved source includes a TEST-only **one-time local login helper** at `ci/authorize_phase5_workspace_provider.mjs`. It is the missing consent-code step **before** the existing read-only `ci/verify_phase5_workspace_provider.mjs` and before hosted worker-secret provisioning. It does not enable Send, deploy an OAuth callback, create remote Drive files or activate production provider delivery.
+
+1. In Google Cloud → Google Auth Platform → **Clients** → existing `Field Work Hub - Workspace Drive Backend` Web client, add exactly this **Authorized redirect URI**: `http://127.0.0.1:8765/oauth2/callback`. Leave JavaScript origins empty. This is only the operator laptop's loopback listener; a later hosted callback is a distinct separately verified configuration. Do not create a second OAuth client to obtain this URI.
+2. Record the actual new **FWH CLIENT TEST** Shared-drive ID via Google Drive's opened drive URL and the exact child `FWH TEST DELIVERY` folder ID from the operator's already-created folder; **never infer** the Shared-drive ID from the folder ID or give the internal holding drive's ID as the client drive.
+3. In the **operator's laptop terminal only**, provide the following nonsecret configuration to the helper through local environment (not a committed or attached .env file): `FWH_TEST_EVIDENCE_CLASS=DISPOSABLE_FWH_TEST_ONLY`, `FWH_TEST_WORKSPACE_EMAIL` (the approved Workspace user), `FWH_TEST_WORKSPACE_DOMAIN`, `FWH_TEST_INTERNAL_SHARED_DRIVE_ID` (preexisting internal holding), `FWH_TEST_CLIENT_SHARED_DRIVE_ID`, `FWH_TEST_CLIENT_ROOT_FOLDER_ID`, `FWH_TEST_WORKSPACE_SCOPE=https://www.googleapis.com/auth/drive` and `FWH_TEST_CREDENTIALS_OUT=$HOME/.config/field-work-hub/workspace-oauth-test.json`. Invoke `node ci/authorize_phase5_workspace_provider.mjs /path/to/downloaded/client_secret.json` from the **existing PR #40 checkout**, using the actual private downloaded JSON path. The file itself is read locally; **never include a secret in the command line**.
+4. The helper prints a Google consent URL **without client secret**. Open it in the signed-in approved Workspace Chrome profile, choose the approved user, and authorize the displayed Drive scope. The loopback handler accepts only the original anti-CSRF state and PKCE verifier, exchanges the code with Google, and verifies real Drive `about.get` exact user, `files.get` exact folder/Shared-drive ID and `canAddChildren`. It also confirms that the new refresh token is usable through the existing Workspace token refresher.
+5. The helper saves a TEST-only receipt/credential bundle **outside the checkout**, in an existing or newly created owner-private directory with mode 0700 and new file mode 0600; it refuses overwrite. The receipt must be used only for separately authorized trusted server secret provisioning. Neither the refresh credential nor client secret is returned by the browser, printed in CI or uploaded to GitHub. Immediately after successful provider login, repeat the existing read-only provider identity check and then stage trusted server Vault/secrets under the approved Phase 5D provider gates. **Do not activate** the deliberately disabled client delivery worker until independent real Storage/Google create/read/uncertainty/receipt evidence is recorded.
+
+A synthetic CI PASS verifies validation, fixed URI/scopes, CSRF/PKCE request construction, tested token-identity fail-closed behavior and no Drive write, but it **cannot prove** Google has accepted the redirect URI, issued offline consent, verified the actual Workspace identity or granted a writable client TEST root. If the exact real Google gate fails, retain all previously accepted private photo and Android evidence and leave `worker_ready=false`.
+
+
+## Accepted 2026-10-14 TEST evidence (not delivery activation)
+
+The operator's existing Workspace Chrome local loopback OAuth bootstrap produced the exact success callback after validating the Workspace identity, separate FWH CLIENT TEST writable root, and refresh credential. A later operator-run, source-pinned TEST-only `ci/probe_phase5_workspace_folder.mjs --execute` produced `PASS: TEST_FOLDER_CREATED_AND_VERIFIED` after one durably preallocated disposable folder attempt, an independent remote GET, and client Drive/parent/name-scoped LIST. Two separately authenticated non-Workspace Gmail GETs for that same TEST root returned HTTP 404. These are real limited provider observations, not proof of all future client ACLs or of a server-side same-company destination.
+
+The new candidate `20261014230000_phase_5_unverified_client_destination_proposal.sql` adds only an authenticated Admin, same-company, inactive/unverified destination proposal and immutable request journal. Tests proved duplicate-root, cross-company, Contractor and direct-activation denial; it is not deployed and creates no verified client destination. Hosted read-only Workspace OAuth refresh and exact client TEST root validation have now passed; the separate encrypted upload-session Vault, client-company destination verification/activation, real private Storage read, package file upload/receipt/reconciliation, client Send and worker readiness remain **PENDING**. Full evidence, exact CI and external-state parity are recorded only in `docs/PHASE_5_6_IMPLEMENTATION_RECORD_2026-10## Hosted Workspace TEST identity/root preflight — live read-only PASS (2026-10-15)
+
+The operator supplied the successful actual hosted Supabase `client-delivery` TEST response `{"status":"TEST_PROVIDER_VERIFIED_READ_ONLY"}`. This is accepted **real live evidence**, following correction of `FWH_CLIENT_SHARED_DRIVE_ID`, `FWH_CLIENT_DRIVE_ACCOUNT`, and `FWH_GOOGLE_OAUTH_SCOPE` after the redacted configuration diagnostic. The hosted verifier authenticated the fixed private `x-fwh-delivery-secret` header, read the TEST-only/off-mode configuration, refreshed the stored OAuth credentials, called Drive `about.get` for the exact approved Workspace account and `files.get` on the independently approved client TEST folder, checked correct separate Shared Drive and `canAddChildren`. No real photo byte upload, Drive file creation, client-company destination activation or actual delivery is implied.
+
+**Deployed boundary:** the live FWH Supabase Edge function `client-delivery` currently uses `test-preflight-only.ts` with only `test-preflight-only.mjs`, `workspace-oauth.mjs`, and `drive-client.mjs`. The actual live bundle checksum was independently read back as `8c8bf9837f57150874e1a71a14038af28d10319ffcca9a7d6aa6c2b71304839e` at function version 6. The active entrypoint has no production service-ledger, worker-runtime, private Storage or Google Drive write path; its `verify_jwt=false` is constrained by the independent tested private worker-header secret. A later version counter does not imply source changes when this SHA remains unchanged. The full runtime `handler.mjs` / `index.ts` is **PR source only and is not the active hosted function**. `FWH_CLIENT_DELIVERY_ACTIVE=false` remains required; client delivery cannot be used. Fresh live SQL after the PASS reported zero configured client destinations, zero worker-ready runtimes, and zero outbox rows.
+
+**Next independent evidence:** original frozen company destination and private Storage byte range `206` authority, TEST Google resumable create/probe/partial upload, immutable preallocated ID and remote SHA-256/parent/appProperties verification, uncertain-outcome recovery, receipt, retained originals and final package manifest. Tests in `tests/functions/client-delivery-*.test.mjs` are mocked and do not replace these external gates. The candidate `drive-client.mjs` receipt matcher additionally requires the provider's explicit `trashed:false` and exact approved appProperties key/value set before confirming an object. Keep all the previously accepted OAuth, separate client TEST root and one-shot folder evidence; do not repeat the passed connection test.
+
+**Operator credential handling decision (2026-10-15):** The Workspace OAuth TEST credentials and worker header secret were shared only in the operator's private ChatGPT conversation. There is **no observed public disclosure or unauthorized access**. The operator explicitly instructed that these saved credentials **stay unchanged**; do not force replacement merely because they appeared in that private chat. This supersedes the previous precautionary wording recommending automatic rotation because of chat exposure alone. Credentials remain in restricted local and Supabase secret storage, never in GitHub, logs, requests visible to ordinary users or the Android app. Any *new, evidenced* credential compromise would require separate safety triage; this is not evidence of one.
+
+**Release gates unchanged:** The governed Phase 5/6 source and exact Provider TEST, client-organization/role isolation, company-specific ACLs, interrupted delivery receipts, protected photo cleanup and explicit Level-3 premerge approval remain separate and **PENDING**. No scheduler, Send, photo upload or remote deletion was activated by the successful read-only preflight.
+
+## Phase 5D — disposable TEST JSON file / same-ID resumable probe (source only)
+
+The existing FWH CLIENT TEST Workspace OAuth receipt, Shared Drive, and independently verified disposable ADDRESS folder can be used for a **separate** genuine Google file-byte proof without any client/customer work. This is **not** a real Field Work Hub package, permission/ACL release, client delivery, Supabase photo Source Range GET, queue action or production rollout. Its only purpose is to exercise the existing `drive-client.mjs` Google resumable protocol with an original preallocated identity and independently verified SHA-256.
+
+New source-only files on the existing PR #40: `ci/phase5_disposable_file_core.mjs` provides the bounded, injected pure proof/state machine; `ci/probe_phase5_workspace_file.mjs` is an explicit **operator laptop CLI only**. It reuses `~/.config/field-work-hub/workspace-oauth-test.json` and `phase5-disposable-folder-proof.json` with ownership/mode checks, and stores a distinct original file journal at `~/.config/field-work-hub/phase5-disposable-file-proof.json` (exclusive 0600, fsync/atomic replace; no overwrite/new Google ID once reserved). Never paste its contents (bearer resumable session, remote IDs, credentials) into chat, GitHub or logs. Only fixed result codes are printed; Google errors are redacted.
+
+After exact branch/CI verification, optional operator-only commands in the existing PR checkout (not CI, no hosted deployment):
+
+```bash
+node ci/probe_phase5_workspace_file.mjs --prepare
+node ci/probe_phase5_workspace_file.mjs --begin
+node ci/probe_phase5_workspace_file.mjs --resume
+node ci/probe_phase5_workspace_file.mjs --verify
+```
+
+`--prepare`: separate TEST saved-folder and account check **only**; does not allocate an ID or write a file. `--begin`: requires no existing file journal, persist original generated ID then durable `START_ATTEMPTED` state before the **one** Google resumable initiation POST, save its protected session URL before sending the **first** 256-KiB disposable JSON chunk, require Google independent offset confirmation, and stop deliberately with bytes remaining. `--resume`: reuse only the saved original session/file ID, probe actual Drive offset and send only the missing final bytes; independent `files.get` must confirm SHA-256, size, exact parent, MIME, name, untrashed status, immutable `appProperties` and expected TEST Shared Drive before marking the test file verified. `--verify`: independently GET-check the same original saved remote file/metadata without any write. Never claim file confirmation from a `308` or upload `200` alone.
+
+A lost session initiation POST freezes `START_ATTEMPTED`: **no second POST/new ID** even if the remote GET fails/404s. A lost PUT is reconciled by the saved session's offset probe. A stale local test lock left by process crash is a **stop for manual journal reconciliation**; do not silently remove/retry the remote create. No deletion is performed automatically, preserving duplicate-prevention evidence and the accepted folder proof. All modes are explicit; absent/unknown mode fails before credentials are read. The pure harness tests use only fakes and do **not** establish an actual Google file PASS.
+
+This source is deliberately **not deployed** into the hosted `client-delivery` TEST-only function and cannot enable `FWH_CLIENT_DELIVERY_ACTIVE`, client `worker_ready`, customer Send, original cleanup or the separate provider/Storage readiness gates. A real operator run and recorded redacted outcome are still required.
+
+
+## Phase 5D — operator TEST upload start BLOCKED and original-ID read-only inspection
+
+**Real operator evidence (2026-10-15).** From the existing FWH Phase 5/6 checkout on the Linux laptop, `node ci/probe_phase5_workspace_file.mjs --prepare` returned `PASS: TEST_FILE_PARENT_VERIFIED` (real Workspace OAuth and saved disposable folder read-only GET). The subsequent single authorized TEST-only `--begin` attempt returned `BLOCKED: TEST_FILE_GATE_UNVERIFIED. Preserve saved TEST journal.` The operator inspected only the local journal's existence/stage/key presence (no secret values): **journal exists**, **lock absent**, **state `START_ATTEMPTED`**, **original file ID saved**, **no session URL saved**. A `START_ATTEMPTED` state is durably recorded immediately before the one Google resumable session-init POST, and the existing code cannot send the first file-byte PUT unless it has saved the session URL. Therefore **no first chunk was sent by this invocation**; a Google session-create outcome or placeholder file remains **UNCERTAIN**, not proven absent/failed/succeeded. The generic CLI error intentionally hid the stage-specific provider failure; do not infer invalid Google credentials or re-run consent.
+
+**Recovery safety and bounded diagnostic.** On this same original attempt, **never rerun `--begin`**, never delete or reset the journal, never synthesize a new file ID, and do not call `--resume` (no valid saved session). A narrowly added `--inspect` CLI mode (after the corresponding CI passes) accepts only an intact saved original journal in `START_ATTEMPTED` without a session, reuses the existing original ID and expected TEST parent/account, and performs **read-only** Drive metadata GET via the existing `drive-client.mjs` exact identity, size, SHA-256, MIME, parent, immutable appProperties and Drive checker. It does not call `generateIds`, `startResumable`, `uploadChunk` or any journal update; the private token refresh POST remains only a Google OAuth authentication request. Results are limited to `PASS: ORIGINAL_FILE_EXACT_GET_VERIFIED` (only on exact complete file receipt), or `BLOCKED: ORIGINAL_FILE_NOT_VERIFIED (PROVIDER_IDENTITY_UNCERTAIN | PROVIDER_AUTH_DENIED | REMOTE_CONTENT_UNVERIFIED | REMOTE_FILE_IDENTITY_MISMATCH | PROVIDER_RETRY_REQUIRED | PROVIDER_OUTCOME_UNCERTAIN | PROVIDER_RESPONSE_UNCERTAIN | PROVIDER_CHECK_UNAVAILABLE)`. HTTP 404/403 and incomplete metadata **never** authorize recreating the file; the original journal remains untouched. No raw token, upload URL, provider response body, file ID or account is printed.
+
+**Exact next operator step (after CI):** in the existing updated FWH checkout run only `node ci/probe_phase5_workspace_file.mjs --inspect` and return the safe one-line outcome. Do not assume a provider PASS; if unavailable, preserve this exact original attempt and assess the next governed, independently authorized recovery approach before any new Google POST. Customer delivery remains disabled and this failed disposable TEST attempt has no effect on accepted hosted read-only Workspace preflight.
+
+
+## Phase 5D — operator-approved independent replacement TEST (2026-10-17)
+
+The operator explicitly approved **one new, separately journaled disposable JSON upload**, while retaining the original 2026-10-15 Google `START_ATTEMPTED` file ID, original journal, and inconclusive exact-ID GET. This is a **new TEST identity/attempt**, not a retry of that original file or FWH customer delivery. The original `--begin`, `--resume` and `--verify` modes above remain tied to the original journal and must not be run again for this recovery.
+
+The existing `ci/probe_phase5_workspace_file.mjs` adds three dedicated commands:
+
+```bash
+node ci/probe_phase5_workspace_file.mjs --replacement-prepare
+node ci/probe_phase5_workspace_file.mjs --replacement-complete
+node ci/probe_phase5_workspace_file.mjs --replacement-verify
+```
+
+Run these commands **only in this order, on the verified PR branch after successful source CI**. `--replacement-prepare` reads/validates the unmodified original failed journal, Workspace TEST account and exact previously verified client TEST folder; no file ID is allocated. `--replacement-complete` is a one-shot bounded JSON-only new file attempt: exclusive `0600` journal at `~/.config/field-work-hub/phase5-disposable-file-proof-replacement-20261017.json`, distinct generated ID, irreversible start marker before the sole session POST, durable session URI before sending bytes, 256 KiB first chunk, offset reconciliation, remainder and independent final exact ID/parent/name/Drive/hash/size GET. A subsequent `--replacement-complete` can resume only a **saved** original replacement session, or re-verify its already completed receipt; it can NEVER issue another session POST/new ID after an uncertain start. `--replacement-verify` rechecks exact completed replacement file metadata only, without upload. The original journal is opened read-only throughout all three replacement commands.
+
+Only allowlisted failure codes are printed; raw HTTP response bodies, OAuth credentials, Google IDs, private journals or session URLs are never printed or committed. If a command reports **BLOCKED**, stop and retain BOTH journals and any lock; do not delete, reset, choose another ID, reconsent or re-run old `--begin`. Do not mistake source/CI success or a TEST JSON receipt for real Supabase Range 206, photo package Send, production Drive delivery, email/push or device evidence. Hosted delivery, workers, migrations, customer photos and FPP remain unchanged. The original ambiguous TEST file is not declared absent or cleaned up.
+
+
+## Phase 5D — third independently approved disposable Google TEST (2026-10-17)
+
+After the original TEST (October 15, `START_ATTEMPTED` with no saved session) and the separately approved replacement TEST (October 17, `UNTRUSTED_UPLOAD_SESSION` before any byte PUT) were both frozen, the operator explicitly approved **one additional, independently journaled disposable TEST upload**. The new probe is available **only** in the existing operator laptop TEST script and existing verified TEST Workspace/client folder. No customer photo, real client destination, FWH Send, Supabase migration, hosted worker or production deployment is involved. A prior read-only Google folder PASS does not prove a file upload; only an independently verified byte/hash receipt does.
+
+Use only these newly approved commands, in order, after the exact updated PR branch passes CI:
+
+```bash
+node ci/probe_phase5_workspace_file.mjs --third-prepare
+node ci/probe_phase5_workspace_file.mjs --third-complete
+node ci/probe_phase5_workspace_file.mjs --third-verify
+```
+
+`--third-prepare` revalidates **both unchanged earlier TEST journals** in their frozen states, the approved Google Workspace principal, and the existing verified TEST folder; it does not generate an ID or write Google files. `--third-complete` uses a separate exclusive, owner-only, fsynced local journal at `~/.config/field-work-hub/phase5-disposable-file-proof-third-20261017.json` and one immutable Google ID different from both earlier IDs. It marks `START_ATTEMPTED` before the single session-start POST, saves a trusted session URL before any byte PUT, performs an interrupted 256-KiB/resumed remainder TEST JSON upload only through that saved session, and requires independent exact ID, Shared Drive, parent, filename, MIME, appProperties, size and SHA-256 GET confirmation. It may only resume a **previously saved session in its own journal**, never create a fourth file. `--third-verify` independently rechecks the same file without new provider bytes.
+
+All three commands reuse the original account credentials and existing one-operator lock; they read **both previous journals without modifying them**. If any command returns `BLOCKED`, **stop** and preserve all THREE private journals and IDs; no rerun of `--begin` or `--replacement-complete`, journal deletion/reset, credential reconsent, fresh ID, manual provider cleanup or further upload is authorized. Output is restricted to redacted pass/block codes: never paste or publish JSON journals, Google Location/session bearer URLs, IDs or tokens. A TEST-only real Google JSON success is distinct from the still-pending real Supabase private Storage byte Range 206, protected photo package/manifest delivery, Admin Send and completion/cleanup gates.
+
+
+## Phase 5D — deep-dive session URL correction and read-only reconciliation (2026-10-17)
+
+The operator provided a deep-dive of the three failed TEST initiations. Google's official Drive [resumable upload guide](https://developers.google.com/workspace/drive/api/guides/manage-uploads) requires uploadType=resumable on the initiation request and directs callers to preserve the returned Location URI for subsequent PUTs, without defining a required grammar for its path or query string. Attempt 3 failed local UPLOAD_SESSION_QUERY_UNRECOGNIZED validation before a byte PUT; the exact rejected URL is not recoverable from the original journal. The source correction in the existing Drive adapter removes those unsupported path, query-key, uploadType and upload_id requirements for the returned Location. It still requires a strict HTTPS www.googleapis.com origin, rejects userinfo, fragments and raw controls, bounds URI length to the protected local journal capacity, prevents redirected bearer requests and retains the exact URI rather than reconstructing it. The existing protected 0600/fsynced session journal, one-shot provider identity, offset-probe-before-content and independent final metadata/content verification remain unchanged. These source changes alone do not establish a real Google byte-upload PASS.
+
+Read-only laptop inspection after updated branch/CI verification:
+
+    node ci/probe_phase5_workspace_file.mjs --inspect-all
+
+The command authenticates using the existing verified TEST Workspace account, verifies the same TEST folder, then performs exact-ID metadata GETs for the ORIGINAL, SECOND and THIRD frozen disposable attempts. It emits only redacted PASS/BLOCKED classifications; no new Drive ID, upload-session POST, chunk PUT, journal update, remote file deletion or customer Send occurs. OAuth refresh may contact Google's token endpoint but does not create a Drive file. A 404/410 is PROVIDER_IDENTITY_UNCERTAIN and does not prove that an unsaved session does not exist. Never paste journal JSON, OAuth secrets, file IDs or Location session URLs. The operator's third-attempt approval is consumed; neither this diagnosis nor the read-only command authorizes any fourth attempt, old-journal reset, retry, or live client delivery. PR #40 remains draft/unmerged.
+
+
+## Phase 5D — native Fetch 308 handling corrected before next provider TEST (2026-10-17)
+
+**Confirmed local transport defect, not a proven Google response:** A native Node.js 22.16 local HTTP-server experiment returned `308` with `Range` and **no** `Location`. Calling `fetch` with `redirect:'error'` threw `fetch failed` instead of exposing the valid `308`. Previous fake-fetch tests returned `new Response(308)` directly, so they never exercised Fetch's actual redirect machinery. This would have prevented source's zero-byte progress probe or first 256-KiB incomplete-chunk acknowledgement on such a runtime even after a good session `Location` was saved.
+
+**Bounded fix:** Only resumable status/chunk `PUT` calls use native `redirect:'manual'` to expose 308/Range. The existing single trusted Google origin, OAuth authentication, opaque saved URI, exact session journal and controlled chunk sizes remain. A manual response carrying **any 3xx Location** is explicitly rejected with `PROVIDER_REDIRECT_FORBIDDEN` before a second request can be sent; other Google request types still use `redirect:'error'`. This is NOT permission for the client to follow redirects. The adapter never accepts a Location-bearing 308 as acknowledged content, and terminal 200/201 still requires independent exact Drive metadata/size/SHA proof.
+
+**Nonprovider regression:** The existing Drive adapter tests now include an actual disposable localhost HTTP server with native Node fetch, proving a Google-shaped `308` without Location is exposed with its exact Range and a 308 containing Location is rejected without requesting its destination. Existing fake protocol/security tests continue. No live Google file/session was created, neither the three protected old journals nor permissions were touched, and no new remote attempt is authorized by this fix.
+
+
+## Phase 5D — fourth provider TEST staged in code, not authorized to run
+
+On the existing sole Phase 5/6 draft PR #40, a fourth **separately journaled** disposable synthetic TEST is source-staged following three real Google one-shot session attempts whose original Location values were rejected before durable storage, and all three exact file IDs were independently inspected without a verified final file. The three frozen source journals remain the only truth of those prior attempts. The current tested adapter now preserves trusted returned Google Location verbatim and uses native Fetch manual no-follow for upload-progress 308 while rejecting actual redirect destinations.
+
+The fourth harness accepts only the three owner-private immutable prior journals at their exact START_ATTEMPTED state with no saved session and mutually distinct TEST UUID/file IDs, verified same Workspace TEST Drive/folder/size/SHA identity. It refuses accidental reuse of any earlier ID. Its new journal is **only** `~/.config/field-work-hub/phase5-disposable-file-proof-fourth-20261017.json`; it is never substituted for, or written over, the three originals. Any initiated fourth session is one-shot and checkpointed before POST, encrypted/owner-protected local credential architecture unchanged. A failed start remains frozen: no automatic subsequent POST, fifth attempt, reset or cleanup.
+
+The source exposes `--fourth-prepare` (read-only account/folder and 3 immutable attempts check), `--fourth-complete` (one new generated ID, **real** provider session + synthetic 299,665-byte upload and independently verified receipt), and `--fourth-verify` (independent current journal/remote GET). `--fourth-complete` is **not approved to run** by the operator's message "Next"; it requires explicit separate operator approval for that fourth provider write. Documentation of commands is not permission to execute them. No Google request, new fourth ID, upload or credentials change occurred during this source preparation. `--inspect-all` still reads precisely the old three, never the new fourth.
+
+Once permission is given and exact CI green, use existing checkout and same branch; run *prepare*, then *complete*, then *verify* only upon a new fourth specific approval. On any BLOCKED, preserve **all four** journals if created, never retry the remote session-start or reconstruct missing Location, and report only bounded redacted result lines. Even a successful synthetic TEST SHA proof would not establish actual Supabase private Storage Range/206 or customer package/Send; delivery worker and public merge/deploy remain disabled.
+
+
+## Phase 5D — fourth provider synthetic upload completed and verified (2026-10-17)
+
+The operator separately approved one fourth disposable Google Drive upload and observed PASS: TEST_FILE_PARENT_VERIFIED on the TEST identity/folder preparation, followed by PASS: TEST_FOURTH_FILE_SHA256_VERIFIED from the one-time fourth-complete command. The real Drive resumable upload created a new synthetic application/json object in the verified TEST destination, checkpointed the returned Location before bytes, sent a first 256-KiB chunk and a 37,521-byte final chunk, and passed an independent exact Google file/Drive/parent/name/application-properties/size/SHA-256 GET. This is accepted genuine provider evidence; no repeat is required.
+
+Earlier staged/preauthorization sections above describe historical conditions before this real pass and are superseded on fourth TEST authorization/status. Preserve all four owner-private TEST journals and the verified synthetic Drive file until deliberate fixture reconciliation. The three earlier uncertain starts remain frozen; do not replay them or create a fifth file. No customer JPEG, Supabase Storage Range 206, actual client-company Send, hosted trusted worker, deployed keys or final photo cleanup was tested by this disposable JSON proof. Draft PR #40 remains unmerged and production delivery stays disabled; the exact live physical evidence and outstanding gates are also recorded in the existing authoritative Phase 5/6 implementation record.
+
+
+## Default-OFF leased continuation candidate (2026-10-19)
+
+This is a **source-only implementation candidate** on existing PR #40. The existing `handler.mjs` now recognizes one-step, worker-secret-only operations **only when** `FWH_CLIENT_DELIVERY_ACTIVE=true`: `reconcile_parent` (geographic ancestor STATE/COUNTY/CITY only), `reconcile_geographic_leaf` (ADDRESS/WORK_ORDER only), `reconcile_package_folder` and `transfer_one_chunk`. The ordinary `preallocate` command is unchanged. Each continuation must provide the exact `package_id`, `worker_id`, positive integer `generation` and either current server `kind` or exact `plan_id`. The existing `service-ledger.mjs` and `worker-runtime.mjs` recheck that current lease, project, source and frozen destination; the client cannot supply a remote Google folder/file ID, a destination, a photo path or a new claim. Unknown operations, extra fields, malformed identities or stale/invalid worker results fail closed, and response bodies contain generic status codes only. The old legacy parent route cannot be selected for geographic leaves.
+
+The file-continuation operation additionally requires a protected, separate **32-byte base64url AES-GCM** `FWH_CLIENT_DELIVERY_SESSION_VAULT_KEY`, passed through `index.ts` to the existing `session-vault.mjs`; missing/wrong key stops instead of allocating a new remote upload identity. No token, key, private receipt or URL is persisted or returned to clients by these routes. Existing one-shot server reservations and Drive GET/proof gates still own remote truth; a completed chunk or a 308 is not DELIVERED.
+
+**Do not deploy or flip flags from this source alone.** The live Team `client-delivery` v11 remains the distinct `test-preflight-only.ts` read-only bundle; the one existing verified client TEST destination remains `active=false`, and no delivery worker, outbox Send or scheduler has been enabled. These source routes are intentionally **not an autonomous resumable delivery engine**: a trusted private scheduler/operator harness must durably recover the actual server-issued `worker_id` and lease generation from the original claim, choose only the server-authorized next step, and enforce interruption/UNCERTAIN/provider-readback policy before use. The source `preallocate` response still does not return lease identifiers to browser callers, and an expired lease is not automatically requeued. No claim of complete delivery, uninterrupted resume or actual client-photo byte Send is justified by Node mocks. Finish the existing guarded scheduler/harness/recovery integration and one combined disposable real TEST provider+phone evidence gate before any hosted activation; no PR #40 merge or original FPP change is implied.
+
+
+**Resumable-session encryption parity (2026-10-19 source correction):** Google's returned `Location` is an opaque same-origin capability; `uploadType=resumable`, `upload_id`, fixed query order and path are **initiation details, not guaranteed URL grammar for returned sessions**. The trusted `drive-client.mjs` already preserves the returned URL as-is. `session-vault.mjs` now applies the same strict HTTPS `www.googleapis.com` **origin** check, rejects credentials/fragments/controls/foreign origins and caps the sealed input to 7,000 characters to fit the encrypted journal, but does not normalize/reconstruct the returned path/query. AES-GCM still binds the ciphertext to the exact package/file ID. Node tests cover precise encrypted roundtrip of opaque query/path variants and invalid origin/size cases. This is source-only preparation; no previously frozen TEST journals were rewritten, decrypted or retried, and no live Drive upload/delivery was performed.
+
+
+## Original-lease single-step wakeup candidate (2026-10-19)
+
+**Source only; not installed in FWH Team.** The additive canonical migration `20261019170000_phase_5_delivery_active_lease_resume_read.sql` adds a service_role-only, no-input **read-only** `service_read_active_delivery_lease()` RPC. It reads the original `DELIVERING` outbox's saved package ID, worker ID, lease generation, approved manifest and current guarded destination. It returns `NONE` when there is no active lease and `BLOCKED_UNCERTAIN` when the original active lease is expired, malformed or disagrees with the approved package/current active destination. It **never renews a lease**, enqueues, changes the attempt counter, creates a second worker, authorizes an inactive destination, or replaces a Google ID. The returned immutable resume record is restricted to the backend service JWT, not a browser. The existing `service_heartbeat_delivery` and every receipt/attempt CAS continue to own the actual lease authority.
+
+The same candidate `handler.mjs` adds exact worker-secret-only `{ "operation": "advance_once" }` while `enabled=true` **only**. The caller cannot supply a package, company, folder, plan or remote ID. `worker-runtime.mjs` `advanceTrustedDeliveryOneStep` reads the original active lease first; when none exists, it uses the existing fenced one-shot `service_claim_delivery`. It reuses the same provider preallocation owner and advances **at most one existing guarded STATE/COUNTY/CITY/ADDRESS/WORK_ORDER folder step**, honoring frozen geographic vs legacy layout and one-shot ATTEMPTED/GET receipts. Inactive/uncertain/stale/changed work remains blocked. Final package-folder creation, photo and manifest uploads, and terminal `DELIVERED` are **NOT** performed by `advance_once` and require the separately approved, still-incomplete source scheduler/provider testing. A surviving lease is read back from SQL on a new process; no new local or browser-owned session journal is introduced. Multiple wakeups must still be serialized by the private scheduler at the release gate; this pilot candidate is not proof of safe parallel production dispatch.
+
+**Current reality:** Hosted `client-delivery` v11 is still the separate read-only TEST verifier, not this source. Team has 103 applied versions; this is the **104th source migration, deliberately unapplied** pending the governed exact-filename CLI deployment and TEST release evidence gate. One TEST destination remains verified but inactive; zero worker-ready, packages, outbox deliveries, final receipts or scheduled Send. The existing runtime's two-minute lease cannot be recovered after expiry by this RPC; an expired attempt becomes BLOCKED and requires the existing explicit same-ID UNCERTAIN reconciliation. This is not a retry feature. No Google folder/photo operation was performed by adding this source.
+
+
+## Phase 5D — one-slot hosted delivery dispatch (SOURCE ONLY, 2026-10-19 CDT)
+
+The original `service_claim_delivery` / `service_delivery_guard` outbox lease fences each
+database operation but it does **not** hold a PostgreSQL transaction lock during a
+Google HTTP request. Since `pg_net` HTTP delivery is asynchronous, cron's
+one-minute cadence does not guarantee non-overlapping Edge requests.
+
+The new **additive and unapplied** canonical migration
+`20261020020000_phase_5_delivery_dispatch_singleflight.sql` introduces one
+private, global, RLS-enabled singleton permit row for the **existing** worker.
+Only `service_role` can call its two narrow atomic RPCs. Every activated,
+worker-secret-validated mutating operation (`advance_once`, legacy guarded
+`preallocate`, and the fenced parent/folder/chunk continuations) must acquire
+a freshly generated private request UUID **before** fetching Workspace OAuth
+or reading/claiming the original outbox. An overlapping request gets a
+generic `WORKER_BUSY` without OAuth or provider calls. The original step
+releases only on a positively verified completion response; wrong-owner
+release cannot clear the row.
+
+**No automatic expiry, takeover or reset.** On crash, uncertain provider
+outcome, failed OAuth, unexpected SQL response or missing verification the
+permit remains occupied across Edge process restarts. Operator recovery
+requires an explicit inspection of the **original** frozen IDs, folder/file
+attempt receipts, lease/outbox, uploaded bytes and last Google outcome before
+any DBA-managed release. Never simply delete the permit to restart delivery,
+and never allocate replacement Google IDs. This is a conservative safety
+fence, not a scheduler, second queue, customer delivery activation or
+complete recovery operator UI.
+
+Tests are source-only Node HTTP overlap / blocked failure checks plus a
+rollback-only real PostgreSQL service-role/permission/singleton fixture in
+the existing test suite. A mock cannot prove an actual hosted crash,
+`pg_net` retry behavior or a real Google delivery. Current Team TEST
+has **107** installed migrations and still runs read-only
+`client-delivery` v11; the new migration is **108th source-only** and is
+not applied or deployed by this documentation. A modified exact-head
+`ci/phase5d_team_migration_preflight.sh` previews **only** this one new
+canonical migration. Do not apply/activate before the governed TEST rollout,
+final CI and real provider/device gates.
+
+## Phase 5D — installed-permit operator inspection (read-only, 2026-10-19 CDT)
+
+Use the existing `ci/phase5d_delivery_reconciliation_readonly.sql` in the
+authorized **FWH Team** Supabase SQL editor for a bounded, no-write snapshot
+when a genuine delivery attempt or crash leaves the *single existing*
+dispatcher occupied. The six SELECT statements were independently executed
+on Team TEST after migration **108** was installed: **PASS**, one summary row
+showing zero occupied permits/outbox/file plans/sessions/receipts, no ready
+workers/active destinations/scheduler, and exactly one verified inactive TEST
+destination; the five bounded private detail queries returned zero records.
+
+The script deliberately does **not** contain an emergency unlock or perform
+`acquire`, `release`, `DELETE`, `UPDATE`, `INSERT`, `TRUNCATE`,
+`cron`, provider retry, or Edge deployment. Do not share its private UUIDs,
+Drive IDs, or receipt details in GitHub/CI. A missing row in its bounded
+output is not proof that no older record exists. If a permit is occupied,
+pause the governed scheduler if provisioned, inspect the original outbox,
+original lease, immutable file/folder IDs and real provider status before a
+separately evidenced **same-ID** reconciliation. If any provider outcome
+remains ambiguous, retain the permit and hard stop rather than clearing it
+to create a duplicate client delivery.
+
+This is an **operator diagnostic**, not real Google/Android provider evidence
+and not authorization to deploy the pending mutating hosted worker. The
+current hosted function remains read-only v11; real hosted execution and
+Vault-backed scheduler provisioning remain pending under the existing plan.

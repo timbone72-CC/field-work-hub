@@ -24,3 +24,52 @@ test('display order and stage/framing do not add another counting rule', () => {
   const c = configuration(null, [4, 4]); c.items[0].stage = 'DURING'; c.items[0].framing = 'WIDE'; c.items[0].order = 9;
   assert.equal(rules.validate(c).minimum, 8);
 });
+
+test('Phase 6B suggestions include only active matching work-type templates, default first',()=>{
+ const entries=[
+  {id:'z',name:'Alternate',active:true,work_type:' Inspection ',is_default:false},
+  {id:'a',name:'Main',active:true,work_type:'inspection',is_default:true},
+  {id:'x',name:'Other',active:true,work_type:'Grass Cut',is_default:true},
+  {id:'h',name:'Archived',active:false,work_type:'Inspection',is_default:false}
+ ];
+ assert.deepEqual(rules.suggestions(entries,'INSPECTION').map(t=>t.id),['a','z']);
+ assert.deepEqual(rules.suggestions(entries,''),[]);
+});
+test('Phase 6B prior requirements are cloned with fresh revision, never mutating original',()=>{
+ const original=rules.empty();
+ const before=structuredClone(original);
+ const newer=rules.copyPriorSnapshot(original);
+ assert.notEqual(newer.revision,original.revision);
+ assert.deepEqual(original,before);
+ assert.deepEqual(newer.items,original.items);
+ const legacy=rules.copyPriorSnapshot({});
+ assert.equal(legacy.total.enabled,false);
+ assert.deepEqual(legacy.items,[]);
+ assert.throws(()=>rules.copyPriorSnapshot({schema:2}),/requirements|total|supported/i);
+});
+
+test('Phase 6B company templates are excluded for unrelated/unassigned work, defaults resolve company first',()=>{
+ const a='00000000-0000-4000-8000-000000000099';
+ const b='00000000-0000-4000-8000-000000000100';
+ const list=[
+  {id:'org',company_id:null,name:'Organization default',active:true,work_type:'Mowing',is_default:true},
+  {id:'b',company_id:b,name:'Other company',active:true,work_type:'mowing',is_default:true},
+  {id:'a',company_id:a,name:'Local default',active:true,work_type:'mowing',is_default:true},
+  {id:'alt',company_id:a,name:'Local alternative',active:true,work_type:'MOWING ',is_default:false},
+  {id:'arch',company_id:a,name:'Archived',active:false,work_type:'Mowing',is_default:true}
+ ];
+ assert.deepEqual(rules.suggestions(list,'mOWING',a).map(x=>x.id),['a','org','alt']);
+ assert.deepEqual(rules.suggestions(list,'Mowing',b).map(x=>x.id),['b','org']);
+ assert.deepEqual(rules.suggestions(list,'Mowing',null).map(x=>x.id),['org']);
+ assert.deepEqual(rules.suggestions(list,'Missing',a),[]);
+});
+test('Phase 6B company template saving retains the existing editor and server-owned mutation',()=>{
+ const content=require('node:fs').readFileSync(require.resolve('../../dashboard/photo-requirements.js'),'utf8');
+ assert.match(content,/admin_save_company_photo_template/);
+ assert.match(content,/p_company_id:company/);
+ assert.match(content,/p_expected_revision:/);
+ assert.match(content,/this\.companyId/);
+ assert.match(content,/token!==accessToken/);
+ assert.match(content,/Use Save as new template to change company availability/);
+ assert.doesNotMatch(content,/innerHTML/);
+});

@@ -24,6 +24,27 @@ const PhotoRules = {
     const total = value.total.enabled ? value.total.minimum : 0;
     return { specified, additional: Math.max(0, total - specified), minimum: Math.max(total, specified) };
   },
+  suggestions(templates,workType,companyId=null) {
+    const type=String(workType||'').trim().toLowerCase();
+    if (!type || !Array.isArray(templates)) return [];
+    const company=companyId||null;
+    return templates.filter(t=>t?.active===true && typeof t.work_type==='string'
+      && t.work_type.trim().toLowerCase()===type
+      && (!t.company_id || (company && t.company_id===company)))
+      .sort((a,b)=>Number(Boolean(b.is_default))-Number(Boolean(a.is_default))
+        || Number(Boolean(b.company_id))-Number(Boolean(a.company_id))
+        || String(a.name).localeCompare(String(b.name))
+        || String(a.id).localeCompare(String(b.id)));
+  },
+  copyPriorSnapshot(value) {
+    // A legacy job with no configured requirements is explicitly optional;
+    // it must not inherit fabricated required photo categories.
+    const copied=value && typeof value==='object' && !Array.isArray(value)
+      && Object.keys(value).length ? structuredClone(value) : this.empty();
+    this.validate(copied);
+    copied.revision=crypto.randomUUID();
+    return copied;
+  },
   summary(value) {
     const c = this.validate(value);
     return c.minimum ? `${c.specified} specified photos${c.additional ? ` + at least ${c.additional} additional` : ''}. Minimum ${c.minimum} unique photos.` : 'Photos optional. Inspectors can still take Extra photos.';
@@ -32,10 +53,22 @@ const PhotoRules = {
 if (typeof module !== 'undefined') module.exports = PhotoRules;
 
 class PhotoRequirementEditor {
-  constructor(element, getWorkType) {
-    this.element = element; this.getWorkType = getWorkType; this.value = PhotoRules.empty(); this.templates = []; this.selectedId = ''; this.locked = false;
+  constructor(element, getWorkType, onTemplateApplied = null, manageTemplates = true) {
+    this.manageTemplates = manageTemplates;
+    this.element = element; this.getWorkType = getWorkType; this.onTemplateApplied = onTemplateApplied;
+    this.value = PhotoRules.empty(); this.templates = []; this.selectedId = ''; this.locked = false;
+    this.companyId = null; this.fetchEpoch = 0;
     this.render();
   }
+  setCompany(companyId) {
+    const next=companyId||null;
+    if (this.companyId===next) return;
+    this.companyId=next; this.refreshSuggestions();
+  }
+  clearAccount() {
+    this.fetchEpoch++; this.templates=[]; this.companyId=null; this.load(null);
+  }
+  applicable() { return PhotoRules.suggestions(this.templates,this.getWorkType(),this.companyId); }
   load(value, locked = false) {
     this.value = value && Object.keys(value).length ? structuredClone(value) : PhotoRules.empty();
     this.legacy = !value || !Object.keys(value).length; this.expectedRevision = this.legacy ? null : value.revision;
@@ -46,18 +79,34 @@ class PhotoRequirementEditor {
     PhotoRules.validate(this.value); return structuredClone(this.value);
   }
   async reloadTemplates() {
+    const epoch=++this.fetchEpoch, token=accessToken;
     const response = await adminFetch(`${SUPABASE_URL}/rest/v1/photo_templates?select=*&order=name.asc`, { headers: authHeaders() });
+    if (epoch!==this.fetchEpoch || token!==accessToken || !token) return;
     if (!response.ok) throw Error(await readableError(response, 'Unable to load photo templates.'));
-    this.templates = await response.json(); this.render();
+    const templates=await response.json();
+    if (epoch!==this.fetchEpoch || token!==accessToken || !token) return;
+    if (!Array.isArray(templates)) throw Error('Unexpected template list.');
+    this.templates=templates; this.refreshSuggestions();
+  }
+  refreshSuggestions() {
+    if (this.selectedId && !this.applicable().some(t=>t.id===this.selectedId))
+      this.selectedId='';
+    this.render();
   }
   useDefault() {
-    const t = this.templates.find(t => t.active && t.is_default && t.work_type.toLowerCase() === this.getWorkType().trim().toLowerCase());
+    const t = this.applicable().find(t=>t.is_default);
     if (t && !this.locked) this.choose(t.id);
+    else this.refreshSuggestions();
   }
   choose(id) {
-    this.selectedId = id;
-    const t = this.templates.find(t => t.id === id);
-    this.value = t ? structuredClone(t.requirements) : PhotoRules.empty(); this.value.revision = crypto.randomUUID(); this.render();
+    const t = this.applicable().find(t=>t.id===id);
+    if (t) {
+      PhotoRules.validate(t.requirements);
+      if (this.onTemplateApplied && this.onTemplateApplied(t)===false) return;
+    }
+    this.selectedId=t?.id||'';
+    this.value=t ? structuredClone(t.requirements) : PhotoRules.empty();
+    this.value.revision=crypto.randomUUID(); this.render();
   }
   render() {
     const host = this.element; host.replaceChildren();
@@ -74,7 +123,10 @@ class PhotoRequirementEditor {
     };
     const action = (label, work, parent = host) => { const el = node('button', label, parent); el.type = 'button'; el.className = 'secondary'; el.disabled = this.locked; el.addEventListener('click', work); return el; };
     node('h3', 'Photo requirements');
-    select('Photo template', [['', 'Custom / all optional'], ...this.templates.filter(t => t.active).map(t => [t.id, `${t.name}${t.is_default ? ' · default' : ''}`])], this.selectedId, id => this.choose(id));
+    const suggested=this.applicable();
+    select('Photo template', [['', 'Custom / all optional'], ...suggested.map(t => [t.id,
+      `${t.name} · ${t.company_id?'This company':'Organization'}${t.is_default ? ' · default' : ''}`])],
+      this.selectedId, id => this.choose(id));
     const summary = node('p', '', host); summary.className = 'muted';
     const updateSummary = () => { try { summary.textContent = PhotoRules.summary(this.value); } catch (e) { summary.textContent = e.message; } };
     if (this.locked) node('p', 'Requirements are frozen after Start. Dispatch details can still be edited.');
@@ -100,22 +152,48 @@ class PhotoRequirementEditor {
       this.value.items.push({ id: crypto.randomUUID(), label: '', enabled: true, minimum: 1, instruction: '', stage: 'NONE', framing: 'NORMAL', order: this.value.items.length }); this.render(); });
     action('Make every requirement optional', () => { this.value.total.enabled = false; this.value.items.forEach(i => i.enabled = false); this.render(); });
     node('p', 'One photo satisfies one selected item and counts once toward the total. Inspectors choose any order.').className = 'muted';
+    if (!this.manageTemplates) { updateSummary(); return; }
     const manage = node('details'); node('summary', 'Save or manage templates', manage);
-    const selected = this.templates.find(t => t.id === this.selectedId);
+    const selected = suggested.find(t => t.id === this.selectedId);
     const name = input('Template name', 'text', selected?.name || '', () => {}, manage); name.maxLength = 100;
+    const scope=select('Template available to', [['','All companies in this organization'],
+      ...(this.companyId ? [[this.companyId,'This job company']] : [])],
+      selected?.company_id||'', () => {}, manage);
+    const description=input('Template description', 'text', selected?.description||'', () => {}, manage);
+    description.maxLength=2000;
+    const instructionsLabel=node('label','Template instructions (copied into editable work-order instructions)',manage);
+    const templateInstructions=node('textarea','',instructionsLabel);templateInstructions.rows=3;
+    templateInstructions.maxLength=4000;templateInstructions.value=selected?.instructions||'';
+    templateInstructions.disabled=this.locked;
     const makeDefault = input('Default for this work type', 'checkbox', selected?.is_default || false, () => {}, manage);
     const status = node('p', '', manage); status.setAttribute('role', 'status');
     const save = async (asNew, active = true) => {
+      const epoch=this.fetchEpoch, token=accessToken, companyAtOpen=this.companyId;
       try {
-        PhotoRules.validate(this.value); status.textContent = 'Saving template…';
-        const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_save_photo_template`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify({
-          p_id: !asNew && selected ? selected.id : crypto.randomUUID(), p_name: name.value.trim(), p_work_type: this.getWorkType().trim(),
-          p_requirements: this.snapshot(), p_active: active, p_is_default: makeDefault.checked,
-          p_expected_revision: !asNew && selected ? selected.revision : null
+        PhotoRules.validate(this.value);
+        const company=scope.value||null;
+        if (!asNew && selected && (selected.company_id||null)!==company)
+          throw Error('Use Save as new template to change company availability.');
+        if (company && company!==companyAtOpen)
+          throw Error('Open an authorized job for this company before saving.');
+        status.textContent = 'Saving template…';
+        const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_save_company_photo_template`, {
+          method: 'POST', headers: authHeaders(true), body: JSON.stringify({
+          p_id: !asNew && selected ? selected.id : crypto.randomUUID(),
+          p_name:name.value.trim(),p_work_type:this.getWorkType().trim(),
+          p_requirements:this.snapshot(),p_active:active,p_is_default:makeDefault.checked,
+          p_expected_revision: !asNew && selected ? selected.revision : null,
+          p_company_id:company,p_description:description.value,p_instructions:templateInstructions.value
         }) });
+        if (epoch!==this.fetchEpoch || token!==accessToken || companyAtOpen!==this.companyId) return;
         if (!response.ok) throw Error(await readableError(response, 'Unable to save template.'));
-        const saved = await response.json(); this.selectedId = active ? saved.id : ''; await this.reloadTemplates();
-      } catch (e) { status.textContent = e.message; }
+        const saved = await response.json();
+        if (epoch!==this.fetchEpoch || token!==accessToken || companyAtOpen!==this.companyId) return;
+        this.selectedId = active ? saved.id : ''; await this.reloadTemplates();
+      } catch (e) {
+        if (epoch===this.fetchEpoch && token===accessToken && companyAtOpen===this.companyId)
+          status.textContent = e.message;
+      }
     };
     action(selected ? 'Update template' : 'Save template', () => save(false), manage);
     if (selected) { action('Save as new template', () => save(true), manage); action('Archive template', () => save(false, false), manage); }

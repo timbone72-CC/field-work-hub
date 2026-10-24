@@ -40,11 +40,11 @@ begin
   if v_admin is null or v_a is null or v_b is null then
     raise exception 'Gate requires one existing Admin and two accepted test Contractors';
   end if;
-  v_admin_claims := jsonb_build_object('sub',v_admin,'role','authenticated',
+  v_admin_claims := jsonb_build_object('sub',v_admin,'session_id',v_admin,'role','authenticated',
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',v_org))::text;
-  v_a_claims := jsonb_build_object('sub',v_a,'role','authenticated',
+  v_a_claims := jsonb_build_object('sub',v_a,'session_id',v_a,'role','authenticated',
     'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',v_org))::text;
-  v_b_claims := jsonb_build_object('sub',v_b,'role','authenticated',
+  v_b_claims := jsonb_build_object('sub',v_b,'session_id',v_b,'role','authenticated',
     'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',v_org))::text;
 
   foreach v_relation in array array['public.work_order_runs','public.work_order_assignments'] loop
@@ -231,7 +231,7 @@ begin
     if not v_denied then raise exception 'Photo accepted another contractor WO'; end if;
 
     -- Wrong organization and role cannot acknowledge the current assignment.
-    perform set_config('request.jwt.claims',jsonb_build_object('sub',v_a,'role','authenticated',
+    perform set_config('request.jwt.claims',jsonb_build_object('sub',v_a,'session_id',v_a,'role','authenticated',
       'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',v_other_org))::text,true);
     if exists(select 1 from public.work_order_runs where id=v_run)
        or exists(select 1 from public.work_order_assignments where run_id=v_run) then
@@ -242,7 +242,7 @@ begin
     exception when insufficient_privilege then v_denied:=true;
     end;
     if not v_denied then raise exception 'Cross-organization RPC succeeded'; end if;
-    perform set_config('request.jwt.claims',jsonb_build_object('sub',v_a,'role','authenticated',
+    perform set_config('request.jwt.claims',jsonb_build_object('sub',v_a,'session_id',v_a,'role','authenticated',
       'app_metadata',jsonb_build_object('role','VIEWER','organization_id',v_org))::text,true);
     v_denied:=false;
     begin perform public.acknowledge_assignment_received(v_wo);
