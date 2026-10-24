@@ -232,6 +232,100 @@ test('hosted worker still refuses all recovery-write operations',async()=>{
  }
 });
 
+const hostedRecoveryOpts={
+ enabled:false,testPreflightEnabled:true,testRecoveryEnabled:true,
+ workerSecret:secret,testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',
+ testReleasePackageId:packageId,testReleaseDestinationId:destinationId,
+ testRootFolderId:root,expectedDriveId:driveId,
+ internalDriveId:'internal_shared_drive_0123456789',
+ testWorkspaceDomain:'example.invalid',expectedAccount:scope,
+ supabaseUrl:'https://fwh-test.supabase.co',
+ serviceRoleJwt:'header.payload.signature',
+ oauthScope:'https://www.googleapis.com/auth/drive',
+ clientId:'disposable-oauth-client-00001',
+ clientSecret:'disposable-client-secret-0001',
+ refreshToken:'disposable-refresh-token-0001',
+ fetcher:()=>{throw Error('TEST_ROUTE_MUST_NOT_TOUCH_NETWORK');},
+ makeWorkerId:()=>uuid(98)
+};
+function recoveryRequest(body,credential=secret){
+ return new Request('https://worker.invalid',{
+  method:'POST',headers:{'content-type':'application/json',
+   'x-fwh-delivery-secret':credential},body:JSON.stringify(body)
+ });
+}
+test('hosted recovery operation is independently default OFF and never enables generic delivery',async()=>{
+ const disabled=createDeliveryHandler({...hostedRecoveryOpts,testRecoveryEnabled:false});
+ const denied=await disabled(recoveryRequest({operation:'recover_original_parent_once'}));
+ assert.equal(denied.status,400);
+ assert.deepEqual(await denied.json(),{status:'EXACT_REQUEST_REQUIRED'});
+ for(const values of [{enabled:true},{testPreflightEnabled:false}]){
+  const conflicting=createDeliveryHandler({...hostedRecoveryOpts,...values});
+  const response=await conflicting(recoveryRequest({operation:'recover_original_parent_once'}));
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{status:'CONFLICTING_WORKER_MODES'});
+ }
+});
+
+test('hosted original-only TEST route denies wrong secret, extra caller IDs and wrong frozen destination',async()=>{
+ let calls=0;
+ const handler=createDeliveryHandler({...hostedRecoveryOpts,
+  recoverOriginalTestParent:()=>{calls++;throw Error('MUST_NOT_CALL');}
+ });
+ for(const [body,key,code] of [
+  [{operation:'recover_original_parent_once'},'wrong-secret','WORKER_UNAUTHORIZED'],
+  [{operation:'recover_original_parent_once',package_id:packageId},secret,'EXACT_REQUEST_REQUIRED'],
+  [{operation:'recover_expired_once'},secret,'EXACT_REQUEST_REQUIRED']
+ ]){
+  const response=await handler(recoveryRequest(body,key));
+  assert.equal((await response.json()).status,code);
+ }
+ const wrongRoot=createDeliveryHandler({...hostedRecoveryOpts,
+  testRootFolderId:driveId,recoverOriginalTestParent:()=>{calls++;throw Error('MUST_NOT_CALL');}
+ });
+ assert.equal((await wrongRoot(recoveryRequest({operation:'recover_original_parent_once'}))).status,503);
+ assert.equal(calls,0);
+});
+
+test('hosted isolated TEST route sends only frozen server identities to existing atomic owner',async()=>{
+ const calls=[];
+ const handler=createDeliveryHandler({...hostedRecoveryOpts,
+  recoverOriginalTestParent:async scope=>{
+   calls.push(scope);
+   assert.equal(scope.testPackageId,packageId);
+   assert.equal(scope.testDestinationId,destinationId);
+   assert.equal(scope.testRootId,root);
+   assert.equal(scope.expectedEmail,scopeValue());
+   assert.equal(scope.expectedDriveId,driveId);
+   assert.equal(scope.makeRequestId(),uuid(98));
+   assert.equal(typeof scope.ledger.recoverAndAcquireDispatch,'function');
+   assert.equal(typeof scope.tokenProvider,'function');
+   return {state:'ORIGINAL_TEST_PARENT_VERIFIED'};
+  }
+ });
+ function scopeValue(){return 'operator@example.invalid';}
+ const response=await handler(recoveryRequest({operation:'recover_original_parent_once'}));
+ assert.equal(response.status,200);
+ assert.deepEqual(await response.json(),{status:'ORIGINAL_TEST_PARENT_VERIFIED'});
+ assert.equal(calls.length,1);
+});
+
+test('hosted recovery masks lost or ambiguous coordinator results with no retry',async()=>{
+ for(const cause of ['throw','wrong-result']){
+  let calls=0;
+  const handler=createDeliveryHandler({...hostedRecoveryOpts,
+   recoverOriginalTestParent:async()=>{calls++;
+    if(cause==='throw')throw Error('SIMULATED_ATOMIC_RESPONSE_LOSS');
+    return {state:'UNCERTAIN'};
+   }
+  });
+  const response=await handler(recoveryRequest({operation:'recover_original_parent_once'}));
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{status:'ORIGINAL_TEST_RECOVERY_UNVERIFIED'});
+  assert.equal(calls,1);
+ }
+});
+
 test('unhosted coordinator refuses failed atomic commit before any provider continuation',async()=>{
  const r=rig(),calls=[];
  r.opts.ledger.recoverAndAcquireDispatch=async proof=>{
