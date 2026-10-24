@@ -258,8 +258,11 @@ begin
       'public.service_resume_exact_test_expired_delivery(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)','execute')
     or not has_function_privilege('service_role',
       'public.service_read_expired_test_delivery_reservation(uuid,uuid,text)','execute')
-    or not has_function_privilege('service_role',
+    -- The former isolated lease CAS must no longer be callable by a service JWT.
+    or has_function_privilege('service_role',
       'public.service_resume_exact_test_expired_delivery(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)','execute')
+    or not has_function_privilege('service_role',
+      'public.service_resume_and_acquire_exact_test_dispatch(uuid,uuid,text,uuid,bigint,uuid,text,timestamptz,timestamptz,text,uuid)','execute')
     or has_table_privilege('service_role',
       'private.client_delivery_test_lease_recoveries','insert')
     or has_table_privilege('authenticated',
