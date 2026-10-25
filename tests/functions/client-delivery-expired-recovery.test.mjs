@@ -4,7 +4,8 @@ import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease,
  recoverAndContinueOriginalTestParentOnce,
  reconcileOriginalAttemptedTestParentOnce,
  continueOriginalVerifiedTestToWorkOrderOnce,
- continueOriginalVerifiedTestToPackageOnce}
+ continueOriginalVerifiedTestToPackageOnce,
+ continueOriginalVerifiedTestFirstPhotoOnce}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain}
  from '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -838,4 +839,173 @@ test('one-time PACKAGE TEST handler is default OFF, private-secret only, exact b
  const response=await lost(recoveryRequest({operation}));
  assert.equal(response.status,503);
  assert.deepEqual(await response.json(),{status:'ORIGINAL_TEST_PACKAGE_FOLDER_UNVERIFIED'});
+});
+
+const firstPhotoPackageId=packageRemoteIds[0];
+const firstPhotoPlanId=uuid(85),firstPhotoRequest=uuid(86);
+const testVault={seal:async()=>({nonce:'test',payload:'test'}),open:async()=>''};
+const verifiedPackageProof={id:firstPhotoPackageId,parent:childId,
+ name:'package-'+packageId,mime:'application/vnd.google-apps.folder',
+ drive_id:driveId,trashed:false,sha256:null,size:null,
+ appProperties:packageProps};
+function firstPhotoRig({change=null,remoteStatus=200,lostCAS=false,
+ resultState='PROGRESS',lostSession=false}={}){
+ const events=[];
+ const snapshot={
+  state:'ORIGINAL_TEST_FIRST_PHOTO_EXPIRED',
+  package_id:packageId,destination_id:destinationId,root_id:root,
+  worker_id:workerId,generation:1,attempts:1,approved_sha256:sha,
+  lease_until:new Date(Date.now()-30000).toISOString(),
+  drive_id:driveId,
+  wo_remote_id:childId,wo_parent_id:originalId,wo_name:childName,
+  wo_proof:structuredClone(woProof),wo_properties:structuredClone(childProperties),
+  folder_plan_id:packagePlan,folder_remote_id:firstPhotoPackageId,
+  folder_name:'package-'+packageId,folder_proof:structuredClone(verifiedPackageProof),
+  folder_properties:structuredClone(packageProps),
+  photo_plan_id:firstPhotoPlanId,photo_remote_id:packageRemoteIds[1],
+  photo_id:packagePhotoIds[0],photo_sha256:'b'.repeat(64),photo_size:128,
+  photo_parent_id:firstPhotoPackageId
+ };
+ if(change)change(snapshot);
+ let advance=0;
+ const ledger={
+  readExactTestFirstPhoto:async(pkg,dest,rootId)=>{
+   assert.deepEqual([pkg,dest,rootId],[packageId,destinationId,root]);
+   events.push('exact-read');return structuredClone(snapshot);
+  },
+  resumeExactTestFirstPhoto:async(s,proof,at,request)=>{
+   events.push('atomic-CAS');
+   assert.equal(request,firstPhotoRequest);
+   assert.equal(s.worker_id,workerId);
+   assert.equal(s.lease_until,snapshot.lease_until);
+   assert.deepEqual(proof,verifiedPackageProof);
+   if(lostCAS)throw Error('LOST_ATOMIC_FIRST_PHOTO_REPLY');
+   return {status:'ORIGINAL_TEST_FIRST_PHOTO_DISPATCH_ACQUIRED',
+    package_id:packageId,worker_id:workerId,generation:1,
+    folder_plan_id:packagePlan,photo_plan_id:firstPhotoPlanId,
+    folder_remote_id:firstPhotoPackageId,photo_remote_id:packageRemoteIds[1],
+    dispatch_id:firstPhotoRequest,
+    expires_at:new Date(Date.now()+120000).toISOString()};
+  },
+  nextReservedItem:async()=>{
+   events.push('next-item');
+   advance++;
+   if(resultState==='FILE_VERIFIED'&&advance===2)
+    return {state:'FILE',kind:'PHOTO',plan_id:uuid(88)};
+   return {state:'FILE',kind:'PHOTO',plan_id:firstPhotoPlanId};
+  },
+  forLease:()=>({getSession:async()=>{
+   events.push('read-session');
+   if(lostSession)throw Error('LOST_READ_SESSION');
+   return {plan_id:firstPhotoPlanId,package_id:packageId,
+    total_bytes:128,recorded_offset:64,encrypted:{payload:'test'}};
+  }}),
+  releaseDispatch:async request=>{
+   events.push('release-permit');assert.equal(request,firstPhotoRequest);
+   return {released:true};
+  }
+ };
+ const ids={
+  [root]:{id:root,driveId,trashed:false,mimeType:'application/vnd.google-apps.folder',capabilities:{canAddChildren:true}},
+  [childId]:{id:childId,driveId,trashed:false,name:childName,
+   mimeType:'application/vnd.google-apps.folder',parents:[originalId],
+   appProperties:childProperties,capabilities:{canAddChildren:true}},
+  [firstPhotoPackageId]:{id:firstPhotoPackageId,driveId,trashed:false,
+   mimeType:'application/vnd.google-apps.folder',
+   parents:[childId],name:'package-'+packageId,
+   appProperties:packageProps,capabilities:{canAddChildren:true}}
+ };
+ const fetcher=async(url,init)=>{
+  const u=new URL(url);
+  events.push((init.method??'GET')+':'+u.pathname);
+  assert.equal(u.origin,'https://www.googleapis.com');
+  if(u.pathname==='/drive/v3/about')
+   return Response.json({user:{emailAddress:scope,me:true,permissionId:'test-permission'}});
+  const id=u.pathname.split('/').at(-1);
+  if(u.pathname.startsWith('/drive/v3/files/')){
+   if(remoteStatus!==200&&id===firstPhotoPackageId)
+    return Response.json({error:'denied'},{status:remoteStatus});
+   return Response.json(ids[id]??{error:'not found'},{status:ids[id]?200:404});
+  }
+  throw Error('Unexpected provider call or CREATE');
+ };
+ const continueFile=async options=>{
+  events.push('existing-file-owner');
+  assert.equal(options.workerId,workerId);
+  assert.equal(options.packageId,packageId);
+  assert.equal(options.planId,firstPhotoPlanId);
+  assert.equal(options.generation,1);
+  assert.equal(options.vault,testVault);
+  assert.equal(options.projectUrl,'https://fwh-test.supabase.co');
+  return resultState==='FILE_VERIFIED'
+   ?{state:'FILE_VERIFIED',plan_id:firstPhotoPlanId}
+   :{state:resultState,plan_id:firstPhotoPlanId,
+      recorded_offset:64};
+ };
+ return {events,opts:{...args,ledger,fetcher,continueFile,
+  projectUrl:'https://fwh-test.supabase.co',serviceRoleJwt:'header.payload.signature',
+  vault:testVault,makeRequestId:()=>firstPhotoRequest,
+  tokenProvider:async()=>({accessToken:'disposable-token-0123456789012345',
+    expiresInSeconds:3600})}};
+}
+test('original first PHOTO resumed only after fresh provider GET and atomic SQL CAS',async()=>{
+ for(const resultState of ['PROGRESS','FILE_VERIFIED']){
+  const r=firstPhotoRig({resultState});
+  const done=await continueOriginalVerifiedTestFirstPhotoOnce(r.opts);
+  assert.equal(done.state,resultState==='FILE_VERIFIED'
+   ?'ORIGINAL_TEST_FIRST_PHOTO_VERIFIED':'ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED');
+  const e=r.events;
+  assert.ok(e.indexOf('GET:/drive/v3/files/'+firstPhotoPackageId)<e.indexOf('atomic-CAS'));
+  assert.ok(e.indexOf('atomic-CAS')<e.indexOf('existing-file-owner'));
+  assert.ok(e.indexOf('existing-file-owner')<e.indexOf('release-permit'));
+  assert.equal(e.filter(x=>x==='existing-file-owner').length,1);
+  assert.equal(e.some(x=>/POST:/.test(x)),false);
+ }
+});
+test('first photo unknown provider and foreign original identity never acquire dispatch',async()=>{
+ for(const status of [403,404,500]){
+  const r=firstPhotoRig({remoteStatus:status});
+  await assert.rejects(()=>continueOriginalVerifiedTestFirstPhotoOnce(r.opts));
+  assert.equal(r.events.includes('atomic-CAS'),false);
+  assert.equal(r.events.includes('existing-file-owner'),false);
+ }
+ for(const change of [
+  s=>s.state='UNKNOWN',s=>s.worker_id=uuid(99),
+  s=>s.folder_remote_id='wrong-id',s=>s.photo_parent_id='wrong-id',
+  s=>s.photo_size=0,s=>s.approved_sha256='tampered'
+ ]){
+  const r=firstPhotoRig({change});
+  await assert.rejects(()=>continueOriginalVerifiedTestFirstPhotoOnce(r.opts));
+  assert.equal(r.events.includes('existing-file-owner'),false);
+ }
+});
+test('lost atomic CAS or upload receipt stops with held original permit and NO retry',async()=>{
+ for(const settings of [{lostCAS:true},{lostSession:true},{resultState:'NEEDS_INDEPENDENT_GET'}]){
+  const r=firstPhotoRig(settings);
+  await assert.rejects(()=>continueOriginalVerifiedTestFirstPhotoOnce(r.opts));
+  assert.equal(r.events.includes('release-permit'),false);
+  assert.ok(r.events.filter(x=>x==='existing-file-owner').length<=1);
+ }
+});
+test('first photo route is private-key exact-body default OFF with sealed vault required',async()=>{
+ const operation='continue_verified_original_first_photo_once';
+ const disabled=createDeliveryHandler({...hostedRecoveryOpts,testRecoveryEnabled:false});
+ assert.equal((await disabled(recoveryRequest({operation}))).status,400);
+ assert.equal((await createDeliveryHandler({
+  ...hostedRecoveryOpts,sessionVaultKey:'not-a-real-vault-key'
+ })(recoveryRequest({operation}))).status,503);
+ let calls=0;
+ const handler=createDeliveryHandler({...hostedRecoveryOpts,
+  continueVerifiedOriginalTestFirstPhoto:async()=>{
+    calls++;return {state:'ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED'};
+  },
+  sessionVaultKey:'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'});
+ assert.equal((await handler(recoveryRequest({operation,photo_id:packagePhotoIds[0]}))).status,400);
+ assert.equal((await handler(recoveryRequest({operation},'bad'))).status,401);
+ assert.equal(calls,0);
+ // Valid disposable 32-byte base64url vault; no real provider call.
+ const result=await handler(recoveryRequest({operation}));
+ assert.equal(result.status,200);
+ assert.deepEqual(await result.json(),{status:'ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED'});
+ assert.equal(calls,1);
 });
