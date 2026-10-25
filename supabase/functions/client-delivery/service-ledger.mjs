@@ -7,6 +7,8 @@ const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_deli
  'service_resume_and_acquire_exact_test_dispatch',
  'service_read_attempted_exact_test_parent',
  'service_commit_attempted_exact_test_parent',
+ 'service_read_verified_exact_test_parent',
+ 'service_resume_verified_original_and_acquire_dispatch',
  'service_next_delivery_item',
  'service_delivery_final_provider_snapshot','service_claim_delivery',
  'service_claim_exact_test_delivery','service_heartbeat_delivery',
@@ -146,6 +148,22 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_root:scope.root_id,p_worker:scope.worker_id,
         p_generation:scope.generation,p_map:scope.map_id,
         p_request:scope.request_id,p_observed_at:observedAt,p_proof:proof
+      }),
+    // Explicit single-use original TEST VERIFIED ADDRESS -> WO continuation.
+    // This SQL owner atomically renews only the saved worker and acquires the
+    // non-expiring global dispatch permit before any new provider write.
+    readVerifiedOriginalTestParent:(pkg,dest,root)=>rpc(
+      'service_read_verified_exact_test_parent',{
+        p_package:pkg,p_destination:dest,p_root:root
+      }),
+    resumeVerifiedOriginalAndAcquireDispatch:(scope,proof,observedAt,requestId)=>rpc(
+      'service_resume_verified_original_and_acquire_dispatch',{
+        p_package:scope.package_id,p_destination:scope.destination_id,
+        p_root:scope.root_id,p_worker:scope.worker_id,
+        p_generation:scope.generation,p_map:scope.map_id,
+        p_remote_id:scope.remote_folder_id,
+        p_expected_lease_until:scope.lease_until,
+        p_observed_at:observedAt,p_proof:proof,p_request:requestId
       }),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
