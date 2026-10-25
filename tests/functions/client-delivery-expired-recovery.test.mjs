@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease,
  recoverAndContinueOriginalTestParentOnce,
  reconcileOriginalAttemptedTestParentOnce,
- continueOriginalVerifiedTestToWorkOrderOnce}
+ continueOriginalVerifiedTestToWorkOrderOnce,
+ continueOriginalVerifiedTestToPackageOnce}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain}
  from '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -682,4 +683,156 @@ test('new WORK_ORDER hosted operation is default OFF, exact-only, and masks unce
  const failed=await lost(recoveryRequest({operation}));
  assert.equal(failed.status,503);
  assert.deepEqual(await failed.json(),{status:'ORIGINAL_TEST_WORK_ORDER_UNVERIFIED'});
+});
+
+const packagePhotoIds=[uuid(71),uuid(72)];
+const packageRemoteIds=['saved_package_folder_0123456789','saved_photo_a_0123456789',
+ 'saved_photo_b_0123456789','saved_manifest_0123456789'];
+const packagePlan=uuid(79),packageRequest=uuid(80);
+const packageProps={fwh_package:packageId,fwh_manifest:sha};
+const parentProof={...verifiedEvidence};
+const woProof={id:childId,parent:originalId,name:childName,
+ mime:'application/vnd.google-apps.folder',drive_id:driveId,
+ trashed:false,sha256:null,size:null,appProperties:childProperties};
+function packageRig({lost=null,remoteStatus=200,snapshotChange=null}={}){
+ const events=[];let reserved=false,verified=false;
+ const snap={state:'ORIGINAL_VERIFIED_WORK_ORDER_EXPIRED',
+  package_id:packageId,destination_id:destinationId,root_id:root,
+  worker_id:workerId,generation:1,attempts:1,map_id:childMap,
+  approved_sha256:sha,lease_until:new Date(Date.now()-30000).toISOString(),
+  remote_folder_id:childId,parent_remote_id:originalId,
+  remote_name:childName,parent_name:heldAttempt.remote_name,
+  drive_id:driveId,appProperties:childProperties,
+  parent_appProperties:heldAttempt.appProperties,
+  remote_evidence:woProof,parent_evidence:parentProof,
+  selected_photos:packagePhotoIds.map((id,i)=>({
+   photo_id:id,observed_sha256:(i?'c':'b').repeat(64),observed_size:i?256:128
+  }))};
+ if(snapshotChange)snapshotChange(snap);
+ const plan=()=>({package_id:packageId,plan_id:packagePlan,kind:'FOLDER',
+  parent_kind:'WORK_ORDER',work_order_id:uuid(11),
+  file_id:packageRemoteIds[0],parent_id:childId,name:'package-'+packageId,
+  mime:'application/vnd.google-apps.folder',sha256:null,size:null,
+  appProperties:packageProps,state:verified?'VERIFIED':'PREALLOCATED'});
+ const ledger={
+  readVerifiedOriginalTestWOForPackage:async()=>{events.push('read');return structuredClone(snap);},
+  resumeVerifiedWOAndAcquirePackageDispatch:async(s,proof,at,request)=>{
+   events.push('CAS');assert.equal(s.worker_id,workerId);
+   assert.equal(s.lease_until,snap.lease_until);
+   assert.deepEqual(proof,woProof);assert.equal(request,packageRequest);
+   if(lost==='cas')throw Error('LOST_CAS');
+   return {status:'ORIGINAL_VERIFIED_WO_LEASE_AND_DISPATCH_ACQUIRED',
+    package_id:packageId,worker_id:workerId,generation:1,map_id:childMap,
+    remote_folder_id:childId,dispatch_id:request,
+    expires_at:new Date(Date.now()+120000).toISOString()};
+  },
+  heartbeat:async()=>{events.push('beat');return {ok:true};},
+  readParent:async()=>{events.push('parent');return {exists:true,
+   kind:'WORK_ORDER',state:'VERIFIED',map_id:childMap,
+   remote_folder_id:childId,parent_remote_id:originalId};},
+  nextReservedItem:async()=>{events.push('next');return reserved
+   ?{state:'FOLDER',plan_id:packagePlan}:{state:'UNRESERVED'};},
+  reserveBatch:async(p,w,g,folder,parent,photos,manifest)=>{
+   events.push('reserve');assert.deepEqual([p,w,g,folder,parent,manifest],
+    [packageId,workerId,1,packageRemoteIds[0],childId,packageRemoteIds[3]]);
+   assert.deepEqual(photos,packagePhotoIds.map((photo_id,i)=>({
+    photo_id,file_id:packageRemoteIds[i+1]})));
+   reserved=true;if(lost==='reserve')throw Error('LOST_RESERVATION');
+   return {reserved:true,package_id:p,folder_id:folder,
+    manifest_id:manifest,reserved_count:4};
+  },
+  forLease:()=>({
+   heartbeat:async()=>{events.push('leasebeat');return {ok:true};},
+   getFolderPlan:async()=>{events.push('getPlan');return plan();},
+   beginFolderCreate:async()=>{events.push('begin');return {
+    state:'MAY_CREATE',plan_id:packagePlan,file_id:packageRemoteIds[0],parent_id:childId};},
+   confirmFolder:async()=>{events.push('confirm');verified=true;return {state:'VERIFIED'};}
+  }),
+  releaseDispatch:async id=>{events.push('release');assert.equal(id,packageRequest);return {released:true};}
+ };
+ const fetcher=async(url,init)=>{
+  const u=new URL(url),method=init.method??'GET';events.push(method+':'+u.pathname);
+  assert.equal(u.origin,'https://www.googleapis.com');
+  if(u.pathname==='/drive/v3/about')
+   return Response.json({user:{emailAddress:scope,me:true,permissionId:'test-permission'}});
+  const files={
+   [root]:{id:root,driveId,trashed:false,mimeType:'application/vnd.google-apps.folder',capabilities:{canAddChildren:true}},
+   [originalId]:{id:originalId,driveId,trashed:false,name:heldAttempt.remote_name,
+    mimeType:'application/vnd.google-apps.folder',parents:[root],
+    appProperties:heldAttempt.appProperties,capabilities:{canAddChildren:true}},
+   [childId]:{id:childId,driveId,trashed:false,name:childName,
+    mimeType:'application/vnd.google-apps.folder',parents:[originalId],
+    appProperties:childProperties,capabilities:{canAddChildren:true}},
+   [packageRemoteIds[0]]:{id:packageRemoteIds[0],driveId,trashed:false,
+    name:'package-'+packageId,mimeType:'application/vnd.google-apps.folder',
+    parents:[childId],appProperties:packageProps}
+  };
+  if(u.pathname.startsWith('/drive/v3/files/') && !u.pathname.endsWith('generateIds')){
+   const id=u.pathname.split('/').at(-1);
+   if(id===childId&&remoteStatus!==200)
+    return Response.json({error:'unavailable'},{status:remoteStatus});
+   return Response.json(files[id]??{error:'unknown'},{status:files[id]?200:404});
+  }
+  if(u.pathname==='/drive/v3/files/generateIds'){
+   assert.equal(u.searchParams.get('count'),'4');
+   return Response.json({ids:packageRemoteIds});
+  }
+  if(u.pathname==='/drive/v3/files'&&method==='POST'){
+   assert.equal(reserved,true);
+   if(lost==='post')throw Error('LOST_GOOGLE_POST');
+   return Response.json({id:packageRemoteIds[0]});
+  }
+  throw Error('Unexpected provider call: '+u.pathname);
+ };
+ return {events,opts:{...args,ledger,fetcher,makeRequestId:()=>packageRequest,
+  tokenProvider:async()=>({accessToken:'test-token-01234567890123456789',expiresInSeconds:3600})}};
+}
+test('verified original WORK_ORDER reserves all immutable IDs before one PACKAGE POST',async()=>{
+ const r=packageRig(),res=await continueOriginalVerifiedTestToPackageOnce(r.opts);
+ assert.equal(res.state,'ORIGINAL_TEST_PACKAGE_FOLDER_VERIFIED');
+ const e=r.events;
+ assert.ok(e.indexOf('CAS')<e.indexOf('GET:/drive/v3/files/generateIds'));
+ assert.ok(e.indexOf('reserve')<e.indexOf('POST:/drive/v3/files'));
+ assert.ok(e.indexOf('confirm')<e.indexOf('release'));
+ assert.equal(e.filter(x=>x==='POST:/drive/v3/files').length,1);
+});
+test('uncertain CAS/reservation/Google provider response stops, keeps permit, never retries',async()=>{
+ for(const lost of ['cas','reserve','post']){
+  const r=packageRig({lost});
+  await assert.rejects(()=>continueOriginalVerifiedTestToPackageOnce(r.opts));
+  assert.equal(r.events.includes('release'),false);
+  assert.equal(r.events.filter(x=>x==='POST:/drive/v3/files').length,lost==='post'?1:0);
+ }
+});
+test('foreign or unverified WORK_ORDER evidence denies any package Google CREATE',async()=>{
+ for(const change of [s=>s.worker_id=uuid(99),s=>s.state='USED',
+  s=>s.selected_photos.pop(),s=>s.remote_folder_id='wrong',
+  s=>s.parent_evidence.name='changed']){
+  const r=packageRig({snapshotChange:change});
+  await assert.rejects(()=>continueOriginalVerifiedTestToPackageOnce(r.opts));
+  assert.equal(r.events.includes('CAS'),false);
+ }
+ for(const remoteStatus of [403,404,500]){
+  const r=packageRig({remoteStatus});
+  await assert.rejects(()=>continueOriginalVerifiedTestToPackageOnce(r.opts));
+  assert.equal(r.events.includes('CAS'),false);
+ }
+});
+test('one-time PACKAGE TEST handler is default OFF, private-secret only, exact body',async()=>{
+ const operation='continue_verified_original_package_once';
+ const disabled=createDeliveryHandler({...hostedRecoveryOpts,testRecoveryEnabled:false});
+ assert.equal((await disabled(recoveryRequest({operation}))).status,400);
+ let calls=0;
+ const handler=createDeliveryHandler({...hostedRecoveryOpts,
+  continueVerifiedOriginalTestPackage:async()=>{calls++;return {state:'ORIGINAL_TEST_PACKAGE_FOLDER_VERIFIED'};}});
+ assert.equal((await handler(recoveryRequest({operation,worker_id:workerId}))).status,400);
+ assert.equal((await handler(recoveryRequest({operation},'wrong-secret'))).status,401);
+ assert.equal(calls,0);
+ assert.equal((await handler(recoveryRequest({operation}))).status,200);
+ assert.equal(calls,1);
+ const lost=createDeliveryHandler({...hostedRecoveryOpts,
+  continueVerifiedOriginalTestPackage:async()=>{throw Error('LOST_PACKAGE_REPLY');}});
+ const response=await lost(recoveryRequest({operation}));
+ assert.equal(response.status,503);
+ assert.deepEqual(await response.json(),{status:'ORIGINAL_TEST_PACKAGE_FOLDER_UNVERIFIED'});
 });

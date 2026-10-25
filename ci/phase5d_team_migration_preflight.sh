@@ -51,7 +51,7 @@ fi
 mapfile -t dry_run_migrations < <(
   grep -Eo '20[0-9]{12}_[a-zA-Z0-9_]+[.]sql' "$out" | sort -u
 )
-# Fail closed unless this precise original parent reconciliation is the ONLY
+# Fail closed unless this exact PACKAGE continuation is the ONLY
 # pending version. A clean/successful CLI exit by itself proves nothing.
 [[ "${#dry_run_migrations[@]}" -eq 1 &&
    "${dry_run_migrations[0]}" == "$expected_pending" ]] ||
