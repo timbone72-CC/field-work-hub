@@ -219,7 +219,7 @@ export function createDeliveryHandler({
       // already exists, and ONLY that immutable encrypted session may resume.
       if(Array.isArray(only)||Object.keys(only).length!==1)
         return reply(400,'EXACT_REQUEST_REQUIRED');
-      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
       const ID=/^[A-Za-z0-9_-]{10,160}$/;
       if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
         ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
