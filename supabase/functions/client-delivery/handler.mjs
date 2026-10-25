@@ -9,7 +9,8 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
  continueTrustedDeliveryFile,inspectExpiredReservedParent,
  recoverAndContinueOriginalTestParentOnce,
- reconcileOriginalAttemptedTestParentOnce} from './worker-runtime.mjs';
+ reconcileOriginalAttemptedTestParentOnce,
+ continueOriginalVerifiedTestToWorkOrderOnce} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
@@ -32,6 +33,7 @@ export function createDeliveryHandler({
   testPreflightEnabled=false,testRecoveryEnabled=false,
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
   reconcileOriginalTestParent=reconcileOriginalAttemptedTestParentOnce,
+  continueVerifiedOriginalTestWO=continueOriginalVerifiedTestToWorkOrderOnce,
   testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
@@ -134,6 +136,43 @@ export function createDeliveryHandler({
         // Never start a new recovery, release speculatively, or create an ID.
       }
       return reply(503,'ORIGINAL_TEST_RECONCILIATION_UNVERIFIED');
+    }
+    if(only?.operation==='continue_verified_original_wo_once'){
+      // EXACT source-side TEST operation. No caller-set worker, package,
+      // parent/child Google ID, proof, request, or retry override.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>DRIVE_ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'TEST_WO_CONTINUATION_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const result=await continueVerifiedOriginalTestWO({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          makeRequestId:makeWorkerId,fetcher
+        });
+        if(result?.state==='ORIGINAL_TEST_WORK_ORDER_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_WORK_ORDER_VERIFIED');
+      }catch{
+        // Uncertain SQL/Google outcome is STOP: never repeat, replace an ID,
+        // claim a different worker or release the durable permit speculatively.
+      }
+      return reply(503,'ORIGINAL_TEST_WORK_ORDER_UNVERIFIED');
     }
   }
   // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
