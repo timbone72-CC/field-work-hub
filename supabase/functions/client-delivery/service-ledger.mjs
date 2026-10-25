@@ -9,6 +9,8 @@ const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_deli
  'service_commit_attempted_exact_test_parent',
  'service_read_verified_exact_test_parent',
  'service_resume_verified_original_and_acquire_dispatch',
+ 'service_read_verified_original_test_wo_for_package',
+ 'service_resume_verified_wo_and_acquire_package_dispatch',
  'service_next_delivery_item',
  'service_delivery_final_provider_snapshot','service_claim_delivery',
  'service_claim_exact_test_delivery','service_heartbeat_delivery',
@@ -158,6 +160,20 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       }),
     resumeVerifiedOriginalAndAcquireDispatch:(scope,proof,observedAt,requestId)=>rpc(
       'service_resume_verified_original_and_acquire_dispatch',{
+        p_package:scope.package_id,p_destination:scope.destination_id,
+        p_root:scope.root_id,p_worker:scope.worker_id,
+        p_generation:scope.generation,p_map:scope.map_id,
+        p_remote_id:scope.remote_folder_id,
+        p_expected_lease_until:scope.lease_until,
+        p_observed_at:observedAt,p_proof:proof,p_request:requestId
+      }),
+    // One-use continuation of the ORIGINAL verified WO, not a new worker.
+    readVerifiedOriginalTestWOForPackage:(pkg,dest,root)=>rpc(
+      'service_read_verified_original_test_wo_for_package',{
+        p_package:pkg,p_destination:dest,p_root:root
+      }),
+    resumeVerifiedWOAndAcquirePackageDispatch:(scope,proof,observedAt,requestId)=>rpc(
+      'service_resume_verified_wo_and_acquire_package_dispatch',{
         p_package:scope.package_id,p_destination:scope.destination_id,
         p_root:scope.root_id,p_worker:scope.worker_id,
         p_generation:scope.generation,p_map:scope.map_id,

@@ -417,6 +417,154 @@ export async function continueOriginalVerifiedTestToWorkOrderOnce({
   return Object.freeze({state:'ORIGINAL_TEST_WORK_ORDER_VERIFIED'});
 }
 
+/**
+ * Disposable TEST: original VERIFIED WORK_ORDER -> ONE PACKAGE folder.
+ * Freshly GET-verify saved parent and child; one atomic same-worker lease +
+ * dispatch CAS, existing atomic file-ID reservation and one-shot folder owner.
+ * Any uncertain response leaves durable original IDs / dispatch untouched.
+ */
+export async function continueOriginalVerifiedTestToPackageOnce({
+ ledger,tokenProvider,expectedEmail,expectedDriveId,
+ testPackageId,testDestinationId,testRootId,fetcher=fetch,
+ makeRequestId=()=>crypto.randomUUID()
+}={}){
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const ID=/^[A-Za-z0-9_-]{10,160}$/;
+ const HASH=/^[a-f0-9]{64}$/;
+ const needed=['readVerifiedOriginalTestWOForPackage',
+   'resumeVerifiedWOAndAcquirePackageDispatch','heartbeat','readParent',
+   'nextReservedItem','reserveBatch','forLease','releaseDispatch'];
+ if(!ledger||needed.some(k=>typeof ledger[k]!=='function')
+   ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+   ||typeof makeRequestId!=='function'
+   ||!UUID.test(testPackageId??'')||!UUID.test(testDestinationId??'')
+   ||!ID.test(expectedDriveId??'')||!ID.test(testRootId??'')
+   ||typeof expectedEmail!=='string'||!expectedEmail)
+  throw new DriveUncertain('VERIFIED_TEST_PACKAGE_CONTINUATION_NOT_CONFIGURED');
+ const s=await ledger.readVerifiedOriginalTestWOForPackage(
+   testPackageId,testDestinationId,testRootId);
+ const props=s?.appProperties,parentProps=s?.parent_appProperties;
+ if(s?.state!=='ORIGINAL_VERIFIED_WORK_ORDER_EXPIRED'
+   ||s.package_id!==testPackageId||s.destination_id!==testDestinationId
+   ||s.root_id!==testRootId||!UUID.test(s.worker_id??'')
+   ||s.generation!==1||s.attempts!==1||!UUID.test(s.map_id??'')
+   ||!HASH.test(s.approved_sha256??'')
+   ||!ID.test(s.remote_folder_id??'')||!ID.test(s.parent_remote_id??'')
+   ||new Set([s.remote_folder_id,s.parent_remote_id,testRootId]).size!==3
+   ||s.drive_id!==expectedDriveId
+   ||typeof s.lease_until!=='string'||Date.parse(s.lease_until)>=Date.now()
+   ||!Number.isFinite(Date.parse(s.lease_until))
+   ||typeof s.remote_name!=='string'||s.remote_name.length<3
+   ||typeof s.parent_name!=='string'||s.parent_name.length<3
+   ||!props||!parentProps
+   ||Object.keys(props).sort().join(',')!==
+      ['fwh_org','fwh_company','fwh_destination','fwh_kind','fwh_key'].sort().join(',')
+   ||Object.keys(parentProps).sort().join(',')!==
+      ['fwh_org','fwh_company','fwh_destination','fwh_kind','fwh_key'].sort().join(',')
+   ||props.fwh_kind!=='WORK_ORDER'||parentProps.fwh_kind!=='ADDRESS'
+   ||props.fwh_destination!==testDestinationId
+   ||parentProps.fwh_destination!==testDestinationId
+   ||!UUID.test(props.fwh_org??'')||!UUID.test(props.fwh_company??'')
+   ||props.fwh_org!==parentProps.fwh_org
+   ||props.fwh_company!==parentProps.fwh_company
+   ||typeof props.fwh_key!=='string'||!props.fwh_key
+   ||!HASH.test(parentProps.fwh_key??'')
+   ||!s.remote_evidence||!s.parent_evidence
+   ||!Array.isArray(s.selected_photos)||s.selected_photos.length!==2
+   ||new Set(s.selected_photos.map(p=>p.photo_id)).size!==2
+   ||s.selected_photos.some(p=>!UUID.test(p.photo_id??'')
+      ||!HASH.test(p.observed_sha256??'')
+      ||!Number.isSafeInteger(p.observed_size)||p.observed_size<=0))
+   throw new DriveUncertain('VERIFIED_TEST_PACKAGE_IDENTITY_CHANGED');
+
+ let token;
+ try{token=await tokenProvider();}
+ catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+ if(typeof token?.accessToken!=='string'||token.accessToken.length<20
+   ||!Number.isInteger(token.expiresInSeconds)||token.expiresInSeconds<60)
+   throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+ const drive=createDriveClient({accessToken:token.accessToken,fetcher});
+ await drive.verifyProviderIdentity(expectedEmail);
+ const root=await drive.verifyDestination({folderId:testRootId,expectedDriveId});
+ if(root?.id!==testRootId||root.drive_id!==expectedDriveId)
+   throw new DriveUncertain('VERIFIED_TEST_ROOT_CHANGED');
+ const parent=await drive.verifyFile({id:s.parent_remote_id,parent:testRootId,
+   name:s.parent_name,mime:'application/vnd.google-apps.folder',
+   expectedDriveId,sha256:null,size:null,appProperties:parentProps});
+ const proof=await drive.verifyFile({id:s.remote_folder_id,parent:s.parent_remote_id,
+   name:s.remote_name,mime:'application/vnd.google-apps.folder',
+   expectedDriveId,sha256:null,size:null,appProperties:props});
+ const same=(a,b)=>a&&b
+   &&Object.keys(a).sort().join(',')===Object.keys(b).sort().join(',')
+   &&Object.keys(a).every(k=>k==='appProperties'
+     ?a[k]&&b[k]&&Object.keys(a[k]).sort().join(',')===Object.keys(b[k]).sort().join(',')
+       &&Object.keys(a[k]).every(n=>a[k][n]===b[k][n])
+     :a[k]===b[k]);
+ if(!same(parent,s.parent_evidence)||!same(proof,s.remote_evidence))
+   throw new DriveUncertain('VERIFIED_ORIGINAL_WO_PROVIDER_PROOF_CHANGED');
+
+ const requestId=makeRequestId();
+ if(!UUID.test(requestId))
+   throw new DriveUncertain('VERIFIED_TEST_PACKAGE_REQUEST_INVALID');
+ const resumed=await ledger.resumeVerifiedWOAndAcquirePackageDispatch({
+   package_id:testPackageId,destination_id:testDestinationId,root_id:testRootId,
+   worker_id:s.worker_id,generation:1,map_id:s.map_id,
+   remote_folder_id:s.remote_folder_id,lease_until:s.lease_until
+ },proof,new Date().toISOString(),requestId);
+ if(resumed?.status!=='ORIGINAL_VERIFIED_WO_LEASE_AND_DISPATCH_ACQUIRED'
+   ||resumed.package_id!==testPackageId||resumed.worker_id!==s.worker_id
+   ||resumed.generation!==1||resumed.map_id!==s.map_id
+   ||resumed.remote_folder_id!==s.remote_folder_id
+   ||resumed.dispatch_id!==requestId
+   ||typeof resumed.expires_at!=='string'
+   ||Date.parse(resumed.expires_at)<=Date.now())
+   throw new DriveUncertain('VERIFIED_TEST_PACKAGE_LEASE_DISPATCH_UNCERTAIN');
+
+ const pkg=testPackageId,workerId=s.worker_id,generation=1;
+ await ledger.heartbeat(pkg,workerId,generation);
+ const wo=await ledger.readParent(pkg,workerId,generation,'WORK_ORDER');
+ if(wo?.exists!==true||wo.kind!=='WORK_ORDER'
+   ||wo.state!=='VERIFIED'||wo.map_id!==s.map_id
+   ||wo.remote_folder_id!==s.remote_folder_id
+   ||wo.parent_remote_id!==s.parent_remote_id)
+   throw new DriveUncertain('ORIGINAL_VERIFIED_WO_CHANGED_AFTER_CAS');
+ const item=await ledger.nextReservedItem(pkg,workerId,generation);
+ if(item?.state!=='UNRESERVED')
+   throw new DriveUncertain('ORIGINAL_PACKAGE_IDS_REQUIRE_RECONCILIATION');
+ const ids=await drive.generateIds(s.selected_photos.length+2);
+ if(!Array.isArray(ids)||ids.length!==4||ids.some(id=>!ID.test(id))
+   ||new Set([...ids,s.remote_folder_id,s.parent_remote_id,testRootId]).size!==7)
+   throw new DriveUncertain('ORIGINAL_PACKAGE_ID_PREALLOCATION_UNCERTAIN');
+ // One SQL transaction records every remote identity BEFORE any provider CREATE.
+ const saved=await ledger.reserveBatch(pkg,workerId,generation,ids[0],
+   s.remote_folder_id,s.selected_photos.map((p,i)=>({
+     photo_id:p.photo_id,file_id:ids[i+1]})),ids.at(-1));
+ if(saved?.reserved!==true||saved.package_id!==pkg
+   ||saved.folder_id!==ids[0]||saved.manifest_id!==ids.at(-1)
+   ||saved.reserved_count!==4)
+   throw new DriveUncertain('ORIGINAL_PACKAGE_RESERVATION_UNCERTAIN');
+ const next=await ledger.nextReservedItem(pkg,workerId,generation);
+ if(next?.state!=='FOLDER'||!UUID.test(next.plan_id??''))
+   throw new DriveUncertain('ORIGINAL_PACKAGE_FOLDER_PLAN_UNCERTAIN');
+ const done=await continueTrustedPackageFolder({
+   tokenProvider:async()=>token,ledger,workerId,generation,packageId:pkg,
+   planId:next.plan_id,expectedEmail,expectedDriveId,fetcher});
+ if(done?.state!=='FOLDER_VERIFIED'||done.plan_id!==next.plan_id)
+   throw new DriveUncertain('ORIGINAL_PACKAGE_FOLDER_PROVIDER_UNVERIFIED');
+ // Re-read the authoritative SQL folder receipt, never trust POST or memory.
+ const persisted=await ledger.forLease(pkg,workerId,generation)
+   .getFolderPlan(next.plan_id);
+ if(persisted?.state!=='VERIFIED'||persisted.plan_id!==next.plan_id
+   ||persisted.package_id!==pkg||persisted.file_id!==ids[0]
+   ||persisted.parent_id!==s.remote_folder_id
+   ||persisted.name!=='package-'+pkg)
+   throw new DriveUncertain('ORIGINAL_PACKAGE_FOLDER_DURABLE_RECEIPT_UNVERIFIED');
+ const released=await ledger.releaseDispatch(requestId);
+ if(released?.released!==true)
+   throw new DriveUncertain('ORIGINAL_PACKAGE_DISPATCH_RELEASE_UNVERIFIED');
+ return Object.freeze({state:'ORIGINAL_TEST_PACKAGE_FOLDER_VERIFIED'});
+}
+
 export async function prepareTrustedDelivery({
   tokenProvider,ledger,workerId,expectedEmail,expectedDriveId,
   fetcher=fetch

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The first 116 canonical migrations are installed. Verify exactly the
-# 117th verified-original TEST WORK_ORDER continuation is pending.
+# The first 117 canonical migrations are installed. Verify exactly the
+# 118th original-verified TEST PACKAGE continuation is pending.
 # Never apply from this helper.
 # It does not install
 # migrations, create cron jobs, deploy workers, or enable Send.
@@ -10,9 +10,9 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=117
-last_installed="20261024190000_phase_5_original_attempted_parent_reconciliation.sql"
-expected_pending="20261024200000_phase_5_verified_original_test_wo_continuation.sql"
+expected_count=118
+last_installed="20261024200000_phase_5_verified_original_test_wo_continuation.sql"
+expected_pending="20261024210000_phase_5_original_verified_wo_package_continuation.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -41,7 +41,7 @@ count="$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr
 [[ -f "supabase/migrations/$last_installed" ]] ||
   stop "Missing known-installed canonical migration $last_installed."
 [[ -f "supabase/migrations/$expected_pending" ]] ||
-  stop "Missing exact approved pending verified-original TEST WORK_ORDER continuation migration $expected_pending."
+  stop "Missing exact approved pending original-verified TEST PACKAGE continuation migration $expected_pending."
 
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
@@ -57,12 +57,12 @@ mapfile -t dry_run_migrations < <(
    "${dry_run_migrations[0]}" == "$expected_pending" ]] ||
   stop "Unexpected pending canonical migrations; stop and reconcile with the current approved plan."
 if grep -Fqx 'Remote database is up to date.' "$out"; then
-  stop "Dry-run reports no pending work despite the expected original-parent reconciliation."
+  stop "Dry-run reports no pending work despite the expected original PACKAGE continuation."
 fi
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: linked dry-run identifies the one exact pending verified-original TEST WORK_ORDER continuation; nothing applied.\n'
+printf 'PASS: linked dry-run identifies the one exact pending original-verified TEST PACKAGE continuation; nothing applied.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
 printf 'This does not replace separate live SQL grant/worker readiness checks,\n'
 printf 'provider and Android evidence, or the governed activation gate.\n'
