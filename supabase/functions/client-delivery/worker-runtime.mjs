@@ -343,7 +343,15 @@ export async function continueOriginalVerifiedTestToWorkOrderOnce({
   });
   if(proof?.id!==s.remote_folder_id||proof.parent!==testRootId
     ||proof.drive_id!==expectedDriveId||proof.trashed!==false
-    ||JSON.stringify(proof)!==JSON.stringify(s.remote_evidence))
+    ||!s.remote_evidence||typeof s.remote_evidence!=='object'
+    ||Object.keys(proof).sort().join(',')!==
+       Object.keys(s.remote_evidence).sort().join(',')
+    ||Object.keys(proof).some(k=>k==='appProperties'
+      ? Object.keys(proof.appProperties).sort().join(',')!==
+           Object.keys(s.remote_evidence.appProperties??{}).sort().join(',')
+        ||Object.keys(proof.appProperties).some(n=>
+           proof.appProperties[n]!==s.remote_evidence.appProperties[n])
+      : proof[k]!==s.remote_evidence[k]))
     throw new DriveUncertain('VERIFIED_ORIGINAL_TEST_PROVIDER_PROOF_CHANGED');
 
   const requestId=makeRequestId();
