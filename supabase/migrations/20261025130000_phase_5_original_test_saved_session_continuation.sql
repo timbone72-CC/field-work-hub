@@ -66,7 +66,6 @@ begin
   or coalesce(k.approved_manifest->>'folder_layout','ADDRESS_WORK_ORDER')<>'ADDRESS_WORK_ORDER'
   or o.approved_sha256 is distinct from k.approved_sha256 or k.approved_sha256 is null
   or rt.organization_id is null or not rt.worker_ready or rt.worker_identity is null
-  or rt.last_verified_at<clock_timestamp()-interval '24 hours'
   or j.photo_plan_id is distinct from p.id
   or j.photo_remote_id is distinct from p.drive_file_id
   or j.folder_plan_id is distinct from f.id
@@ -145,6 +144,10 @@ set lock_timeout='5s' as $resume$
 declare
  o private.client_delivery_outbox%rowtype;
  s private.client_delivery_upload_sessions%rowtype;
+ k private.client_packages%rowtype;
+ d private.client_delivery_destinations%rowtype;
+ rt private.client_delivery_runtime%rowtype;
+ audit private.client_delivery_worker_readiness_actions%rowtype;
  prior jsonb;
  lease_end timestamptz;
  permit jsonb;
@@ -191,6 +194,40 @@ begin
   or p_proof->'trashed' is distinct from 'false'::jsonb
  then raise exception 'Original provider proof or session changed'
   using errcode='42501';end if;
+ -- Exact same audited original worker readiness, never a general renewal:
+ -- an expired 24-hour health stamp is revalidated atomically with the
+ -- original lease CAS and dispatch permit (no separate readiness API).
+ select * into k from private.client_packages where id=p_package;
+ select * into d from private.client_delivery_destinations where id=p_destination;
+ select * into rt from private.client_delivery_runtime
+  where organization_id=k.organization_id for update;
+ select * into audit from private.client_delivery_worker_readiness_actions q
+  where q.organization_id=k.organization_id
+  order by q.recorded_at desc,q.action_id desc limit 1;
+ if rt.organization_id is null or not rt.worker_ready
+  or rt.worker_identity is null or audit.action_id is null
+  or not audit.requested_ready
+  or audit.worker_identity is distinct from rt.worker_identity
+  or audit.destination_id is distinct from d.id
+  or audit.destination_revision is distinct from d.revision
+  or audit.expected_root_folder_id is distinct from p_root
+  or audit.provider_identity is distinct from d.provider_identity
+  or audit.provider_proof_folder_id is distinct from
+    d.verification_receipt->>'proof_folder_id'
+  or audit.verified_probe_result is distinct from
+    'TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY'
+  or rt.last_verified_at<audit.recorded_at-interval '1 minute'
+ then raise exception 'Original audited worker readiness changed'
+  using errcode='42501';end if;
+ if rt.last_verified_at<clock_timestamp()-interval '24 hours' then
+  update private.client_delivery_runtime
+    set last_verified_at=clock_timestamp()
+   where organization_id=k.organization_id and worker_ready
+    and worker_identity=audit.worker_identity;
+  if not found then
+   raise exception 'Original readiness revalidation denied'
+    using errcode='40001';end if;
+ end if;
  insert into private.client_delivery_test_first_photo_progress_continuations(
   package_id,worker_id,lease_generation,photo_plan_id,photo_remote_id,
   previous_offset,previous_revision,request_id,original_expired_lease)
