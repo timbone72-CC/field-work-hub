@@ -11,7 +11,8 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  recoverAndContinueOriginalTestParentOnce,
  reconcileOriginalAttemptedTestParentOnce,
  continueOriginalVerifiedTestToWorkOrderOnce,
- continueOriginalVerifiedTestToPackageOnce} from './worker-runtime.mjs';
+ continueOriginalVerifiedTestToPackageOnce,
+ continueOriginalVerifiedTestFirstPhotoOnce} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
@@ -36,6 +37,7 @@ export function createDeliveryHandler({
   reconcileOriginalTestParent=reconcileOriginalAttemptedTestParentOnce,
   continueVerifiedOriginalTestWO=continueOriginalVerifiedTestToWorkOrderOnce,
   continueVerifiedOriginalTestPackage=continueOriginalVerifiedTestToPackageOnce,
+  continueVerifiedOriginalTestFirstPhoto=continueOriginalVerifiedTestFirstPhotoOnce,
   testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
@@ -211,6 +213,45 @@ export function createDeliveryHandler({
       return reply(503,'ORIGINAL_TEST_PACKAGE_FOLDER_UNVERIFIED');
     }
   }
+    if(only?.operation==='continue_verified_original_first_photo_once'){
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'TEST_FIRST_PHOTO_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      let vault;
+      try{vault=await createSessionVault({base64Key:sessionVaultKey});}
+      catch{return reply(503,'SESSION_KEY_NOT_CONFIGURED');}
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const result=await continueVerifiedOriginalTestFirstPhoto({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,testDestinationId:testReleaseDestinationId,
+          testRootId:testRootFolderId,projectUrl:supabaseUrl,
+          serviceRoleJwt,vault,fetcher,makeRequestId:makeWorkerId
+        });
+        if(result?.state==='ORIGINAL_TEST_FIRST_PHOTO_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_FIRST_PHOTO_VERIFIED');
+        if(result?.state==='ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED');
+      }catch{
+        // Lost session/Google/SQL result keeps original IDs and permit.
+      }
+      return reply(503,'ORIGINAL_TEST_FIRST_PHOTO_UNVERIFIED');
+    }
   // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
   // rollout. No second OAuth/root-check implementation and no database RPC.
   // The existing adapter independently rejects preallocate, Send and every

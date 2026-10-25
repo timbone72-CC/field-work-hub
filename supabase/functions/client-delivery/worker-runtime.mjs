@@ -565,6 +565,139 @@ export async function continueOriginalVerifiedTestToPackageOnce({
  return Object.freeze({state:'ORIGINAL_TEST_PACKAGE_FOLDER_VERIFIED'});
 }
 
+/**
+ * One approved disposable TEST photo step using already-preallocated IDs.
+ * Only the original expired worker + original package may obtain the
+ * transactionally fenced lease/permit. Existing encrypted upload and private
+ * source implementations own every byte and Google session.
+ * No retry, replacement ID, new worker, delivery finish, or cleanup.
+ */
+export async function continueOriginalVerifiedTestFirstPhotoOnce({
+ ledger,tokenProvider,expectedEmail,expectedDriveId,
+ testPackageId,testDestinationId,testRootId,projectUrl,serviceRoleJwt,
+ vault,fetcher=fetch,makeRequestId=()=>crypto.randomUUID(),
+ continueFile=continueTrustedDeliveryFile
+}={}){
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const HASH=/^[a-f0-9]{64}$/;
+ const ID=/^[A-Za-z0-9_-]{10,160}$/;
+ if(!ledger||['readExactTestFirstPhoto','resumeExactTestFirstPhoto',
+   'nextReservedItem','forLease','releaseDispatch'].some(k=>typeof ledger[k]!=='function')
+  ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+  ||typeof continueFile!=='function'||typeof makeRequestId!=='function'
+  ||!UUID.test(testPackageId??'')||!UUID.test(testDestinationId??'')
+  ||!ID.test(testRootId??'')||!ID.test(expectedDriveId??'')
+  ||typeof expectedEmail!=='string'||!expectedEmail
+  ||typeof projectUrl!=='string'||!projectUrl
+  ||typeof serviceRoleJwt!=='string'||!serviceRoleJwt
+  ||!vault||typeof vault.seal!=='function'||typeof vault.open!=='function')
+  throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_NOT_CONFIGURED');
+ const s=await ledger.readExactTestFirstPhoto(
+   testPackageId,testDestinationId,testRootId);
+ if(s?.state!=='ORIGINAL_TEST_FIRST_PHOTO_EXPIRED'
+  ||s.package_id!==testPackageId||s.destination_id!==testDestinationId
+  ||s.root_id!==testRootId||!UUID.test(s.worker_id??'')
+  ||s.generation!==1||s.attempts!==1||!HASH.test(s.approved_sha256??'')
+  ||!UUID.test(s.folder_plan_id??'')||!UUID.test(s.photo_plan_id??'')
+  ||!UUID.test(s.photo_id??'')||!HASH.test(s.photo_sha256??'')
+  ||!Number.isSafeInteger(s.photo_size)||s.photo_size<1||s.photo_size>33554432
+  ||!ID.test(s.folder_remote_id??'')||!ID.test(s.photo_remote_id??'')
+  ||!ID.test(s.wo_remote_id??'')||!ID.test(s.wo_parent_id??'')
+  ||new Set([testRootId,s.wo_parent_id,s.wo_remote_id,
+    s.folder_remote_id,s.photo_remote_id]).size!==5
+  ||s.photo_parent_id!==s.folder_remote_id||s.drive_id!==expectedDriveId
+  ||typeof s.lease_until!=='string'||!Number.isFinite(Date.parse(s.lease_until))
+  ||Date.parse(s.lease_until)>=Date.now()
+  ||!s.folder_properties||!s.wo_properties
+  ||s.folder_properties.fwh_package!==testPackageId
+  ||s.folder_properties.fwh_manifest!==s.approved_sha256
+  ||s.wo_properties.fwh_kind!=='WORK_ORDER'
+  ||s.wo_properties.fwh_destination!==testDestinationId
+  ||typeof s.folder_name!=='string'
+  ||s.folder_name!=='package-'+testPackageId
+  ||typeof s.wo_name!=='string'||!s.wo_name
+  ||!s.folder_proof||!s.wo_proof)
+  throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_IDENTITY_CHANGED');
+ let token;
+ try{token=await tokenProvider();}
+ catch{throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');}
+ if(typeof token?.accessToken!=='string'||token.accessToken.length<20
+   ||!Number.isInteger(token.expiresInSeconds)||token.expiresInSeconds<60)
+   throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+ const drive=createDriveClient({accessToken:token.accessToken,fetcher});
+ const account=await drive.verifyProviderIdentity(expectedEmail);
+ if(account?.account?.toLowerCase()!==expectedEmail.toLowerCase())
+  throw new DriveUncertain('WORKSPACE_ACCOUNT_MISMATCH');
+ const root=await drive.verifyDestination({folderId:testRootId,expectedDriveId});
+ if(root?.id!==testRootId||root.drive_id!==expectedDriveId)
+  throw new DriveUncertain('ORIGINAL_TEST_ROOT_CHANGED');
+ const wo=await drive.verifyFile({
+  id:s.wo_remote_id,parent:s.wo_parent_id,
+  name:s.wo_name,mime:'application/vnd.google-apps.folder',
+  expectedDriveId,sha256:null,size:null,appProperties:s.wo_properties
+ });
+ const proof=await drive.verifyFile({
+  id:s.folder_remote_id,parent:s.wo_remote_id,
+  name:s.folder_name,mime:'application/vnd.google-apps.folder',
+  expectedDriveId,sha256:null,size:null,appProperties:s.folder_properties
+ });
+ const same=(a,b)=>a&&b&&Object.keys(a).sort().join(',')===Object.keys(b).sort().join(',')
+  &&Object.keys(a).every(k=>k==='appProperties'
+    ? a[k]&&b[k]&&Object.keys(a[k]).sort().join(',')===Object.keys(b[k]).sort().join(',')
+      &&Object.keys(a[k]).every(n=>a[k][n]===b[k][n])
+    : a[k]===b[k]);
+ if(!same(wo,s.wo_proof)||!same(proof,s.folder_proof))
+  throw new DriveUncertain('ORIGINAL_TEST_PROVIDER_PROOF_CHANGED');
+ const request=makeRequestId();
+ if(!UUID.test(request))throw new DriveUncertain('ORIGINAL_TEST_REQUEST_INVALID');
+ // SQL commits the original lease, unique journal and non-TTL dispatch together.
+ const resumed=await ledger.resumeExactTestFirstPhoto(s,proof,new Date().toISOString(),request);
+ if(resumed?.status!=='ORIGINAL_TEST_FIRST_PHOTO_DISPATCH_ACQUIRED'
+  ||resumed.package_id!==testPackageId||resumed.worker_id!==s.worker_id
+  ||resumed.generation!==1||resumed.folder_plan_id!==s.folder_plan_id
+  ||resumed.photo_plan_id!==s.photo_plan_id
+  ||resumed.folder_remote_id!==s.folder_remote_id
+  ||resumed.photo_remote_id!==s.photo_remote_id
+  ||resumed.dispatch_id!==request
+  ||typeof resumed.expires_at!=='string'
+  ||Date.parse(resumed.expires_at)<=Date.now())
+  throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_DISPATCH_UNVERIFIED');
+ const next=await ledger.nextReservedItem(testPackageId,s.worker_id,1);
+ if(next?.state!=='FILE'||next.kind!=='PHOTO'||next.plan_id!==s.photo_plan_id)
+  throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_QUEUE_CHANGED');
+ const outcome=await continueFile({
+  tokenProvider:async()=>token,ledger,workerId:s.worker_id,generation:1,
+  packageId:testPackageId,planId:s.photo_plan_id,
+  expectedEmail,expectedDriveId,projectUrl,serviceRoleJwt,vault,fetcher
+ });
+ if(outcome?.plan_id!==s.photo_plan_id
+  ||!['FILE_VERIFIED','PROGRESS'].includes(outcome.state))
+  throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_RESULT_UNVERIFIED');
+ const nextAfter=await ledger.nextReservedItem(testPackageId,s.worker_id,1);
+ if(outcome.state==='FILE_VERIFIED'){
+  if(nextAfter?.plan_id===s.photo_plan_id||nextAfter?.state==='UNRESERVED')
+   throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_RECEIPT_MISSING');
+ }else{
+  if(nextAfter?.state!=='FILE'||nextAfter?.kind!=='PHOTO'
+    ||nextAfter.plan_id!==s.photo_plan_id
+    ||!Number.isSafeInteger(outcome.recorded_offset)
+    ||outcome.recorded_offset<1||outcome.recorded_offset>s.photo_size)
+   throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_UNVERIFIED');
+  const session=await ledger.forLease(testPackageId,s.worker_id,1)
+    .getSession(s.photo_plan_id);
+  if(!session||session.plan_id!==s.photo_plan_id
+    ||session.package_id!==testPackageId||session.total_bytes!==s.photo_size
+    ||session.recorded_offset<outcome.recorded_offset
+    ||!session.encrypted)
+   throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_SESSION_NOT_DURABLE');
+ }
+ const release=await ledger.releaseDispatch(request);
+ if(release?.released!==true)
+  throw new DriveUncertain('ORIGINAL_TEST_FIRST_PHOTO_PERMIT_UNVERIFIED');
+ return Object.freeze({state:outcome.state==='FILE_VERIFIED'
+   ?'ORIGINAL_TEST_FIRST_PHOTO_VERIFIED':'ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED'});
+}
+
 export async function prepareTrustedDelivery({
   tokenProvider,ledger,workerId,expectedEmail,expectedDriveId,
   fetcher=fetch
