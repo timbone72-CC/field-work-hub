@@ -15,7 +15,7 @@ function stub(path,text){
  writeFileSync(path,'#!/usr/bin/env bash\nset -euo pipefail\n'+text+'\n');
  chmodSync(path,0o700);
 }
-test('read-only exact-head Team dry-run accepts one known pending migration; uncertain cases fail closed',t=>{
+test('read-only exact-head Team dry-run accepts 119 installed and zero pending; uncertain cases fail closed',t=>{
  const tmp=mkdtempSync(join(tmpdir(),'fwh-phase5d-migration-test-'));
  t.after(()=>rmSync(tmp,{recursive:true,force:true}));
  const bin=join(tmp,'bin'),dir=join(tmp,'source');
@@ -52,7 +52,7 @@ test('read-only exact-head Team dry-run accepts one known pending migration; unc
    FWH_STUB_BRANCH:BRANCH,
    FWH_STUB_REMOTE:'https://github.com/timbone72-CC/field-work-hub.git',
    FWH_STUB_HEAD:HEAD,
-   FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n'+expected,
+   FWH_STUB_DRYRUN:'Remote database is up to date.',
    FWH_STUB_EXIT:'0'
  };
  function execute(extra={}){
@@ -63,14 +63,15 @@ test('read-only exact-head Team dry-run accepts one known pending migration; unc
  }
  let r=execute();
  assert.equal(r.status,0,r.stderr);
- assert.match(r.stdout,/one exact pending original-worker TEST first PHOTO continuation/);
+ assert.match(r.stdout,/zero pending migrations/);
  assert.match(r.stdout,/NO MIGRATIONS APPLIED/);
  const stops=[
-   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
-   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.\\n'+expected},code:/STOP: Dry-run reports no pending work/},
-   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.'},code:/STOP: Unexpected pending/},
-   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n'+expected+'\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
-   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.'},code:/STOP: Unexpected pending/},
+   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n'+expected},code:/STOP: Unexpected pending/},
+   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.\\n'+expected},code:/STOP: Unexpected pending/},
+   {env:{FWH_STUB_DRYRUN:'Remote database is up to date.\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
+   {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.'},code:/STOP: Dry-run did not confirm/},
+   {env:{FWH_STUB_DRYRUN:''},code:/STOP: Dry-run did not confirm/},
+   {env:{FWH_STUB_DRYRUN:'Remote database is up to date. (unverified)'},code:/STOP: Dry-run did not confirm/},
    {env:{FWH_STUB_DRYRUN:'Remote database is up to date.',FWH_STUB_EXIT:'1'},code:/STOP: Supabase canonical dry-run failed/},
    {env:{FWH_STUB_BRANCH:'main'},code:/STOP: Not on PR #40/},
    {env:{FWH_STUB_HEAD:'another-head',FWH_STUB_REMOTE:'invalid-example.net'},code:/STOP: Remote is not/}
