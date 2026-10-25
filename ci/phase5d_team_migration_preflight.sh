@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The first 118 canonical migrations are installed. Verify exactly the
-# 119th original-worker TEST first PHOTO continuation is pending.
+# All 119 canonical migrations are installed. Verify that the linked
+# Team TEST database has ZERO pending migrations before provider testing.
 # Never apply from this helper.
 # It does not install
 # migrations, create cron jobs, deploy workers, or enable Send.
@@ -11,8 +11,7 @@ repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
 expected_count=119
-last_installed="20261024210000_phase_5_original_verified_wo_package_continuation.sql"
-expected_pending="20261024220000_phase_5_original_test_first_photo_continuation.sql"
+last_installed="20261024220000_phase_5_original_test_first_photo_continuation.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
@@ -40,8 +39,6 @@ count="$(find supabase/migrations -maxdepth 1 -name '*.sql' -type f | wc -l | tr
   stop "Canonical source migration count changed; re-reconcile before rollout."
 [[ -f "supabase/migrations/$last_installed" ]] ||
   stop "Missing known-installed canonical migration $last_installed."
-[[ -f "supabase/migrations/$expected_pending" ]] ||
-  stop "Missing exact approved pending original-worker TEST first PHOTO continuation migration $expected_pending."
 
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
@@ -51,18 +48,16 @@ fi
 mapfile -t dry_run_migrations < <(
   grep -Eo '20[0-9]{12}_[a-zA-Z0-9_]+[.]sql' "$out" | sort -u
 )
-# Fail closed unless this exact PACKAGE continuation is the ONLY
-# pending version. A clean/successful CLI exit by itself proves nothing.
-[[ "${#dry_run_migrations[@]}" -eq 1 &&
-   "${dry_run_migrations[0]}" == "$expected_pending" ]] ||
-  stop "Unexpected pending canonical migrations; stop and reconcile with the current approved plan."
-if grep -Fqx 'Remote database is up to date.' "$out"; then
-  stop "Dry-run reports no pending work despite the expected original first PHOTO continuation."
-fi
+# Fail closed if any migration appears pending, including an old version.
+# CLI exit 0 is not enough: require its explicit up-to-date confirmation.
+[[ "${#dry_run_migrations[@]}" -eq 0 ]] ||
+  stop "Unexpected pending canonical migrations; stop and reconcile before provider testing."
+grep -Fqx 'Remote database is up to date.' "$out" ||
+  stop "Dry-run did not confirm the linked database is up to date."
 
 printf 'PASS: exact clean PR #40 HEAD %s\n' "$local_sha"
 printf 'PASS: linked Team TEST project %s, %s canonical source migrations\n' "$project" "$count"
-printf 'PASS: linked dry-run identifies the one exact pending original-worker TEST first PHOTO continuation; nothing applied.\n'
+printf 'PASS: linked dry-run confirms zero pending migrations and Remote database is up to date.\n'
 printf '\nNO MIGRATIONS APPLIED. NO WORKERS OR CLIENT DELIVERY ENABLED.\n'
 printf 'This does not replace separate live SQL grant/worker readiness checks,\n'
 printf 'provider and Android evidence, or the governed activation gate.\n'
