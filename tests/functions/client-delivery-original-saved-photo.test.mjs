@@ -166,6 +166,9 @@ test('source migration is one-shot, service-only and does not relax existing gua
  assert.match(sql,/lease_until is distinct from p_expected_lease_until/);
  assert.match(sql,/s\.revision is distinct from p_expected_revision/);
  assert.match(sql,/service_acquire_delivery_dispatch/);
+ assert.match(sql,/client_delivery_worker_readiness_actions/);
+ assert.match(sql,/TEST_WORKER_CRYPTO_PROVIDER_READ_ONLY/);
+ assert.match(sql,/last_verified_at=clock_timestamp\(\)/);
  assert.match(sql,/client_delivery_dispatch_permit/);
  assert.match(sql,/revoke all on function[\s\S]+from public,anon,authenticated,service_role/);
  assert.match(sql,/to service_role;/);
