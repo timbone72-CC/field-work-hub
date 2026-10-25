@@ -62,7 +62,7 @@ test('one POST, verified HTTP, OFF cleanup, and permanent no-retry marker',t=>{
  const f=fixture(t);
  const a=f.run();
  assert.equal(a.status,0,a.stdout+'\n'+a.stderr);
- assert.match(a.stdout,/Calling the original SAVED saved-session first-photo continuation ONCE/);
+ assert.match(a.stdout,/Calling the original saved-session first-photo continuation ONCE/);
  assert.match(a.stdout,/Curl exit: 0 \| HTTP: 200/);
  assert.match(a.stdout,/PASS: TEST recovery OFF command accepted/);
  assert.equal((f.log().match(/CURL:/g)||[]).length,1);
