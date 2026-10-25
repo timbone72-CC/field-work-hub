@@ -128,7 +128,7 @@ test('wrong Google folder identity blocks SQL recovery and photo bytes',async()=
 test('read denials and changed saved offsets stop before provider or SQL',async()=>{
  for(const wrong of [{...original,session_revision:2},
   {...original,recorded_offset:0},
-  {...original,photo_remote_id:'different_'+remote},
+  {...original,photo_remote_id:'invalid/remote/id'},
   {...original,state:'ALREADY_CONSUMED'}]){
   const x=rig({read:wrong});
   await assert.rejects(()=>continueOriginalTestSavedFirstPhotoOnce(x.input),DriveUncertain);
