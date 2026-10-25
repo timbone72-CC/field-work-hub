@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {inspectExpiredReservedParent,resumeInspectedExpiredTestLease,
  recoverAndContinueOriginalTestParentOnce,
- reconcileOriginalAttemptedTestParentOnce}
+ reconcileOriginalAttemptedTestParentOnce,
+ continueOriginalVerifiedTestToWorkOrderOnce}
  from '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain}
  from '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -527,4 +528,158 @@ test('new hosted TEST reconciliation route is default OFF, no ID override, and f
   operation:'reconcile_original_attempted_parent_once'}));
  assert.equal(blocked.status,503);
  assert.deepEqual(await blocked.json(),{status:'ORIGINAL_TEST_RECONCILIATION_UNVERIFIED'});
+});
+
+const childId='verified_workorder_child_0123456789';
+const childName='work-order-00000000-0000-4000-8000-000000000011';
+const childMap=uuid(77);
+const childProperties={fwh_org:uuid(30),fwh_company:uuid(31),
+ fwh_destination:destinationId,fwh_kind:'WORK_ORDER',fwh_key:uuid(11)};
+const verifiedEvidence={id:originalId,parent:root,
+ mime:'application/vnd.google-apps.folder',name:heldAttempt.remote_name,
+ drive_id:driveId,trashed:false,sha256:null,size:null,
+ appProperties:heldAttempt.appProperties};
+const verifiedSnapshot={...heldAttempt,state:'ORIGINAL_VERIFIED_PARENT_EXPIRED',
+ lease_until:new Date(Date.now()-30000).toISOString(),
+ remote_evidence:verifiedEvidence};
+
+function verifiedChildRig({snapshot=verifiedSnapshot,remoteStatus=200,
+ resumeLost=false,reservationLost=false,createLost=false}={}){
+ const events=[];let reserved=false;
+ const ledger={
+  readVerifiedOriginalTestParent:async()=>{events.push('read-exact');return structuredClone(snapshot);},
+  resumeVerifiedOriginalAndAcquireDispatch:async(scope,proof,observed,request)=>{
+   events.push('atomic-acquire');
+   assert.equal(scope.worker_id,workerId);
+   assert.equal(scope.remote_folder_id,originalId);
+   assert.equal(scope.lease_until,snapshot.lease_until);
+   assert.equal(request,uuid(81));
+   assert.ok(Math.abs(Date.now()-Date.parse(observed))<5000);
+   assert.deepEqual(proof,verifiedEvidence);
+   if(resumeLost)throw Error('LOST_ATOMIC_REPLY');
+   return {status:'ORIGINAL_VERIFIED_PARENT_LEASE_AND_DISPATCH_ACQUIRED',
+    package_id:packageId,worker_id:workerId,generation:1,map_id:mapId,
+    remote_folder_id:originalId,dispatch_id:request,
+    expires_at:new Date(Date.now()+120000).toISOString()};
+  },
+  heartbeat:async()=>{events.push('heartbeat');return {expires_at:new Date(Date.now()+120000).toISOString()};},
+  readParent:async(pkg,worker,gen,kind)=>{
+   events.push('read-parent');assert.equal(kind,'WORK_ORDER');
+   return reserved?{exists:true,map_id:childMap,kind:'WORK_ORDER',
+    remote_folder_id:childId,parent_remote_id:originalId,
+    remote_name:childName,state:'RESERVED',appProperties:childProperties}
+    :{exists:false,kind:'WORK_ORDER'};
+  },
+  reserveParent:async(pkg,worker,gen,kind,id,parent)=>{
+   events.push('reserve-child');
+   assert.deepEqual([pkg,worker,gen,kind,id,parent],
+    [packageId,workerId,1,'WORK_ORDER',childId,originalId]);
+   reserved=true;
+   if(reservationLost)throw Error('LOST_RESERVATION_REPLY');
+   return {map_id:childMap,kind:'WORK_ORDER',remote_folder_id:id,
+    parent_remote_id:parent,state:'RESERVED'};
+  },
+  beginParentCreate:async()=>{events.push('create-permit');
+   return {state:'MAY_CREATE',map_id:childMap,file_id:childId,parent_id:originalId};},
+  confirmParent:async()=>{events.push('commit-child');return {state:'VERIFIED'};},
+  releaseDispatch:async(id)=>{events.push('release-permit');assert.equal(id,uuid(81));return {released:true};}
+ };
+ const fetcher=async(url,init)=>{
+  const u=new URL(url);events.push((init.method??'GET')+':'+u.pathname);
+  assert.equal(u.origin,'https://www.googleapis.com');
+  assert.equal(init.redirect,'error');
+  if(u.pathname==='/drive/v3/about')
+   return Response.json({user:{emailAddress:scope,me:true,permissionId:'test-permission'}});
+  if(u.pathname==='/drive/v3/files/'+root)
+   return Response.json({id:root,driveId,trashed:false,
+    mimeType:'application/vnd.google-apps.folder',
+    capabilities:{canAddChildren:true}});
+  if(u.pathname==='/drive/v3/files/'+originalId){
+   if(remoteStatus!==200)return Response.json({error:'unavailable'},{status:remoteStatus});
+   return Response.json({id:originalId,driveId,trashed:false,
+    mimeType:'application/vnd.google-apps.folder',name:heldAttempt.remote_name,
+    parents:[root],appProperties:heldAttempt.appProperties,
+    capabilities:{canAddChildren:true}});
+  }
+  if(u.pathname==='/drive/v3/files/generateIds'){
+   assert.equal(init.method??'GET','GET');return Response.json({ids:[childId]});
+  }
+  if(u.pathname==='/drive/v3/files'&&init.method==='POST'){
+   assert.equal(reserved,true);if(createLost)throw Error('LOST_PROVIDER_CREATE_REPLY');
+   return Response.json({id:childId});
+  }
+  if(u.pathname==='/drive/v3/files/'+childId)
+   return Response.json({id:childId,driveId,trashed:false,
+     mimeType:'application/vnd.google-apps.folder',name:childName,
+     parents:[originalId],appProperties:childProperties,
+     capabilities:{canAddChildren:true}});
+  throw Error('UNEXPECTED_PROVIDER_OPERATION');
+ };
+ return {events,opts:{...args,ledger,fetcher,
+  makeRequestId:()=>uuid(81),
+  tokenProvider:async()=>({accessToken:'test-token-01234567890123456789',
+    expiresInSeconds:3600})}};
+}
+test('verified original parent continues with SAME worker and only one preallocated WORK_ORDER POST',async()=>{
+ const r=verifiedChildRig();
+ const value=await continueOriginalVerifiedTestToWorkOrderOnce(r.opts);
+ assert.equal(value.state,'ORIGINAL_TEST_WORK_ORDER_VERIFIED');
+ const ev=r.events;
+ assert.ok(ev.indexOf('atomic-acquire')<ev.indexOf('GET:/drive/v3/files/generateIds'));
+ assert.ok(ev.indexOf('reserve-child')<ev.indexOf('POST:/drive/v3/files'));
+ assert.ok(ev.indexOf('commit-child')<ev.indexOf('release-permit'));
+ assert.equal(ev.filter(x=>x==='POST:/drive/v3/files').length,1);
+ assert.equal(ev.filter(x=>x==='atomic-acquire').length,1);
+});
+test('verified original parent refuses unknown remote outcomes before dispatch or CREATE',async()=>{
+ for(const status of [404,403,500]){
+  const r=verifiedChildRig({remoteStatus:status});
+  await assert.rejects(()=>continueOriginalVerifiedTestToWorkOrderOnce(r.opts),
+   e=>e instanceof DriveUncertain);
+  assert.equal(r.events.includes('atomic-acquire'),false);
+ }
+ for(const mutation of [x=>x.worker_id=null,x=>x.generation=2,
+  x=>x.remote_folder_id='wrong',x=>x.state='RESERVED',
+  x=>x.remote_evidence.drive_id='wrong']){
+  const snap=structuredClone(verifiedSnapshot);mutation(snap);
+  const r=verifiedChildRig({snapshot:snap});
+  await assert.rejects(()=>continueOriginalVerifiedTestToWorkOrderOnce(r.opts),
+   e=>e instanceof DriveUncertain);
+  assert.equal(r.events.includes('atomic-acquire'),false);
+ }
+});
+test('lost atomic or reservation acknowledgement never POSTs or releases permit',async()=>{
+ for(const cfg of [{resumeLost:true},{reservationLost:true}]){
+  const r=verifiedChildRig(cfg);
+  await assert.rejects(()=>continueOriginalVerifiedTestToWorkOrderOnce(r.opts));
+  assert.equal(r.events.includes('POST:/drive/v3/files'),false);
+  assert.equal(r.events.includes('release-permit'),false);
+ }
+});
+test('uncertain Google CREATE response leaves original dispatch held without retry',async()=>{
+ const r=verifiedChildRig({createLost:true});
+ await assert.rejects(()=>continueOriginalVerifiedTestToWorkOrderOnce(r.opts),
+  /LOST_PROVIDER_CREATE_REPLY/);
+ assert.equal(r.events.filter(x=>x==='POST:/drive/v3/files').length,1);
+ assert.equal(r.events.includes('release-permit'),false);
+});
+test('new WORK_ORDER hosted operation is default OFF, exact-only, and masks uncertainty',async()=>{
+ const operation='continue_verified_original_wo_once';
+ const disabled=createDeliveryHandler({...hostedRecoveryOpts,testRecoveryEnabled:false});
+ assert.equal((await disabled(recoveryRequest({operation}))).status,400);
+ let calls=0;
+ const handler=createDeliveryHandler({...hostedRecoveryOpts,
+  continueVerifiedOriginalTestWO:async()=>{calls++;return {state:'ORIGINAL_TEST_WORK_ORDER_VERIFIED'};}});
+ for(const body of [{operation,worker_id:workerId},{operation,remote_id:childId}]){
+  const r=await handler(recoveryRequest(body));assert.equal(r.status,400);
+ }
+ assert.equal((await handler(recoveryRequest({operation},'wrong-secret'))).status,401);
+ assert.equal(calls,0);
+ const ok=await handler(recoveryRequest({operation}));
+ assert.equal(ok.status,200);assert.equal(calls,1);
+ const lost=createDeliveryHandler({...hostedRecoveryOpts,
+  continueVerifiedOriginalTestWO:async()=>{throw Error('LOSS_AFTER_GOOGLE');}});
+ const failed=await lost(recoveryRequest({operation}));
+ assert.equal(failed.status,503);
+ assert.deepEqual(await failed.json(),{status:'ORIGINAL_TEST_WORK_ORDER_UNVERIFIED'});
 });
