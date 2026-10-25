@@ -428,7 +428,7 @@ export async function continueOriginalVerifiedTestToPackageOnce({
  testPackageId,testDestinationId,testRootId,fetcher=fetch,
  makeRequestId=()=>crypto.randomUUID()
 }={}){
- const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  const ID=/^[A-Za-z0-9_-]{10,160}$/;
  const HASH=/^[a-f0-9]{64}$/;
  const needed=['readVerifiedOriginalTestWOForPackage',

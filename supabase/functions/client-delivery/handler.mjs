@@ -34,6 +34,7 @@ export function createDeliveryHandler({
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
   reconcileOriginalTestParent=reconcileOriginalAttemptedTestParentOnce,
   continueVerifiedOriginalTestWO=continueOriginalVerifiedTestToWorkOrderOnce,
+  continueVerifiedOriginalTestPackage=continueOriginalVerifiedTestToPackageOnce,
   testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
