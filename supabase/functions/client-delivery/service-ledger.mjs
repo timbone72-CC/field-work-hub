@@ -13,6 +13,8 @@ const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_deli
  'service_resume_verified_wo_and_acquire_package_dispatch',
  'service_read_exact_test_first_photo_continuation',
  'service_resume_exact_test_first_photo_and_dispatch',
+ 'service_read_exact_test_first_photo_saved_progress',
+ 'service_resume_exact_test_first_photo_saved_progress',
  'service_next_delivery_item',
  'service_delivery_final_provider_snapshot','service_claim_delivery',
  'service_claim_exact_test_delivery','service_heartbeat_delivery',
@@ -196,6 +198,19 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_folder_remote:s.folder_remote_id,p_photo_remote:s.photo_remote_id,
         p_expected_lease_until:s.lease_until,p_observed_at:at,
         p_proof:proof,p_request:request
+      }),
+    readSavedTestFirstPhoto:(pkg,dest,root)=>rpc(
+      'service_read_exact_test_first_photo_saved_progress',{
+        p_package:pkg,p_destination:dest,p_root:root
+      }),
+    resumeSavedTestFirstPhoto:(s,proof,request)=>rpc(
+      'service_resume_exact_test_first_photo_saved_progress',{
+        p_package:s.package_id,p_destination:s.destination_id,p_root:s.root_id,
+        p_worker:s.worker_id,p_generation:s.generation,
+        p_photo_plan:s.photo_plan_id,p_photo_remote:s.photo_remote_id,
+        p_expected_lease_until:s.lease_until,
+        p_expected_offset:s.recorded_offset,
+        p_expected_revision:s.session_revision,p_proof:proof,p_request:request
       }),
     nextReservedItem:(pkg,worker,gen)=>rpc('service_next_delivery_item',
       {p_package:pkg,p_worker:worker,p_generation:gen}),
