@@ -10,7 +10,8 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  continueTrustedDeliveryFile,inspectExpiredReservedParent,
  recoverAndContinueOriginalTestParentOnce,
  reconcileOriginalAttemptedTestParentOnce,
- continueOriginalVerifiedTestToWorkOrderOnce} from './worker-runtime.mjs';
+ continueOriginalVerifiedTestToWorkOrderOnce,
+ continueOriginalVerifiedTestToPackageOnce} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 

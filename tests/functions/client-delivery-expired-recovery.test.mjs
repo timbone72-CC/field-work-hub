@@ -704,7 +704,7 @@ function packageRig({lost=null,remoteStatus=200,snapshotChange=null}={}){
   remote_name:childName,parent_name:heldAttempt.remote_name,
   drive_id:driveId,appProperties:childProperties,
   parent_appProperties:heldAttempt.appProperties,
-  remote_evidence:woProof,parent_evidence:parentProof,
+  remote_evidence:structuredClone(woProof),parent_evidence:structuredClone(parentProof),
   selected_photos:packagePhotoIds.map((id,i)=>({
    photo_id:id,observed_sha256:(i?'c':'b').repeat(64),observed_size:i?256:128
   }))};
