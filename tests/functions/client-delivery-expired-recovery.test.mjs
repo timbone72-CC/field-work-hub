@@ -810,7 +810,10 @@ test('foreign or unverified WORK_ORDER evidence denies any package Google CREATE
   s=>s.parent_evidence.name='changed']){
   const r=packageRig({snapshotChange:change});
   await assert.rejects(()=>continueOriginalVerifiedTestToPackageOnce(r.opts));
-  assert.equal(r.events.includes('CAS'),false);
+  // SQL owns the final worker equality check: a foreign ID may reach the CAS,
+  // but its denial must never authorize a provider POST or permit release.
+  assert.equal(r.events.includes('POST:/drive/v3/files'),false);
+  assert.equal(r.events.includes('release'),false);
  }
  for(const remoteStatus of [403,404,500]){
   const r=packageRig({remoteStatus});
