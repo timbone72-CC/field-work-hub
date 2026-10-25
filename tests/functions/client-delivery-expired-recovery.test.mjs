@@ -659,7 +659,7 @@ test('lost atomic or reservation acknowledgement never POSTs or releases permit'
 test('uncertain Google CREATE response leaves original dispatch held without retry',async()=>{
  const r=verifiedChildRig({createLost:true});
  await assert.rejects(()=>continueOriginalVerifiedTestToWorkOrderOnce(r.opts),
-  /LOST_PROVIDER_CREATE_REPLY/);
+  isCode('PROVIDER_OUTCOME_UNCERTAIN'));
  assert.equal(r.events.filter(x=>x==='POST:/drive/v3/files').length,1);
  assert.equal(r.events.includes('release-permit'),false);
 });
