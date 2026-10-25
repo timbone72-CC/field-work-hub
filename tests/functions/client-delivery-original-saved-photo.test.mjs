@@ -6,6 +6,7 @@ import {continueOriginalTestSavedFirstPhotoOnce} from
  '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain} from
  '../../supabase/functions/client-delivery/drive-client.mjs';
+import {createDeliveryHandler} from '../../supabase/functions/client-delivery/handler.mjs';
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const pkg=uuid(3),dest=uuid(4),worker=uuid(5),first=uuid(6),second=uuid(7);
 const root='root_'+'a'.repeat(24),folder='folder_'+'b'.repeat(24);
@@ -173,4 +174,76 @@ test('source migration is one-shot, service-only and does not relax existing gua
  assert.match(sql,/revoke all on function[\s\S]+from public,anon,authenticated,service_role/);
  assert.match(sql,/to service_role;/);
  assert.doesNotMatch(sql,/create extension|drop table|truncate|alter role/i);
+});
+
+test('hosted narrow recovery route requires exact one-field body and TEST settings',async()=>{
+ let calls=0;
+ const cfg={
+  enabled:false,testPreflightEnabled:true,testRecoveryEnabled:true,
+  workerSecret:'disposable-test-worker-only-1234567890',
+  testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',
+  testReleasePackageId:pkg,testReleaseDestinationId:dest,
+  testRootFolderId:root,expectedDriveId:drive,
+  internalDriveId:'internal_'+('a'.repeat(22)),
+  testWorkspaceDomain:'example.invalid',expectedAccount:account,
+  clientId:'disposable-client-id',clientSecret:'disposable-client-secret',
+  refreshToken:'disposable-refresh-token',
+  oauthScope:'https://www.googleapis.com/auth/drive.file',
+  supabaseUrl:'https://fake-team.invalid',
+  serviceRoleJwt:'header.payload.signature',
+  sessionVaultKey:Buffer.alloc(32,7).toString('base64url'),
+  continueOriginalSavedTestPhoto:async()=>{calls++;return {
+   state:'ORIGINAL_TEST_SAVED_FIRST_PHOTO_VERIFIED'
+  };},
+  fetcher:()=>{throw Error('No real provider in handler mock');}
+ };
+ const makeReq=(body,workerSecret=cfg.workerSecret)=>new Request('https://irrelevant.invalid',{
+  method:'POST',headers:{'x-fwh-delivery-secret':workerSecret,
+   'Content-Type':'application/json'},body:JSON.stringify(body)
+ });
+ const h=createDeliveryHandler(cfg);
+ const good=await h(makeReq({operation:'continue_original_saved_first_photo_once'}));
+ assert.equal(good.status,200,await good.text());
+ assert.equal(calls,1);
+ for(const body of [
+  {operation:'continue_original_saved_first_photo_once',package_id:pkg},
+  {operation:'continue_original_saved_first_photo_once',force:true},
+  ['continue_original_saved_first_photo_once']
+ ]){
+  const res=await h(makeReq(body));
+  assert.equal(res.status,400);
+  assert.equal((await res.json()).status,'EXACT_REQUEST_REQUIRED');
+ }
+ assert.equal(calls,1);
+ const unauth=await h(makeReq(
+  {operation:'continue_original_saved_first_photo_once'},'wrong-worker-key'));
+ assert.equal(unauth.status,401);
+ const disabled=createDeliveryHandler({...cfg,testRecoveryEnabled:false});
+ const denied=await disabled(makeReq({operation:'continue_original_saved_first_photo_once'}));
+ assert.notEqual(denied.status,200);
+ assert.equal(calls,1);
+});
+test('saved-session route never says VERIFIED on uncertain coordinator outcome',async()=>{
+ const secret='disposable-test-worker-only-1234567890';
+ const h=createDeliveryHandler({
+  enabled:false,testPreflightEnabled:true,testRecoveryEnabled:true,
+  workerSecret:secret,testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',
+  testReleasePackageId:pkg,testReleaseDestinationId:dest,
+  testRootFolderId:root,expectedDriveId:drive,
+  internalDriveId:'internal_'+('a'.repeat(22)),
+  expectedAccount:account,testWorkspaceDomain:'example.invalid',
+  clientId:'test-client',clientSecret:'test-secret',refreshToken:'test-refresh',
+  oauthScope:'https://www.googleapis.com/auth/drive.file',
+  supabaseUrl:'https://fake-team.invalid',serviceRoleJwt:'header.payload.signature',
+  sessionVaultKey:Buffer.alloc(32,9).toString('base64url'),
+  continueOriginalSavedTestPhoto:async()=>{throw new Error('uncertain-google-response');}
+ });
+ const response=await h(new Request('https://irrelevant.invalid',{
+  method:'POST',headers:{'x-fwh-delivery-secret':secret,
+   'Content-Type':'application/json'},
+  body:JSON.stringify({operation:'continue_original_saved_first_photo_once'})
+ }));
+ assert.equal(response.status,503);
+ assert.deepEqual(await response.json(),
+  {status:'ORIGINAL_TEST_SAVED_FIRST_PHOTO_UNVERIFIED'});
 });
