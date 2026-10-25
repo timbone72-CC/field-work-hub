@@ -62,7 +62,7 @@ unset worker_key
 state_root="${XDG_STATE_HOME:-${HOME:?}/.local/state}/field-work-hub"
 mkdir -p -m 700 -- "$state_root"
 attempt_marker="$state_root/phase5d-original-saved-first-photo-attempted"
-if ! (set -C; printf 'Original TEST first-photo attempt reserved; reconcile before any replay.\n' > "$attempt_marker") 2>/dev/null; then
+if ! (set -C; printf 'Original TEST saved-session continuation reserved; reconcile before any replay.\n' > "$attempt_marker") 2>/dev/null; then
   stop "Prior first-photo launcher attempt exists at $attempt_marker; no retry."
 fi
 
@@ -76,7 +76,7 @@ supabase secrets set \
   FWH_CLIENT_TEST_RECOVERY_ENABLED=true \
   --project-ref "$project" </dev/null || stop 'TEST recovery enable command failed.'
 
-printf 'Calling the original SAVED saved-session first-photo continuation ONCE...\n'
+printf 'Calling the original saved-session first-photo continuation ONCE...\n'
 curl_exit=0
 http_status="$(curl --silent --show-error --retry 0 \
   --connect-timeout 10 --max-time 120 \
@@ -90,6 +90,6 @@ printf 'Curl exit: %s | HTTP: %s\n' "$curl_exit" "${http_status:-none}"
 if [[ -s "$response_file" ]]; then cat -- "$response_file"; printf '\n'; fi
 if [[ "$curl_exit" != 0 || "$http_status" != 200 ]] ||
    ! grep -Eq '^\{"status":"ORIGINAL_TEST_SAVED_FIRST_PHOTO_(VERIFIED|PROGRESS_VERIFIED)"\}$' "$response_file"; then
-  stop 'Unverified first-photo response. NO RETRY; inspect original provider identity and SQL journal.'
+  stop 'Unverified saved-photo response. NO RETRY; inspect original provider identity and SQL journal.'
 fi
 printf 'PASS: original SAVED first-photo response verified; full package still pending.\n'
