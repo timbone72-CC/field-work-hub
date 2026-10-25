@@ -545,7 +545,7 @@ const verifiedSnapshot={...heldAttempt,state:'ORIGINAL_VERIFIED_PARENT_EXPIRED',
 
 function verifiedChildRig({snapshot=verifiedSnapshot,remoteStatus=200,
  resumeLost=false,reservationLost=false,createLost=false}={}){
- const events=[];let reserved=false;
+ const events=[];let reserved=false,confirmed=false;
  const ledger={
   readVerifiedOriginalTestParent:async()=>{events.push('read-exact');return structuredClone(snapshot);},
   resumeVerifiedOriginalAndAcquireDispatch:async(scope,proof,observed,request)=>{
@@ -567,7 +567,7 @@ function verifiedChildRig({snapshot=verifiedSnapshot,remoteStatus=200,
    events.push('read-parent');assert.equal(kind,'WORK_ORDER');
    return reserved?{exists:true,map_id:childMap,kind:'WORK_ORDER',
     remote_folder_id:childId,parent_remote_id:originalId,
-    remote_name:childName,state:'RESERVED',appProperties:childProperties}
+    remote_name:childName,state:confirmed?'VERIFIED':'RESERVED',appProperties:childProperties}
     :{exists:false,kind:'WORK_ORDER'};
   },
   reserveParent:async(pkg,worker,gen,kind,id,parent)=>{
@@ -581,7 +581,7 @@ function verifiedChildRig({snapshot=verifiedSnapshot,remoteStatus=200,
   },
   beginParentCreate:async()=>{events.push('create-permit');
    return {state:'MAY_CREATE',map_id:childMap,file_id:childId,parent_id:originalId};},
-  confirmParent:async()=>{events.push('commit-child');return {state:'VERIFIED'};},
+  confirmParent:async()=>{events.push('commit-child');confirmed=true;return {state:'VERIFIED'};},
   releaseDispatch:async(id)=>{events.push('release-permit');assert.equal(id,uuid(81));return {released:true};}
  };
  const fetcher=async(url,init)=>{
