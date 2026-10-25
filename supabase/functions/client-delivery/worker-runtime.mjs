@@ -401,6 +401,16 @@ export async function continueOriginalVerifiedTestToWorkOrderOnce({
   if(result?.state!=='PARENT_VERIFIED'
     ||result.kind!=='WORK_ORDER'||result.map_id!==reservation.map_id)
     throw new DriveUncertain('ORIGINAL_WO_PROVIDER_RESULT_UNCERTAIN');
+  // The existing parent reconciler performs a Google GET and confirmation,
+  // but do not release singleflight merely on its in-memory return. Demand
+  // independently re-read durable state under the same worker's live lease.
+  const persisted=await ledger.readParent(pkg,worker,gen,'WORK_ORDER');
+  if(persisted?.exists!==true||persisted.kind!=='WORK_ORDER'
+    ||persisted.state!=='VERIFIED'
+    ||persisted.map_id!==reservation.map_id
+    ||persisted.remote_folder_id!==ids[0]
+    ||persisted.parent_remote_id!==s.remote_folder_id)
+    throw new DriveUncertain('ORIGINAL_WO_DURABLE_RECEIPT_UNVERIFIED');
   const released=await ledger.releaseDispatch(requestId);
   if(released?.released!==true)
     throw new DriveUncertain('ORIGINAL_WO_DISPATCH_RELEASE_UNVERIFIED');
