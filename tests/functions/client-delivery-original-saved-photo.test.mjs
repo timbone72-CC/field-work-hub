@@ -189,7 +189,7 @@ test('hosted narrow recovery route requires exact one-field body and TEST settin
   clientId:'disposable-client-id',clientSecret:'disposable-client-secret',
   refreshToken:'disposable-refresh-token',
   oauthScope:'https://www.googleapis.com/auth/drive.file',
-  supabaseUrl:'https://fake-team.invalid',
+  supabaseUrl:'https://disposable-fwh-test.supabase.co',
   serviceRoleJwt:'header.payload.signature',
   sessionVaultKey:Buffer.alloc(32,7).toString('base64url'),
   continueOriginalSavedTestPhoto:async()=>{calls++;return {
@@ -234,7 +234,7 @@ test('saved-session route never says VERIFIED on uncertain coordinator outcome',
   expectedAccount:account,testWorkspaceDomain:'example.invalid',
   clientId:'test-client',clientSecret:'test-secret',refreshToken:'test-refresh',
   oauthScope:'https://www.googleapis.com/auth/drive.file',
-  supabaseUrl:'https://fake-team.invalid',serviceRoleJwt:'header.payload.signature',
+  supabaseUrl:'https://disposable-fwh-test.supabase.co',serviceRoleJwt:'header.payload.signature',
   sessionVaultKey:Buffer.alloc(32,9).toString('base64url'),
   continueOriginalSavedTestPhoto:async()=>{throw new Error('uncertain-google-response');}
  });
