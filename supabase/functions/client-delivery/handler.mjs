@@ -212,7 +212,6 @@ export function createDeliveryHandler({
       }
       return reply(503,'ORIGINAL_TEST_PACKAGE_FOLDER_UNVERIFIED');
     }
-  }
     if(only?.operation==='continue_verified_original_first_photo_once'){
       if(Array.isArray(only)||Object.keys(only).length!==1)
         return reply(400,'EXACT_REQUEST_REQUIRED');
@@ -252,6 +251,7 @@ export function createDeliveryHandler({
       }
       return reply(503,'ORIGINAL_TEST_FIRST_PHOTO_UNVERIFIED');
     }
+  }
   // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
   // rollout. No second OAuth/root-check implementation and no database RPC.
   // The existing adapter independently rejects preallocate, Send and every
