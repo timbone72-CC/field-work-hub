@@ -63,7 +63,7 @@ test('read-only exact-head Team dry-run accepts one known pending migration; unc
  }
  let r=execute();
  assert.equal(r.status,0,r.stderr);
- assert.match(r.stdout,/one exact pending verified original TEST WORK_ORDER continuation/);
+ assert.match(r.stdout,/one exact pending verified-original TEST WORK_ORDER continuation/);
  assert.match(r.stdout,/NO MIGRATIONS APPLIED/);
  const stops=[
    {env:{FWH_STUB_DRYRUN:'DRY RUN: migrations will not be applied.\\n20261021000000_unexpected_pending.sql'},code:/STOP: Unexpected pending/},
