@@ -147,7 +147,7 @@ test('TEST handler restricts diagnostic to one exact operation and private heade
  });
  const h=createDeliveryHandler(cfg);
  const good=await h(request({operation:'inspect_original_held_first_photo_session'}));
- assert.equal(good.status,200,await good.text());
+ assert.equal(good.status,200,await good.clone().text());
  assert.deepEqual(await good.json(),{
   status:'HELD_TEST_SESSION_UNAVAILABLE_404',
   http_status:404,saved_offset:262144,provider_offset:null
