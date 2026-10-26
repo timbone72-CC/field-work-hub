@@ -63,7 +63,7 @@ state_root="${XDG_STATE_HOME:-${HOME:?}/.local/state}/field-work-hub"
 mkdir -p -m 700 -- "$state_root"
 attempt_marker="$state_root/phase5d-original-held-session-probed"
 if ! (set -C; printf 'Original TEST held-session forensic probe reserved; inspect before any repeat.\n' > "$attempt_marker") 2>/dev/null; then
-  stop "Prior first-photo launcher attempt exists at $attempt_marker; no retry."
+  stop "Prior held-session diagnostic attempt exists at $attempt_marker; no retry."
 fi
 
 # Supabase CLI must NOT consume script input; former stdin/heredoc launcher
@@ -89,11 +89,7 @@ http_status="$(curl --silent --show-error --retry 0 \
 printf 'Curl exit: %s | HTTP: %s\n' "$curl_exit" "${http_status:-none}"
 if [[ -s "$response_file" ]]; then cat -- "$response_file"; printf '\n'; fi
 if [[ "$curl_exit" != 0 || "$http_status" != 200 ]] ||
-   ! grep -Eq '^\{"status":"HELD_TEST_SESSION_(INCOMPLETE|COMPLETE_CANDIDATE|UNAVAILABLE_404|AUTH_DENIED|PROVIDER_OTHER|TRANSPORT_UNCERTAIN)","http_status":(null|[0-9]{3}),"saved_offset":[0-9]+,"provider_offset":(null|[0-9]+)\} then
+   ! grep -Eq '^\{"status":"HELD_TEST_SESSION_(INCOMPLETE|COMPLETE_CANDIDATE|UNAVAILABLE_404|AUTH_DENIED|PROVIDER_OTHER|TRANSPORT_UNCERTAIN)","http_status":(null|[0-9]{3}),"saved_offset":[0-9]+,"provider_offset":(null|[0-9]+)\}$' "$response_file"; then
   stop 'Unverified forensic status. NO RETRY; preserve held permit, session, and Google identity.'
 fi
-printf 'PASS: original SAVED first-photo response verified; full package still pending.\n'
- "$response_file"; then
-  stop 'Unverified forensic status. NO RETRY; preserve held permit, session, and Google identity.'
-fi
-printf 'PASS: original SAVED first-photo response verified; full package still pending.\n'
+printf 'PASS: held-session status classified (NOT a photo receipt); global dispatch remains HELD.\n'
