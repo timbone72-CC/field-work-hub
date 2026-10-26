@@ -125,3 +125,75 @@ export async function inspectOriginalHeldFirstPhotoSession({
   await response?.body?.cancel?.().catch(()=>{});
  }
 }
+
+
+// Exact original preallocated Drive-ID inspection AFTER a separate one-shot
+// session diagnostic reported 404. The prior upload session MUST NOT be reused.
+// This reads metadata for the SAME immutable ID; it neither proves full content
+// delivery nor authorizes a replacement session, another file ID, or SQL writes.
+export async function inspectOriginalHeldFirstPhotoFile({
+ ledger,tokenProvider,fetcher=fetch,testPackageId,testDestinationId,
+ testRootId,expectedDriveId,expectedEmail
+}={}){
+ if(typeof ledger?.readHeldTestFirstPhoto!=='function'
+  ||typeof tokenProvider!=='function'||typeof fetcher!=='function'
+  ||!UUID.test(testPackageId??'')||!UUID.test(testDestinationId??'')
+  ||!ID.test(testRootId??'')||!ID.test(expectedDriveId??'')
+  ||typeof expectedEmail!=='string'||!expectedEmail)
+  throw new DriveUncertain('HELD_FILE_PROBE_NOT_CONFIGURED');
+ // This existing, service-only SQL read requires the SAME global dispatch
+ // permit, original continuation journal, expired lease, file plan and
+ // encrypted saved-session revision. No caller chooses a remote ID.
+ const s=await ledger.readHeldTestFirstPhoto(testPackageId,testDestinationId,testRootId);
+ if(s?.status!=='ORIGINAL_TEST_HELD_FIRST_PHOTO_EXACT'
+  ||s.package_id!==testPackageId||s.destination_id!==testDestinationId
+  ||s.root_id!==testRootId||!UUID.test(s.worker_id??'')
+  ||s.generation!==1||!UUID.test(s.photo_plan_id??'')
+  ||!ID.test(s.photo_remote_id??'')||!ID.test(s.parent_remote_id??'')
+  ||s.drive_id!==expectedDriveId
+  ||!Number.isSafeInteger(s.expected_size)||s.expected_size<1||s.expected_size>MAX
+  ||!Number.isSafeInteger(s.saved_offset)||s.saved_offset<1
+  ||s.saved_offset>=s.expected_size
+  ||!Number.isSafeInteger(s.session_revision)||s.session_revision<3
+  ||s.sealed_session?.version!==1)
+  throw new DriveUncertain('HELD_FILE_PROBE_IDENTITY_MISMATCH');
+ let token;
+ try{token=await tokenProvider();}
+ catch{throw new DriveUncertain('HELD_FILE_PROBE_OAUTH_UNAVAILABLE');}
+ if(typeof token?.accessToken!=='string'||token.accessToken.length<20
+  ||!Number.isInteger(token.expiresInSeconds)||token.expiresInSeconds<60)
+  throw new DriveUncertain('HELD_FILE_PROBE_OAUTH_UNAVAILABLE');
+ const drive=createDriveClient({accessToken:token.accessToken,fetcher});
+ const who=await drive.verifyProviderIdentity(expectedEmail);
+ if(who?.account!==expectedEmail.toLowerCase())
+  throw new DriveUncertain('HELD_FILE_PROBE_ACCOUNT_MISMATCH');
+ // Existing Drive adapter performs an authenticated, redirects-denied,
+ // metadata-only files.get on the EXACT original ID, with supportsAllDrives.
+ // The adapter's historical "FolderId" name does not impose a folder MIME.
+ let observation;
+ try{observation=await drive.inspectOriginalFolderId(s.photo_remote_id);}
+ catch(e){
+  if(e instanceof DriveUncertain&&e.code==='PROVIDER_AUTH_DENIED')
+   return Object.freeze({status:'HELD_TEST_FILE_AUTH_DENIED',http_status:null});
+  return Object.freeze({status:'HELD_TEST_FILE_PROVIDER_UNCERTAIN',http_status:null});
+ }
+ if(observation?.state==='NOT_FOUND')
+  return Object.freeze({status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404});
+ if(observation?.state!=='PRESENT')
+  throw new DriveUncertain('HELD_FILE_PROBE_INVALID_RESPONSE');
+ const m=observation.metadata;
+ const props=m?.appProperties;
+ const exact= m?.id===s.photo_remote_id && m.trashed===false
+  && m.mimeType==='image/jpeg' && m.driveId===expectedDriveId
+  && Array.isArray(m.parents)&&m.parents.length===1
+  && m.parents[0]===s.parent_remote_id
+  && typeof m.name==='string'
+  && m.name.length>0 && m.name.length<=160
+  && props&&typeof props==='object'&&!Array.isArray(props)
+  && Object.keys(props).sort().join(',')==='fwh_manifest,fwh_package'
+  && props.fwh_package===testPackageId
+  && /^[a-f0-9]{64}$/.test(props.fwh_manifest??'');
+ return Object.freeze({status:exact?
+  'HELD_TEST_FILE_PRESENT_CANDIDATE':'HELD_TEST_FILE_IDENTITY_MISMATCH',
+  http_status:200});
+}
