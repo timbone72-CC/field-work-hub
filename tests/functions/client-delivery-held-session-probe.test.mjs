@@ -235,7 +235,7 @@ function originalFileFixture(status=404,metadata=null,descriptorValue=descriptor
   assert.equal(u.pathname,'/drive/v3/files/'+remote);
   assert.equal(u.searchParams.get('supportsAllDrives'),'true');
   assert.match(u.searchParams.get('fields'),/appProperties/);
-  return status===404?new Response(null,{status}):Response.json(metadata);
+  return status!==200?new Response(null,{status}):Response.json(metadata);
  };
  const opts={ledger,fetcher,testPackageId:pkg,
   testDestinationId:dest,testRootId:root,expectedDriveId:drive,
@@ -248,9 +248,18 @@ function originalFileFixture(status=404,metadata=null,descriptorValue=descriptor
 test('held original PHOTO ID 404 is isolated from expired resumable session',async()=>{
  const x=originalFileFixture();
  assert.deepEqual(await inspectOriginalHeldFirstPhotoFile(x.opts),{
-  status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
+  status:'HELD_TEST_FILE_UNAVAILABLE_404',http_status:404
  });
  assert.deepEqual(x.events,['sql_read','account_get','file_get']);
+});
+test('held file-ID 403 is auth-denied and provider 503 stays uncertain; neither writes',async()=>{
+ for(const [code,label] of [[403,'HELD_TEST_FILE_AUTH_DENIED'],[503,'HELD_TEST_FILE_PROVIDER_UNCERTAIN']]){
+  const x=originalFileFixture(code);
+  assert.deepEqual(await inspectOriginalHeldFirstPhotoFile(x.opts),{
+   status:label,http_status:null
+  });
+  assert.deepEqual(x.events,['sql_read','account_get','file_get']);
+ }
 });
 test('held photo metadata is a CANDIDATE only; mismatches are not receipts',async()=>{
  const metadata={id:remote,name:'field-photo.jpg',mimeType:'image/jpeg',
@@ -294,7 +303,7 @@ test('metadata probe handler requires private header, exact input and recovery m
   supabaseUrl:'https://disposable-fwh-test.supabase.co',
   serviceRoleJwt:'header.payload.signature',
   inspectHeldTestFile:async()=>({
-   status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
+   status:'HELD_TEST_FILE_UNAVAILABLE_404',http_status:404
   })
  };
  const request=(body,key=config.workerSecret)=>new Request('https://test.invalid',{
@@ -305,7 +314,7 @@ test('metadata probe handler requires private header, exact input and recovery m
  const good=await h(request({operation:'inspect_original_held_first_photo_file'}));
  assert.equal(good.status,200,await good.clone().text());
  assert.deepEqual(await good.json(),{
-  status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
+  status:'HELD_TEST_FILE_UNAVAILABLE_404',http_status:404
  });
  for(const body of [
   {operation:'inspect_original_held_first_photo_file',file_id:remote},
