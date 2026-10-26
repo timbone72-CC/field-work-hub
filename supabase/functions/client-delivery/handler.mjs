@@ -247,7 +247,7 @@ export function createDeliveryHandler({
           testRootId:testRootFolderId,expectedDriveId,expectedEmail:expectedAccount
         });
         const allowed=new Set([
-          'HELD_TEST_FILE_NOT_FOUND_404','HELD_TEST_FILE_PRESENT_CANDIDATE',
+          'HELD_TEST_FILE_UNAVAILABLE_404','HELD_TEST_FILE_PRESENT_CANDIDATE',
           'HELD_TEST_FILE_IDENTITY_MISMATCH','HELD_TEST_FILE_AUTH_DENIED',
           'HELD_TEST_FILE_PROVIDER_UNCERTAIN'
         ]);
