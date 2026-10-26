@@ -15,6 +15,7 @@ const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_deli
  'service_resume_exact_test_first_photo_and_dispatch',
  'service_read_exact_test_first_photo_saved_progress',
  'service_resume_exact_test_first_photo_saved_progress',
+ 'service_read_exact_held_first_photo_probe',
  'service_next_delivery_item',
  'service_delivery_final_provider_snapshot','service_claim_delivery',
  'service_claim_exact_test_delivery','service_heartbeat_delivery',
@@ -198,6 +199,10 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_folder_remote:s.folder_remote_id,p_photo_remote:s.photo_remote_id,
         p_expected_lease_until:s.lease_until,p_observed_at:at,
         p_proof:proof,p_request:request
+      }),
+    readHeldTestFirstPhoto:(pkg,dest,root)=>rpc(
+      'service_read_exact_held_first_photo_probe',{
+        p_package:pkg,p_destination:dest,p_root:root
       }),
     readSavedTestFirstPhoto:(pkg,dest,root)=>rpc(
       'service_read_exact_test_first_photo_saved_progress',{
