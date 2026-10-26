@@ -314,8 +314,9 @@ test('metadata probe handler requires private header, exact input and recovery m
  ]){
   assert.equal((await h(request(body))).status,400);
  }
- assert.equal((await h(request({operation:'inspect_original_held_first_photo_file'},
-  'incorrect-worker-secret')).status,401);
+ const badKey=await h(request({operation:'inspect_original_held_first_photo_file'},
+  'incorrect-worker-secret'));
+ assert.equal(badKey.status,401);
  const off=createDeliveryHandler({...config,testRecoveryEnabled:false});
  assert.notEqual((await off(request({
   operation:'inspect_original_held_first_photo_file'}))).status,200);
