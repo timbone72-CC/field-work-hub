@@ -177,8 +177,10 @@ export async function inspectOriginalHeldFirstPhotoFile({
    return Object.freeze({status:'HELD_TEST_FILE_AUTH_DENIED',http_status:null});
   return Object.freeze({status:'HELD_TEST_FILE_PROVIDER_UNCERTAIN',http_status:null});
  }
+ // Drive files.get 404 may mean nonexistent OR inaccessible. Never infer
+ // safe retry or replace the original reserved ID from this observation.
  if(observation?.state==='NOT_FOUND')
-  return Object.freeze({status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404});
+  return Object.freeze({status:'HELD_TEST_FILE_UNAVAILABLE_404',http_status:404});
  if(observation?.state!=='PRESENT')
   throw new DriveUncertain('HELD_FILE_PROBE_INVALID_RESPONSE');
  const m=observation.metadata;
