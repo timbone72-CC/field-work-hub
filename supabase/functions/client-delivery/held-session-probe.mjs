@@ -72,7 +72,7 @@ export async function inspectOriginalHeldFirstPhotoSession({
   // Official Drive status query is a zero-content PUT. This has no photo
   // body, no session initiation and no ability to select a new file ID.
   response=await fetcher(url,{
-   method:'PUT',redirect:'error',signal:AbortSignal.timeout(20000),
+   method:'PUT',redirect:'manual',signal:AbortSignal.timeout(20000),
    headers:{
     Authorization:'Bearer '+token.accessToken,
     'Content-Length':'0',
@@ -87,6 +87,10 @@ export async function inspectOriginalHeldFirstPhotoSession({
  }
  try{
   const code=response?.status;
+  // A 308 without Location is Drive progress, NOT an HTTP redirect.
+  // Never follow or accept a redirect to a different upload capability.
+  if(code>=300&&code<400&&response?.headers?.has('Location'))
+    throw new DriveUncertain('HELD_TEST_PROBE_REDIRECT_FORBIDDEN');
   let status,providerOffset=null;
   if(code===308){
    const range=response.headers?.get('Range');
