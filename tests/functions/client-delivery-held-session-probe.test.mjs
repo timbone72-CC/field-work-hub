@@ -35,13 +35,13 @@ function harness({status=308,range='bytes=0-262143',descriptorValue=descriptor,i
  const fetcher=async(url,init)=>{
   const u=new URL(url);
   if(u.pathname==='/drive/v3/about'){
-   events.push('account_get');assert.equal(init.method,'GET');
+   events.push('account_get');assert.equal(init.method??'GET','GET');
    return Response.json({user:{emailAddress:account,permissionId:'permission',me:true}});
   }
   events.push('status_query');
   assert.equal(url,session);
   assert.equal(init.method,'PUT');
-  assert.equal(init.redirect,'error');
+  assert.equal(init.redirect,'manual');
   assert.equal(init.body,undefined);
   assert.equal(init.headers['Content-Length'],'0');
   assert.equal(init.headers['Content-Range'],'bytes */404185');
