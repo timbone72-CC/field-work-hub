@@ -41,7 +41,7 @@ function fixture(t) {
   '    *) shift;;',
   '  esac',
   'done',
-  'printf "%s" \'{"status":"HELD_TEST_FILE_NOT_FOUND_404","http_status":404}\' > "$out"',
+  'printf "%s" \'{"status":"HELD_TEST_FILE_UNAVAILABLE_404","http_status":404}\' > "$out"',
   'printf "%s" "${MOCK_HTTP:-200}"'
  ].join('\n'));
  const calls=join(root,'calls.txt');
