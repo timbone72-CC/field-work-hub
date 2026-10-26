@@ -303,7 +303,7 @@ test('metadata probe handler requires private header, exact input and recovery m
  });
  const h=createDeliveryHandler(config);
  const good=await h(request({operation:'inspect_original_held_first_photo_file'}));
- assert.equal(good.status,200);
+ assert.equal(good.status,200,await good.clone().text());
  assert.deepEqual(await good.json(),{
   status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
  });
