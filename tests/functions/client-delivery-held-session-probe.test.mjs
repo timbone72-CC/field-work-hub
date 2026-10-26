@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {inspectOriginalHeldFirstPhotoSession} from
+import {inspectOriginalHeldFirstPhotoSession,inspectOriginalHeldFirstPhotoFile} from
  '../../supabase/functions/client-delivery/held-session-probe.mjs';
 import {DriveUncertain} from
  '../../supabase/functions/client-delivery/drive-client.mjs';
@@ -210,4 +210,113 @@ test('migration only adds held forensic service RPC, with no mutations',()=>{
  assert.doesNotMatch(code,/uploadChunk|startResumable|beginSession|recordOffset|releaseDispatch/);
  assert.match(code,/'Content-Length':'0'/);
  assert.match(code,/'Content-Range':'bytes \*\/'/);
+});
+
+
+// Separate forensic fact: 404 for an upload *session* does not establish
+// whether the original preallocated FILE ID was remotely committed.
+function originalFileFixture(status=404,metadata=null,descriptorValue=descriptor){
+ const events=[];
+ const ledger={readHeldTestFirstPhoto:async(p,d,r)=>{
+  events.push('sql_read');
+  assert.equal(p,pkg);assert.equal(d,dest);assert.equal(r,root);
+  return descriptorValue;
+ }};
+ const fetcher=async(url,init)=>{
+  const u=new URL(url);
+  assert.equal(init.method??'GET','GET');
+  assert.equal(init.redirect,'error');
+  assert.equal(init.body,undefined);
+  if(u.pathname==='/drive/v3/about'){
+   events.push('account_get');
+   return Response.json({user:{emailAddress:account,permissionId:'perm',me:true}});
+  }
+  events.push('file_get');
+  assert.equal(u.pathname,'/drive/v3/files/'+remote);
+  assert.equal(u.searchParams.get('supportsAllDrives'),'true');
+  assert.match(u.searchParams.get('fields'),/appProperties/);
+  return status===404?new Response(null,{status}):Response.json(metadata);
+ };
+ const opts={ledger,fetcher,testPackageId:pkg,
+  testDestinationId:dest,testRootId:root,expectedDriveId:drive,
+  expectedEmail:account,tokenProvider:async()=>({
+   accessToken:'private-disposable-test-mock-token',
+   expiresInSeconds:3600
+  })};
+ return {opts,events};
+}
+test('held original PHOTO ID 404 is isolated from expired resumable session',async()=>{
+ const x=originalFileFixture();
+ assert.deepEqual(await inspectOriginalHeldFirstPhotoFile(x.opts),{
+  status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
+ });
+ assert.deepEqual(x.events,['sql_read','account_get','file_get']);
+});
+test('held photo metadata is a CANDIDATE only; mismatches are not receipts',async()=>{
+ const metadata={id:remote,name:'field-photo.jpg',mimeType:'image/jpeg',
+  parents:[parent],driveId:drive,trashed:false,
+  appProperties:{fwh_package:pkg,fwh_manifest:'a'.repeat(64)}};
+ const x=originalFileFixture(200,metadata);
+ assert.deepEqual(await inspectOriginalHeldFirstPhotoFile(x.opts),{
+  status:'HELD_TEST_FILE_PRESENT_CANDIDATE',http_status:200
+ });
+ for(const bad of [
+  {...metadata,id:'wrong_'+remote},
+  {...metadata,parents:[root]},
+  {...metadata,driveId:root},
+  {...metadata,trashed:true},
+  {...metadata,appProperties:{...metadata.appProperties,fwh_package:dest}},
+  {...metadata,appProperties:{fwh_package:pkg}}
+ ]){
+  const testCase=originalFileFixture(200,bad);
+  assert.deepEqual(await inspectOriginalHeldFirstPhotoFile(testCase.opts),{
+   status:'HELD_TEST_FILE_IDENTITY_MISMATCH',http_status:200
+  });
+ }
+});
+test('held original PHOTO ID refuses changed SQL identity before provider GET',async()=>{
+ const x=originalFileFixture(200,{}, {...descriptor,photo_remote_id:'wrong/id'});
+ await assert.rejects(()=>inspectOriginalHeldFirstPhotoFile(x.opts),DriveUncertain);
+ assert.deepEqual(x.events,['sql_read']);
+});
+test('metadata probe handler requires private header, exact input and recovery mode',async()=>{
+ const config={
+  enabled:false,testPreflightEnabled:true,testRecoveryEnabled:true,
+  workerSecret:'disposable-test-worker-only-1234567890',
+  testEvidenceClass:'DISPOSABLE_FWH_TEST_ONLY',
+  testReleasePackageId:pkg,testReleaseDestinationId:dest,
+  testRootFolderId:root,expectedDriveId:drive,
+  internalDriveId:'internal_'+('e'.repeat(24)),
+  testWorkspaceDomain:'example.invalid',expectedAccount:account,
+  clientId:'test-client-id',clientSecret:'test-client-secret',
+  refreshToken:'test-refresh-token',
+  oauthScope:'https://www.googleapis.com/auth/drive.file',
+  supabaseUrl:'https://disposable-fwh-test.supabase.co',
+  serviceRoleJwt:'header.payload.signature',
+  inspectHeldTestFile:async()=>({
+   status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
+  })
+ };
+ const request=(body,key=config.workerSecret)=>new Request('https://test.invalid',{
+  method:'POST',headers:{'x-fwh-delivery-secret':key,
+   'Content-Type':'application/json'},body:JSON.stringify(body)
+ });
+ const h=createDeliveryHandler(config);
+ const good=await h(request({operation:'inspect_original_held_first_photo_file'}));
+ assert.equal(good.status,200);
+ assert.deepEqual(await good.json(),{
+  status:'HELD_TEST_FILE_NOT_FOUND_404',http_status:404
+ });
+ for(const body of [
+  {operation:'inspect_original_held_first_photo_file',file_id:remote},
+  {operation:'inspect_original_held_first_photo_file',retry:true},
+  ['inspect_original_held_first_photo_file']
+ ]){
+  assert.equal((await h(request(body))).status,400);
+ }
+ assert.equal((await h(request({operation:'inspect_original_held_first_photo_file'},
+  'incorrect-worker-secret')).status,401);
+ const off=createDeliveryHandler({...config,testRecoveryEnabled:false});
+ assert.notEqual((await off(request({
+  operation:'inspect_original_held_first_photo_file'}))).status,200);
 });
