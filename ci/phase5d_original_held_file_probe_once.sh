@@ -89,7 +89,7 @@ http_status="$(curl --silent --show-error --retry 0 \
 printf 'Curl exit: %s | HTTP: %s\n' "$curl_exit" "${http_status:-none}"
 if [[ -s "$response_file" ]]; then cat -- "$response_file"; printf '\n'; fi
 if [[ "$curl_exit" != 0 || "$http_status" != 200 ]] ||
-   ! grep -Eq '^\{"status":"HELD_TEST_FILE_(NOT_FOUND_404|PRESENT_CANDIDATE|IDENTITY_MISMATCH|AUTH_DENIED|PROVIDER_UNCERTAIN)","http_status":(null|[0-9]{3})\}$' "$response_file"; then
+   ! grep -Eq '^\{"status":"HELD_TEST_FILE_(UNAVAILABLE_404|PRESENT_CANDIDATE|IDENTITY_MISMATCH|AUTH_DENIED|PROVIDER_UNCERTAIN)","http_status":(null|[0-9]{3})\}$' "$response_file"; then
   stop 'Unverified forensic status. NO RETRY; preserve held permit, session, and Google identity.'
 fi
 printf 'PASS: original file-ID metadata classified (NOT a photo receipt); global dispatch remains HELD.\n'
