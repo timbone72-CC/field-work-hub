@@ -15,7 +15,8 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  continueOriginalVerifiedTestFirstPhotoOnce,
  continueOriginalTestSavedFirstPhotoOnce} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
-import {inspectOriginalHeldFirstPhotoSession} from './held-session-probe.mjs';
+import {inspectOriginalHeldFirstPhotoSession,
+ inspectOriginalHeldFirstPhotoFile} from './held-session-probe.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
 
 function reply(status,code) {
@@ -42,6 +43,7 @@ export function createDeliveryHandler({
   continueVerifiedOriginalTestFirstPhoto=continueOriginalVerifiedTestFirstPhotoOnce,
   continueOriginalSavedTestPhoto=continueOriginalTestSavedFirstPhotoOnce,
   inspectHeldTestSession=inspectOriginalHeldFirstPhotoSession,
+  inspectHeldTestFile=inspectOriginalHeldFirstPhotoFile,
   testEvidenceClass,testRootFolderId,internalDriveId,
   testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
   clientId,clientSecret,refreshToken,oauthScope,
@@ -215,6 +217,51 @@ export function createDeliveryHandler({
         // A lost SQL/Google acknowledgement is not permission to retry.
       }
       return reply(503,'ORIGINAL_TEST_PACKAGE_FOLDER_UNVERIFIED');
+    }
+    if(only?.operation==='inspect_original_held_first_photo_file'){
+      // Only the EXACT original reserved PHOTO ID is inspected, once in
+      // a distinct operator-gated session. Do not create/restart the upload.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'HELD_FILE_PROBE_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const o=await inspectHeldTestFile({
+          ledger,tokenProvider,fetcher,testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,
+          testRootId:testRootFolderId,expectedDriveId,expectedEmail:expectedAccount
+        });
+        const allowed=new Set([
+          'HELD_TEST_FILE_NOT_FOUND_404','HELD_TEST_FILE_PRESENT_CANDIDATE',
+          'HELD_TEST_FILE_IDENTITY_MISMATCH','HELD_TEST_FILE_AUTH_DENIED',
+          'HELD_TEST_FILE_PROVIDER_UNCERTAIN'
+        ]);
+        if(allowed.has(o?.status)
+          &&(o.http_status===null||[200,404].includes(o.http_status)))
+          return new Response(JSON.stringify({
+            status:o.status,http_status:o.http_status
+          }),{status:200,headers:{
+            'Content-Type':'application/json','Cache-Control':'no-store, private'
+          }});
+      }catch{
+        // Fail closed without logging Drive identity, OAuth or SQL evidence.
+      }
+      return reply(503,'HELD_TEST_FILE_DIAGNOSTIC_UNVERIFIED');
     }
     if(only?.operation==='inspect_original_held_first_photo_session'){
       // Status-only forensic endpoint for the ALREADY held TEST dispatch.
