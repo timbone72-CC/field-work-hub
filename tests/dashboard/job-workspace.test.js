@@ -498,3 +498,31 @@ test('Modern Premium Stage 9 visually isolates restricted photo recovery without
  assert.doesNotMatch(stage,/#recovery-card\s*\{[^}]*display\s*:/);
  assert.doesNotMatch(stage,/(?:display:\s*none|visibility:\s*hidden|pointer-events:\s*none)/i);
 });
+
+
+test('Phase 6A paging discards unsafe offsets rather than issuing invalid page requests', () => {
+  for (const offset of [-1, -25, 1.25, NaN, Infinity, 'not-an-offset', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(rules.parameters({size:50,offset}).get('offset'), '0', String(offset));
+  }
+  assert.equal(rules.parameters({size:50,offset:50}).get('offset'), '50');
+  assert.equal(rules.parameters({size:25,offset:0}).get('offset'), '0');
+});
+
+test('Phase 6A due-date filter only accepts real calendar days, including leap years', () => {
+  for (const dueDate of ['2026-02-29', '2026-02-30', '2026-02-31', '2026-04-31',
+    '1900-02-29', '2026-13-01', '2026-00-10', '2026-10-00', '2026-01-01,or.true']) {
+    assert.equal(rules.parameters({dueDate}).has('due_date'), false, dueDate);
+  }
+  for (const dueDate of ['2000-02-29', '2024-02-29', '2026-10-26']) {
+    assert.equal(rules.parameters({dueDate}).get('due_date'), 'eq.'+dueDate, dueDate);
+  }
+});
+
+test('Phase 6A unknown or unsafe content-range totals stay unknown', () => {
+  for (const header of ['0-24/9007199254740992', '0-24/99999999999999999999999',
+    '0-24/*', 'malformed', null]) {
+    assert.equal(rules.total(header), null, String(header));
+  }
+  assert.equal(rules.total('0-24/100'), 100);
+  assert.equal(rules.total('*/0'), 0);
+});
