@@ -118,11 +118,12 @@ const PushDevice=(()=>{
     if(!sameSession(user,org,token))throw Error('Session changed while disabling push.');
     if(!data?.device_id)
       throw Error('No push enrollment belongs to this account on this browser.');
-    // Do not unsubscribe some other user's browser subscription merely
-    // because this account has no local enrollment record.
+    // Write the non-secret pending revoke BEFORE the browser side effect:
+    // interruption cannot forget a server enrollment needing reconciliation.
+    await record(k,{...data,pending_revoke:true});
+    if(!sameSession(user,org,token))throw Error('Session changed while disabling push.');
     await disableLocal().catch(()=>{});
     if(!sameSession(user,org,token))throw Error('Session changed while disabling push.');
-    await record(k,{...data,pending_revoke:true});
     const answer=await rpc('admin_disable_push',{
       p_action:crypto.randomUUID(),p_device:data.device_id,
       p_expected_revision:data.revision},token);
