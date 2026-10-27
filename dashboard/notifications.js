@@ -3,6 +3,7 @@
    Browser never stores push keys, sessions, job details or alert contents. */
 const NotificationCenter=(()=>{
   let seq=0,settings=null,issues=[],busy=false,owner='',organization='';
+  let fetching=false,fetchingToken=null;
   const el=id=>document.getElementById(id);
   const LABELS={
     READY_FOR_REVIEW:'Ready for photo review',
@@ -27,6 +28,7 @@ const NotificationCenter=(()=>{
   }
   function reset(){
     seq++;settings=null;issues=[];busy=false;owner='';organization='';
+    fetching=false;fetchingToken=null;
     clearDisplayed();
     el('notification-status').textContent='';
     el('notification-org-timezone').value='America/Chicago';
@@ -163,10 +165,17 @@ const NotificationCenter=(()=>{
     }
     host.append(list);
   }
-  async function load(){
+  async function load(force=false){
     if(!accessToken||!currentUser)return;
+    // Auto-refresh and opening Alerts may overlap. Coalesce simultaneous
+    // reads for the SAME active session; a deliberate refresh or a saved
+    // mutation uses force to supersede stale server evidence.
+    const sameActor=owner===currentUser.id
+      && organization===(currentUser.app_metadata?.organization_id||'');
+    if(fetching&&!force&&fetchingToken===accessToken&&sameActor)return;
     const n=++seq,token=accessToken;
     owner=currentUser.id;organization=currentUser.app_metadata?.organization_id||'';
+    fetching=true;fetchingToken=token;
     // Clear potentially stale, still-clickable results *before* the first
     // network request. A denied/offline refresh leaves a truthful empty view.
     settings=null;issues=[];clearDisplayed();
@@ -207,6 +216,7 @@ const NotificationCenter=(()=>{
       renderSettings();renderAlerts();
       status('Loaded current server facts. Unobserved offline phone state is not interpreted as an error.');
     }catch(error){if(current(n,token))status('Notification status unavailable: '+error.message);}
+    finally{if(n===seq){fetching=false;fetchingToken=null;}}
   }
   async function mutate(name,body){
     if(busy||!accessToken||!currentUser)return;
@@ -215,7 +225,7 @@ const NotificationCenter=(()=>{
     try{
       await rpc(name,body,token);
       if(!current(n,token))return;
-      await load();
+      await load(true);
     }catch(error){if(current(n,token))
       status('Save outcome unconfirmed. Reload before trying again. '+error.message);}
     finally{busy=false;}
@@ -233,13 +243,13 @@ const NotificationCenter=(()=>{
       try{
         await PushDevice.enroll(klass,settings);
         status('Device enrolled with the server. Push service acceptance and actual OS display still require real tests.');
-        await load();
+        await load(true);
       }catch(error){status('Push enrollment not confirmed: '+error.message);}
       finally{busy=false;}
     });
     el('notification-push-disable').addEventListener('click',async()=>{
       if(busy)return;busy=true;
-      try{await PushDevice.disable();status('Local push disabled. Server revocation attempted; reload to verify device state.');await load();}
+      try{await PushDevice.disable();status('Local push disabled. Server revocation attempted; reload to verify device state.');await load(true);}
       catch(error){status('Local push unsubscribed. Server revocation unconfirmed; device will need reconciliation. '+error.message);}
       finally{busy=false;}
     });
