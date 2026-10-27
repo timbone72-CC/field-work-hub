@@ -331,22 +331,45 @@ const JobWorkspace = (() => {
     }
   }
 
+  let moving=false;
   function move(delta) {
+    if(moving)return;
     const target=JobResultNavigation.step(workOrderRows,selectedRow?.id,delta,state.size);
     if(!target)return;
     if(target.kind==='job'){choose(target.id);return;}
-    // Use the same unsaved-change decision as ordinary WO navigation.
+    // One unsaved-change decision owns this navigation. Reentering choose()
+    // after an approved Discard would incorrectly prompt for the same draft.
     guard(async()=>{
+      if(moving)return;
       const actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
       const token=accessToken,selected=selectedRow?.id;
       if(!token||!actor||!org||!selected)return;
-      const success=await change(target.offset,true);
-      if(!success||!accessToken||accessToken!==token||currentUser?.id!==actor
-        ||currentUser?.app_metadata?.organization_id!==org ||selectedRow?.id!==selected)return;
-      if(workOrderRows.page?.offset!==target.offset)return;
-      const candidate=target.delta>0?workOrderRows[0]:workOrderRows.at(-1);
-      if(candidate?.id)await choose(candidate.id);
-      else el('job-list-status').textContent='No further matching jobs on this page.';
+      moving=true;
+      // The operator may still interact with the old editor during an
+      // asynchronous page read. Any new edit demands a fresh guard decision.
+      let editedAgain=false;
+      const onInteraction=()=>{editedAgain=true;};
+      for(const type of ['input','change','click'])
+        editSection.addEventListener(type,onInteraction,true);
+      try{
+        const success=await change(target.offset,true);
+        if(!success||!accessToken||accessToken!==token||currentUser?.id!==actor
+          ||currentUser?.app_metadata?.organization_id!==org ||selectedRow?.id!==selected)return;
+        if(workOrderRows.page?.offset!==target.offset)return;
+        const candidate=target.delta>0?workOrderRows[0]:workOrderRows.at(-1);
+        if(!candidate?.id){
+          el('job-list-status').textContent='No further matching jobs on this page.';
+          return;
+        }
+        // The first guard already authorized discarding/saving the old draft.
+        // Do not repeat that decision unless the operator has since edited it.
+        if(editedAgain)guard(()=>load(candidate.id));
+        else await load(candidate.id);
+      }finally{
+        for(const type of ['input','change','click'])
+          editSection.removeEventListener(type,onInteraction,true);
+        moving=false;
+      }
     });
   }
   function init() {
