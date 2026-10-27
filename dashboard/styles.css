@@ -1149,6 +1149,15 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   line-height: 1.35;
   white-space: normal;
 }
+#notification-center .notification-preference > .notification-quiet {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+#notification-center .notification-quiet > .form-grid {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 @media (max-width: 980px) {
   #notification-center .notification-preference {
     grid-template-columns: minmax(0, 1fr) auto;
