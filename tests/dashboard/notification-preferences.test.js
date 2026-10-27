@@ -101,6 +101,10 @@ test('invalid quiet-hour edits stop before a preference write', async () => {
   await controls.save.handlers.click();
   assert.equal(ui.writes.length,0);
 
+  controls.timezone.value='';
+  await controls.save.handlers.click();
+  assert.equal(ui.writes.length,0, 'Missing timezone must be rejected locally');
+
   controls.timezone.value='America/Chicago';
   await controls.save.handlers.click();
   assert.equal(ui.writes.length,1);
