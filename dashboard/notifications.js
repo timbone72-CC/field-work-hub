@@ -22,6 +22,8 @@ const NotificationCenter=(()=>{
     el('notification-count').textContent='Alerts not loaded';
     el('notification-push-enable').disabled=true;
     el('notification-push-disable').disabled=true;
+    el('notification-org-timezone').value='';
+    el('notification-timezone-save').disabled=true;
   }
   function reset(){
     seq++;settings=null;issues=[];busy=false;owner='';organization='';
@@ -189,6 +191,7 @@ const NotificationCenter=(()=>{
       issues=list.alerts;
       el('notification-org-timezone').value=
         settings.organization_timezone||'America/Chicago';
+      el('notification-timezone-save').disabled=false;
       el('notification-push-status').textContent=settings.push_ready
         ?'This device must be explicitly enrolled before receiving push. Browser/OS permission does not guarantee delivery.'
         :'Phone and computer push is not configured or verified. Settings remain Off; no push notifications are being sent.';
