@@ -15,12 +15,18 @@ const NotificationCenter=(()=>{
     DELIVERY_PROBLEM:'Client delivery problem',
     CLIENT_DELIVERED:'Client package delivered'
   };
-  function reset(){
-    seq++;settings=null;issues=[];busy=false;owner='';organization='';
+  function clearDisplayed(){
+    // A failed refresh must not leave old alerts or write controls looking current.
     el('notification-settings').replaceChildren();
     el('notification-list').replaceChildren();
-    el('notification-status').textContent='';
     el('notification-count').textContent='Alerts not loaded';
+    el('notification-push-enable').disabled=true;
+    el('notification-push-disable').disabled=true;
+  }
+  function reset(){
+    seq++;settings=null;issues=[];busy=false;owner='';organization='';
+    clearDisplayed();
+    el('notification-status').textContent='';
     el('notification-org-timezone').value='America/Chicago';
     el('notification-push-status').textContent=
       'Phone and computer push has not passed provider activation. No device is enrolled by opening this page.';
@@ -158,7 +164,10 @@ const NotificationCenter=(()=>{
     if(!accessToken||!currentUser)return;
     const n=++seq,token=accessToken;
     owner=currentUser.id;organization=currentUser.app_metadata?.organization_id||'';
-    if(!organization)return;
+    // Clear potentially stale, still-clickable results *before* the first
+    // network request. A denied/offline refresh leaves a truthful empty view.
+    settings=null;issues=[];clearDisplayed();
+    if(!organization){status('Notification scope unavailable.');return;}
     status('Loading current, scoped notification settings and alert facts…');
     try{
       const nextSettings=await rpc('admin_notification_settings',{},token);
