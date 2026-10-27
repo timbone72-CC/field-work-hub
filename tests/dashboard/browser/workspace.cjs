@@ -1008,14 +1008,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.evaluate(()=>window.__permissionRequestCount),0,
       'Opening the dashboard must not prompt for OS notification permission.');
     await page.locator('#notification-center > summary').click();
-    await wait(page,()=>document.querySelectorAll('.notification-preference').length===9);
+    // A current-device IndexedDB lookup can finish after both scoped reads.
+    // Verify the complete new alert render, not a partly populated settings list.
+    await wait(page,()=>document.querySelectorAll('.notification-preference').length===9
+      && document.querySelector('#notification-status')?.textContent
+        .startsWith('Loaded current server facts.')
+      && document.querySelector('#notification-list')?.textContent
+        .includes('Awaiting contractor Accept'));
     assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
     assert.equal(await page.locator('#notification-settings input[type=checkbox]:checked').count(),9);
     assert.match(await page.locator('#notification-list').innerText(),/Awaiting contractor Accept/);
-    // Wait for the completed settings + issue read, not just the first
-    // rendered preference row. CI may still be processing the final read.
-    await wait(page,()=>document.querySelector('#notification-status')?.textContent
-      .startsWith('Loaded current server facts.'));
     // Stage 5: real Alert destination, populated with disposable server facts.
     await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
     // Reopening Alerts triggers a fresh scoped read. Stale rows are now
