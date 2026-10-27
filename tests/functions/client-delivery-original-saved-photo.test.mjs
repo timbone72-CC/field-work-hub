@@ -6,7 +6,7 @@ import {continueOriginalTestSavedFirstPhotoOnce} from
  '../../supabase/functions/client-delivery/worker-runtime.mjs';
 import {DriveUncertain} from
  '../../supabase/functions/client-delivery/drive-client.mjs';
-import {createDeliveryHandler} from '../../supabase/functions/client-delivery/handler.mjs';
+import {createDeliveryHandler,safeTrustedDeliveryDiagnostic} from '../../supabase/functions/client-delivery/handler.mjs';
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const pkg=uuid(3),dest=uuid(4),worker=uuid(5),first=uuid(6),second=uuid(7);
 const root='root_'+'a'.repeat(24),folder='folder_'+'b'.repeat(24);
@@ -246,4 +246,19 @@ test('saved-session route never says VERIFIED on uncertain coordinator outcome',
  assert.equal(response.status,503);
  assert.deepEqual(await response.json(),
   {status:'ORIGINAL_TEST_SAVED_FIRST_PHOTO_UNVERIFIED'});
+});
+
+test('private failure diagnostics retain only approved code, HTTP status and stage',()=>{
+ assert.deepEqual(safeTrustedDeliveryDiagnostic(
+  new DriveUncertain('PROVIDER_IDENTITY_UNCERTAIN',404,'GOOGLE_SESSION_STATUS')),
+  {code:'PROVIDER_IDENTITY_UNCERTAIN',provider_http_status:404,
+   provider_step:'GOOGLE_SESSION_STATUS'});
+ const unsafe=new Error('secret-token-and-session-url');
+ unsafe.code='PROVIDER_IDENTITY_UNCERTAIN';
+ unsafe.providerHttpStatus=404;
+ unsafe.providerStep='GOOGLE_SESSION_STATUS';
+ assert.deepEqual(safeTrustedDeliveryDiagnostic(unsafe),
+  {code:'UNCLASSIFIED_UNCERTAIN',provider_http_status:null,provider_step:null});
+ assert.equal(JSON.stringify(safeTrustedDeliveryDiagnostic(unsafe))
+  .includes('secret-token'),false);
 });
