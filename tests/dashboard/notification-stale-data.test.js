@@ -16,7 +16,7 @@ function rig(fail = false) {
   const elements = Object.fromEntries([
     'notification-settings', 'notification-list', 'notification-count',
     'notification-push-enable', 'notification-push-disable',
-    'notification-org-timezone', 'notification-push-status'
+    'notification-org-timezone', 'notification-timezone-save', 'notification-push-status'
   ].map(id => [id, {
     children: ['stale-action'], textContent: 'old server state', disabled: false, value: '',
     replaceChildren(...children) { this.children = children; }
@@ -57,6 +57,8 @@ test('failed alert refresh clears stale jobs, actions and enrollment controls be
   assert.equal(ui.elements['notification-count'].textContent, 'Alerts not loaded');
   assert.equal(ui.elements['notification-push-enable'].disabled, true);
   assert.equal(ui.elements['notification-push-disable'].disabled, true);
+  assert.equal(ui.elements['notification-timezone-save'].disabled, true);
+  assert.equal(ui.elements['notification-org-timezone'].value, '');
   assert.equal(ui.context.settings, null);
   assert.equal(ui.context.issues.length, 0);
   assert.match(ui.messages.at(-1), /Notification status unavailable: Network unavailable/);
@@ -73,5 +75,6 @@ test('successful scoped alert reload restores only newly received server state',
   assert.equal(ui.elements['notification-org-timezone'].value, 'UTC');
   assert.equal(ui.elements['notification-push-enable'].disabled, true);
   assert.equal(ui.elements['notification-push-disable'].disabled, true);
+  assert.equal(ui.elements['notification-timezone-save'].disabled, false);
   assert.match(ui.messages.at(-1), /Loaded current server facts/);
 });
