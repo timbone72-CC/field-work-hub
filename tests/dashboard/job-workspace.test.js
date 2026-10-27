@@ -78,6 +78,37 @@ test('Phase 6A contractor/date filters are server-side and reject SQL operator i
  assert.equal(rules.normalize({contractor:uid,dueDate:'2026-10-10'}).contractor,undefined);
 });
 
+
+test('Phase 6A previous/next stays in result order across bounded server pages',()=>{
+ const rows=Array.from({length:25},(_,i)=>({id:'job-'+(i+26)}));
+ rows.page={offset:25,total:75};
+ const step=rules.JobResultNavigation.step;
+ assert.deepEqual(step(rows,'job-27',1,25),{kind:'job',id:'job-28'});
+ assert.deepEqual(step(rows,'job-26',-1,25),{kind:'page',offset:0,delta:-1});
+ assert.deepEqual(step(rows,'job-50',1,25),{kind:'page',offset:50,delta:1});
+ assert.equal(step(rows,'job-missing',1,25),null);
+ assert.equal(step(rows,'job-50',1,100),null);
+ const last=rows.slice();last.page={offset:50,total:75};
+ assert.equal(step(last,'job-50',1,25),null);
+ const unknown=rows.slice();unknown.page={offset:25,total:null};
+ assert.equal(step(unknown,'job-50',1,25),null,'Unknown total cannot guess a new job');
+ const partial=rows.slice(0,12);partial.page={offset:25,total:75};
+ assert.equal(step(partial,'job-37',1,25),null,'Do not invent a neighboring job after a partial page');
+});
+
+test('Phase 6A cross-page job movement uses saved filters, current account and unsaved guard',()=>{
+ const source=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ const move=source.split('  function move(delta) {')[1]?.split('  function init() {')[0];
+ assert.ok(move,'Keep one job-to-job navigation owner');
+ for(const pattern of [/JobResultNavigation\.step/,/guard\(async\(\)=>/,/change\(target.offset,true\)/,
+   /accessToken!==token/,/currentUser\?\.id!==actor/,/selectedRow\?\.id!==selected/,
+   /workOrderRows\.page\?\.offset!==target.offset/,/await choose\(candidate.id\)/])
+  assert.match(move,pattern);
+ assert.match(source,/const previous=state;/);
+ assert.match(source,/state=previous;revision\+\+;/);
+ assert.doesNotMatch(move,/admin_create_work_order|admin_update_work_order|admin_send/);
+});
+
 test('Phase 6A closing a job returns keyboard focus by UUID and clears transient account data',()=>{
  const workspace=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
  assert.match(workspace,/returnFocusId=id/);
