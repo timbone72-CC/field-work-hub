@@ -1140,6 +1140,17 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelectorAll('.job-table tbody tr').length === 50);
     await page.locator('#job-page-next').click(); await wait(page, () => document.querySelector('#job-page-info').textContent.includes('51–100'));
     await page.locator('.job-link').first().click(); await wait(page, () => document.querySelector('dialog').open);
+    // Phase 6A: Previous on the first job of page 2 crosses back to page 1;
+    // Next on its last job returns to page 2, preserving server filters and UUID.
+    assert.equal(await page.locator('#edit-work-order-id').inputValue(),uuid(51));
+    assert.equal(await page.locator('#job-previous').isDisabled(),false);
+    await page.locator('#job-previous').click();
+    await wait(page,()=>document.querySelector('#edit-work-order-id').value===uuid(50)
+      && document.querySelector('#job-page-info').textContent.includes('1–50'));
+    assert.equal(await page.locator('#job-next').isDisabled(),false);
+    await page.locator('#job-next').click();
+    await wait(page,()=>document.querySelector('#edit-work-order-id').value===uuid(51)
+      && document.querySelector('#job-page-info').textContent.includes('51–100'));
     await page.locator('#edit-instructions').fill('Accepted write with failed read'); failDetail = true;
     await page.locator('#save-edit').click(); await wait(page, () => document.querySelector('#edit-status').textContent.includes('Changes saved. Unable'));
     const count = saves.length; await page.locator('#save-edit').click(); assert.equal(saves.length, count, 'Must not repeat accepted mutation when revision refresh fails');
