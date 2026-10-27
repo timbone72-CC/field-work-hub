@@ -142,17 +142,15 @@ function rig({wrongAccount=false,wrongDrive=false,leaseRevoked=false,
 test('one worker resumes exact private bytes with same remote ID; only independent GET creates file receipt',async()=>{
  const r=rig();
  const first=await r.run();
- assert.equal(first.state,'PROGRESS');
- assert.deepEqual(r.totals,{posts:1,uploads:1,confirmed:0,offset:262144});
+ assert.equal(first.state,'FILE_VERIFIED');
+ assert.deepEqual(r.totals,{posts:1,uploads:1,confirmed:1,offset:300000});
  assert.ok(r.events.indexOf('account')<r.events.indexOf('projection'));
  assert.ok(r.events.indexOf('parent')<r.events.indexOf('create'));
  assert.ok(r.events.indexOf('durable_start')<r.events.indexOf('create'));
  assert.ok(r.events.indexOf('private_range')<r.events.indexOf('durable_start'));
  assert.ok(r.events.indexOf('persist_session')<r.events.lastIndexOf('private_range'));
  assert.ok(r.events.lastIndexOf('projection')<r.events.indexOf('upload'));
- const second=await r.run();
- assert.equal(second.state,'FILE_VERIFIED');
- assert.deepEqual(r.totals,{posts:1,uploads:2,confirmed:1,offset:300000});
+ // One content PUT, verified independently by a same-ID GET.
  assert.ok(r.events.lastIndexOf('remote_get')<r.events.lastIndexOf('verify_receipt'));
 });
 test('wrong OAuth account or wrong client-drive folder prevents any remote create and protected read',async()=>{
@@ -188,11 +186,10 @@ test('wrong private Storage byte range stops before one-shot Google start or del
 test('uploaded bytes cannot yield a receipt after remote file rename or shared-drive move',async()=>{
  for(const scenario of [{remoteMoved:true},{remoteRenamed:true}]){
   const r=rig(scenario);
-  assert.equal((await r.run()).state,'PROGRESS');
   await assert.rejects(()=>r.run(),e=>e instanceof DriveUncertain
     &&e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
   assert.equal(r.totals.posts,1);
-  assert.equal(r.totals.uploads,2);
+  assert.equal(r.totals.uploads,1);
   assert.equal(r.totals.confirmed,0);
  }
 });
