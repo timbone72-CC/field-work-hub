@@ -569,7 +569,8 @@ test('Phase 6A job navigation identifies page boundaries without selecting a dif
     workOrderRows.page={offset,total};
     let contexts=0;
     vm.runInNewContext(navigation+'\nnavigation();',{
-      workOrderRows,selectedRow:selected?{id:selected}:null,state:{offset},
+      workOrderRows,selectedRow:selected?{id:selected}:null,state:{offset,size:25},
+      JobResultNavigation:rules.JobResultNavigation,
       el:id=>(elements[id]??={disabled:false,textContent:''}),
       addressContext:()=>{contexts++;}
     });
@@ -579,8 +580,8 @@ test('Phase 6A job navigation identifies page boundaries without selecting a dif
   assert.equal(run(['job-a'],'job-a',0,1)['job-context'].textContent,'End of current results.');
   assert.match(run(['job-a','job-b'],'job-b',0,5)['job-context'].textContent,/Next page in the job list/);
   const first=run(['job-c','job-d'],'job-c',2,5);
-  assert.match(first['job-context'].textContent,/Previous page in the job list/);
-  assert.equal(first['job-previous'].disabled,true);
+  assert.match(first['job-context'].textContent,/Previous opens the preceding result page/);
+  assert.equal(first['job-previous'].disabled,false);
   assert.equal(first['job-next'].disabled,false);
   assert.match(run(['job-a','job-b'],'job-outside',0,2)['job-context'].textContent,/outside the current page/);
   assert.equal(run(['job-a','job-b','job-c'],'job-b',0,3)['job-context'].textContent,'');
