@@ -4,9 +4,12 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(require.resolve('../../dashboard/push-device.js'), 'utf8');
+const helper = source.indexOf('  function sameSession(');
+const helperEnd = source.indexOf('  const base64=', helper);
 const first = source.indexOf('  async function enroll(');
 const last = source.indexOf('  async function localEnabled(', first);
-assert.ok(first >= 0 && last > first, 'Retain original enroll/disable/recovery ownership');
+assert.ok(helper >= 0 && helperEnd > helper && first > helperEnd && last > first,
+  'Retain the real session fence and original enroll/disable/recovery owners');
 
 function rig({old = false, saved = null, failRpc = false, onRead = null,
   onPermission = null} = {}) {
@@ -57,8 +60,8 @@ function rig({old = false, saved = null, failRpc = false, onRead = null,
       return {revision:'rev-new'};
     }
   };
-  vm.runInNewContext(source.slice(first,last)+
-    '\nthis.actions={enroll,disable,reconcilePending};',ctx);
+  vm.runInNewContext(source.slice(helper,helperEnd) + '\n' +
+    source.slice(first,last) + '\nthis.actions={enroll,disable,reconcilePending};',ctx);
   return {ctx,actions:ctx.actions,operations,stored,subscription};
 }
 
