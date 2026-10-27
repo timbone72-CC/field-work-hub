@@ -25,6 +25,7 @@ function rig(fail = false) {
   const types = Array.from({length: 9}, (_, i) => ({type: 'TYPE_' + i}));
   const context = {
     seq: 0, settings: {old: true}, issues: [{id: 'old', current: true}],
+    fetching: false, fetchingToken: null,
     owner: '', organization: '', accessToken: 'current-token',
     currentUser: {id: 'office-user', app_metadata: {organization_id: 'office-org'}},
     el: id => elements[id],
