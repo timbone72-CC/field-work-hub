@@ -1151,11 +1151,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#edit-work-order-id').inputValue(),uuid(51));
     assert.equal(await page.locator('#job-previous').isDisabled(),false);
     await page.locator('#job-previous').click();
-    await wait(page,()=>document.querySelector('#edit-work-order-id').value===uuid(50)
+    await wait(page,()=>document.querySelector('#edit-work-order-id').value==='00000000-0000-4000-8000-000000000050'
       && document.querySelector('#job-page-info').textContent.includes('1–50'));
     assert.equal(await page.locator('#job-next').isDisabled(),false);
     await page.locator('#job-next').click();
-    await wait(page,()=>document.querySelector('#edit-work-order-id').value===uuid(51)
+    await wait(page,()=>document.querySelector('#edit-work-order-id').value==='00000000-0000-4000-8000-000000000051'
       && document.querySelector('#job-page-info').textContent.includes('51–100'));
     await page.locator('#edit-instructions').fill('Accepted write with failed read'); failDetail = true;
     await page.locator('#save-edit').click(); await wait(page, () => document.querySelector('#edit-status').textContent.includes('Changes saved. Unable'));
