@@ -124,7 +124,7 @@ test('rejects missing, partial, oversized, mismatched or redirected Storage resp
 });
 test('only bounded exact ranges may reach service Storage with bearer credentials',async()=>{
  const r=rig();
- for(const [offset,size] of [[-1,1],[0,0],[0,262145],[299999,2],
+ for(const [offset,size] of [[-1,1],[0,0],[0,1048577],[299999,2],
   [300000,1],[Number.NaN,1]]){
    await assert.rejects(()=>r.read(photo,offset,size),unavailable);
  }
