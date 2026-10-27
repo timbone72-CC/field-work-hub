@@ -79,6 +79,27 @@ const JobAddressContext = {
 };
 if (typeof module !== 'undefined' && module.exports) module.exports.JobAddressContext=JobAddressContext;
 
+/* Phase 6A: bounded next/previous within the selected server result set.
+ * Unknown totals do not authorize speculative next-page selection. */
+const JobResultNavigation = {
+  step(rows, id, delta, pageSize = 25) {
+    if (!Array.isArray(rows) || !id || ![-1,1].includes(delta)) return null;
+    const index=rows.findIndex(row=>row?.id===id);
+    if(index<0)return null;
+    const adjacent=rows[index+delta];
+    if(adjacent?.id)return {kind:'job',id:adjacent.id};
+    const offset=rows.page?.offset, total=rows.page?.total;
+    if(!Number.isSafeInteger(offset)||offset<0||![25,50].includes(pageSize))return null;
+    if(delta<0 && index===0 && offset>0)
+      return {kind:'page',offset:Math.max(0,offset-pageSize),delta};
+    if(delta>0 && index===rows.length-1 && Number.isSafeInteger(total)
+      && total>offset+rows.length && rows.length===pageSize)
+      return {kind:'page',offset:offset+pageSize,delta};
+    return null;
+  }
+};
+if (typeof module !== 'undefined' && module.exports) module.exports.JobResultNavigation=JobResultNavigation;
+
 const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
@@ -140,19 +161,30 @@ const JobWorkspace = (() => {
     el('job-list-status').textContent = '';
     navigation();
   }
-  async function change(offset) {
-    if (adminWritesPending || saveEditButton.disabled) return;
-    state = { ...state, size: Number(el('job-page-size').value), sort: el('job-sort').value,
-      status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
-      contractor:el('job-contractor').value,dueDate:el('job-due-date').value, offset };
+  async function change(offset, keepResultFilters=false) {
+    if (adminWritesPending || saveEditButton.disabled) return false;
+    const previous=state;
+    state = keepResultFilters ? {...state,offset} :
+      { ...state, size: Number(el('job-page-size').value), sort: el('job-sort').value,
+        status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
+        contractor:el('job-contractor').value,dueDate:el('job-due-date').value, offset };
     revision++;
     try { localStorage.setItem(JOB_VIEW_STORAGE_KEY(), JSON.stringify(JobViewRules.normalize(state))); } catch { /* Optional preference. */ }
     const ownRevision = revision;
     el('job-list-status').textContent = 'Loading jobs…';
     el('job-page-previous').disabled = true; el('job-page-next').disabled = true;
-    try { await refreshWorkOrders(); }
-    catch (error) {
-      if (ownRevision === revision && accessToken) el('job-list-status').textContent = `${error.message} Showing the last received page. Apply to retry.`;
+    try {
+      await refreshWorkOrders();
+      return ownRevision===revision;
+    } catch (error) {
+      if (ownRevision===revision && accessToken) {
+        // A failed page read cannot silently change the active result-set
+        // offset while the selected job still belongs to the old page.
+        state=previous;revision++;
+        el('job-list-status').textContent = `${error.message} Showing the last received page. Apply to retry.`;
+        navigation();
+      }
+      return false;
     }
   }
   function guard(action) {
@@ -214,8 +246,10 @@ const JobWorkspace = (() => {
   }
   function navigation() {
     const index = workOrderRows.findIndex(row => row.id === selectedRow?.id);
-    el('job-previous').disabled = index <= 0;
-    el('job-next').disabled = index < 0 || index >= workOrderRows.length - 1;
+    const previous=JobResultNavigation.step(workOrderRows,selectedRow?.id,-1,state.size);
+    const next=JobResultNavigation.step(workOrderRows,selectedRow?.id,1,state.size);
+    el('job-previous').disabled = !previous;
+    el('job-next').disabled = !next;
     const offset = workOrderRows.page?.offset ?? state.offset;
     const total = workOrderRows.page?.total;
     let context = '';
@@ -224,9 +258,10 @@ const JobWorkspace = (() => {
     } else if (index >= 0 && index === workOrderRows.length - 1) {
       context = total !== null && total !== undefined && offset + workOrderRows.length >= total
         ? 'End of current results.'
-        : 'End of this page. Use Next page in the job list for more results.';
+        : next ? 'Next opens the following result page.' :
+          'End of this page. The total is unavailable; use Next page in the job list.';
     } else if (index === 0 && offset > 0) {
-      context = 'Start of this page. Use Previous page in the job list for earlier results.';
+      context = 'Previous opens the preceding result page.';
     }
     el('job-context').textContent = context;
     addressContext();
@@ -295,6 +330,25 @@ const JobWorkspace = (() => {
       el('job-reload').hidden = false;
     }
   }
+
+  function move(delta) {
+    const target=JobResultNavigation.step(workOrderRows,selectedRow?.id,delta,state.size);
+    if(!target)return;
+    if(target.kind==='job'){choose(target.id);return;}
+    // Use the same unsaved-change decision as ordinary WO navigation.
+    guard(async()=>{
+      const actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+      const token=accessToken,selected=selectedRow?.id;
+      if(!token||!actor||!org||!selected)return;
+      const success=await change(target.offset,true);
+      if(!success||!accessToken||accessToken!==token||currentUser?.id!==actor
+        ||currentUser?.app_metadata?.organization_id!==org ||selectedRow?.id!==selected)return;
+      if(workOrderRows.page?.offset!==target.offset)return;
+      const candidate=target.delta>0?workOrderRows[0]:workOrderRows.at(-1);
+      if(candidate?.id)await choose(candidate.id);
+      else el('job-list-status').textContent='No further matching jobs on this page.';
+    });
+  }
   function init() {
     CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init(); ReleaseHistory.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
@@ -314,10 +368,8 @@ const JobWorkspace = (() => {
     });
     el('job-page-previous').addEventListener('click', () => change(Math.max(0, state.offset - state.size)));
     el('job-page-next').addEventListener('click', () => change(state.offset + state.size));
-    for (const [id, delta] of [['job-previous', -1], ['job-next', 1]]) el(id).addEventListener('click', () => {
-      const index = workOrderRows.findIndex(row => row.id === selectedRow?.id);
-      if (index >= 0 && workOrderRows[index + delta]) choose(workOrderRows[index + delta].id);
-    });
+    for (const [id, delta] of [['job-previous', -1], ['job-next', 1]])
+      el(id).addEventListener('click', () => move(delta));
     document.querySelectorAll('[data-job-tab]').forEach(button => button.addEventListener('click', () => tab(button.dataset.jobTab)));
     el('job-next-action-open').addEventListener('click', () => tab(el('job-next-action-open').dataset.panel || 'details'));
     editSection.addEventListener('cancel', event => { event.preventDefault(); closeEditor(); });
