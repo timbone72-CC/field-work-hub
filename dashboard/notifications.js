@@ -113,14 +113,14 @@ const NotificationCenter=(()=>{
     el('notification-count').textContent=
       issues.filter(x=>x.current&&!x.acknowledged).length+
       ' current unread alerts in this bounded view';
-    if(issues.length===0){
+    const currentIssues=issues.filter(item=>item.current);
+    if(currentIssues.length===0){
       const p=document.createElement('p');p.className='muted';
       p.textContent='No current alerts in the latest server-evaluated work orders.';
       host.append(p);return;
     }
     const list=document.createElement('ol');
-    for(const item of issues){
-      if(!item.current)continue;
+    for(const item of currentIssues){
       const li=document.createElement('li');li.className='notification-item';
       const title=document.createElement('strong');
       title.textContent=LABELS[item.type]||item.type;
