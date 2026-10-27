@@ -216,7 +216,19 @@ const JobWorkspace = (() => {
     const index = workOrderRows.findIndex(row => row.id === selectedRow?.id);
     el('job-previous').disabled = index <= 0;
     el('job-next').disabled = index < 0 || index >= workOrderRows.length - 1;
-    el('job-context').textContent = selectedRow && index < 0 ? 'This job is outside the current page or filter. Your workspace remains open.' : '';
+    const offset = workOrderRows.page?.offset ?? state.offset;
+    const total = workOrderRows.page?.total;
+    let context = '';
+    if (selectedRow && index < 0) {
+      context = 'This job is outside the current page or filter. Your workspace remains open.';
+    } else if (index >= 0 && index === workOrderRows.length - 1) {
+      context = total !== null && total !== undefined && offset + workOrderRows.length >= total
+        ? 'End of current results.'
+        : 'End of this page. Use Next page in the job list for more results.';
+    } else if (index === 0 && offset > 0) {
+      context = 'Start of this page. Use Previous page in the job list for earlier results.';
+    }
+    el('job-context').textContent = context;
     addressContext();
   }
   function opened(row) {
