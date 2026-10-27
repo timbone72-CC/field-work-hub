@@ -9,7 +9,14 @@ const HASH=/^[0-9a-f]{64}$/;
 const MIME=new Set(['image/jpeg','application/json','application/vnd.google-apps.folder']);
 const CHUNK=256*1024;
 export class DriveUncertain extends Error {
-  constructor(code){super(code);this.name='DriveUncertain';this.code=code;}
+  constructor(code,providerHttpStatus=null,providerStep=null){
+    super(code);this.name='DriveUncertain';this.code=code;
+    // Only bounded status/stage, never provider body or URL.
+    this.providerHttpStatus=Number.isInteger(providerHttpStatus)
+      &&providerHttpStatus>=400&&providerHttpStatus<=599?providerHttpStatus:null;
+    this.providerStep=['GOOGLE_SESSION_STATUS','GOOGLE_MEDIA_PUT'].includes(providerStep)
+      ?providerStep:null;
+  }
 }
 function valid(value,rx,code){if(typeof value!=='string'||!rx.test(value))throw new DriveUncertain(code);return value;}
 function fixedObject({id,parent,name,mime,appProperties}) {
@@ -51,14 +58,14 @@ function sessionUrl(value){
   // a query count. None are guaranteed for Google's returned Location.
   return value;
 }
-function handleHttp(response,expected){
+function handleHttp(response,expected,providerStep=null){
   if(expected.includes(response.status))return response;
   // 404 is NOT permission to create a new object: inaccessible/missing are ambiguous.
   throw new DriveUncertain(response.status===401||response.status===403?'PROVIDER_AUTH_DENIED'
     :response.status===404||response.status===410?'PROVIDER_IDENTITY_UNCERTAIN'
     :response.status===409?'REMOTE_ID_CONFLICT_RECONCILE'
     :response.status===429||response.status>=500?'PROVIDER_RETRY_REQUIRED'
-    :'PROVIDER_RESPONSE_UNCERTAIN');
+    :'PROVIDER_RESPONSE_UNCERTAIN',response.status,providerStep);
 }
 async function boundedJson(response){
   const type=response.headers.get('Content-Type')||'';
@@ -264,7 +271,7 @@ export function createDriveClient({accessToken,fetcher=fetch}){
       if(!Number.isSafeInteger(total)||total<=0||total>32*1024*1024)
         throw new DriveUncertain('INVALID_UPLOAD_SIZE');
       const r=handleHttp(await request(url,{method:'PUT',resumableProgress:true,
-        headers:{'Content-Length':'0','Content-Range':`bytes */${total}`}}),[200,201,308]);
+        headers:{'Content-Length':'0','Content-Range':`bytes */${total}`}}),[200,201,308],'GOOGLE_SESSION_STATUS');
       if(r.status!==308)return {complete_candidate:true,requires_get_verification:true};
       const range=r.headers.get('Range');
       if(!range)return {offset:0,complete_candidate:false};
@@ -284,7 +291,7 @@ export function createDriveClient({accessToken,fetcher=fetch}){
       const end=offset+chunk.length-1;
       const response=handleHttp(await request(url,{method:'PUT',resumableProgress:true,headers:{
         'Content-Length':String(chunk.length),
-        'Content-Range':`bytes ${offset}-${end}/${total}`},body:chunk}),[200,201,308]);
+        'Content-Range':`bytes ${offset}-${end}/${total}`},body:chunk}),[200,201,308],'GOOGLE_MEDIA_PUT');
       // Even HTTP 201 requires an independent GET of the preallocated ID.
       return {complete_candidate:response.status!==308,requires_get_verification:true};
     }
