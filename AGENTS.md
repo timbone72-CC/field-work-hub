@@ -23,6 +23,14 @@ Keep one owner for server authority, Android local evidence, field workflow, cam
 
 Do not change the original FPP repository, Android app/package, Supabase, Drive folders, production data or permissions as part of FWH work. Never commit service secrets, contractor/customer PII, field photos, production signing material or auth refresh tokens to this public repository.
 
+## Current FWH TEST-only evidence classification — operator confirmation 2026-10-27
+
+The operator has confirmed that the **current Field Work Hub installation is not public, has no customer work, and its current FWH files/photos are disposable TEST data**. This describes the present FWH TEST environment, not the separate original Field Photo Prep app and not a permanent promise about future real work.
+
+For an explicitly isolated, identity-verified disposable FWH TEST fixture, loss or deliberately approved cleanup of the *fake photo bytes* is an acceptable test outcome. This does **not** automatically make every database record, Google ID, encrypted session, dispatch permit, or one-shot attempt marker safe to reset: while an uncertain remote outcome is being investigated, preserve the identity/journal evidence needed to classify it truthfully. Ordinary TEST cleanup may follow an exact-scoped recorded procedure instead of treating every disposable image as irreplaceable customer evidence.
+
+Do not silently infer that FPP or later live FWH data are disposable; reclassify protection before production or customer intake. Current explicit platform deployment safety restrictions cannot be bypassed by relabeling work as TEST. Retain the single governed PR/branch and required Level-3 gates.
+
 ## Verification and stop
 
 Build the largest safe coherent batch inside approved scope; use focused verification during development, one final complete suite on the exact runtime head when required, and the smallest real-device/provider check that software cannot prove. A failed test, unverified authorization, external-state contradiction, unproven photo destination, unresolved ambiguity or unapproved expansion stops the affected path. Passing physical observations need not be repeated for reassurance.
