@@ -259,7 +259,7 @@ const JobWorkspace = (() => {
       context = total !== null && total !== undefined && offset + workOrderRows.length >= total
         ? 'End of current results.'
         : next ? 'Next opens the following result page.' :
-          'End of this page. The total is unavailable; use Next page in the job list.';
+          'End of this page. Use Next page in the job list for more results.';
     } else if (index === 0 && offset > 0) {
       context = 'Previous opens the preceding result page.';
     }
