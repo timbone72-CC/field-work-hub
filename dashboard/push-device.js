@@ -114,6 +114,15 @@ const PushDevice=(()=>{
       p_expected_revision:saved.revision},accessToken);
     await record(keyName,{...saved,revision:receipt.revision,pending_revoke:false});
   }
+  async function localEnabled(devices){
+    const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
+    if(!user||!org||!Array.isArray(devices))return false;
+    // The server list is scoped to this office user. Its other devices must
+    // never enable this browser's local Disable button.
+    const saved=await record(key(user,org));
+    return !!saved?.device_id && devices.some(device=>
+      device.device_id===saved.device_id && device.enabled===true);
+  }
   function signedOut(){
     const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
     const token=accessToken;
@@ -138,5 +147,5 @@ const PushDevice=(()=>{
       }catch{/* Offline signout leaves a durable non-secret pending revoke. */}
     }).catch(()=>{});
   }
-  return {supported,enroll,disable,signedOut,reconcilePending};
+  return {supported,enroll,disable,signedOut,reconcilePending,localEnabled};
 })();
