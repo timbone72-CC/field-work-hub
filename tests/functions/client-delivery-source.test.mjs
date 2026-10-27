@@ -169,3 +169,17 @@ test('rejects untrusted Supabase origin and missing service lease/JWT at constru
   assert.throws(()=>createPrivateSourceChunkReader(props),unavailable);
  }
 });
+
+test('one-chunk 404185-byte prepared photo uses one exact private range with receipt recheck',async()=>{
+ const whole={...photo,size:404185};
+ const record=[];
+ const r=rig({fresh:whole,record,bytes:new Uint8Array(404185),
+  headers:{'Content-Range':'bytes 0-404184/404185',
+   'Content-Length':'404185'}});
+ const bytes=await r.read(whole,0,404185);
+ assert.equal(bytes.length,404185);
+ assert.deepEqual(record.map(x=>x[0]),['projection','storage','projection']);
+ assert.equal(record[1][2].headers.Range,'bytes=0-404184');
+ await assert.rejects(()=>r.read(whole,0,1048577),unavailable);
+ assert.equal(record.filter(x=>x[0]==='storage').length,1);
+});
