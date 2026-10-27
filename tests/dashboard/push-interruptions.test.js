@@ -143,3 +143,62 @@ test('pending revoke from old actor does not unsubscribe or submit with a new ac
   assert.equal(x.operations.some(op=>op.startsWith('rpc:')),false);
   assert.equal(x.stored.get('user-a:org-a').pending_revoke,true);
 });
+
+function signoutRig({saved=null,switchOnRead=false,offline=false}={}) {
+  const actions = [], values = new Map();
+  if(saved) values.set('user-a:org-a',{...saved});
+  const ctx = {
+    currentUser:{id:'user-a',app_metadata:{organization_id:'org-a'}},
+    accessToken:'token-a', SUPABASE_URL:'https://fwh.example',
+    SUPABASE_PUBLISHABLE_KEY:'public-test',
+    crypto:{randomUUID:()=> 'action-a'},
+    AbortSignal:{timeout:()=>undefined},
+    key:(user,org)=>user+':'+org,
+    async record(k,write=null){
+      if(write){actions.push('save-pending');values.set(k,{...write});return write;}
+      actions.push('read');
+      if(switchOnRead)ctx.currentUser={id:'user-b',app_metadata:{organization_id:'org-b'}};
+      return values.get(k)||null;
+    },
+    async disableLocal(){actions.push('unsubscribe');},
+    async fetch(_url,options){
+      actions.push('server-revoke');
+      assert.equal(options.headers.Authorization,'Bearer token-a');
+      if(offline)throw Error('Offline');
+      return {ok:true,async json(){return {revision:'rev-closed'};}};
+    }
+  };
+  const start=source.indexOf('  function signedOut(){');
+  const end=source.indexOf('  return {supported,enroll,disable',start);
+  assert.ok(start>=0&&end>start,'Original sign-out push owner remains present');
+  vm.runInNewContext(source.slice(start,end)+'\nthis.signout=signedOut;',ctx);
+  return {ctx,actions,values,async run(){
+    ctx.signout();
+    // The sign-out handler intentionally cannot block the page's session reset.
+    await new Promise(resolve=>setImmediate(resolve));
+  }};
+}
+
+test('sign-out without a saved identity never unsubscribes another office account',async()=>{
+  const x=signoutRig();
+  await x.run();
+  assert.deepEqual(x.actions,['read']);
+});
+
+test('signed-out old actor revokes with captured token but never unsubscribes new actor',async()=>{
+  const x=signoutRig({saved:{device_id:'device-a',revision:'rev-a'},
+    switchOnRead:true});
+  await x.run();
+  assert.equal(x.actions.includes('unsubscribe'),false);
+  assert.ok(x.actions.indexOf('save-pending')<x.actions.indexOf('server-revoke'));
+  assert.equal(x.values.get('user-a:org-a').pending_revoke,false);
+  assert.equal(x.values.get('user-a:org-a').revision,'rev-closed');
+});
+
+test('offline sign-out unsubscribes saved local device and keeps revocation pending',async()=>{
+  const x=signoutRig({saved:{device_id:'device-a',revision:'rev-a'},offline:true});
+  await x.run();
+  assert.ok(x.actions.indexOf('save-pending')<x.actions.indexOf('unsubscribe'));
+  assert.ok(x.actions.indexOf('unsubscribe')<x.actions.indexOf('server-revoke'));
+  assert.equal(x.values.get('user-a:org-a').pending_revoke,true);
+});
