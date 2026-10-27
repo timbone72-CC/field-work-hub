@@ -1007,6 +1007,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'Ordinary Admin must not see owner-only office controls.');
     assert.equal(await page.evaluate(()=>window.__permissionRequestCount),0,
       'Opening the dashboard must not prompt for OS notification permission.');
+    // This fixture validates exact static alert content and mobile layout.
+    // Stop the periodic work-order timer while asserting DOM snapshots;
+    // explicit automatic refresh and alert race tests run separately below.
+    await page.evaluate(()=>stopAdminAutoRefresh());
     await page.locator('#notification-center > summary').click();
     // A current-device IndexedDB lookup can finish after both scoped reads.
     // Verify the complete new alert render, not a partly populated settings list.
