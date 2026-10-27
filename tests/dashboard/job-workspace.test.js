@@ -102,7 +102,8 @@ test('Phase 6A cross-page job movement uses saved filters, current account and u
  assert.ok(move,'Keep one job-to-job navigation owner');
  for(const pattern of [/JobResultNavigation\.step/,/guard\(async\(\)=>/,/change\(target.offset,true\)/,
    /accessToken!==token/,/currentUser\?\.id!==actor/,/selectedRow\?\.id!==selected/,
-   /workOrderRows\.page\?\.offset!==target.offset/,/await choose\(candidate.id\)/])
+   /workOrderRows\.page\?\.offset!==target.offset/,/await load\(candidate.id\)/,
+   /if\(editedAgain\)guard\(\(\)=>load\(candidate.id\)\)/])
   assert.match(move,pattern);
  assert.match(source,/const previous=state;/);
  assert.match(source,/state=previous;revision\+\+;/);
