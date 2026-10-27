@@ -1150,9 +1150,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // Next on its last job returns to page 2, preserving server filters and UUID.
     assert.equal(await page.locator('#edit-work-order-id').inputValue(),uuid(51));
     assert.equal(await page.locator('#job-previous').isDisabled(),false);
+    await page.locator('#edit-instructions').fill('Unsaved edit to discard once at the page boundary');
     await page.locator('#job-previous').click();
+    await wait(page,()=>!document.querySelector('#job-unsaved').hidden);
+    await page.locator('#job-discard').click();
     await wait(page,()=>document.querySelector('#edit-work-order-id').value==='00000000-0000-4000-8000-000000000050'
       && document.querySelector('#job-page-info').textContent.includes('1–50'));
+    assert.equal(await page.locator('#job-unsaved').isVisible(),false,
+      'One Discard at the boundary must not cause a duplicate unsaved-change prompt');
+    assert.notEqual(await page.locator('#edit-instructions').inputValue(),
+      'Unsaved edit to discard once at the page boundary');
     assert.equal(await page.locator('#job-next').isDisabled(),false);
     await page.locator('#job-next').click();
     await wait(page,()=>document.querySelector('#edit-work-order-id').value==='00000000-0000-4000-8000-000000000051'
