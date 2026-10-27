@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(require.resolve('../../dashboard/notifications.js'), 'utf8');
 const start = source.indexOf('  function renderAlerts(){');
-const end = source.indexOf('  async function load(){', start);
+const end = source.indexOf('  async function load(', start);
 assert.ok(start >= 0 && end > start, 'Keep the existing notification renderer');
 
 function node(tag = 'div') {
