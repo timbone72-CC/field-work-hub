@@ -4,7 +4,9 @@
 import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
-const STEP=256*1024;
+// A prepared file of up to 1 MiB can complete in one provider content PUT.
+// Larger files remain resumable in bounded, 256-KiB-aligned steps.
+const STEP=1024*1024;
 const ID=/^[A-Za-z0-9_-]{10,160}$/;
 
 export async function transferOnePreparedChunk({
