@@ -1021,7 +1021,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         .includes('Awaiting contractor Accept'));
     assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
     assert.equal(await page.locator('#notification-settings input[type=checkbox]:checked').count(),9);
-    assert.match(await page.locator('#notification-list').innerText(),/Awaiting contractor Accept/);
+    assert.match(await page.locator('#notification-list').textContent(),/Awaiting contractor Accept/);
     // Stage 5: real Alert destination, populated with disposable server facts.
     await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
     // Reopening Alerts triggers a fresh scoped read. Stale rows are now
@@ -1038,6 +1038,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     }
     assert.equal(await page.locator('.notification-preference').count(),9);
     assert.equal(await page.locator('#notification-list .notification-item').count()>0,true);
+    assert.match(await page.locator('#notification-list').innerText(),/Awaiting contractor Accept/,
+      'Visible Alerts destination must show the server-scoped fixture issue.');
     await page.screenshot({path:path.join(output,'stage5-alerts-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.locator('#notification-center').evaluate(el=>
