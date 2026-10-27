@@ -10,7 +10,7 @@ function extract(start, end) {
   return source.slice(from, to);
 }
 const clear = extract('  function clearDisplayed(){', '  function reset(){');
-const load = extract('  async function load(){', '  async function mutate(');
+const load = extract('  async function load(', '  async function mutate(');
 
 function rig(fail = false) {
   const elements = Object.fromEntries([
