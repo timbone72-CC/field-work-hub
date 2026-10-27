@@ -118,7 +118,8 @@ const NotificationCenter=(()=>{
     }
   }
   function validIanaZone(s){
-    if(!s.includes('/'))return false;
+    // UTC is an IANA zone too; not every valid identifier contains a slash.
+    if(s!=='UTC'&&!s.includes('/'))return false;
     try{new Intl.DateTimeFormat('en-US',{timeZone:s});return true;}catch{return false;}
   }
   function renderAlerts(){
@@ -189,6 +190,8 @@ const NotificationCenter=(()=>{
         ||list.alerts.length>25)
         throw Error('Alert list scope mismatch.');
       issues=list.alerts;
+      const localDeviceEnabled=await PushDevice.localEnabled(settings.devices).catch(()=>false);
+      if(!current(n,token))return;
       el('notification-org-timezone').value=
         settings.organization_timezone||'America/Chicago';
       el('notification-timezone-save').disabled=false;
@@ -197,8 +200,7 @@ const NotificationCenter=(()=>{
         :'Phone and computer push is not configured or verified. Settings remain Off; no push notifications are being sent.';
       el('notification-push-enable').disabled=
         !settings.push_ready||!PushDevice.supported();
-      el('notification-push-disable').disabled=
-        !Array.isArray(settings.devices)||settings.devices.every(device=>!device.enabled);
+      el('notification-push-disable').disabled=!localDeviceEnabled;
       if(!PushDevice.supported())
         el('notification-push-status').textContent+=
           ' This browser/device is not in the supported Chrome/Edge enrollment set.';
