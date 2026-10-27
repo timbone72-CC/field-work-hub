@@ -6,7 +6,9 @@ import {serviceCredentialHeaders} from './service-ledger.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
-const STEP=256*1024;
+// Match the Google content-step limit. Every read remains exact-Range, bounded,
+// lease-fenced, and rechecked against the frozen private receipt.
+const STEP=1024*1024;
 const MAX=32*1024*1024;
 function unavailable(){throw new DriveUncertain('PROTECTED_SOURCE_CHUNK_UNAVAILABLE');}
 function exactPlan(requested,current){
