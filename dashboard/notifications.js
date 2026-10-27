@@ -92,7 +92,7 @@ const NotificationCenter=(()=>{
         const qzone=qstart&&qend?tzInput.value.trim():null;
         if((qstart&&!qend)||(!qstart&&qend)
           ||(qstart&&qend&&qstart===qend)
-          ||(qzone&&!validIanaZone(qzone))){
+          ||(qstart&&qend&&!validIanaZone(qzone))){
           status('Quiet hours need a valid IANA time zone and different start/end times.');return;
         }
         const mins=Number(delay.value);
