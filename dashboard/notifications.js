@@ -50,24 +50,29 @@ const NotificationCenter=(()=>{
   function renderSettings(){
     const host=el('notification-settings');host.replaceChildren();
     host.append(sectionHeading('Choose your alerts'));
-    const quiet=document.createElement('div');quiet.className='form-grid';
-    const timezone=document.createElement('label');timezone.textContent='Quiet hours time zone';
-    const tzInput=document.createElement('input');tzInput.id='notification-quiet-timezone';
-    tzInput.placeholder='America/Chicago';tzInput.value=
-      settings?.types?.find(x=>x.quiet_timezone)?.quiet_timezone||'America/Chicago';
-    timezone.append(tzInput);
-    const start=document.createElement('label');start.textContent='Quiet start (optional)';
-    const startInput=document.createElement('input');startInput.type='time';
-    startInput.id='notification-quiet-start';
-    startInput.value=settings?.types?.find(x=>x.quiet_start)?.quiet_start?.slice(0,5)||'';
-    start.append(startInput);
-    const end=document.createElement('label');end.textContent='Quiet end (optional)';
-    const endInput=document.createElement('input');endInput.type='time';
-    endInput.id='notification-quiet-end';
-    endInput.value=settings?.types?.find(x=>x.quiet_end)?.quiet_end?.slice(0,5)||'';
-    end.append(endInput);
-    quiet.append(timezone,start,end);host.append(quiet);
     for(const item of settings.types){
+      // Quiet hours are stored per alert type. Sharing inputs across rows
+      // could silently copy another type's hours when saving a toggle.
+      const quietPanel=document.createElement('details');
+      quietPanel.className='notification-quiet';
+      const quietSummary=document.createElement('summary');
+      quietSummary.textContent='Quiet hours for '+(LABELS[item.type]||item.type);
+      quietPanel.append(quietSummary);
+      const quiet=document.createElement('div');quiet.className='form-grid';
+      const timezone=document.createElement('label');timezone.textContent='Time zone';
+      const tzInput=document.createElement('input');
+      tzInput.placeholder='America/Chicago';
+      tzInput.value=item.quiet_timezone||'America/Chicago';
+      timezone.append(tzInput);
+      const start=document.createElement('label');start.textContent='Quiet start (optional)';
+      const startInput=document.createElement('input');startInput.type='time';
+      startInput.value=item.quiet_start?.slice(0,5)||'';
+      start.append(startInput);
+      const end=document.createElement('label');end.textContent='Quiet end (optional)';
+      const endInput=document.createElement('input');endInput.type='time';
+      endInput.value=item.quiet_end?.slice(0,5)||'';
+      end.append(endInput);
+      quiet.append(timezone,start,end);quietPanel.append(quiet);
       const row=document.createElement('div');row.className='notification-preference';
       const title=document.createElement('strong');title.textContent=LABELS[item.type]||item.type;
       const options=document.createElement('div');options.className='workspace-navigation';
@@ -101,7 +106,7 @@ const NotificationCenter=(()=>{
           p_reminder_minutes:mins,p_quiet_timezone:qzone,
           p_quiet_start:qstart,p_quiet_end:qend});
       });
-      row.append(title,options,delay,save);host.append(row);
+      row.append(title,options,delay,save,quietPanel);host.append(row);
     }
   }
   function validIanaZone(s){
