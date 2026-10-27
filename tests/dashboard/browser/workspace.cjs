@@ -1018,6 +1018,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       .startsWith('Loaded current server facts.'));
     // Stage 5: real Alert destination, populated with disposable server facts.
     await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
+    // Reopening Alerts triggers a fresh scoped read. Stale rows are now
+    // intentionally cleared until that request completes.
+    await wait(page,()=>document.querySelectorAll('.notification-preference').length===9
+      && document.querySelector('#notification-status')?.textContent
+        .startsWith('Loaded current server facts.'));
     for(const id of ['notification-refresh','notification-count','notification-list',
       'notification-org-timezone','notification-timezone-save','notification-push-status',
       'notification-device-class','notification-push-enable','notification-push-disable',
