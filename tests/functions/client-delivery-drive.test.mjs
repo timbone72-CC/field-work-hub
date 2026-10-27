@@ -337,3 +337,15 @@ test('geographic parent create accepts only exact scoped five-property identity'
     'EXACT_APP_PROPERTIES_REQUIRED');
   assert.equal(calls.length,1);
 });
+
+test('status errors retain bounded provider code and operation without URL data',async()=>{
+ const uri='https://www.googleapis.com/upload/drive/v3/files?upload_id=synthetic';
+ const {client}=fixture(()=>new Response(null,{status:404}));
+ await assert.rejects(()=>client.probeResumable(uri,404185),e=>e instanceof DriveUncertain
+  &&e.code==='PROVIDER_IDENTITY_UNCERTAIN'
+  &&e.providerHttpStatus===404&&e.providerStep==='GOOGLE_SESSION_STATUS');
+ const {client:retry}=fixture(()=>new Response(null,{status:503}));
+ await assert.rejects(()=>retry.uploadChunk(uri,404185,0,new Uint8Array(404185)),e=>
+  e instanceof DriveUncertain&&e.providerHttpStatus===503
+   &&e.providerStep==='GOOGLE_MEDIA_PUT');
+});
