@@ -159,12 +159,20 @@ const PushDevice=(()=>{
     const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
     const token=accessToken;
     if(!user||!org)return;
-    // Start local unsubscription immediately, and revoke server enrollment
-    // with the old exact actor's token only. Never persist the token.
-    const local=disableLocal().catch(()=>{});
-    Promise.all([local,record(key(user,org))]).then(async([,data])=>{
+    // Never unsubscribe an unknown origin-wide subscription when this
+    // signed-out actor has no saved device identity. Capture the old actor
+    // before the sign-out handler clears its session.
+    const k=key(user,org);
+    record(k).then(async data=>{
       if(!data?.device_id)return;
-      await record(key(user,org),{...data,pending_revoke:true});
+      // Durable non-secret intent precedes the browser unsubscribe and any
+      // attempted network revoke, including offline sign-out.
+      await record(k,{...data,pending_revoke:true});
+      // A different office identity may have logged in during IndexedDB I/O.
+      // Its subscription must not be removed by this former user's sign-out.
+      if(!currentUser || currentUser.id===user
+        && currentUser.app_metadata?.organization_id===org)
+        await disableLocal().catch(()=>{});
       if(!token)return;
       try{
         const res=await fetch(SUPABASE_URL+'/rest/v1/rpc/admin_disable_push',{
