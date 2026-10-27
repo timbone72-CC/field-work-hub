@@ -3,7 +3,7 @@
 // server lease, source-only continuation can make ONE guarded provider step.
 // The hosted TEST function remains read-only; no scheduler or cleanup here.
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
-import {createDriveClient} from './drive-client.mjs';
+import {createDriveClient,DriveUncertain} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
 import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeliveryParent,
  continueTrustedGeographicLeaf,continueTrustedPackageFolder,
@@ -23,6 +23,31 @@ function reply(status,code) {
  return new Response(JSON.stringify({status:code}),{status,headers:{
   'Content-Type':'application/json','Cache-Control':'no-store, private'
  }});
+}
+// Authenticated worker diagnostics record only an explicit allowlist of
+// failure codes and bounded provider HTTP status. No raw error message,
+// response body, credential, upload URI or file identity is ever logged.
+const SAFE_TEST_ERRORS=new Set([
+ 'PROVIDER_IDENTITY_UNCERTAIN','PROVIDER_AUTH_DENIED','PROVIDER_RETRY_REQUIRED',
+ 'PROVIDER_RESPONSE_UNCERTAIN','PROVIDER_OUTCOME_UNCERTAIN',
+ 'REMOTE_ID_CONFLICT_RECONCILE','PROVIDER_REDIRECT_FORBIDDEN',
+ 'PROTECTED_SOURCE_CHUNK_UNAVAILABLE','JOURNAL_DECRYPTION_FAILED',
+ 'SERVICE_RPC_OUTCOME_UNCERTAIN','SERVICE_RPC_UNAVAILABLE',
+ 'SERVICE_RPC_AUTH_DENIED','REMOTE_CONTENT_UNVERIFIED',
+ 'WORKSPACE_ACCOUNT_MISMATCH','UPLOAD_SESSION_START_UNCERTAIN',
+ 'UPLOAD_SESSION_START_UNCONFIRMED','PROVIDER_OFFSET_UNCERTAIN'
+]);
+export function safeTrustedDeliveryDiagnostic(error){
+ return Object.freeze({
+  code:error instanceof DriveUncertain&&SAFE_TEST_ERRORS.has(error.code)
+   ?error.code:'UNCLASSIFIED_UNCERTAIN',
+  provider_http_status:error instanceof DriveUncertain?error.providerHttpStatus:null,
+  provider_step:error instanceof DriveUncertain?error.providerStep:null
+ });
+}
+function noteTrustedDeliveryFailure(operation,error){
+ const diag=safeTrustedDeliveryDiagnostic(error);
+ console.warn('FWH_TRUSTED_DELIVERY_DIAGNOSTIC',JSON.stringify({operation,...diag}));
 }
 // Compare fixed-length private worker key without early return on mismatch.
 function sameSecret(x,y){
@@ -364,7 +389,8 @@ export function createDeliveryHandler({
           return reply(200,'ORIGINAL_TEST_SAVED_FIRST_PHOTO_VERIFIED');
         if(result?.state==='ORIGINAL_TEST_SAVED_FIRST_PHOTO_PROGRESS_VERIFIED')
           return reply(200,'ORIGINAL_TEST_SAVED_FIRST_PHOTO_PROGRESS_VERIFIED');
-      }catch{
+      }catch(error){
+        noteTrustedDeliveryFailure('ORIGINAL_TEST_SAVED_PHOTO',error);
         // Never restart the prior Google upload, generate an ID or release an
         // uncertain dispatch. A lost SQL/provider reply is not a retry permit.
       }
@@ -672,7 +698,8 @@ export function createDeliveryHandler({
     if(['FILE_VERIFIED','PROGRESS','NEEDS_INDEPENDENT_GET'].includes(result?.state))
       return await complete(result.state==='FILE_VERIFIED'?'FILE_STEP_VERIFIED':'FILE_STEP_PENDING');
     return reply(503,'TRUSTED_STEP_UNVERIFIED');
-  }catch {
+  }catch (error) {
+    noteTrustedDeliveryFailure('TRUSTED_PROVIDER',error);
     // Never expose a live OAuth token, session URI, Supabase key, package ID
     // or provider error body in responses to callers.
     return reply(503,'TRUSTED_PROVIDER_UNAVAILABLE');
