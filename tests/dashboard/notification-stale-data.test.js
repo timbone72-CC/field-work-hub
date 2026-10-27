@@ -38,7 +38,8 @@ function rig(fail = false) {
           push_ready: false, types, devices: []};
       return {organization_id: 'office-org', alerts: [{id: 'fresh', current: true}]};
     },
-    PushDevice: {reconcilePending: async () => {}, supported: () => false},
+    PushDevice: {reconcilePending: async () => {}, localEnabled: async () => false,
+      supported: () => false},
     renderSettings() { elements['notification-settings'].children = ['fresh-settings']; },
     renderAlerts() {
       elements['notification-list'].children = ['fresh-alerts'];
