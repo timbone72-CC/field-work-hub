@@ -30,6 +30,10 @@ const PushDevice=(()=>{
     });}finally{db.close();}
   }
   const key=(user,org)=>user+':'+org;
+  function sameSession(user,org,token){
+    return !!token && accessToken===token && currentUser?.id===user
+      && currentUser?.app_metadata?.organization_id===org;
+  }
   const base64=bytes=>btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   function vapidBytes(str){
@@ -54,33 +58,49 @@ const PushDevice=(()=>{
     const token=accessToken,user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
     if(!token||!user||org!==settings.organization_id)throw Error('Current office session changed.');
     // The ONLY permission prompt in FWH: deliberate click from this device.
+    const existing=await record(key(user,org));
+    if(!sameSession(user,org,token))throw Error('Session switched while enrolling.');
     const permission=await Notification.requestPermission();
     if(permission!=='granted')throw Error('Browser/OS notification permission was not granted.');
+    if(!sameSession(user,org,token))throw Error('Session switched while enrolling.');
     const registration=await navigator.serviceWorker.register(
       new URL('push-sw.js',scope()),{scope:scope().pathname});
     if(new URL(registration.scope).pathname!==scope().pathname)
       throw Error('Hosted dashboard worker scope mismatch.');
-    const existing=await record(key(user,org));
+    if(!sameSession(user,org,token))throw Error('Session switched while enrolling.');
     const device_id=existing?.device_id||crypto.randomUUID();
-    const old=await registration.pushManager.getSubscription();
-    const subscription=old||await registration.pushManager.subscribe({
-      userVisibleOnly:true,applicationServerKey:vapidBytes(settings.vapid_public_key)});
-    const json=subscription.toJSON();
-    if(!json.keys?.p256dh||!json.keys?.auth)throw Error('Browser push subscription missing encryption keys.');
+    let subscription=null,created=false;
     try{
+      const old=await registration.pushManager.getSubscription();
+      if(!sameSession(user,org,token))throw Error('Session switched while enrolling.');
+      // A subscription is scoped to the browser/worker, NOT to its signed-in
+      // office account. Never bind an unowned older subscription to a new user.
+      if(old&&!existing?.device_id)
+        throw Error('This browser has an existing push subscription not owned by this office account.');
+      subscription=old||await registration.pushManager.subscribe({
+        userVisibleOnly:true,applicationServerKey:vapidBytes(settings.vapid_public_key)});
+      created=!old;
+      if(!sameSession(user,org,token))throw Error('Session switched while enrolling.');
+      const json=subscription.toJSON();
+      if(!json.keys?.p256dh||!json.keys?.auth)
+        throw Error('Browser push subscription missing encryption keys.');
       const result=await rpc('admin_enroll_push',{
         p_action:crypto.randomUUID(),p_device:device_id,p_class:className,
         p_endpoint:json.endpoint,p_p256dh:json.keys.p256dh,
         p_auth_secret:json.keys.auth,p_expected_revision:existing?.revision||null},token);
-      if(currentUser?.id!==user||currentUser?.app_metadata?.organization_id!==org)
+      if(!sameSession(user,org,token))
         throw Error('Session switched while enrolling.');
       await record(key(user,org),{device_id,revision:result.revision,
         device_class:className,pending_revoke:false});
       return result;
     }catch(error){
-      await subscription.unsubscribe().catch(()=>{});
-      await record(key(user,org),{device_id,revision:existing?.revision||null,
-        device_class:className,pending_revoke:true}).catch(()=>{});
+      if(created){
+        // Only undo a newly created subscription. A failed reenrollment must
+        // not destroy an existing, possibly still-working registration.
+        await subscription.unsubscribe().catch(()=>{});
+        await record(key(user,org),{device_id,revision:existing?.revision||null,
+          device_class:className,pending_revoke:true}).catch(()=>{});
+      }
       throw error;
     }
   }
@@ -92,11 +112,16 @@ const PushDevice=(()=>{
   }
   async function disable(){
     const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
-    const token=accessToken;if(!user||!org||!token)return;
+    const token=accessToken;
+    if(!sameSession(user,org,token))throw Error('Current office session unavailable.');
     const k=key(user,org),data=await record(k);
-    // Unsubscribe locally regardless of server/network outcome.
+    if(!sameSession(user,org,token))throw Error('Session changed while disabling push.');
+    if(!data?.device_id)
+      throw Error('No push enrollment belongs to this account on this browser.');
+    // Do not unsubscribe some other user's browser subscription merely
+    // because this account has no local enrollment record.
     await disableLocal().catch(()=>{});
-    if(!data?.device_id)return;
+    if(!sameSession(user,org,token))throw Error('Session changed while disabling push.');
     await record(k,{...data,pending_revoke:true});
     const answer=await rpc('admin_disable_push',{
       p_action:crypto.randomUUID(),p_device:data.device_id,
@@ -105,13 +130,19 @@ const PushDevice=(()=>{
   }
   async function reconcilePending(){
     const user=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
-    if(!user||!org||!accessToken)return;
+    const token=accessToken;
+    if(!sameSession(user,org,token))return;
     const keyName=key(user,org),saved=await record(keyName);
     if(!saved?.pending_revoke||!saved.device_id)return;
+    // A pending revoke belongs to the captured actor, not whoever signed in
+    // while IndexedDB/network operations were awaiting their responses.
+    if(!sameSession(user,org,token))return;
     await disableLocal().catch(()=>{});
+    if(!sameSession(user,org,token))return;
     const receipt=await rpc('admin_disable_push',{
       p_action:crypto.randomUUID(),p_device:saved.device_id,
-      p_expected_revision:saved.revision},accessToken);
+      p_expected_revision:saved.revision},token);
+    if(!sameSession(user,org,token))return;
     await record(keyName,{...saved,revision:receipt.revision,pending_revoke:false});
   }
   async function localEnabled(devices){
