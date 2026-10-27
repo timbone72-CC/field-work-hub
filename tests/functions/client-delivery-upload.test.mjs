@@ -52,7 +52,7 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
     offset,complete_candidate:offset===plan.size};},
   uploadChunk:async(session,total,at,chunk)=>{
     events.push('upload');assert.equal(session,'sealed-url');
-    assert.equal(chunk.length,Math.min(262144,plan.size-at));
+    assert.equal(chunk.length,Math.min(1024*1024,plan.size-at));
     uploaded++;offset=at+chunk.length;
     return {complete_candidate:offset===plan.size};},
   verifyFile:async request=>{events.push('verify');
@@ -73,21 +73,18 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
 const invoke=r=>transferOnePreparedChunk({plan,workerId,generation,
  drive:r.drive,ledger:r.ledger,vault:r.vault,readProtectedChunk:r.readProtectedChunk,
  expectedDriveId});
-test('persist ciphertext before any remote photo bytes; bounded resume finishes by independent GET',async()=>{
+test('prepared 300000-byte photo finishes in one content PUT with independent GET',async()=>{
  const r=rig();
  const first=await invoke(r);
- assert.deepEqual(first,{state:'PROGRESS',plan_id:plan.plan_id,
-  recorded_offset:262144,total:300000});
+ assert.deepEqual(first,{state:'FILE_VERIFIED',plan_id:plan.plan_id,
+  remote_id:plan.file_id});
  assert.ok(r.events.indexOf('begin')<r.events.indexOf('start'));
  assert.ok(r.events.indexOf('start')<r.events.indexOf('store'));
  assert.ok(r.events.indexOf('read')<r.events.indexOf('begin'));
  assert.ok(r.events.indexOf('store')<r.events.lastIndexOf('read'));
  assert.ok(r.events.lastIndexOf('read')<r.events.indexOf('upload'));
  assert.ok(r.events.indexOf('encrypt')<r.events.indexOf('store'));
- assert.equal(r.counters.receipts,0);
- const second=await invoke(r);
- assert.equal(second.state,'FILE_VERIFIED');
- assert.equal(r.counters.uploaded,2);
+ assert.equal(r.counters.uploaded,1);
  assert.equal(r.counters.receipts,1);
  assert.equal(r.counters.offset,300000);
  assert.equal(r.events.filter(e=>e==='start').length,1);
@@ -183,10 +180,9 @@ test('preflight never stands in for a later byte-read after start',async()=>{
 });
 test('a complete upload response is only a candidate until independent checksum GET',async()=>{
  const r=rig({failGet:true});
- await invoke(r);
  await assert.rejects(()=>invoke(r),e=>
    e instanceof DriveUncertain&&e.code==='REMOTE_CONTENT_UNVERIFIED');
- assert.equal(r.counters.uploaded,2);assert.equal(r.counters.receipts,0);
+ assert.equal(r.counters.uploaded,1);assert.equal(r.counters.receipts,0);
 });
 
 test('no client Shared Drive binding refuses provider session/bytes and durable receipt',async()=>{
@@ -207,9 +203,26 @@ test('Google moving or renaming an otherwise matching file cannot confirm delive
     assert.equal(params.name,plan.name);
     throw new DriveUncertain('REMOTE_FILE_IDENTITY_MISMATCH');
   };
-  await invoke(r);
   await assert.rejects(()=>invoke(r),e=>e instanceof DriveUncertain
     &&e.code==='REMOTE_FILE_IDENTITY_MISMATCH');
   assert.equal(r.counters.receipts,0,violation);
  }
+});
+
+// A previously journaled partial upload must resume the original ID/session,
+// not begin another session, even after the small-photo step-size change.
+test('partial 262144-byte session resumes its remaining 37856 bytes without new POST',async()=>{
+ const r=rig();
+ r.entry={package_id:plan.package_id,plan_id:plan.plan_id,total_bytes:plan.size,
+  encrypted:{version:1,nonce:'fixture',payload:'protected'}};
+ r.drive.probeResumable=async()=>{r.events.push('probe');return {
+  offset:262144,complete_candidate:false};};
+ const result=await invoke(r);
+ assert.equal(result.state,'FILE_VERIFIED');
+ assert.equal(r.counters.uploaded,1);
+ assert.equal(r.counters.receipts,1);
+ assert.equal(r.counters.offset,300000);
+ assert.equal(r.events.includes('begin'),false);
+ assert.equal(r.events.includes('start'),false);
+ assert.ok(r.events.indexOf('decrypt')<r.events.indexOf('upload'));
 });
