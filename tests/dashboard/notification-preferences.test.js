@@ -110,3 +110,19 @@ test('invalid quiet-hour edits stop before a preference write', async () => {
   assert.equal(ui.writes.length,1);
   assert.equal(ui.writes[0].payload.p_quiet_timezone,'America/Chicago');
 });
+
+test('UTC is an accepted IANA quiet-hours timezone', async () => {
+  const ui = rig([{type:'OVERDUE',dashboard:true,phone:false,computer:false,
+    reminder_minutes:1440,revision:'rev-utc',quiet_timezone:null,
+    quiet_start:null,quiet_end:null}]);
+  const controls = ui.controls(0);
+  controls.timezone.value='UTC';
+  controls.start.value='21:00';
+  controls.end.value='07:00';
+  await controls.save.handlers.click();
+  assert.equal(ui.writes.length,1);
+  assert.equal(ui.writes[0].payload.p_expected_revision,'rev-utc');
+  assert.equal(ui.writes[0].payload.p_quiet_timezone,'UTC');
+  assert.equal(ui.writes[0].payload.p_quiet_start,'21:00');
+  assert.equal(ui.writes[0].payload.p_quiet_end,'07:00');
+});
