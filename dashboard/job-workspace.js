@@ -7,7 +7,9 @@ const JobViewRules = {
   },
   parameters(state) {
     const prefs = this.normalize(state);
-    const query = new URLSearchParams({ limit: String(prefs.size), offset: String(state.offset || 0),
+    const offset = Number(state.offset);
+    const safeOffset = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
+    const query = new URLSearchParams({ limit: String(prefs.size), offset: String(safeOffset),
       order: `${prefs.sort}.nullslast,id.asc` });
     if (prefs.status) query.set('field_status', `eq.${prefs.status}`);
     // Optional filters are server-side, from fixed columns and bounded values.
@@ -15,8 +17,12 @@ const JobViewRules = {
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contractor))
       query.set('assigned_user_id',`eq.${contractor}`);
     const due=String(state.dueDate || '');
-    if (/^\d{4}-\d{2}-\d{2}$/.test(due) && !Number.isNaN(Date.parse(due+'T00:00:00Z')))
-      query.set('due_date',`eq.${due}`);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      const parsed = new Date(due+'T00:00:00Z');
+      // Date.parse normalizes impossible dates (for example February 31).
+      if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0,10) === due)
+        query.set('due_date',`eq.${due}`);
+    }
     // Escape PostgREST pattern metacharacters; column and operator are never user supplied.
     const text = String(state.search || '').trim().slice(0, 160);
     if (text) query.set(state.searchField === 'wo_number' ? 'wo_number' : 'property_address',
@@ -25,7 +31,8 @@ const JobViewRules = {
   },
   total(header) {
     const match = /^(?:\d+-\d+|\*)\/(\d+)$/.exec(header || '');
-    return match ? Number(match[1]) : null;
+    const count = match ? Number(match[1]) : NaN;
+    return Number.isSafeInteger(count) ? count : null;
   }
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = JobViewRules;
