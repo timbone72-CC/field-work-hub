@@ -526,3 +526,33 @@ test('Phase 6A unknown or unsafe content-range totals stay unknown', () => {
   assert.equal(rules.total('0-24/100'), 100);
   assert.equal(rules.total('*/0'), 0);
 });
+
+
+test('Phase 6A job navigation identifies page boundaries without selecting a different work order', () => {
+  const source=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+  const navigation=source.match(/  function navigation\(\) \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(navigation);
+  function run(ids,selected,offset,total){
+    const elements={};
+    const workOrderRows=ids.map(id=>({id}));
+    workOrderRows.page={offset,total};
+    let contexts=0;
+    vm.runInNewContext(navigation+'\nnavigation();',{
+      workOrderRows,selectedRow:selected?{id:selected}:null,state:{offset},
+      el:id=>(elements[id]??={disabled:false,textContent:''}),
+      addressContext:()=>{contexts++;}
+    });
+    assert.equal(contexts,1);
+    return elements;
+  }
+  assert.equal(run(['job-a'],'job-a',0,1)['job-context'].textContent,'End of current results.');
+  assert.match(run(['job-a','job-b'],'job-b',0,5)['job-context'].textContent,/Next page in the job list/);
+  const first=run(['job-c','job-d'],'job-c',2,5);
+  assert.match(first['job-context'].textContent,/Previous page in the job list/);
+  assert.equal(first['job-previous'].disabled,true);
+  assert.equal(first['job-next'].disabled,false);
+  assert.match(run(['job-a','job-b'],'job-outside',0,2)['job-context'].textContent,/outside the current page/);
+  assert.equal(run(['job-a','job-b','job-c'],'job-b',0,3)['job-context'].textContent,'');
+  assert.equal(run(['job-a'],'job-a',0,null)['job-context'].textContent,
+    'End of this page. Use Next page in the job list for more results.');
+});
