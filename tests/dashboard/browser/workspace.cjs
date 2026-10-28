@@ -1014,21 +1014,38 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#notification-center > summary').click();
     // A current-device IndexedDB lookup can finish after both scoped reads.
     // Verify the complete new alert render, not a partly populated settings list.
-    await wait(page,()=>document.querySelectorAll('.notification-preference').length===9
-      && document.querySelector('#notification-status')?.textContent
-        .startsWith('Loaded current server facts.')
-      && document.querySelector('#notification-list')?.textContent
-        .includes('Awaiting contractor Accept'));
-    assert.match(await page.locator('#notification-push-status').innerText(),/not configured/);
-    assert.equal(await page.locator('#notification-settings input[type=checkbox]:checked').count(),9);
-    assert.match(await page.locator('#notification-list').textContent(),/Awaiting contractor Accept/);
+    // Capture the entire settled Alerts state in a SINGLE browser evaluation.
+    // Another valid scoped refresh clears stale DOM before refetching; separate
+    // Playwright locator reads can straddle that clear and report a false failure.
+    // This still requires all nine default-On settings and the actual issue.
+    const initialAlerts=await page.waitForFunction(()=>{
+      const preferences=document.querySelectorAll('.notification-preference').length;
+      const checked=document.querySelectorAll(
+        '#notification-settings input[type=checkbox]:checked').length;
+      const state=document.querySelector('#notification-status')?.textContent||'';
+      const list=document.querySelector('#notification-list')?.textContent||'';
+      const push=document.querySelector('#notification-push-status')?.textContent||'';
+      return preferences===9&&checked===9
+        &&state.startsWith('Loaded current server facts.')
+        &&list.includes('Awaiting contractor Accept')
+        &&push.includes('not configured')
+        ?{preferences,checked,state,list,push}:false;
+    });
+    const initialFacts=await initialAlerts.jsonValue();
+    assert.equal(initialFacts.preferences,9);
+    assert.equal(initialFacts.checked,9);
+    assert.match(initialFacts.push,/not configured/);
+    assert.match(initialFacts.list,/Awaiting contractor Accept/);
     // Stage 5: real Alert destination, populated with disposable server facts.
     await page.locator('#fwh-primary-nav [data-fwh-go="alerts"]').click();
     // Reopening Alerts triggers a fresh scoped read. Stale rows are now
     // intentionally cleared until that request completes.
     await wait(page,()=>document.querySelectorAll('.notification-preference').length===9
+      && document.querySelectorAll('#notification-settings input[type=checkbox]:checked').length===9
       && document.querySelector('#notification-status')?.textContent
-        .startsWith('Loaded current server facts.'));
+        .startsWith('Loaded current server facts.')
+      && document.querySelector('#notification-list')?.textContent
+        .includes('Awaiting contractor Accept'));
     for(const id of ['notification-refresh','notification-count','notification-list',
       'notification-org-timezone','notification-timezone-save','notification-push-status',
       'notification-device-class','notification-push-enable','notification-push-disable',
