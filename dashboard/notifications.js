@@ -179,7 +179,13 @@ const NotificationCenter=(()=>{
     // Clear potentially stale, still-clickable results *before* the first
     // network request. A denied/offline refresh leaves a truthful empty view.
     settings=null;issues=[];clearDisplayed();
-    if(!organization){status('Notification scope unavailable.');return;}
+    if(!organization){
+      status('Notification scope unavailable.');
+      // No network request will reach the try/finally below. Release the
+      // same-session coalescing latch so later authorized scope can reload.
+      fetching=false;fetchingToken=null;
+      return;
+    }
     status('Loading current, scoped notification settings and alert facts…');
     try{
       const nextSettings=await rpc('admin_notification_settings',{},token);
