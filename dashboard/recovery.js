@@ -141,7 +141,11 @@ const RecoveryGallery = (() => {
       if (!matches(g)) return;
       preview.src = url; preview.hidden = false;
       selected = photo; download.disabled = false;
-      message('Verified photo selected. Download is an evidence copy, not client delivery.');
+      const exportBytes = exportPhotos.reduce((sum, p) => sum + p.prepared_size, 0);
+      message(exportPhotos.length >= MAX_EXPORT_PHOTOS ||
+        exportBytes + photo.prepared_size > MAX_EXPORT_BYTES
+        ? 'Photo selected for inspection. Remove another photo from the ZIP selection to make room (8 photos / 64 MiB maximum).'
+        : 'Verified photo selected. Download is an evidence copy, not client delivery.');
     } catch (error) { if (matches(g)) message(error.message, true); }
     finally { if (matches(g)) { busy = false; updateExportControls(); } }
   }
