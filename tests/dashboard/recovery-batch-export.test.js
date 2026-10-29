@@ -96,8 +96,12 @@ async function exportNow(x,photos){
   assert.equal(x.zip.disabled,false,'Explicitly selected receipts allow an export');
   x.zip.click();
   // SHA-256 and Blob.arrayBuffer complete asynchronously outside the VM.
-  // Wait for the export's own busy guard to release, not a guessed tick count.
-  for(let i=0;i<80 && x.zip.disabled;i++)await tick();
+  // A count of fast event-loop ticks can expire before worker-thread crypto
+  // settles on a busy CI runner. Observe the actual busy state, with a
+  // wall-clock safety deadline so a hung export still fails this test.
+  const deadline=Date.now()+2000;
+  while(x.zip.disabled && Date.now()<deadline)
+    await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal(x.zip.disabled,false,'Bounded archive work must settle');
 }
 test('one explicitly selected bounded archive contains only exact checksum-verified JPEGs',async()=>{
