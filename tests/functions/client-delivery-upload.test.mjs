@@ -10,7 +10,7 @@ const plan={package_id:uuid(1),plan_id:uuid(2),kind:'PHOTO',
  appProperties:{fwh_package:uuid(1),fwh_manifest:'a'.repeat(64)}};
 const workerId=uuid(7),generation=2,expectedDriveId='client_drive_'+'c'.repeat(20);
 function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false,
-  failStart=false,failBegin=false,beginReply=undefined}={}){
+  failStart=false,failBegin=false,beginReply=undefined,fixturePlan=plan}={}){
  let entry=null,offset=0,uploaded=0,receipts=0,read=0,started=false;
  const events=[];
  const vault={
@@ -26,16 +26,16 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
   },
   beginSession:async id=>{
     events.push('begin');
-    assert.equal(id,plan.plan_id);
+    assert.equal(id,fixturePlan.plan_id);
     if(started)throw new DriveUncertain('UPLOAD_SESSION_START_UNCERTAIN');
     started=true;
     if(failBegin)throw new DriveUncertain('SERVICE_RPC_OUTCOME_UNCERTAIN');
     return beginReply===undefined
-      ? {plan_id:plan.plan_id,start_recorded:true} : beginReply;
+      ? {plan_id:fixturePlan.plan_id,start_recorded:true} : beginReply;
   },
   storeSession:async(pkg,worker,gen,id,encrypted)=>{
    events.push('store');if(failStore)throw Error('PERSISTENCE_BLOCKED');
-   entry={package_id:pkg,plan_id:id,total_bytes:plan.size,encrypted};
+   entry={package_id:pkg,plan_id:id,total_bytes:fixturePlan.size,encrypted};
   },
   recordOffset:async(pkg,worker,gen,id,n,complete)=>{
    events.push('offset:'+n+':'+complete);if(n<offset)throw Error('REGRESSION');offset=n;
@@ -47,30 +47,30 @@ function rig({failStore=false,failGet=false,failBytes=false,corruptSession=false
     events.push('start');
     if(failStart)throw new DriveUncertain('PROVIDER_OUTCOME_UNCERTAIN');
     return {
-    session_url:'sealed-url',remote_id:plan.file_id,total:plan.size};},
+    session_url:'sealed-url',remote_id:fixturePlan.file_id,total:fixturePlan.size};},
   probeResumable:async()=>{events.push('probe');return {
-    offset,complete_candidate:offset===plan.size};},
+    offset,complete_candidate:offset===fixturePlan.size};},
   uploadChunk:async(session,total,at,chunk)=>{
     events.push('upload');assert.equal(session,'sealed-url');
-    assert.equal(chunk.length,Math.min(1024*1024,plan.size-at));
+    assert.equal(chunk.length,Math.min(1024*1024,fixturePlan.size-at));
     uploaded++;offset=at+chunk.length;
-    return {complete_candidate:offset===plan.size};},
+    return {complete_candidate:offset===fixturePlan.size};},
   verifyFile:async request=>{events.push('verify');
     assert.equal(request.expectedDriveId,expectedDriveId);
-    assert.equal(request.name,plan.name);
-    assert.equal(request.id,plan.file_id);
-    assert.equal(request.parent,plan.parent_id);
+    assert.equal(request.name,fixturePlan.name);
+    assert.equal(request.id,fixturePlan.file_id);
+    assert.equal(request.parent,fixturePlan.parent_id);
     if(failGet)throw new DriveUncertain('REMOTE_CONTENT_UNVERIFIED');
-    return {id:plan.file_id,parent:plan.parent_id,sha256:plan.sha256,size:plan.size};}
+    return {id:fixturePlan.file_id,parent:fixturePlan.parent_id,sha256:fixturePlan.sha256,size:fixturePlan.size};}
  };
  const readProtectedChunk=async(file,at,size)=>{
   events.push('read');read++;
-  assert.equal(file,plan);return new Uint8Array(failBytes?size-1:size);
+  assert.equal(file,fixturePlan);return new Uint8Array(failBytes?size-1:size);
  };
  return {vault,ledger,drive,readProtectedChunk,events,
   get counters(){return {uploaded,receipts,read,offset};},set entry(v){entry=v;}};
 }
-const invoke=r=>transferOnePreparedChunk({plan,workerId,generation,
+const invoke=(r,fixturePlan=plan)=>transferOnePreparedChunk({plan:fixturePlan,workerId,generation,
  drive:r.drive,ledger:r.ledger,vault:r.vault,readProtectedChunk:r.readProtectedChunk,
  expectedDriveId});
 test('prepared 300000-byte photo finishes in one content PUT with independent GET',async()=>{
@@ -225,4 +225,75 @@ test('partial 262144-byte session resumes its remaining 37856 bytes without new 
  assert.equal(r.events.includes('begin'),false);
  assert.equal(r.events.includes('start'),false);
  assert.ok(r.events.indexOf('decrypt')<r.events.indexOf('upload'));
+});
+
+const originalSizeFixture={...plan,size:404185};
+test('404185-byte held-shape fixture resumes exactly 142041 bytes with same encrypted session and ID',async()=>{
+ const p=originalSizeFixture;
+ const r=rig({fixturePlan:p});
+ const recordedRanges=[];
+ const source=r.readProtectedChunk;
+ r.readProtectedChunk=async(file,at,count)=>{
+  recordedRanges.push([at,count]);
+  return source(file,at,count);
+ };
+ r.entry={package_id:p.package_id,plan_id:p.plan_id,total_bytes:p.size,
+  encrypted:{version:1,nonce:'disposable',payload:'encrypted'}};
+ r.drive.probeResumable=async()=>{
+  r.events.push('probe');
+  return {offset:262144,complete_candidate:false};
+ };
+ const result=await invoke(r,p);
+ assert.deepEqual(result,{state:'FILE_VERIFIED',plan_id:p.plan_id,remote_id:p.file_id});
+ assert.deepEqual(recordedRanges,[[262144,142041]]);
+ assert.equal(r.counters.offset,404185);
+ assert.equal(r.counters.uploaded,1);
+ assert.equal(r.counters.receipts,1);
+ assert.equal(r.events.filter(x=>x==='start').length,0);
+ assert.equal(r.events.filter(x=>x==='begin').length,0);
+ assert.equal(r.events.filter(x=>x==='store').length,0);
+ assert.ok(r.events.indexOf('probe')<r.events.indexOf('read'));
+ assert.ok(r.events.indexOf('verify')<r.events.indexOf('confirm'));
+});
+
+test('held-shape saved-session Google 404 preserves ciphertext and forbids another POST or PUT',async()=>{
+ const p=originalSizeFixture;
+ const r=rig({fixturePlan:p});
+ const encrypted={version:1,nonce:'disposable',payload:'encrypted'};
+ const journal={package_id:p.package_id,plan_id:p.plan_id,total_bytes:p.size,encrypted};
+ r.entry=journal;
+ r.drive.probeResumable=async()=>{
+  r.events.push('probe');
+  throw new DriveUncertain('PROVIDER_IDENTITY_UNCERTAIN',404,'GOOGLE_SESSION_STATUS');
+ };
+ await assert.rejects(()=>invoke(r,p),e=>e instanceof DriveUncertain
+  &&e.code==='PROVIDER_IDENTITY_UNCERTAIN'
+  &&e.providerHttpStatus===404
+  &&e.providerStep==='GOOGLE_SESSION_STATUS');
+ assert.equal((await r.ledger.getSession(p.plan_id)),journal);
+ assert.equal(journal.encrypted,encrypted);
+ for(const event of ['start','begin','store','upload','read','offset:262144:false',
+  'verify','confirm'])assert.equal(r.events.includes(event),false,event);
+ assert.equal(r.counters.uploaded,0);
+ assert.equal(r.counters.receipts,0);
+ assert.equal(r.counters.read,0);
+});
+
+test('1048577-byte fake photo uses one 1-MiB aligned chunk then final byte, one session',async()=>{
+ const p={...plan,size:1048577};
+ const r=rig({fixturePlan:p});
+ const first=await invoke(r,p);
+ assert.deepEqual(first,{state:'PROGRESS',plan_id:p.plan_id,
+  recorded_offset:1048576,total:1048577});
+ assert.equal(r.counters.uploaded,1);
+ assert.equal(r.counters.receipts,0);
+ const second=await invoke(r,p);
+ assert.deepEqual(second,{state:'FILE_VERIFIED',plan_id:p.plan_id,remote_id:p.file_id});
+ assert.equal(r.counters.offset,1048577);
+ assert.equal(r.counters.uploaded,2);
+ assert.equal(r.counters.receipts,1);
+ assert.equal(r.events.filter(x=>x==='start').length,1);
+ assert.equal(r.events.filter(x=>x==='begin').length,1);
+ assert.equal(r.events.filter(x=>x==='store').length,1);
+ assert.equal(r.events.filter(x=>x==='confirm').length,1);
 });
