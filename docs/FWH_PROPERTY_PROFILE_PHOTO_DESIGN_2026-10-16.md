@@ -1,9 +1,11 @@
 # Field Work Hub — Contractor-Owned Property Profile Photos
 
 **Design revision:** 0.1, 2026-10-16  
-**Status:** IMPLEMENTATION DESIGN **FOR OPERATOR REVIEW**. The user-approved *experience* is binding; the Level 3 backend/persistence design below is **proposed and not yet separately approved**. This file authorizes no migration, Storage bucket, private image read, release, app runtime change or public APK publication.  
+**Status (reconciled 2026-10-28):** IMPLEMENTATION DESIGN **STILL FOR OPERATOR REVIEW**. The user-approved *experience* is binding; the Level 3 backend/persistence design below is **proposed and not yet separately approved**. This file authorizes no migration, Storage bucket, private image read, release, app runtime change or public APK publication.  
 **Scope:** Android Package B under the approved [Android UI/UX implementation plan](fwh-android-ui-ux-implementation-plan.md) and linked Phase 6 roadmap presentation adjunct. One implementation owner: existing Phase 5/6 PR #40, `feat/phase-5-6-dashboard-workflow`, only after its storage/authorization and versioning gates are reconciled.  
 **Protected baseline:** Approved two-tone UI styling runtime `c35f17c3b15e5ea8fae88f1b87468ae6561838b1` passed exact-head CI. Public v26 was independently found to reference older pre-styling source `3581b90082d0e4f07095c1dcd1ca6d1e28315f27`. A **new v28 candidate/v29 recovery pair is being staged independently for the styled-UI phone check**, with Room 5 retained. **Do not add a profile migration or alter that device candidate for Package B.**
+
+**Historical staging note:** The v26/v28/v29 styling-candidate references below were the *2026-10-16 design baseline*, not an instruction to publish or reinstall those versions now. A separate Samsung v36 navigation/Recovery Back observation was later accepted on PR #40; it does **not** approve this Package B property identity/storage design, establish profile-photo runtime, or change Phase 5D's protected original Google delivery gate. Current authoritative source/TEST and release status belongs to the existing Phase 5/6 implementation record. This note is Level-1 documentation catch-up only, with no new storage/Android/package approval.
 
 ## 1. Approved product behavior, not a new job photo
 
