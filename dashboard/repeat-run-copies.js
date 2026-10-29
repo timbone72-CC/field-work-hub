@@ -1,7 +1,7 @@
 /* Phase 6B: bounded prior-visit requirements reuse. Read-only server evidence;
  * old run/photo IDs never become new work-order, assignment or photo identities. */
 const RepeatRunCopies = {
-  uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   history(rows, workOrderId, currentRunId) {
     if (!this.uuid.test(workOrderId) || !this.uuid.test(currentRunId)
       || !Array.isArray(rows) || rows.length > 26)
