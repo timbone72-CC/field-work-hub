@@ -166,9 +166,67 @@ test('export selection is unique, session-scoped, and at most eight receipts',as
   await x.gallery.show();
   for(let n=1;n<=8;n++)await select(x,n,n-1);
   assert.match(x.zip.textContent,/8\/8/);
-  assert.equal(x.add.disabled,true);
+  assert.equal(x.add.disabled,false,'A full batch must still permit removing the selected item');
+  assert.match(x.add.textContent,/Remove selected/);
+  x.add.click();
+  assert.match(x.zip.textContent,/7\/8/);
+  assert.match(x.add.textContent,/Add selected/);
   x.gallery.reset();
   assert.match(x.zip.textContent,/0\/8/);
   assert.equal(x.zip.disabled,true);
   assert.equal(x.blobs.length,0);
+});
+
+test('recovery ZIP selection can remove an accidental photo, then re-add before export',async()=>{
+  const x=rig();
+  x.enqueue({photos:[receipt(1),receipt(2)],next_photo:null});
+  await x.gallery.show();
+  await select(x,1,0);
+  await select(x,2,1);
+  assert.match(x.zip.textContent,/2\/8/);
+  assert.match(x.add.textContent,/Remove selected/);
+  x.add.click();
+  assert.match(x.zip.textContent,/1\/8/);
+  assert.match(x.add.textContent,/Add selected/);
+  assert.equal(x.add.disabled,false);
+  await exportNow(x,[1]);
+  assert.equal(x.fileClicks.length,1);
+  const archive=Buffer.from(await x.blobs[0].arrayBuffer());
+  assert.equal(archive.readUInt16LE(archive.length-22+10),1);
+  assert.equal(archive.includes(Buffer.from(id(2))),false,
+    'Removed photo identity cannot remain in evidence archive');
+  assert.equal(x.uploads.length,1,'Removed photo is never fetched for export');
+});
+
+test('receipt-byte budget is enforced before network download, and removal makes room',async()=>{
+  const big1={...receipt(1),prepared_size:32*1024*1024};
+  const big2={...receipt(2),prepared_size:32*1024*1024};
+  const small=receipt(3);
+  const x=rig();
+  x.enqueue({photos:[big1,big2,small],next_photo:null});
+  await x.gallery.show();
+  await select(x,1,0);
+  await select(x,2,1);
+  assert.match(x.zip.textContent,/2\/8/);
+  x.enqueue(signer(3));
+  x.rows.children[2].click();
+  await tick();
+  assert.equal(x.add.disabled,true,'Third JPEG exceeding 64 MiB must be unselectable');
+  assert.match(x.status.textContent,/Remove another photo/);
+  assert.equal(x.uploads.length,0,'No large private bytes are fetched for selection');
+  // Go back to an already-selected photo: removal is always possible.
+  x.enqueue(signer(1));
+  x.rows.children[0].click();
+  await tick();
+  assert.equal(x.add.disabled,false);
+  assert.match(x.add.textContent,/Remove selected/);
+  x.add.click();
+  assert.match(x.zip.textContent,/1\/8/);
+  x.enqueue(signer(3));
+  x.rows.children[2].click();
+  await tick();
+  assert.equal(x.add.disabled,false,'Removing a large JPEG makes room for a small one');
+  x.add.click();
+  assert.match(x.zip.textContent,/2\/8/);
+  assert.equal(x.uploads.length,0);
 });
