@@ -396,7 +396,7 @@ async function fetchWorkOrders() {
     'field_status',
     'created_at',
     'current_run_id',
-    'run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)'
+    'run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot,assignment:work_order_assignments!work_order_assignments_run_id_fkey(assigned_user_id,assignment_received_at,acknowledgment_received_at,assignment_ended_at))'
   ].join(',');
 
   // Intentionally broad request: no organization_id or assigned_user_id filter.
@@ -453,7 +453,7 @@ async function fetchAddressWorkOrders(row,offset=0) {
 async function fetchWorkOrder(id) {
   requireAccessToken();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid job identity.');
-  const select = 'id,organization_id,client_company_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot)';
+  const select = 'id,organization_id,client_company_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot,assignment:work_order_assignments!work_order_assignments_run_id_fkey(assigned_user_id,assignment_received_at,acknowledgment_received_at,assignment_ended_at))';
   const response = await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&id=eq.${id}&limit=1`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await readableError(response, 'Unable to open this job.'));
   const rows = await response.json();
@@ -615,7 +615,9 @@ function renderWorkOrders(rows, organizationId) {
     tr.insertCell().textContent = row.due_date;
     const status = tr.insertCell();
     const field = document.createElement('div'); field.textContent = JobOperationalFacts.project(row).label;
-    const receipt = document.createElement('small'); receipt.textContent = row.assignment_received_at ? 'Assignment received' : 'Not yet received';
+    const accepted = JobOperationalFacts.currentAssignment(row)?.acknowledgment_received_at;
+    const receipt = document.createElement('small');
+    receipt.textContent = accepted ? 'Accepted by contractor' : row.assignment_received_at ? 'Assignment received' : 'Not yet received';
     status.append(field, receipt);
     if (row.pending_assignee_user_id) {
       const handoff = document.createElement('div'); handoff.className = 'handoff pending'; handoff.textContent = 'Handoff awaiting approval'; status.append(handoff);

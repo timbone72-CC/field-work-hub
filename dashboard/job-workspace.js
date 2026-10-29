@@ -42,6 +42,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = JobViewRul
 // the current server page. Unknown private-photo/review/delivery facts never
 // become a fabricated "Ready", "Completed" or "Awaiting review" status.
 const JobOperationalFacts = {
+  currentAssignment(row) {
+    const assignments = row?.run?.assignment;
+    if (!Array.isArray(assignments)) return null;
+    return assignments.find(assignment => !assignment?.assignment_ended_at
+      && assignment.assigned_user_id === row.assigned_user_id) || null;
+  },
   project(row) {
     if (!row || typeof row !== 'object') return {label:'Status unavailable',next:'Open details',panel:'details'};
     if (row.pending_assignee_user_id) return {
@@ -49,6 +55,8 @@ const JobOperationalFacts = {
     switch (row.field_status) {
       case 'ASSIGNED':
         if (!row.assigned_user_id) return {label:'Needs assignment',next:'Assign',panel:'assignment'};
+        if (JobOperationalFacts.currentAssignment(row)?.acknowledgment_received_at)
+          return {label:'Accepted by contractor',next:'View assignment',panel:'assignment'};
         return row.assignment_received_at
           ? {label:'Assignment downloaded — human Accept not established',next:'View assignment',panel:'assignment'}
           : {label:'Awaiting delivery receipt',next:'View assignment',panel:'assignment'};
@@ -277,8 +285,12 @@ const JobWorkspace = (() => {
     el('job-next-action').textContent = operational.label + ' · ' + operational.next;
     el('job-next-action-open').textContent = operational.next;
     el('job-next-action-open').dataset.panel = operational.panel;
-    el('job-receipt').textContent = row.assignment_received_at
+    const assignment = JobOperationalFacts.currentAssignment(row);
+    const receipt = row.assignment_received_at
       ? `Assignment received ${formatTimestamp(row.assignment_received_at)}` : 'Assignment not yet received';
+    el('job-receipt').textContent = assignment?.acknowledgment_received_at
+      ? `${receipt} · Accepted by contractor ${formatTimestamp(assignment.acknowledgment_received_at)}`
+      : receipt;
     el('job-reload').hidden = true;
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     tab('details');

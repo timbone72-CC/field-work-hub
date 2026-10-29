@@ -5178,3 +5178,30 @@ This is the supporting historical entry for the current-checklist Owner Console 
 ## 2026-10-28 — Reversible private ZIP receipt selection, source-only PASS
 
 This dated support record preserves the exact Phase 6F batch above, following previous ZIP-export source head `6c56e76`. The existing ZIP implementation prevented duplicates and bounded file count but could not remove a mistakenly chosen photo: it disabled the selection button for items already in the batch, including when more than 64 MiB were requested. This made its own 'Select a smaller batch' error impossible without a fresh recovery session. Added **one reversible Add/Remove action using the same existing button**, a bounded cumulative receipt-size check before any signed JPEG bytes, and an explicit explanatory limit message; exact-token/account/session checks and private photo signer/receipt verification remain mandatory. Focused regression in the existing test owner verifies removal, one-member ZIP content, no fetch for deselected/oversized photo, full-selection removal and replacement after enforcing byte bound. The source/test-only final commit `1d8a5e7eb4da68b313d65eb401f7156d9c131acc` passed Dashboard `40809229005`, Database `40809228991`, Android `40809229001` (all SUCCESS). Baseline `6c56e76143d4d86b1bbafc8150ae72db60749d20`; rollback only `13bac0d`, `73477e6`, `1d8a5e7`. This record-only successor does not claim runtime/provider/deployment change; any automatically triggered documentation CI is separately classified. Original Phase 5D Google deployment restriction and held one-shot records untouched. The operator's intervening clarification authorizes continuing independent work; it does not authorize bypassing that external restriction or treating overall Phase 5/6 as complete. Genuine Phase 6F physical recovery/export and email tests, Phase 6E supported push and final Phase 5/6 provider/merge gates remain outstanding.
+
+## Phase 6A/6B — dashboard distinguishes downloaded receipt from human Accept (2026-10-29 CDT)
+
+Continued the same approved `dashboard-workflow-enhancement-plan` implementation line on
+`feat/phase-5-6-dashboard-workflow` / draft PR #40. This is a bounded Level-2 dashboard
+read/display batch inside the broader Level-3 scope. The existing Admin work-order page now
+requests the current run's active assignment facts through the existing RLS-protected
+`work_order_assignments` relation and uses the exact current assignee to display:
+
+- assignment not yet received;
+- assignment downloaded, with human Accept not established; or
+- explicit human Accept received by the contractor.
+
+The opened workspace preserves the original download-receipt timestamp and adds the separate
+Accept timestamp when present. No UI state, Start/Finish action, assignment authority, RPC,
+schema, photo, delivery, cleanup, Android, Auth, provider or external data was changed. The
+presentation helper fails closed when the assignment projection is absent and never infers
+Accept from download, Start or Finish.
+
+Focused evidence on this source head: `tests/dashboard/job-workspace.test.js`,
+`tests/dashboard/admin-auto-refresh.test.js`, `tests/dashboard/photo-requirements.test.js`,
+`tests/functions/phase_6_admin_push.test.mjs`, and `tests/functions/phase_6_scoped_admin_invite.test.mjs`
+all PASS; `git diff --check` PASS. The complete available JavaScript suite and exact-head CI
+remain required before merge. Gradle could not initialize its native Linux library in this
+workspace, so Android CI remains the build authority. The live Supabase/TEST provider state
+was not touched; the held original Google operation, permit and recovery journal remain
+unchanged. Explicit Level-3 pre-merge approval remains PENDING.

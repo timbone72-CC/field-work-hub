@@ -53,6 +53,10 @@ test('Phase 6A operational guidance never invents Accept, photo readiness or cli
   assert.equal(facts.project({field_status:'CANCELLED'}).label,'Cancelled');
   assert.equal(facts.project({field_status:'DELIVERED'}).label,'Status unavailable');
   assert.equal(facts.project(null).label,'Status unavailable');
+  assert.equal(facts.project({field_status:'ASSIGNED',assigned_user_id:'contractor-uuid',run:{assignment:[{
+    assigned_user_id:'contractor-uuid',assignment_ended_at:null,
+    acknowledgment_received_at:'2026-10-10T18:05:00Z'
+  }]}}).label,'Accepted by contractor');
 });
 test('Phase 6A job guidance uses text-only rendering and existing protected tabs', () => {
   const html=fs.readFileSync(require.resolve('../../dashboard/index.html'),'utf8');
@@ -63,6 +67,18 @@ test('Phase 6A job guidance uses text-only rendering and existing protected tabs
   assert.match(js,/el\('job-next-action-open'\)\.dataset\.panel/);
   assert.doesNotMatch(js,/job-next-action'\)\.innerHTML/);
   assert.match(app,/JobOperationalFacts\.project\(row\)\.label/);
+});
+
+test('Phase 6B dashboard reads the current assignment Accept fact without replacing receipt truth',()=>{
+ const source=fs.readFileSync(require.resolve('../../dashboard/app.js'),'utf8');
+ assert.match(source,/assignment:work_order_assignments!work_order_assignments_run_id_fkey/);
+ for(const field of ['assignment_received_at','acknowledgment_received_at','assignment_ended_at'])
+   assert.match(source,new RegExp(field));
+ const workspace=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ assert.match(workspace,/Accepted by contractor/);
+ assert.match(workspace,/Assignment received/);
+ assert.match(workspace,/formatTimestamp\(row\.assignment_received_at\)/);
+ assert.match(source,/JobOperationalFacts\.currentAssignment\(row\)\?\.acknowledgment_received_at/);
 });
 
 test('Phase 6A contractor/date filters are server-side and reject SQL operator injection',()=>{
