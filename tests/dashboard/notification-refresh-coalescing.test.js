@@ -95,3 +95,27 @@ test('a new office session can load without waiting for stale previous actor res
   assert.equal(x.ctx.organization,'org-b');
   assert.deepEqual(x.renders,['settings','alerts']);
 });
+
+test('missing organization clears the refresh latch and a newly scoped session can load',async()=>{
+  const x=rig();
+  x.ctx.currentUser={id:'user-a',app_metadata:{}};
+  await x.ctx.testLoad();
+  assert.equal(x.els.status,'Notification scope unavailable.');
+  assert.equal(x.ctx.fetching,false);
+  assert.equal(x.ctx.fetchingToken,null);
+  assert.deepEqual(x.calls,[],'No request may start without organization authority');
+  assert.deepEqual(x.els['notification-settings'].children,[]);
+  assert.deepEqual(x.els['notification-list'].children,[]);
+
+  // A later real organization claim for the same login must not be suppressed
+  // by the abandoned previous load.
+  x.ctx.currentUser={id:'user-a',app_metadata:{organization_id:'org-a'}};
+  const refreshed=x.ctx.testLoad();
+  assert.deepEqual(x.calls,['admin_notification_settings:token-a']);
+  x.releaseFirst();
+  await refreshed;
+  assert.equal(x.ctx.fetching,false);
+  assert.equal(x.ctx.settings.organization_id,'org-a');
+  assert.equal(x.ctx.issues[0].id,'fresh-org-a');
+  assert.deepEqual(x.renders,['settings','alerts']);
+});
