@@ -47,9 +47,16 @@ const RecoveryGallery = (() => {
     status.textContent = value; status.classList.toggle('error', error);
   };
   function updateExportControls() {
-    addToExport.disabled = busy || !selected || exportPhotos.length >= MAX_EXPORT_PHOTOS
-      || exportPhotos.some(p => p.photo_id === selected.photo_id);
-    exportZip.disabled = busy || exportPhotos.length === 0;
+    const alreadySelected = selected && exportPhotos.some(p => p.photo_id === selected.photo_id);
+    const bytes = exportPhotos.reduce((sum, p) => sum + p.prepared_size, 0);
+    const wouldExceedBytes = selected && bytes + selected.prepared_size > MAX_EXPORT_BYTES;
+    addToExport.textContent = alreadySelected
+      ? 'Remove selected photo from export' : 'Add selected photo to export';
+    // Allow removal even when the archive is full; reject oversized additions
+    // before fetching any private bytes.
+    addToExport.disabled = busy || !selected || !matches(generation) ||
+      (!alreadySelected && (exportPhotos.length >= MAX_EXPORT_PHOTOS || wouldExceedBytes));
+    exportZip.disabled = busy || !matches(generation) || exportPhotos.length === 0;
     exportZip.textContent = `Export selected ZIP (${exportPhotos.length}/${MAX_EXPORT_PHOTOS})`;
   }
   function reset() {
@@ -139,11 +146,21 @@ const RecoveryGallery = (() => {
     finally { if (matches(g)) { busy = false; updateExportControls(); } }
   }
   function addSelectedToExport() {
-    if (busy || !selected || exportPhotos.length >= MAX_EXPORT_PHOTOS ||
-      exportPhotos.some(p => p.photo_id === selected.photo_id)) return;
-    exportPhotos.push(selected);
+    if (busy || !selected || !matches(generation)) return;
+    const existing = exportPhotos.findIndex(p => p.photo_id === selected.photo_id);
+    if (existing >= 0) {
+      exportPhotos.splice(existing, 1);
+    } else {
+      const bytes = exportPhotos.reduce((sum, p) => sum + p.prepared_size, 0);
+      if (exportPhotos.length >= MAX_EXPORT_PHOTOS ||
+        bytes + selected.prepared_size > MAX_EXPORT_BYTES) {
+        message('Select at most 8 photos and 64 MiB. Remove a selected photo to make room.', true);
+        return;
+      }
+      exportPhotos.push(selected);
+    }
     updateExportControls();
-    message(`${exportPhotos.length} verified receipt(s) selected. Export checks each JPEG again before saving.`);
+    message(`${exportPhotos.length} receipt(s) selected. Export rechecks each private JPEG before saving.`);
   }
   async function readVerifiedJPEG(photo, g) {
     const url = await signedUrl(photo, g);
