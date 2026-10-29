@@ -158,9 +158,12 @@ async function loadRepeatRunChoices() {
   const load=document.getElementById('repeat-load-runs');
   load.disabled=true;
   status.textContent='Loading authorized prior visits…';
-  const stillCurrent=()=>repeatRunEpoch===epoch&&accessToken===token
-    &&currentUser?.id===actor&&currentUser?.app_metadata?.organization_id===org
-    &&editWorkOrderIdInput.value===id&&choice.dataset.workOrderId===id;
+  const stillCurrent=()=>{
+    const activeOrganization=currentUser?.app_metadata?.organization_id;
+    return repeatRunEpoch===epoch&&accessToken===token
+      &&currentUser?.id===actor&&activeOrganization===org
+      &&editWorkOrderIdInput.value===id&&choice.dataset.workOrderId===id;
+  };
   try {
     const current=await fetchWorkOrder(id);
     if(!stillCurrent())return;
