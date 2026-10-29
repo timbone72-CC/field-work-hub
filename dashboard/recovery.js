@@ -31,13 +31,15 @@ const RecoveryGallery = (() => {
   document.querySelector('main.shell').append(card);
 
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let generation = 0, identity = null, next = null, selected = null, busy = false;
-  const matches = (g) => generation === g && !!accessToken && identity === currentUser?.id;
+  let generation = 0, identity = null, sessionToken = null, next = null, selected = null, busy = false;
+  // A new Auth session for the same user must not inherit an old recovery read.
+  const matches = (g) => generation === g && !!sessionToken && accessToken === sessionToken
+    && identity === currentUser?.id;
   const message = (value, error = false) => {
     status.textContent = value; status.classList.toggle('error', error);
   };
   function reset() {
-    generation++; identity = null; next = null; selected = null; busy = false;
+    generation++; identity = null; sessionToken = null; next = null; selected = null; busy = false;
     rows.replaceChildren(); preview.removeAttribute('src'); preview.hidden = true;
     download.disabled = true; more.hidden = true; more.disabled = false;
     card.classList.add('hidden'); message('');
@@ -50,10 +52,17 @@ const RecoveryGallery = (() => {
     });
     if (!response.ok) throw Error(await readableError(response, 'Recovery access unavailable. Sign in again.'));
     const result = await response.json();
-    if (!matches(g) || !Array.isArray(result?.photos) || result.photos.length > 25
-      || (result.next_photo !== null && result.next_photo !== undefined && !UUID.test(result.next_photo))
-      || result.photos.some(p => !UUID.test(p.photo_id || '') || !UUID.test(p.transfer_version || '')
-        || (after && p.photo_id <= after)
+    const photos = result?.photos;
+    const hasNext = result?.next_photo !== null && result?.next_photo !== undefined;
+    // The server returns a strictly increasing 25-row UUID page and only
+    // returns a cursor when another row exists. Never render duplicate pages.
+    if (!matches(g) || !Array.isArray(photos) || photos.length > 25
+      || (hasNext && (photos.length !== 25 || !UUID.test(result.next_photo)
+        || result.next_photo !== photos[photos.length - 1]?.photo_id))
+      || photos.some((p, i) => !p || !UUID.test(p.photo_id || '')
+        || p.photo_id !== p.photo_id.toLowerCase()
+        || !UUID.test(p.transfer_version || '')
+        || p.photo_id <= (i ? photos[i - 1]?.photo_id : (after || ''))
         || !Number.isSafeInteger(p.prepared_size) || p.prepared_size < 4
         || p.prepared_size > 33554432
         || !/^[0-9a-f]{64}$/.test(p.prepared_sha256 || '')))
@@ -78,7 +87,7 @@ const RecoveryGallery = (() => {
       message(rows.childElementCount ? 'Select a photo to inspect or download its private prepared copy.' :
         'No privately verified recovery copies are available yet. Unsynchronized original photos may still be on the original phone.');
     } catch (error) { if (matches(g)) message(error.message, true); }
-    finally { busy = false; more.disabled = false; }
+    finally { if (matches(g)) { busy = false; more.disabled = false; } }
   }
   async function signedUrl(photo, g) {
     if (!matches(g)) throw Error('Your recovery session changed.');
@@ -93,7 +102,10 @@ const RecoveryGallery = (() => {
       || answer.transfer_version !== photo.transfer_version
       || url.origin !== new URL(SUPABASE_URL).origin
       || !url.pathname.startsWith('/storage/v1/object/sign/fwh-review-private/')
-      || !url.searchParams.get('token') || Number(answer.expires_in) > 300)
+      || url.username || url.password || url.hash
+      || url.searchParams.size !== 1 || !url.searchParams.get('token')
+      || !Number.isSafeInteger(answer.expires_in)
+      || answer.expires_in < 1 || answer.expires_in > 300)
       throw Error('Photo authorization response is invalid.');
     return url.href;
   }
@@ -109,7 +121,7 @@ const RecoveryGallery = (() => {
       selected = photo; download.disabled = false;
       message('Verified photo selected. Download is an evidence copy, not client delivery.');
     } catch (error) { if (matches(g)) message(error.message, true); }
-    finally { busy = false; }
+    finally { if (matches(g)) busy = false; }
   }
   async function savePhoto() {
     if (!selected || busy) return;
@@ -139,14 +151,14 @@ const RecoveryGallery = (() => {
       } finally { setTimeout(() => URL.revokeObjectURL(local), 1000); }
       message('Prepared photo copy offered for download. Original evidence and work state are unchanged.');
     } catch (error) { if (matches(g)) message(error.message, true); }
-    finally { if (matches(g)) download.disabled = !selected; busy = false; }
+    finally { if (matches(g)) { download.disabled = !selected; busy = false; } }
   }
   more.addEventListener('click', () => { if (next && !busy) void appendPage(next, generation); });
   download.addEventListener('click', () => { void savePhoto(); });
   async function show() {
     if (!accessToken || !currentUser?.id) throw Error('Verified sign-in required for photo recovery.');
     reset();
-    identity = currentUser.id;
+    identity = currentUser.id; sessionToken = accessToken;
     const g = generation;
     const result = await readPage(null, g); // Server authority before showing recovery mode.
     if (!matches(g)) throw Error('Your recovery session changed.');
