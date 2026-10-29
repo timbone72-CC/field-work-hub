@@ -15,6 +15,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Enforce active Phase 5/6 handoff size (24 KiB)
+        run: |
+          python3 -m unittest discover -s tests/ci -p 'test_phase56_record_size.py' -v
+          python3 ci/check_phase56_record_size.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
