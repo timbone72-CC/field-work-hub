@@ -93,8 +93,12 @@ async function select(x,n,index){
 }
 async function exportNow(x,photos){
   for(const n of photos)x.enqueue(signer(n));
+  assert.equal(x.zip.disabled,false,'Explicitly selected receipts allow an export');
   x.zip.click();
-  await tick();await tick();
+  // SHA-256 and Blob.arrayBuffer complete asynchronously outside the VM.
+  // Wait for the export's own busy guard to release, not a guessed tick count.
+  for(let i=0;i<80 && x.zip.disabled;i++)await tick();
+  assert.equal(x.zip.disabled,false,'Bounded archive work must settle');
 }
 test('one explicitly selected bounded archive contains only exact checksum-verified JPEGs',async()=>{
   const x=rig();
