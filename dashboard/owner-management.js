@@ -261,9 +261,13 @@ async function ownerChange(action, onSuccess) {
     if (!ownerStillCurrent(check)) return;
     await onSuccess?.();
     if (!ownerStillCurrent(check)) return;
+    // The visible Saved status is the point where the next owner action is safe.
+    // Release the guard first; otherwise an immediate Manage teams click is lost.
+    ownerConsoleBusy = false;
     ownerStatus('Saved. Server permissions and revisions verified.');
   } catch (error) {
     if (!ownerStillCurrent(check)) return;
+    ownerConsoleBusy = false;
     ownerStatus(error.message || 'Owner change failed. Refresh the current access data.', true);
   } finally { ownerConsoleBusy = false; }
 }
