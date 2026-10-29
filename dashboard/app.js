@@ -77,7 +77,30 @@ function prepareWorkFromSelectedJob(copyPriorDetails) {
       if (adminSessionEpoch!==epoch || currentUser?.id!==actor
         || currentUser?.app_metadata?.organization_id!==org
         || !accessToken || editWorkOrderIdInput.value!==oldId) return;
-      const snapshot=copyPriorDetails ? PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot) : null;
+      let snapshot=copyPriorDetails ? PhotoRules.copyPriorSnapshot(old.run?.requirement_snapshot) : null;
+      const picker=document.getElementById('repeat-source-run');
+      const chosenRun=copyPriorDetails ? picker.value : '';
+      if(chosenRun){
+        if(picker.dataset.workOrderId!==oldId || !RepeatRunCopies.uuid.test(chosenRun))
+          throw Error('Choose a verified visit for this work order. Load visits again.');
+        const token=accessToken;
+        const response=await adminFetch(SUPABASE_URL+'/rest/v1/work_order_runs?select='+
+          encodeURIComponent('id,work_order_id,requirement_snapshot')+
+          '&work_order_id=eq.'+oldId+'&id=eq.'+chosenRun+'&limit=1',
+          {headers:authHeaders()});
+        if(adminSessionEpoch!==epoch || currentUser?.id!==actor
+          || currentUser?.app_metadata?.organization_id!==org
+          || accessToken!==token || editWorkOrderIdInput.value!==oldId
+          || picker.value!==chosenRun)return;
+        if(!response.ok)throw Error(await readableError(response,
+          'Unable to read historical requirements.'));
+        const rows=await response.json();
+        if(adminSessionEpoch!==epoch || currentUser?.id!==actor
+          || currentUser?.app_metadata?.organization_id!==org
+          || accessToken!==token || editWorkOrderIdInput.value!==oldId
+          || picker.value!==chosenRun)return;
+        snapshot=PhotoRules.copyPriorSnapshot(RepeatRunCopies.sourceSnapshot(rows,oldId,chosenRun));
+      }
       const existingCreateDraft=Boolean(propertyAddressInput.value.trim()
         || workTypeInput.value.trim() || instructionsInput.value.trim()
         || dueDateInput.value || assigneeSelect.value || woNumberInput.value.trim()
@@ -110,6 +133,59 @@ function prepareWorkFromSelectedJob(copyPriorDetails) {
 }
 document.getElementById('prepare-repeat-work').addEventListener('click', () => prepareWorkFromSelectedJob(true));
 document.getElementById('prepare-custom-work').addEventListener('click', () => prepareWorkFromSelectedJob(false));
+
+// Phase 6B historical visits are loaded only on explicit request and are
+// read using existing authenticated RLS; nothing is written to older runs.
+let repeatRunEpoch=0;
+function resetRepeatRunChoices(id='') {
+  repeatRunEpoch++;
+  const choice=document.getElementById('repeat-source-run');
+  choice.replaceChildren(new Option('Current visit (latest requirements)',''));
+  choice.dataset.workOrderId=id;
+  choice.disabled=!id;
+  document.getElementById('repeat-load-runs').disabled=!id;
+  document.getElementById('repeat-source-status').textContent=id
+    ? 'Current visit selected. Load earlier visits to copy an older frozen photo list.'
+    : '';
+}
+async function loadRepeatRunChoices() {
+  const id=editWorkOrderIdInput.value,actor=currentUser?.id;
+  const org=currentUser?.app_metadata?.organization_id,token=accessToken;
+  if(!RepeatRunCopies.uuid.test(id)||!actor||!org||!token)return;
+  const epoch=++repeatRunEpoch;
+  const choice=document.getElementById('repeat-source-run');
+  const status=document.getElementById('repeat-source-status');
+  const load=document.getElementById('repeat-load-runs');
+  load.disabled=true;
+  status.textContent='Loading authorized prior visits…';
+  const stillCurrent=()=>repeatRunEpoch===epoch&&accessToken===token
+    &&currentUser?.id===actor&&currentUser?.app_metadata?.organization_id===org
+    &&editWorkOrderIdInput.value===id&&choice.dataset.workOrderId===id;
+  try {
+    const current=await fetchWorkOrder(id);
+    if(!stillCurrent())return;
+    if(!RepeatRunCopies.uuid.test(current.current_run_id))
+      throw Error('No current visit exists for this work order.');
+    const response=await adminFetch(SUPABASE_URL+'/rest/v1/work_order_runs?select='+
+      encodeURIComponent('id,work_order_id,run_sequence')+
+      '&work_order_id=eq.'+id+'&order=run_sequence.desc&limit=26',
+      {headers:authHeaders()});
+    if(!stillCurrent())return;
+    if(!response.ok)throw Error(await readableError(response,'Visit history unavailable.'));
+    const rows=await response.json();
+    if(!stillCurrent())return;
+    const {earlier,more}=RepeatRunCopies.history(rows,id,current.current_run_id);
+    choice.replaceChildren(new Option('Current visit (latest requirements)',''));
+    for(const run of earlier)choice.add(new Option('Visit '+run.run_sequence+' · saved photo requirements',run.id));
+    status.textContent=earlier.length
+      ? 'Choose a previous visit, then Prepare repeat work. This does not edit either visit.'+
+        (more?' Only the latest 25 visits are shown.':'')
+      : 'No earlier visit is available in this bounded history.';
+  }catch(error){
+    if(stillCurrent())status.textContent='Prior visits not loaded: '+error.message;
+  }finally{if(stillCurrent())load.disabled=false;}
+}
+document.getElementById('repeat-load-runs').addEventListener('click',loadRepeatRunChoices);
 
 function fillWorkTypes() {
   for (const [prefix, input, editor] of [['', workTypeInput, createPhotos], ['edit-', editWorkTypeInput, editPhotos]]) {

@@ -151,6 +151,7 @@ const JobWorkspace = (() => {
   function reset() {
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
+    resetRepeatRunChoices();
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
   }
@@ -276,6 +277,7 @@ const JobWorkspace = (() => {
   }
   function opened(row) {
     selectedRow = row; needsReload = false; pending = null; baseline = fingerprint();
+    resetRepeatRunChoices(row.id);
     addressLookupEpoch++; addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
     el('edit-heading').textContent = row.wo_number;
@@ -315,6 +317,7 @@ const JobWorkspace = (() => {
   function closed() {
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
+    resetRepeatRunChoices();
     addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
     if (editSection.open) editSection.close();

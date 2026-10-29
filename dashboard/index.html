@@ -184,6 +184,15 @@
             <button id="prepare-repeat-work" class="secondary" type="button">Prepare repeat work</button>
             <button id="prepare-custom-work" class="secondary" type="button">Prepare custom work at this address</button>
           </div>
+          <div class="fwh-job-repeat-source">
+            <label>Copy photo requirements from visit
+              <select id="repeat-source-run" aria-label="Prior visit to reuse" disabled>
+                <option value="">Current visit (latest requirements)</option>
+              </select>
+            </label>
+            <button id="repeat-load-runs" class="secondary" type="button" disabled>Load earlier visits</button>
+            <p id="repeat-source-status" class="muted" role="status"></p>
+          </div>
           <nav class="workspace-tabs" aria-label="Job sections">
             <button type="button" data-job-tab="details" aria-pressed="true" aria-controls="job-details">Details</button>
             <button type="button" data-job-tab="assignment" aria-pressed="false" aria-controls="job-assignment">Assignment</button>
@@ -437,6 +446,7 @@
   </main>
   <script src="navigation.js?v=modern-premium-stage2b-20261017" defer></script>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
+  <script src="repeat-run-copies.js?v=phase6b-20261029" defer></script>
   <script src="correction-draft.js?v=phase6c-20261013-eligibility" defer></script>
   <script src="followup-management.js?v=phase6c-20261011" defer></script>
   <script src="private-review.js?v=phase5c-20261010-1" defer></script>
