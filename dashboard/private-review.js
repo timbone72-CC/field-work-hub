@@ -3,12 +3,14 @@ const PrivateReview = (() => {
   let current = '', generation = 0, next = null, entries = [];
   let currentRun = '', selected = new Map(), inspected = new Map();
   let bulkBusy = false, uncertain = false, inspectionIndex = 0;
+  let manualBusy = false, manualRevision = 0, manualSelected = new Map();
   const el = id => document.getElementById(id);
   const UUID = /^[a-f0-9-]{36}$/i;
 
   function reset() {
     generation++; current = ''; next = null; entries = [];
     currentRun = ''; selected.clear(); inspected.clear(); bulkBusy = false; uncertain = false;
+    manualRevision++; manualBusy=false; manualSelected.clear();
     inspectionIndex = 0;
     for(const id of ['private-review-run','private-review-item','private-review-stage','private-review-decision'])
       if(el(id)) el(id).value='';
@@ -57,6 +59,9 @@ const PrivateReview = (() => {
     el('private-review-bulk-approve').disabled=bulkBusy||uncertain||selected.size===0;
     el('private-review-bulk-reject').disabled=bulkBusy||uncertain||selected.size===0
       ||!el('private-review-bulk-reason').value.trim();
+    const manual=el('private-review-manual-export');
+    if(manual){manual.disabled=manualBusy||bulkBusy||uncertain||manualSelected.size===0;
+      manual.textContent='Download manual TEST ZIP ('+manualSelected.size+'/8 approved)';}
     el('private-review-previous-photo').disabled=entries.length===0||inspectionIndex<=0;
     el('private-review-next-photo').disabled=entries.length===0||inspectionIndex>=entries.length-1;
   }
@@ -92,13 +97,25 @@ const PrivateReview = (() => {
       });
       selectedLabel.append(choose,document.createTextNode(' Select for bulk review'));
       const controls = document.createElement('div'); controls.className = 'workspace-navigation';
+      const manual=actionButton(manualSelected.has(item.photo_id)?'Remove from manual TEST ZIP':'Add to manual TEST ZIP',()=>{
+        if(manualBusy||bulkBusy||uncertain||item.decision!=='APPROVED'
+          ||inspected.get(item.photo_id)!==item.transfer_version)return;
+        if(manualSelected.has(item.photo_id)){manualSelected.delete(item.photo_id);manual.textContent='Add to manual TEST ZIP';}
+        else{
+          if(manualSelected.size>=ManualTestExport.MAX_PHOTOS){status('Manual TEST ZIP is limited to eight approved photos.',true);return;}
+          try {ManualTestExport.checkPhoto(item);}catch(error){status(error.message,true);return;}
+          manualSelected.set(item.photo_id,{...item});manual.textContent='Remove from manual TEST ZIP';
+        }
+        manualRevision++;selectionStatus();
+      },item.decision!=='APPROVED'||inspected.get(item.photo_id)!==item.transfer_version);
+      manual.disabled=manual.disabled||manualBusy||bulkBusy||uncertain;
       const explanation = document.createElement('input');
       explanation.type = 'text'; explanation.maxLength = 1000;
       explanation.placeholder = 'Reason for rejecting this photo';
       explanation.setAttribute('aria-label', 'Photo rejection reason');
       const review = async decision => {
         const gen = generation, wo = current, token = accessToken;
-        if (!active(gen,wo,token)) return;
+        if (!active(gen,wo,token)||manualBusy) return;
         const reason = decision === 'REJECTED' ? explanation.value.trim() : '';
         if (decision === 'REJECTED' && !reason) {
           status('Enter a reason before rejecting a photo.', true); explanation.focus(); return;
@@ -146,6 +163,7 @@ const PrivateReview = (() => {
             approval.disabled = false; rejection.disabled = false;
             inspected.set(item.photo_id,item.transfer_version);
             choose.disabled=bulkBusy||uncertain;
+            if(item.decision==='APPROVED'&&!manualBusy)manual.disabled=false;
             status('Verified photo inspected. You may review or select this exact version.');
           }, { once: true });
           img.addEventListener('error', () => {
@@ -160,7 +178,7 @@ const PrivateReview = (() => {
         const reason=explanation.value.trim()||item.reason||'';
         if(!CorrectionDraft.addIssue(item,reason))explanation.focus();
       },false);
-      controls.append(show, approval, rejection, addIssue);
+      controls.append(show, approval, rejection, addIssue,manual);
       const reference=document.createElement('label');reference.className='check';
       const refChoice=document.createElement('input');refChoice.type='checkbox';
       refChoice.dataset.correctionPhotoId=item.photo_id;
@@ -180,7 +198,8 @@ const PrivateReview = (() => {
     if (!wo || !token) return;
     status('Loading verified private photos…');
     const cursor = append ? next : null;
-    if (!append) { next = null; entries = []; inspectionIndex=0; }
+    if (!append) { next = null; entries = []; inspectionIndex=0;
+      manualRevision++;manualSelected.clear();selectionStatus(); }
     const runFilter=el('private-review-run').value==='CURRENT'?currentRun:null;
     const itemValue=el('private-review-item').value;
     try {
@@ -213,6 +232,7 @@ const PrivateReview = (() => {
   }
   function applyFilter(){
     selected.clear();inspected.clear();uncertain=false;next=null;
+    manualRevision++;manualSelected.clear();
     load(false);
   }
   function populateCategories(){
@@ -223,7 +243,7 @@ const PrivateReview = (() => {
     }
   }
   async function bulk(decision,allReviewed=false){
-    if(bulkBusy||uncertain||!current)return;
+    if(bulkBusy||manualBusy||uncertain||!current)return;
     if(allReviewed){
       for(const entry of entries){
         if(entry.decision==='PENDING'&&inspected.get(entry.photo_id)===entry.transfer_version){
@@ -282,6 +302,82 @@ const PrivateReview = (() => {
       if(active(gen,wo,token)){bulkBusy=false;selectionStatus();}
     }
   }
+  async function checkManualSelection(photos,wo,token,gen,revision){
+    const found=new Map(),wanted=new Map(photos.map(p=>[p.photo_id,p]));
+    let cursor=null;
+    for(let page=0;page<40&&found.size<wanted.size;page++){
+      if(!active(gen,wo,token)||manualRevision!==revision)throw Error('TEST selection changed.');
+      const result=await rpc('admin_review_photo_page',{
+        p_wo:wo,p_limit:50,p_after_sequence:cursor?.sequence||null,
+        p_after_photo:cursor?.photo||null,p_run:null,p_item:null,p_extra:false,
+        p_stage:null,p_decision:'APPROVED'},token);
+      if(!active(gen,wo,token)||manualRevision!==revision||result.work_order_id!==wo
+        ||!Array.isArray(result.photos)||result.photos.length>50)
+        throw Error('Current approved photo page unavailable.');
+      for(const p of result.photos){
+        if(!wanted.has(p.photo_id))continue;
+        ManualTestExport.checkPhoto(p);
+        const old=wanted.get(p.photo_id);
+        if(old.run_id!==p.run_id||old.transfer_version!==p.transfer_version
+          ||old.decision_revision!==p.decision_revision
+          ||old.observed_sha256!==p.observed_sha256)
+          throw Error('Photo approval or receipt changed; select again.');
+        found.set(p.photo_id,p);
+      }
+      if(!result.next_photo)break;
+      if(!UUID.test(result.next_photo)||!Number.isInteger(result.next_sequence)
+        ||result.photos.length!==50)
+        throw Error('Approved photo page cursor changed.');
+      cursor={sequence:result.next_sequence,photo:result.next_photo};
+    }
+    if(found.size!==wanted.size)throw Error('Selected photo no longer approved or outside bounded TEST review.');
+    return photos.map(p=>found.get(p.photo_id));
+  }
+  async function checkManualFixture(wo,token,gen,revision){
+    const choice=await rpc('admin_client_choices',{p_wo:wo},token);
+    if(!active(gen,wo,token)||manualRevision!==revision
+      ||choice.work_order_id!==wo||!Array.isArray(choice.companies)
+      ||!choice.client_company_id
+      ||choice.companies.find(c=>c.id===choice.client_company_id)?.name!=='FWH TEST CLIENT')
+      throw Error('Only the separately configured FWH TEST CLIENT fixture is eligible.');
+    const state=await rpc('admin_package_state',{p_wo:wo},token);
+    if(!active(gen,wo,token)||manualRevision!==revision
+      ||state.work_order_id!==wo||state.package)
+      throw Error('Manual TEST export requires an independent WO with no existing client package or held delivery.');
+  }
+  async function exportManualTest(){
+    if(manualBusy||bulkBusy||uncertain||!current||manualSelected.size<1)return;
+    const wo=current, token=accessToken, gen=generation, revision=manualRevision;
+    const photos=[...manualSelected.values()];
+    if(!active(gen,wo,token)||!window.confirm('Download approved disposable FWH TEST photos only? This creates NO client delivery receipt, does NOT send, and must NOT use the held package or its Drive folder.'))return;
+    manualBusy=true;selectionStatus();status('Verifying current TEST work order, photo approvals and bytes…');
+    const currentExport=()=>active(gen,wo,token)&&manualRevision===revision&&manualBusy;
+    try{
+      await checkManualFixture(wo,token,gen,revision);
+      const verified=await checkManualSelection(photos,wo,token,gen,revision);
+      const result=await ManualTestExport.makeArchive(verified,{
+        org:currentUser?.app_metadata?.organization_id,wo,origin:SUPABASE_URL,
+        signer:p=>viewer(p,token),fetcher:(url,opts)=>fetch(url,opts),current:currentExport
+      });
+      if(!currentExport())throw Error('TEST export session changed.');
+      await checkManualFixture(wo,token,gen,revision);
+      await checkManualSelection(photos,wo,token,gen,revision);
+      if(!currentExport())throw Error('TEST export cancelled.');
+      const local=URL.createObjectURL(result.blob);
+      try{
+        const link=document.createElement('a');link.href=local;
+        link.download='FWH_MANUAL_TEST_ONLY.zip';link.rel='noopener';
+        el('private-review-list').append(link);link.click();link.remove();
+      }finally{setTimeout(()=>URL.revokeObjectURL(local),1000);}
+      status('Verified '+result.count+' TEST JPEG(s) ('+result.bytes+
+        ' bytes) offered for manual download. Place only in FWH_MANUAL_TEST_ONLY under the verified TEST client root. NOT delivered; no FWH receipt or cleanup.');
+      manualSelected.clear();manualRevision++;
+    }catch(error){
+      if(active(gen,wo,token))status('Manual TEST export stopped. No delivery status changed. '+error.message,true);
+    }finally{
+      if(active(gen,wo,token)){manualBusy=false;selectionStatus();render();}
+    }
+  }
   function navigate(delta){
     inspectionIndex=Math.max(0,Math.min(entries.length-1,inspectionIndex+delta));
     const entry=entries[inspectionIndex];
@@ -301,6 +397,7 @@ const PrivateReview = (() => {
   }
   function init(){
     el('private-review-more').addEventListener('click',()=>load(true));
+    el('private-review-manual-export').addEventListener('click',()=>{void exportManualTest();});
     for(const id of ['private-review-run','private-review-item','private-review-stage',
       'private-review-decision','private-review-size'])
       el(id).addEventListener('change',applyFilter);
