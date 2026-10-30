@@ -124,3 +124,49 @@ test('manual TEST download result remains visible after repaint for success or f
   assert.match(manual,/status\('Manual TEST export stopped\./);
   assert.match(manual,/finally\s*\{\s*if\(active\(gen,wo,token\)\)\{manualBusy=false;selectionStatus\(\);render\(true\);\}/);
 });
+
+test('ZIP local/central directory and CRC verify exact JPEG plus local-only hash manifest',async()=>{
+  const {blob}=await makeArchive([receipt],fixture().options);
+  const zip=Buffer.from(await blob.arrayBuffer());
+  const end=zip.length-22;
+  assert.equal(zip.readUInt32LE(end),0x06054b50);
+  assert.equal(zip.readUInt16LE(end+8),2);
+  assert.equal(zip.readUInt16LE(end+10),2);
+  assert.equal(zip.readUInt32LE(end+12),zip.length-22-zip.readUInt32LE(end+16));
+  let at=zip.readUInt32LE(end+16),manifest='';
+  const contents=new Map();
+  for(let i=0;i<2;i++){
+    assert.equal(zip.readUInt32LE(at),0x02014b50);
+    assert.equal(zip.readUInt16LE(at+10),0); // stored; no decompression
+    const crc=zip.readUInt32LE(at+16),size=zip.readUInt32LE(at+20);
+    assert.equal(size,zip.readUInt32LE(at+24));
+    const nameLen=zip.readUInt16LE(at+28),extra=zip.readUInt16LE(at+30),
+      comment=zip.readUInt16LE(at+32),local=zip.readUInt32LE(at+42);
+    const name=zip.toString('utf8',at+46,at+46+nameLen);
+    assert.equal(zip.readUInt32LE(local),0x04034b50);
+    assert.equal(zip.readUInt16LE(local+8),0);
+    assert.equal(zip.readUInt32LE(local+14),crc);
+    assert.equal(zip.readUInt32LE(local+18),size);
+    assert.equal(zip.readUInt32LE(local+22),size);
+    const start=local+30+zip.readUInt16LE(local+26)+zip.readUInt16LE(local+28);
+    const file=zip.subarray(start,start+size);
+    assert.equal(file.length,size);
+    // Independent CRC-32 check, not a search for ZIP metadata literals.
+    let check=0xffffffff;
+    for(const b of file){
+      check^=b;
+      for(let k=0;k<8;k++)check=(check>>>1)^((check&1)?0xedb88320:0);
+    }
+    assert.equal((check^0xffffffff)>>>0,crc);
+    contents.set(name,file);
+    at+=46+nameLen+extra+comment;
+  }
+  assert.equal(at,end);
+  assert.deepEqual([...contents.keys()].sort(),[
+    'manual-test-'+photo+'.jpg','manual-test-sha256.txt'].sort());
+  assert.deepEqual(contents.get('manual-test-'+photo+'.jpg'),Buffer.from(bytes));
+  manifest=contents.get('manual-test-sha256.txt').toString('utf8');
+  assert.match(manifest,/NOT CLIENT DELIVERED/);
+  assert.ok(manifest.includes(photo+'  '+sha+'  '+bytes.length+' bytes'));
+  assert.ok(!manifest.includes('fixture-only'));
+});
