@@ -41,6 +41,9 @@ test('approved exact private receipt creates a bounded, non-delivery TEST ZIP',a
  const archived=Buffer.from(await z.blob.arrayBuffer());
  assert.equal(archived.toString('utf8',0,2),'PK');
  assert.ok(archived.includes(Buffer.from('manual-test-'+photo+'.jpg')));
+ assert.ok(archived.includes(Buffer.from('manual-test-sha256.txt')));
+ assert.ok(archived.includes(Buffer.from(sha)));
+ assert.ok(archived.includes(Buffer.from('NOT CLIENT DELIVERED')));
  assert.ok(!archived.includes(Buffer.from('fixture-only')));
  assert.deepEqual(f.calls.map(x=>x.kind||x.opts.method),['sign','HEAD','GET']);
 });
