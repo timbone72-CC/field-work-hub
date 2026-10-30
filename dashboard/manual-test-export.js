@@ -92,11 +92,18 @@ const ManualTestExport = (() => {
     return (crc^-1)>>>0;
   }
   function zip(entries) {
+    // The local-only manifest keeps exact original receipt hashes alongside the
+    // disposable copies. It is NOT a client submission or delivery receipt.
+    const manifest=new TextEncoder().encode(
+      'FWH MANUAL TEST TRANSFER ONLY - NOT CLIENT DELIVERED\\n'+
+      'No automatic FWH receipt, Send or original cleanup.\\n'+
+      entries.map(e=>e.photo.photo_id+'  '+e.sha+'  '+e.size+' bytes').join('\\n')+'\\n');
+    const files=[...entries,{file:manifest,filename:'manual-test-sha256.txt'}];
     const parts=[], directory=[];let offset=0,central=0;
     const put16=(v,n,x)=>v.setUint16(n,x,true);
     const put32=(v,n,x)=>v.setUint32(n,x,true);
-    for(const entry of entries) {
-      const name=new TextEncoder().encode('manual-test-'+entry.photo.photo_id+'.jpg');
+    for(const entry of files) {
+      const name=new TextEncoder().encode(entry.filename||('manual-test-'+entry.photo.photo_id+'.jpg'));
       const size=entry.file.length, crc=crc32(entry.file);
       const h=new Uint8Array(30+name.length),hv=new DataView(h.buffer);
       put32(hv,0,0x04034b50);put16(hv,4,20);put16(hv,10,0);
@@ -110,7 +117,7 @@ const ManualTestExport = (() => {
       directory.push(d);central+=d.length;offset+=h.length+size;
     }
     const end=new Uint8Array(22),ev=new DataView(end.buffer);
-    put32(ev,0,0x06054b50);put16(ev,8,entries.length);put16(ev,10,entries.length);
+    put32(ev,0,0x06054b50);put16(ev,8,files.length);put16(ev,10,files.length);
     put32(ev,12,central);put32(ev,16,offset);
     return new Blob([...parts,...directory,end],{type:'application/zip'});
   }
@@ -131,7 +138,9 @@ const ManualTestExport = (() => {
       entries.push(result);
     }
     if (!options.current()) throw Error('Admin session changed before archive could be saved.');
-    return {blob:zip(entries),count:entries.length,bytes:total,
+    const blob=zip(entries);
+    if(blob.size>MAX_BYTES)throw Error('Manual TEST ZIP exceeds 64 MiB including metadata.');
+    return {blob,count:entries.length,bytes:total,
       hashes:entries.map(x=>({photo_id:x.photo.photo_id,sha256:x.sha,size:x.size}))};
   }
   return {checkPhoto,checkSigned,makeArchive,MAX_PHOTOS,MAX_BYTES};
