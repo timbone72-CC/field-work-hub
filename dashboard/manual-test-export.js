@@ -95,9 +95,9 @@ const ManualTestExport = (() => {
     // The local-only manifest keeps exact original receipt hashes alongside the
     // disposable copies. It is NOT a client submission or delivery receipt.
     const manifest=new TextEncoder().encode(
-      'FWH MANUAL TEST TRANSFER ONLY - NOT CLIENT DELIVERED\\n'+
-      'No automatic FWH receipt, Send or original cleanup.\\n'+
-      entries.map(e=>e.photo.photo_id+'  '+e.sha+'  '+e.size+' bytes').join('\\n')+'\\n');
+      'FWH MANUAL TEST TRANSFER ONLY - NOT CLIENT DELIVERED\n'+
+      'No automatic FWH receipt, Send or original cleanup.\n'+
+      entries.map(e=>e.photo.photo_id+'  '+e.sha+'  '+e.size+' bytes').join('\n')+'\n');
     const files=[...entries,{file:manifest,filename:'manual-test-sha256.txt'}];
     const parts=[], directory=[];let offset=0,central=0;
     const put16=(v,n,x)=>v.setUint16(n,x,true);
