@@ -282,6 +282,8 @@
             </div>
             <div id="private-review-list"></div>
             <button id="private-review-more" type="button" class="secondary" hidden>Load next verified page</button>
+            <p class="muted">Manual TEST export: approved and individually previewed disposable photos only. This never Sends, confirms delivery, releases held uploads, or cleans originals. Place the ZIP contents only in FWH_MANUAL_TEST_ONLY under the verified TEST client root.</p>
+            <button id="private-review-manual-export" type="button" class="secondary" disabled>Download manual TEST ZIP (0/8 approved)</button>
             <details id="correction-details" hidden>
               <summary>Prepare same-WO follow-up</summary>
               <p class="muted">Save a correction draft first. Original finished photos and previous client delivery remain untouched. Dispatch is separate and requires an exact checked preview.</p>
@@ -449,7 +451,8 @@
   <script src="repeat-run-copies.js?v=phase6b-20261029" defer></script>
   <script src="correction-draft.js?v=phase6c-20261013-eligibility" defer></script>
   <script src="followup-management.js?v=phase6c-20261011" defer></script>
-  <script src="private-review.js?v=phase5c-20261010-1" defer></script>
+  <script src="manual-test-export.js?v=phase5d-manual-test-20261029" defer></script>
+  <script src="private-review.js?v=phase5d-manual-test-20261029" defer></script>
   <script src="client-release.js?v=phase5d-20261010" defer></script>
   <script src="release-history.js?v=phase6d-20261011" defer></script>
   <script src="push-device.js?v=phase6e-20261011" defer></script>
