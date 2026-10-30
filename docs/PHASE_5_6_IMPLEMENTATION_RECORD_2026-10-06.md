@@ -35,6 +35,8 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 ### Critical priority, blockers and exact continuation
 
+**Proposed manual TEST transfer exception, October 29 — NOT APPROVED:** Operator expressed a preference for limited Admin export of individually APPROVED, checksum-verified disposable TEST photos into a separate manual-only TEST client Drive folder, recorded solely as **MANUAL TEST TRANSFER**. The [specific proposed amendment](PHASE_5_TEST_MANUAL_TRANSFER_PROPOSAL_2026-10-29.md) is Level-1 planning documentation; no new runtime, Drive write, receipt, migration, CI deploy route or manual-test evidence exists. Its proposed scope excludes the original frozen package, one-shot markers, encrypted session and held global permit; automatic DELIVERED, cleanup and all governing Phase 5D acceptance gates remain blocked/unverified. **Exact next decision:** operator approval/amendment of the proposed TEST-only exception before implementation; no inference of approved execution or PR #40 Level-3 merge. The existing managed worker-deployment prohibition remains unchanged and must not be bypassed.
+
 **Operator priority as clarified October 29:** resolve the Phase 5D delivery block rather than substituting unrelated passing Phase 6 tests or prolonged retrospective checks.
 
 1. **Immediate external gate:** Determine and legitimately resolve the explicit managed worker-deployment safety restriction. Its exact denial ID/message is still missing; seek actual platform authorization/support. **Do not bypass** this restriction by changing CLI, connector, browser, credentials, identity, or deployment route.
