@@ -112,3 +112,15 @@ test('UI remains Admin review-owned; no provider, Send, cleanup or recovery auth
  assert.doesNotMatch(helper,/admin_queue_package|client_delivery_final_receipts|cleanup_photo|googleapis\.com/);
  assert.doesNotMatch(source,/manual-test.+\bPUT\b/);
 });
+
+test('manual TEST download result remains visible after repaint for success or failure',()=>{
+  const source=readFileSync(new URL('../../dashboard/private-review.js',import.meta.url),'utf8');
+  const render=source.slice(source.indexOf('  function render('),source.indexOf('  async function load('));
+  const manual=source.slice(source.indexOf('  async function exportManualTest('),source.indexOf('  function navigate('));
+  assert.match(render,/function render\(preserveStatus = false\)/);
+  assert.match(render,/if \(!preserveStatus\) status\('No verified photos/);
+  assert.match(render,/if \(!preserveStatus\) status\('Only privately verified photos/);
+  assert.match(manual,/status\('Verified '\+result\.count/);
+  assert.match(manual,/status\('Manual TEST export stopped\./);
+  assert.match(manual,/finally\s*\{\s*if\(active\(gen,wo,token\)\)\{manualBusy=false;selectionStatus\(\);render\(true\);\}/);
+});
