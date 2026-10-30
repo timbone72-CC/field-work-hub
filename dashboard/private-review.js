@@ -65,13 +65,13 @@ const PrivateReview = (() => {
     el('private-review-previous-photo').disabled=entries.length===0||inspectionIndex<=0;
     el('private-review-next-photo').disabled=entries.length===0||inspectionIndex>=entries.length-1;
   }
-  function render() {
+  function render(preserveStatus = false) {
     const list = el('private-review-list'); list.replaceChildren();
     if (entries.length === 0) {
-      status('No verified photos match this exact run/category/stage/decision filter, or private receipts remain pending.');
+      if (!preserveStatus) status('No verified photos match this exact run/category/stage/decision filter, or private receipts remain pending.');
       selectionStatus();return;
     }
-    status('Only privately verified photos are listed here. Nothing is sent to a client from this screen.');
+    if (!preserveStatus) status('Only privately verified photos are listed here. Nothing is sent to a client from this screen.');
     for (const item of entries) {
       const row = document.createElement('article'); row.className = 'private-review-photo';
       const heading = document.createElement('strong');
@@ -375,7 +375,7 @@ const PrivateReview = (() => {
     }catch(error){
       if(active(gen,wo,token))status('Manual TEST export stopped. No delivery status changed. '+error.message,true);
     }finally{
-      if(active(gen,wo,token)){manualBusy=false;selectionStatus();render();}
+      if(active(gen,wo,token)){manualBusy=false;selectionStatus();render(true);}
     }
   }
   function navigate(delta){
