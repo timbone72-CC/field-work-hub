@@ -19,6 +19,8 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 - **Dated handoff preservation:** The October 29 20:11 hosted-parity and earlier read-only takeover snapshots are preserved verbatim in [history part 18](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_18.md); current evidence and continuation above supersede those dated status descriptions.
 
+**2026-10-31 independent Phase 6A/6B Create & Assign continuation (source-only, Level 2):** On existing draft PR #40 after green documentation baseline fa0bf3e9, corrected a misleading confirmed work-order-create outcome in dashboard/app.js. Previously a subsequent list refresh failure reported a confirmed new job as a failed creation and could prompt duplicate submission. The existing server create RPC and assignment semantics are untouched; returned server work-order ID remains confirmed, and a failed subsequent refresh warns not to resubmit. An unconfirmed response preserves the draft and directs the operator to check Work Orders before retrying. New focused tests/dashboard/create-confirmation.test.js covers success, ambiguous outcome and refresh failure. Only dashboard create presentation, its test and this existing record change. No held permit, protected PHOTO-ID diagnostic, Supabase, Drive, Android, FPP or PR merge. **Rollback:** revert to fa0bf3e9; **verify:** focused test plus exact-final-runtime-head CI, deployed UI not updated. Original provider restriction and Level-3 pre-merge gate remain pending.
+
 ### Actual completion and outstanding gates
 
 | Scope | Current precise evidence |

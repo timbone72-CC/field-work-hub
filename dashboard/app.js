@@ -309,6 +309,7 @@ createForm.addEventListener('submit', async (event) => {
   const mode = currentWoNumberMode();
   const rememberMode = rememberWoNumberMode.checked;
 
+  let confirmedCreated = null;
   try {
     const createdRows = await createWorkOrder({
       generateWoNumber: mode === 'auto',
@@ -322,6 +323,7 @@ createForm.addEventListener('submit', async (event) => {
     });
 
     const created = Array.isArray(createdRows) ? createdRows[0] : null;
+    if (created?.work_order_id) confirmedCreated = created;
     if (!created || !created.work_order_id) {
       throw new Error('The server did not return the created work order.');
     }
@@ -336,7 +338,15 @@ createForm.addEventListener('submit', async (event) => {
     fillAssigneeSelect(assigneeSelect, assignableUsers, 'Choose Team user');
     await refreshWorkOrders();
   } catch (error) {
-    setCreateStatus(error instanceof Error ? error.message : 'Unable to create work order.', true);
+    const detail = error instanceof Error ? error.message : 'Unexpected response.';
+    if (confirmedCreated) {
+      // A confirmed create must not become a failed create when list refresh fails.
+      setCreateStatus(
+        `Created and assigned ${confirmedCreated.wo_number}. The job list could not refresh. Check Work Orders; do not submit this job again. ${detail}`, true);
+    } else {
+      // A timeout before the receipt is not proof the server rejected the create.
+      setCreateStatus(`Creation not confirmed. ${detail} Check Work Orders before submitting again to avoid duplicates.`, true);
+    }
   } finally {
     createButton.disabled = false;
   }
