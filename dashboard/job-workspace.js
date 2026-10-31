@@ -399,6 +399,12 @@ const JobWorkspace = (() => {
     }
   }
   function saved() { baseline = fingerprint(); needsReload = true; el('job-reload').hidden = false; }
+  function saveUnverified() {
+    // Never repeat an unconfirmed non-idempotent edit before a new exact read.
+    needsReload = true;
+    el('job-reload').hidden = false;
+    el('job-save-continue').disabled = true;
+  }
   async function reconcileSaved(id) {
     const destination = pending, ownSelection = selection;
     const epoch = adminSessionEpoch, token = accessToken;
@@ -528,5 +534,5 @@ const JobWorkspace = (() => {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   }
   return { init, ensureAccount, request, accept, page, choose, guard, opened, closed, reset, dirty, saved,
-    reconcileSaved, refreshed, selectionSnapshot, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
+    reconcileSaved, refreshed, selectionSnapshot, saveUnverified, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
 })();

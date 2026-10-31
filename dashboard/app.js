@@ -356,6 +356,7 @@ createForm.addEventListener('submit', async (event) => {
 
 editForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (saveEditButton.disabled || editForm.inert) return;
   if (JobWorkspace.needsReload()) { setEditStatus('Reload the latest job before saving again. Your unsaved changes are still here.', true); return; }
   setEditStatus('Saving changes…', false);
   saveEditButton.disabled = true;
@@ -363,6 +364,12 @@ editForm.addEventListener('submit', async (event) => {
   let committed = false;
   let afterSave = null;
   const savedId = editWorkOrderIdInput.value;
+  const startedEpoch = adminSessionEpoch;
+  const startedActor = currentUser?.id, startedOrganization = currentUser?.app_metadata?.organization_id;
+  const stillSaveOwner = () => !!accessToken && adminSessionEpoch === startedEpoch
+    && currentUser?.id === startedActor
+    && currentUser?.app_metadata?.organization_id === startedOrganization
+    && editWorkOrderIdInput.value === savedId;
 
   try {
     const updatedRows = await updateWorkOrder({
@@ -393,11 +400,21 @@ editForm.addEventListener('submit', async (event) => {
       setEditStatus(`Saved ${updated.wo_number}.`, false);
     }
   } catch (error) {
-    if (accessToken) setEditStatus(committed ? (JobWorkspace.needsReload() ? 'Changes saved. Unable to refresh the latest job right now; reload before saving again.' : 'Changes saved. Unable to refresh the job list right now.') : (error instanceof Error ? error.message : 'Unable to update work order.'), true);
+    if (stillSaveOwner()) {
+      if (!committed) JobWorkspace.saveUnverified();
+      const message = committed
+        ? (JobWorkspace.needsReload()
+          ? 'Changes saved. Unable to refresh the latest job right now; reload before saving again.'
+          : 'Changes saved. Unable to refresh the job list right now.')
+        : error?.workOrderConflict
+          ? 'The server rejected this work-order edit because of a conflict. Your unsaved changes remain here. Reload to inspect the latest job before trying again; do not resubmit the same edit.'
+          : 'Work-order save was not confirmed. Your unsaved changes remain here. The server may have received the request. Reload to verify the latest job before trying again; do not resubmit the same edit.';
+      setEditStatus(message, true);
+    }
   } finally {
     saveEditButton.disabled = false;
     editForm.inert = false;
-    if (afterSave && accessToken) afterSave();
+    if (afterSave && stillSaveOwner()) afterSave();
   }
 });
 
@@ -611,7 +628,11 @@ async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workTyp
   });
 
   if (!response.ok) {
-    throw new Error(await readableError(response, 'Unable to update work order.'));
+    const error = new Error(await readableError(response, 'Unable to update work order.'));
+    // HTTP 409 is an explicit rejection. Other failed or missing responses
+    // may have committed remotely, so neither path is safe to blind-retry.
+    error.workOrderConflict = response.status === 409;
+    throw error;
   }
 
   return response.json();
