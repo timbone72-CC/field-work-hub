@@ -7,16 +7,24 @@
 -- list read. Use the existing work_orders.updated_at trigger revision.
 -- Lock the same WO before checking, then delegate to the established
 -- requirements and assignment mutation owners in the same transaction.
+-- Transitional TEST deployment: retain the nine-argument legacy RPC for the
+-- existing published-main dashboard. The ten-argument overload enables the
+-- approved isolated Phase 6 preview. Remove the legacy write surface only
+-- after hosted dashboard parity and distinct signed-in Admin verification.
+-- Rollback of this additive step: drop only the ten-argument public then
+-- private function, preserving the pre-existing nine-argument endpoints.
 do $preflight$
 begin
   if to_regprocedure('private.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb)') is null
      or to_regprocedure('public.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb)') is null
   then raise exception 'Expected Phase 4 Admin edit owner missing; stop upgrade';end if;
+  if to_regprocedure('private.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb,timestamptz)') is not null
+     or to_regprocedure('public.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb,timestamptz)') is not null
+  then raise exception 'Revision-aware Admin edit already exists; stop duplicate upgrade';end if;
 end;
 $preflight$;
 
-drop function public.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb);
-drop function private.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb);
+-- The existing nine-argument functions stay byte-identical during TEST staging.
 
 create function private.admin_update_work_order_v4(
   p_work_order_id uuid,p_wo_number text,p_property_address text,

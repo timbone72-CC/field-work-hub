@@ -9,9 +9,12 @@ declare
  wo uuid; original_updated timestamptz; cfg jsonb;
  req_revision uuid; result jsonb; n integer; denied boolean;
 begin
- if to_regprocedure('public.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb)') is not null
-  or to_regprocedure('private.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb)') is not null
- then raise exception 'Unversioned legacy v4 edit bypass still exposed';end if;
+ if to_regprocedure('public.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb)') is null
+  or to_regprocedure('private.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb)') is null
+ then raise exception 'Published-main Admin edit surface was broken during staged revision rollout';end if;
+ if to_regprocedure('public.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb,timestamptz)') is null
+  or to_regprocedure('private.admin_update_work_order_v4(uuid,text,text,text,text,date,uuid,uuid,jsonb,timestamptz)') is null
+ then raise exception 'Revision-aware Admin edit overload missing';end if;
  perform set_config('request.jwt.claims',jsonb_build_object(
    'sub',admin_id,'session_id',admin_id,'role','authenticated',
    'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
