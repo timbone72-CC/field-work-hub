@@ -233,17 +233,35 @@ const JobWorkspace = (() => {
   }
   async function load(id) {
     const ownSelection = ++selection;
-    const startingEdit = fingerprint();
+    const epoch = adminSessionEpoch, token = accessToken;
+    const actor = currentUser?.id, org = currentUser?.app_metadata?.organization_id;
+    const stillCurrent = () => ownSelection === selection && !!token && accessToken === token
+      && adminSessionEpoch === epoch && currentUser?.id === actor
+      && currentUser?.app_metadata?.organization_id === org;
+    const startingEdit = fingerprint(), initiallyDirty = dirty();
+    // Correction and package drafts are separate from the details fingerprint.
+    // Detect edits made while the async job read is pending, including when a
+    // previous Discard already authorized the old dirty draft.
+    let editedDuringRead = false;
+    const onInteraction = () => { editedDuringRead = true; };
+    for (const type of ['input', 'change', 'click'])
+      editSection.addEventListener(type, onInteraction, true);
     el('job-list-status').textContent = 'Opening job…';
     try {
       const row = await fetchWorkOrder(id);
-      if (ownSelection !== selection || !accessToken) return;
-      if (saveEditButton.disabled) return;
-      const open = () => { if (ownSelection === selection && accessToken) openEditor(id, row); };
-      if (fingerprint() !== startingEdit) guard(open); else open();
-      el('job-list-status').textContent = filterDraftPending ? pendingFiltersMessage() : '';
+      if (!stillCurrent() || saveEditButton.disabled) return;
+      const open = () => { if (stillCurrent() && !saveEditButton.disabled) openEditor(id, row); };
+      if (fingerprint() !== startingEdit || (!initiallyDirty && dirty())
+          || (editedDuringRead && dirty())) guard(open);
+      else open();
+      if (accessToken === token && adminSessionEpoch === epoch
+          && (stillCurrent() || selectedRow?.id === id))
+        el('job-list-status').textContent = filterDraftPending ? pendingFiltersMessage() : '';
     } catch (error) {
-      if (ownSelection === selection && accessToken) el('job-list-status').textContent = error.message;
+      if (stillCurrent()) el('job-list-status').textContent = error.message;
+    } finally {
+      for (const type of ['input', 'change', 'click'])
+        editSection.removeEventListener(type, onInteraction, true);
     }
   }
   function addressContext() {
@@ -302,6 +320,8 @@ const JobWorkspace = (() => {
     addressContext();
   }
   function opened(row) {
+    // A direct editor open/save reload invalidates older in-flight job reads.
+    selection++;
     selectedRow = row; needsReload = false; pending = null; baseline = fingerprint();
     resetRepeatRunChoices(row.id);
     addressLookupEpoch++; addressRows=[];addressTotal=null;addressOffset=0;
@@ -357,8 +377,13 @@ const JobWorkspace = (() => {
   }
   function saved() { baseline = fingerprint(); needsReload = true; el('job-reload').hidden = false; }
   async function reconcileSaved(id) {
-    const destination = pending;
+    const destination = pending, ownSelection = selection;
+    const epoch = adminSessionEpoch, token = accessToken;
+    const actor = currentUser?.id, org = currentUser?.app_metadata?.organization_id;
     const row = await fetchWorkOrder(id);
+    if (!token || accessToken !== token || epoch !== adminSessionEpoch
+        || currentUser?.id !== actor || currentUser?.app_metadata?.organization_id !== org
+        || ownSelection !== selection || selectedRow?.id !== id) return null;
     openEditor(id, row);
     return destination;
   }
