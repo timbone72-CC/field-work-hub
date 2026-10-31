@@ -40,7 +40,7 @@ function createHarness(createResult, refreshFailure = null) {
     createWorkOrder: async () => {
       createCalls++;
       if (createResult instanceof Error) throw createResult;
-      return createResult;
+      return typeof createResult === 'function' ? createResult() : createResult;
     },
     refreshWorkOrders: async () => {
       refreshCalls++;
@@ -84,6 +84,21 @@ test('unconfirmed create response preserves draft and tells user to check before
     assert.match(h.messages.at(-1).message, /Creation not confirmed/);
     assert.match(h.messages.at(-1).message, /Check Work Orders before submitting again/);
   }
+});
+
+test('overlapping submit events are single-flight while a create is pending', async () => {
+  let finish;
+  const inFlight = new Promise(resolve => { finish = resolve; });
+  const h = createHarness(() => inFlight);
+  const first = h.run();
+  await h.run();
+  assert.equal(h.calls.createCalls, 1, 'second submit must not issue another server create');
+  assert.equal(h.calls.refreshCalls, 0);
+  assert.equal(h.button.disabled, true);
+  finish([{ work_order_id: 'server-confirmed', wo_number: 'WO-103' }]);
+  await first;
+  assert.deepEqual(h.calls, { createCalls: 1, refreshCalls: 1, resets: 1 });
+  assert.equal(h.button.disabled, false);
 });
 
 test('confirmed create with successful refresh preserves the normal success flow', async () => {

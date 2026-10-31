@@ -303,6 +303,8 @@ loginForm.addEventListener('submit', async (event) => {
 
 createForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  // Ignore a second Enter/submit event while the first server create is pending.
+  if (createButton.disabled) return;
   setCreateStatus('Creating work order…', false);
   createButton.disabled = true;
 
