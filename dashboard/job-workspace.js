@@ -395,13 +395,27 @@ const JobWorkspace = (() => {
     openEditor(id, row);
     return destination;
   }
-  function refreshed(rows) {
+  // Exact selected identity is captured before a background read. UUID alone
+  // is not enough: a job can be closed and reopened while that read is pending.
+  function selectionSnapshot() {
+    return selectedRow && editSection.open ? { id: selectedRow.id, selection } : null;
+  }
+  function refreshed(rows, checkedSelection = null) {
     page(rows);
-    const row = rows.find(item => item.id === selectedRow?.id);
-    if (row && JSON.stringify(row) !== JSON.stringify(selectedRow)) {
-      setEditStatus('This job changed on the server. Your edits were kept. Reload before making further changes.', false);
+    const current = selectionSnapshot();
+    if (!current) return;
+    const pageRow = rows.find(item => item.id === current.id);
+    const checked = checkedSelection?.id === current.id
+      && checkedSelection.selection === current.selection ? checkedSelection : null;
+    const row = pageRow || checked?.row || null;
+    if (checked?.unavailable && !pageRow) {
       needsReload = true;
       el('job-reload').hidden = false;
+      setEditStatus('Unable to verify this selected work order. Your edits were kept. Reload to check access and current details before saving.', true);
+    } else if (row && JSON.stringify(row) !== JSON.stringify(selectedRow)) {
+      needsReload = true;
+      el('job-reload').hidden = false;
+      setEditStatus('This job changed on the server. Your edits were kept. Reload before making further changes.', false);
     }
   }
 
@@ -493,5 +507,5 @@ const JobWorkspace = (() => {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   }
   return { init, ensureAccount, request, accept, page, choose, guard, opened, closed, reset, dirty, saved,
-    reconcileSaved, refreshed, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
+    reconcileSaved, refreshed, selectionSnapshot, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
 })();

@@ -59,6 +59,8 @@ async function refreshAdminViewAutomatically() {
   const epoch = adminSessionEpoch;
   const writeRevision = adminWriteRevision;
   const organizationId = currentUser.app_metadata.organization_id;
+  const actorId = currentUser.id, sessionToken = accessToken;
+  const selected = typeof JobWorkspace !== 'undefined' ? JobWorkspace.selectionSnapshot() : null;
 
   try {
     const [rows, users, summary, invitations] = await Promise.all([
@@ -66,9 +68,27 @@ async function refreshAdminViewAutomatically() {
       fetchContractorSeatSummary(), fetchPendingContractorInvitations()
     ]);
     if (epoch !== adminSessionEpoch || writeRevision !== adminWriteRevision
-        || adminWritesPending || !adminAutoRefreshAllowed()) return;
+        || adminWritesPending || accessToken !== sessionToken
+        || currentUser?.id !== actorId
+        || currentUser?.app_metadata?.organization_id !== organizationId
+        || !adminAutoRefreshAllowed()) return;
     verifyAdminRls(rows, organizationId);
     if (!Array.isArray(users)) throw new Error('Unexpected Contractor response.');
+
+    // The current bounded page may omit the open job after a filter/status
+    // change. Verify that specific UUID through the existing RLS-protected
+    // read; a failure is uncertainty, not evidence that the job was deleted.
+    let selectedCheck = null;
+    if (selected && !rows.some(row => row.id === selected.id)) {
+      selectedCheck = { id: selected.id, selection: selected.selection };
+      try { selectedCheck.row = await fetchWorkOrder(selected.id); }
+      catch { selectedCheck.unavailable = true; }
+      if (epoch !== adminSessionEpoch || writeRevision !== adminWriteRevision
+          || adminWritesPending || accessToken !== sessionToken
+          || currentUser?.id !== actorId
+          || currentUser?.app_metadata?.organization_id !== organizationId
+          || !adminAutoRefreshAllowed()) return;
+    }
 
     if (typeof JobWorkspace !== 'undefined') JobWorkspace.accept(rows.page);
     const usersChanged = JSON.stringify(users) !== JSON.stringify(assignableUsers);
@@ -80,7 +100,7 @@ async function refreshAdminViewAutomatically() {
 
     if (typeof JobWorkspace !== 'undefined') {
       JobWorkspace.populateContractors(users);
-      JobWorkspace.refreshed(rows);
+      JobWorkspace.refreshed(rows, selectedCheck);
     }
     if (changed) {
       if (usersChanged) preserveAdminAssigneeSelection(assigneeSelect, users);

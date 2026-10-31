@@ -101,6 +101,56 @@ test('receipt changes appear without resetting inputs, selections or scroll', as
   assert.equal(f.context.window.scrollY, 250); assert.ok(f.calls.messages.some(x => x.includes('unsaved edits')));
 });
 
+test('selected off-page job receives one exact-ID refresh check without discarding list',async()=>{
+  const f=fixture();const checks=[];let checkedId=null;
+  f.get('editor').open=true;
+  f.context.JobWorkspace={
+    selectionSnapshot:()=>({id:'off-page-work-order',selection:4}),
+    accept(){},populateContractors(){},
+    refreshed(_rows,result){checks.push(result);}
+  };
+  f.context.fetchWorkOrder=async id=>{checkedId=id;return {id,organization_id:'test-org',instructions:'new server details'};};
+  await f.run('refreshAdminViewAutomatically()');
+  assert.equal(checkedId,'off-page-work-order');
+  assert.equal(checks.length,1);
+  assert.equal(checks[0].id,'off-page-work-order');
+  assert.equal(checks[0].selection,4);
+  assert.equal(checks[0].row.instructions,'new server details');
+  assert.equal(f.context.workOrderRows.length,3);
+});
+test('unavailable off-page job verification stays uncertain and does not discard list',async()=>{
+  const f=fixture();let checked;
+  f.context.JobWorkspace={
+    selectionSnapshot:()=>({id:'unavailable-job',selection:7}),
+    accept(){},populateContractors(){},
+    refreshed(_rows,result){checked=result;}
+  };
+  f.context.fetchWorkOrder=async()=>{throw Error('No access or temporary network fault');};
+  await f.run('refreshAdminViewAutomatically()');
+  assert.equal(checked.unavailable,true);
+  assert.equal(checked.id,'unavailable-job');
+  assert.equal(f.context.workOrderRows.length,3);
+  assert.equal(f.calls.render,0);
+});
+test('off-page detail read from a previous account cannot update current job state',async()=>{
+  const f=fixture();const pending=deferred(),checks=[];
+  f.context.JobWorkspace={
+    selectionSnapshot:()=>({id:'off-page-job',selection:2}),
+    accept(){},populateContractors(){},
+    refreshed(_rows,result){checks.push(result);}
+  };
+  f.context.fetchWorkOrder=async()=>pending.promise;
+  const task=f.run('refreshAdminViewAutomatically()');
+  // The read begins after the first Promise.all settles; give it one microtask.
+  for(let i=0;i<5;i++)await Promise.resolve();
+  f.context.accessToken='another-token';
+  f.context.currentUser={...user,id:'other-admin'};
+  pending.resolve({id:'off-page-job'});
+  await task;
+  assert.equal(checks.length,0);
+  assert.equal(f.calls.render,0);
+});
+
 test('keeps the selected Contractor when options change, including an unavailable selection', async () => {
   const f = fixture(); f.context.fetchAssignableUsers = async () => [];
   await f.run('refreshAdminViewAutomatically()');
