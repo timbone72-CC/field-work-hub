@@ -87,6 +87,7 @@ jobs:
           python3 -m pip install 'psycopg[binary]==3.2.10'
           python3 tests/supabase/phase_3_lock_races.py
           python3 tests/supabase/phase_4_lock_races.py
+          python3 tests/supabase/phase_6_admin_work_order_cas_races.py
           python3 tests/supabase/phase_5_bootstrap_races.py
           python3 tests/supabase/phase_5_recovery_races.py
           python3 tests/supabase/phase_6_historical_handoff_races.py
