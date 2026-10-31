@@ -111,6 +111,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports.JobResultNav
 const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
+  let filterReadFailed = false;
   let returnFocusId = null, addressLookupEpoch=0, addressRows=[], addressTotal=null, addressOffset=0;
   const el = id => document.getElementById(id);
   const JOB_VIEW_STORAGE_KEY = () => `fwh.jobView.${account}`;
@@ -151,6 +152,7 @@ const JobWorkspace = (() => {
   function reset() {
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
+    filterReadFailed = false;
     resetRepeatRunChoices();
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
@@ -159,15 +161,18 @@ const JobWorkspace = (() => {
   function accept(page) {
     if (page?.revision !== undefined && page.revision !== revision) throw new Error('The job view changed.');
   }
-  function page(rows) {
-    accept(rows.page);
+  function setPageControls(rows) {
     const info = rows.page || { offset: state.offset, total: null };
     el('job-page-info').textContent = rows.length
       ? `${info.offset + 1}–${info.offset + rows.length}${info.total === null ? ' (total unavailable)' : ` of ${info.total}`} jobs`
       : `No jobs on this page${info.total ? ` (${info.total} match; choose Previous)` : ''}.`;
     el('job-page-previous').disabled = state.offset === 0;
     el('job-page-next').disabled = info.total === null ? rows.length < state.size : state.offset + rows.length >= info.total;
-    el('job-list-status').textContent = '';
+  }
+  function page(rows) {
+    accept(rows.page);
+    setPageControls(rows);
+    if (!filterReadFailed) el('job-list-status').textContent = '';
     navigation();
   }
   async function change(offset, keepResultFilters=false) {
@@ -178,19 +183,24 @@ const JobWorkspace = (() => {
         status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
         contractor:el('job-contractor').value,dueDate:el('job-due-date').value, offset };
     revision++;
-    try { localStorage.setItem(JOB_VIEW_STORAGE_KEY(), JSON.stringify(JobViewRules.normalize(state))); } catch { /* Optional preference. */ }
+    filterReadFailed = false;
     const ownRevision = revision;
     el('job-list-status').textContent = 'Loading jobs…';
     el('job-page-previous').disabled = true; el('job-page-next').disabled = true;
     try {
       await refreshWorkOrders();
-      return ownRevision===revision;
+      if (ownRevision!==revision) return false;
+      // Persist only after accepting the matching server page.
+      try { localStorage.setItem(JOB_VIEW_STORAGE_KEY(), JSON.stringify(JobViewRules.normalize(state))); } catch { /* Optional preference. */ }
+      return true;
     } catch (error) {
       if (ownRevision===revision && accessToken) {
         // A failed page read cannot silently change the active result-set
         // offset while the selected job still belongs to the old page.
         state=previous;revision++;
-        el('job-list-status').textContent = `${error.message} Showing the last received page. Apply to retry.`;
+        filterReadFailed = true;
+        setPageControls(workOrderRows);
+        el('job-list-status').textContent = `${error.message} Filters were not applied; showing the last received results. Apply to retry.`;
         navigation();
       }
       return false;
