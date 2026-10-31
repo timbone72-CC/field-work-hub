@@ -19,7 +19,7 @@ function rig() {
  };
  vm.createContext(context);
  vm.runInContext(source.slice(start,end)+
-   '\\nglobalThis.refresh=refreshed;globalThis.snapshot=selectionSnapshot;'+
+   '\nglobalThis.refresh=refreshed;globalThis.snapshot=selectionSnapshot;'+
    'globalThis.readState=()=>({needsReload,selectedRow});',context);
  return {context,old,status,fields};
 }

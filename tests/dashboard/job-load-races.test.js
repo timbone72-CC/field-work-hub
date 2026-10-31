@@ -11,7 +11,7 @@ function section(begin,end) {
  return source.slice(a,b);
 }
 const loadSource=section('  async function load(id) {','  function addressContext() {');
-const reconSource=section('  async function reconcileSaved(id) {','  function refreshed(rows) {');
+const reconSource=section('  async function reconcileSaved(id) {','  // Exact selected identity is captured before a background read.');
 function rig({initiallyDirty=false}={}) {
  let resolveRead, rejectRead, dirtyFlag=initiallyDirty, fingerprint='original';
  let selection=0, actor='admin-one', org='org-one', token='token-one', epoch=2;
