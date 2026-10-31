@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const JobViewRules = require('../../dashboard/job-workspace.js');
 const source = fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
-const a = source.indexOf('  function setPageControls(rows) {');
+const a = source.indexOf('  function pendingFiltersMessage() {');
 const b = source.indexOf('  function guard(action) {',a);
 assert.ok(a>0 && b>a);
 const code = source.slice(a,b);
