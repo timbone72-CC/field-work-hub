@@ -15,11 +15,12 @@ const reconSource=section('  async function reconcileSaved(id) {','  // Exact se
 function rig({initiallyDirty=false}={}) {
  let resolveRead, rejectRead, dirtyFlag=initiallyDirty, fingerprint='original';
  let selection=0, actor='admin-one', org='org-one', token='token-one', epoch=2;
- const actions=[], guards=[], listeners=new Map();
+ const actions=[], guards=[], listeners=new Map(), statuses=[];
  const pending=new Promise((resolve,reject)=>{resolveRead=resolve;rejectRead=reject;});
  const controls={'job-list-status':{textContent:''}};
  const context={
    editSection:{
+     open:true,
      addEventListener(type,fn){listeners.set(type,fn);},
      removeEventListener(type,fn){if(listeners.get(type)===fn)listeners.delete(type);}
    },
@@ -27,6 +28,7 @@ function rig({initiallyDirty=false}={}) {
    el:id=>controls[id]||(controls[id]={textContent:''}),
    fingerprint:()=>fingerprint,dirty:()=>dirtyFlag,
    guard:fn=>guards.push(fn),
+   setEditStatus:(message,isError)=>statuses.push({message,isError}),
    fetchWorkOrder:async()=>pending,
    openEditor:(id,row)=>actions.push({id,row}),
    pendingFiltersMessage:()=> 'Unapplied filters',
@@ -38,7 +40,7 @@ function rig({initiallyDirty=false}={}) {
    'let adminSessionEpoch=2, accessToken="token-one";',
    'let currentUser={id:"admin-one",app_metadata:{organization_id:"org-one"}};',
    'let selectedRow={id:"job-original"};',
-   'let pending=null;',
+   'let pending=null,needsReload=true;',
    loadSource,reconSource,
    'globalThis.loadJob=load;globalThis.reconcileJob=reconcileSaved;',
    'globalThis.setSelection=v=>selection=v;',
@@ -46,7 +48,7 @@ function rig({initiallyDirty=false}={}) {
    'globalThis.setSelected=id=>{selectedRow={id};};'
  ].join('\n'),context);
  return {
-   ctx:context,actions,guards,listeners,controls,
+   ctx:context,actions,guards,listeners,controls,statuses,
    finish:(value={id:'job-next'})=>resolveRead(value),
    fail:error=>rejectRead(error),setDirty:v=>{dirtyFlag=v;},
    editDraft:()=>{dirtyFlag=true;listeners.get('input')?.();},
@@ -141,6 +143,26 @@ test('post-save reread on same account and selection preserves pending destinati
  assert.deepEqual(h.actions.map(x=>x.id),['job-original']);
 });
 
+test('failed selected reload keeps draft and stale-save barrier without opening editor',async()=>{
+ const h=rig({initiallyDirty:true});
+ h.controls['job-reload']={hidden:false};
+ const task=h.ctx.loadJob('job-original');h.fail(Error('Network failed'));await task;
+ assert.equal(h.actions.length,0);
+ assert.equal(h.controls['job-reload'].hidden,false);
+ assert.equal(h.controls['job-save-continue'].disabled,true);
+ assert.match(h.statuses.at(-1).message,/Unable to reload/);
+ assert.match(h.statuses.at(-1).message,/unsaved changes are still here/);
+ assert.equal(h.statuses.at(-1).isError,true);
+ assert.equal(h.listeners.size,0);
+});
+test('failed prior-account reload cannot show old account error',async()=>{
+ const h=rig({initiallyDirty:true});
+ const task=h.ctx.loadJob('job-original');
+ h.ctx.setSession(3,'other-token','other-admin','other-org');
+ h.fail(Error('Old-account error'));await task;
+ assert.equal(h.statuses.length,0);
+ assert.equal(h.actions.length,0);
+});
 test('existing opened workspace and saved-reload use one selection owner',()=>{
  assert.match(source,/function opened\(row\) \{\s*\/\/ A direct editor open\/save reload invalidates older in-flight job reads\.\s*selection\+\+;/);
  assert.match(reconSource,/selectedRow\?\.id !== id/);

@@ -225,7 +225,11 @@ const JobWorkspace = (() => {
   function guard(action) {
     if (saveEditButton.disabled) return;
     if (!dirty()) { action(); return; }
-    pending = action; el('job-unsaved').hidden = false; el('job-stay').focus();
+    pending = action;
+    // A stale server revision cannot safely accept Save and continue.
+    el('job-save-continue').disabled = needsReload;
+    el('job-unsaved').hidden = false;
+    el('job-stay').focus();
   }
   async function choose(id) {
     if (!selectedRow) returnFocusId=id;
@@ -258,7 +262,16 @@ const JobWorkspace = (() => {
           && (stillCurrent() || selectedRow?.id === id))
         el('job-list-status').textContent = filterDraftPending ? pendingFiltersMessage() : '';
     } catch (error) {
-      if (stillCurrent()) el('job-list-status').textContent = error.message;
+      if (stillCurrent()) {
+        el('job-list-status').textContent = error instanceof Error ? error.message : 'Unable to open work order.';
+        if (selectedRow?.id === id && editSection.open) {
+          // A failed read never replaces local draft state or clears the stale gate.
+          needsReload = true;
+          el('job-reload').hidden = false;
+          el('job-save-continue').disabled = true;
+          setEditStatus('Unable to reload this work order. Your unsaved changes are still here. Reload again before saving.', true);
+        }
+      }
     } finally {
       for (const type of ['input', 'change', 'click'])
         editSection.removeEventListener(type, onInteraction, true);
@@ -334,6 +347,7 @@ const JobWorkspace = (() => {
     resetRepeatRunChoices(row.id);
     addressLookupEpoch++; addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
+    el('job-save-continue').disabled = false;
     el('edit-heading').textContent = row.wo_number;
     el('job-address').textContent = row.property_address;
     el('job-facts').textContent = `${row.work_type} · ${row.field_status.replaceAll('_', ' ')} · Due ${row.due_date}`;
@@ -374,6 +388,7 @@ const JobWorkspace = (() => {
     resetRepeatRunChoices();
     addressLookupEpoch++;addressRows=[];addressTotal=null;addressOffset=0;
     el('job-unsaved').hidden = true;
+    el('job-save-continue').disabled = false;
     if (editSection.open) editSection.close();
     const id=returnFocusId;
     returnFocusId=null;
@@ -411,10 +426,12 @@ const JobWorkspace = (() => {
     if (checked?.unavailable && !pageRow) {
       needsReload = true;
       el('job-reload').hidden = false;
+      el('job-save-continue').disabled = true;
       setEditStatus('Unable to verify this selected work order. Your edits were kept. Reload to check access and current details before saving.', true);
     } else if (row && JSON.stringify(row) !== JSON.stringify(selectedRow)) {
       needsReload = true;
       el('job-reload').hidden = false;
+      el('job-save-continue').disabled = true;
       setEditStatus('This job changed on the server. Your edits were kept. Reload before making further changes.', false);
     }
   }
@@ -487,6 +504,10 @@ const JobWorkspace = (() => {
     el('job-stay').addEventListener('click', () => { pending = null; el('job-unsaved').hidden = true; });
     el('job-discard').addEventListener('click', () => { const action = pending; pending = null; el('job-unsaved').hidden = true; if (action) action(); });
     el('job-save-continue').addEventListener('click', async () => {
+      if (needsReload) {
+        setEditStatus('Reload the latest work order before saving. Your unsaved edits are still here.', true);
+        return;
+      }
       if (CorrectionDraft.dirty()) {
         const saved=await CorrectionDraft.save();
         if (!saved) { setEditStatus('Correction draft is not saved. Stay on this job to resolve.',true);return; }
