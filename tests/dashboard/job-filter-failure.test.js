@@ -28,11 +28,11 @@ function rig() {
  vm.createContext(ctx);
  vm.runInContext([
  'let state={size:25,sort:"created_at.desc",status:"ASSIGNED",offset:25,search:"old",searchField:"property_address",contractor:"",dueDate:""};',
- 'let revision=0,filterReadFailed=false;',
+ 'let revision=0,filterReadFailed=false,filterDraftPending=false;',
  'const JOB_VIEW_STORAGE_KEY=()=>"fixture";',
  code,
  'globalThis.apply=change;globalThis.refreshPage=page;',
- 'globalThis.info=()=>({state:{...state},filterReadFailed});'
+ 'globalThis.info=()=>({state:{...state},filterReadFailed,filterDraftPending});'
  ].join('\n'),ctx);
  return {ctx,fields,writes,rows};
 }
@@ -67,4 +67,32 @@ test('explicit successful retry persists the now-confirmed preferences only',asy
  assert.equal(saved.size,50);
  assert.equal(saved.sort,'due_date.asc');
  assert.equal(saved.status,'FIELD_COMPLETE');
+});
+
+test('pager navigates confirmed result filters without applying a failed filter draft',async()=>{
+ const f=rig();
+ await f.ctx.apply(0);
+ assert.equal(f.ctx.info().filterDraftPending,true);
+ let requested;
+ f.ctx.refreshWorkOrders=async()=>{
+   requested=f.ctx.info().state;
+   const page=Array.from({length:25},(_,i)=>({id:'next-'+i}));
+   page.page={offset:50,total:75,revision:2};
+   f.ctx.refreshPage(page);
+ };
+ assert.equal(await f.ctx.apply(50,true),true);
+ assert.equal(requested.offset,50);
+ assert.equal(requested.status,'ASSIGNED','confirmed filter remains authoritative');
+ assert.equal(requested.size,25);
+ assert.equal(f.fields['job-status'].value,'FIELD_COMPLETE','unapplied draft stays in controls');
+ assert.equal(f.ctx.info().filterDraftPending,true);
+ assert.match(f.fields['job-list-status'].textContent,/Filter changes have not been applied/);
+ const saved=JSON.parse(f.writes.at(-1)[1]);
+ assert.equal(saved.status,'ASSIGNED','pager cannot persist unconfirmed draft');
+});
+test('page controls use confirmed filter state and job opening preserves pending warning',()=>{
+ const source=fs.readFileSync(require.resolve('../../dashboard/job-workspace.js'),'utf8');
+ assert.match(source,/job-page-previous'\)\.addEventListener\('click', \(\) => change\(Math\.max\(0, state\.offset - state\.size\), true\)\)/);
+ assert.match(source,/job-page-next'\)\.addEventListener\('click', \(\) => change\(state\.offset \+ state\.size, true\)\)/);
+ assert.match(source,/filterDraftPending \? pendingFiltersMessage\(\) : ''/);
 });

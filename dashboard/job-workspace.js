@@ -112,6 +112,7 @@ const JobWorkspace = (() => {
   let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
   let filterReadFailed = false;
+  let filterDraftPending = false;
   let returnFocusId = null, addressLookupEpoch=0, addressRows=[], addressTotal=null, addressOffset=0;
   const el = id => document.getElementById(id);
   const JOB_VIEW_STORAGE_KEY = () => `fwh.jobView.${account}`;
@@ -153,6 +154,7 @@ const JobWorkspace = (() => {
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     filterReadFailed = false;
+    filterDraftPending = false;
     resetRepeatRunChoices();
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
     state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
@@ -160,6 +162,9 @@ const JobWorkspace = (() => {
   function request() { return { ...state, revision }; }
   function accept(page) {
     if (page?.revision !== undefined && page.revision !== revision) throw new Error('The job view changed.');
+  }
+  function pendingFiltersMessage() {
+    return 'Filter changes have not been applied. Current jobs use the last confirmed filters. Select Apply to update them.';
   }
   function setPageControls(rows) {
     const info = rows.page || { offset: state.offset, total: null };
@@ -178,6 +183,8 @@ const JobWorkspace = (() => {
   async function change(offset, keepResultFilters=false) {
     if (adminWritesPending || saveEditButton.disabled) return false;
     const previous=state;
+    const hadPendingFilters = filterDraftPending;
+    if (!keepResultFilters) filterDraftPending = false;
     state = keepResultFilters ? {...state,offset} :
       { ...state, size: Number(el('job-page-size').value), sort: el('job-sort').value,
         status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
@@ -190,6 +197,12 @@ const JobWorkspace = (() => {
     try {
       await refreshWorkOrders();
       if (ownRevision!==revision) return false;
+      if (keepResultFilters && hadPendingFilters) {
+        // Paging the confirmed result set must not imply that draft filters applied.
+        filterDraftPending = true;
+        filterReadFailed = true;
+        el('job-list-status').textContent = pendingFiltersMessage();
+      }
       // Persist only after accepting the matching server page.
       try { localStorage.setItem(JOB_VIEW_STORAGE_KEY(), JSON.stringify(JobViewRules.normalize(state))); } catch { /* Optional preference. */ }
       return true;
@@ -198,9 +211,12 @@ const JobWorkspace = (() => {
         // A failed page read cannot silently change the active result-set
         // offset while the selected job still belongs to the old page.
         state=previous;revision++;
+        filterDraftPending = !keepResultFilters || hadPendingFilters;
         filterReadFailed = true;
         setPageControls(workOrderRows);
-        el('job-list-status').textContent = `${error.message} Filters were not applied; showing the last received results. Apply to retry.`;
+        el('job-list-status').textContent = keepResultFilters
+          ? `${error.message} Page was not loaded; showing the last received results. ${filterDraftPending ? pendingFiltersMessage() : 'Retry page navigation.'}`
+          : `${error.message} Filters were not applied; showing the last received results. Apply to retry.`;
         navigation();
       }
       return false;
@@ -225,7 +241,7 @@ const JobWorkspace = (() => {
       if (saveEditButton.disabled) return;
       const open = () => { if (ownSelection === selection && accessToken) openEditor(id, row); };
       if (fingerprint() !== startingEdit) guard(open); else open();
-      el('job-list-status').textContent = '';
+      el('job-list-status').textContent = filterDraftPending ? pendingFiltersMessage() : '';
     } catch (error) {
       if (ownSelection === selection && accessToken) el('job-list-status').textContent = error.message;
     }
@@ -414,8 +430,8 @@ const JobWorkspace = (() => {
       el('job-page-size').value=25;
       change(0);
     });
-    el('job-page-previous').addEventListener('click', () => change(Math.max(0, state.offset - state.size)));
-    el('job-page-next').addEventListener('click', () => change(state.offset + state.size));
+    el('job-page-previous').addEventListener('click', () => change(Math.max(0, state.offset - state.size), true));
+    el('job-page-next').addEventListener('click', () => change(state.offset + state.size, true));
     for (const [id, delta] of [['job-previous', -1], ['job-next', 1]])
       el(id).addEventListener('click', () => move(delta));
     document.querySelectorAll('[data-job-tab]').forEach(button => button.addEventListener('click', () => tab(button.dataset.jobTab)));
