@@ -3,7 +3,15 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## Current evidence checklist — refreshed 2026-10-30 CDT
+## Current evidence checklist — refreshed 2026-10-31 CDT
+
+### 2026-10-31 10:10 CDT — live read-only continuation / no provider action
+
+- **GitHub:** draft PR #40 on `feat/phase-5-6-dashboard-workflow` at pre-note source `4fd8884ffcad221df8801637ebdaa8d26d34b192`, following the accepted manual Drive transfer. Exact-head Admin Dashboard Gate `41213288401`, FWH Database Gate `41213288397` and Android Team Client CI `41213288383` all **SUCCESS**. This checkpoint only changes this record; no new runtime test or physical test is claimed.
+- **Live FWH Team TEST (independently read-only):** 121 installed migrations; `client-delivery` v54 ACTIVE. SQL counts: **1** dispatch-permit row, **1** DELIVERING outbox, **1** UPLOADING session, **0** VERIFIED PHOTO file plans and **0** final delivery receipts. No original Google PHOTO-ID metadata or media observation was made.
+- **Security readback:** advisors still report **74 INFO** private-table RLS/no-policy, **36 WARN** authenticated-executable security-definer RPC, **1 WARN** Auth leaked-password protection. Examined private delivery/owner tables have no anon/authenticated CRUD; `private.supervisor_assignment_actions` still lacks RLS but has no direct anon/authenticated CRUD. This is targeted read-only inventory, **not** an end-to-end privilege PASS or approval to alter grants.
+- **Priority:** The separate manual TEST ZIP → Drive transfer is already **PASS**; do not repeat. The **automatic original-ID diagnostic remains restricted**: no worker invocation, retry, new ID, session/marker/permit reset, Send, receipt, cleanup, deployment bypass or PR merge. Continue automatic provider reconciliation only after legitimate clearance of the existing deployment/diagnostic restriction; then require the original exact-ID read-only evidence before any continuation decision. Wider roles/notification/email/device and premerge gates remain PENDING. FPP unchanged.
+
 
 ### Ownership and verified source
 
