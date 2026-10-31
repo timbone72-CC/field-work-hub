@@ -99,7 +99,8 @@ begin
   if not private.can_work_order(wo) then raise exception 'Receiving office cannot manage completed work';end if;
   perform public.admin_update_work_order_v4(wo,before_wo->>'wo_number',before_wo->>'property_address',
     before_wo->>'work_type',coalesce(before_wo->>'instructions',''),current_date,contractor,
-    (before_run->'requirement_snapshot'->>'revision')::uuid,before_run->'requirement_snapshot');
+    (before_run->'requirement_snapshot'->>'revision')::uuid,before_run->'requirement_snapshot',
+    (select updated_at from public.work_orders where id=wo));
   -- Original contractor retains completed assignment read and accepted original transfer, never new work.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',contractor,'session_id',contractor,
     'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
