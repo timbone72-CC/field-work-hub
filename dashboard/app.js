@@ -381,7 +381,8 @@ editForm.addEventListener('submit', async (event) => {
       dueDate: editDueDateInput.value,
       assignedUserId: editAssigneeSelect.value,
       requirements: editPhotos.snapshot(),
-      expectedRevision: editPhotos.expectedRevision
+      expectedRevision: editPhotos.expectedRevision,
+      expectedWorkOrderUpdatedAt: JobWorkspace.selectedUpdatedAt()
     });
 
     const updated = Array.isArray(updatedRows) ? updatedRows[0] : null;
@@ -502,6 +503,7 @@ async function fetchWorkOrders() {
     'instructions',
     'due_date',
     'field_status',
+    'updated_at',
     'created_at',
     'current_run_id',
     'run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot,assignment:work_order_assignments!work_order_assignments_run_id_fkey(assigned_user_id,assignment_received_at,acknowledgment_received_at,assignment_ended_at))'
@@ -561,7 +563,7 @@ async function fetchAddressWorkOrders(row,offset=0) {
 async function fetchWorkOrder(id) {
   requireAccessToken();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid job identity.');
-  const select = 'id,organization_id,client_company_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot,assignment:work_order_assignments!work_order_assignments_run_id_fkey(assigned_user_id,assignment_received_at,acknowledgment_received_at,assignment_ended_at))';
+  const select = 'id,organization_id,client_company_id,assigned_user_id,pending_assignee_user_id,reassignment_requested_at,assignment_received_at,wo_number,property_address,work_type,instructions,due_date,field_status,updated_at,created_at,current_run_id,run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot,assignment:work_order_assignments!work_order_assignments_run_id_fkey(assigned_user_id,assignment_received_at,acknowledgment_received_at,assignment_ended_at))';
   const response = await adminFetch(`${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&id=eq.${id}&limit=1`, { headers: authHeaders() });
   if (!response.ok) throw new Error(await readableError(response, 'Unable to open this job.'));
   const rows = await response.json();
@@ -609,7 +611,7 @@ async function createWorkOrder({ generateWoNumber, woNumber, propertyAddress, wo
   return response.json();
 }
 
-async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId, requirements, expectedRevision }) {
+async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId, requirements, expectedRevision, expectedWorkOrderUpdatedAt }) {
   requireAccessToken();
   const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_update_work_order_v4`, {
     method: 'POST',
@@ -623,7 +625,8 @@ async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workTyp
       p_due_date: dueDate,
       p_assigned_user_id: assignedUserId,
       p_requirements: requirements,
-      p_expected_revision: expectedRevision
+      p_expected_revision: expectedRevision,
+      p_expected_updated_at: expectedWorkOrderUpdatedAt
     })
   });
 

@@ -534,5 +534,5 @@ const JobWorkspace = (() => {
     window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   }
   return { init, ensureAccount, request, accept, page, choose, guard, opened, closed, reset, dirty, saved,
-    reconcileSaved, refreshed, selectionSnapshot, saveUnverified, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
+    reconcileSaved, refreshed, selectionSnapshot, saveUnverified, selectedUpdatedAt: () => selectedRow?.updated_at ?? null, populateContractors, detailsDirty, dirty, needsReload: () => needsReload };
 })();

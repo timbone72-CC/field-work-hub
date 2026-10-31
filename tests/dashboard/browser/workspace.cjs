@@ -69,7 +69,7 @@ const rows = Array.from({ length: 1000 }, (_, i) => ({ id: uuid(i + 1), organiza
   assignment_received_at: null, wo_number: `DEMO-${String(i + 1).padStart(4, '0')}`,
   property_address: i < 50 ? '100 Example Street, Unit A' : `${i + 100} Example Street`, work_type: 'Property inspection',
   instructions: 'Record the requested inspection photos.', due_date: '2026-10-15', field_status: 'ASSIGNED',
-  created_at: '2026-10-01T12:00:00Z', current_run_id: null, run: null }));
+  created_at: '2026-10-01T12:00:00Z', updated_at:'2026-10-01T12:00:00.000000Z', current_run_id: null, run: null }));
 const requests = [], saves = [], errors = [];
 const wait = async (page, condition) => page.waitForFunction(condition);
 (async () => {
@@ -840,9 +840,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         const payload = req.postDataJSON(); saves.push(payload);
         if (failSave) return reply({ message: 'Controlled save failure' }, 409);
         const row = rows.find(r => r.id === payload.p_work_order_id);
+        assert.equal(payload.p_expected_updated_at,row.updated_at,
+          'Admin edit must send exact selected work-order server revision');
         Object.assign(row, { property_address: payload.p_property_address, instructions: payload.p_instructions,
           wo_number: payload.p_wo_number, assigned_user_id: payload.p_assigned_user_id, due_date: payload.p_due_date,
-          work_type: payload.p_work_type, run: { requirement_snapshot: payload.p_requirements } });
+          work_type: payload.p_work_type, updated_at:'2026-10-11T12:00:00.000000Z', run: { requirement_snapshot: payload.p_requirements } });
         return reply([{ work_order_id: row.id, wo_number: row.wo_number, pending_assignee_user_id: null }]);
       }
       if (url.pathname === '/rest/v1/work_orders') {

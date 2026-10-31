@@ -19,7 +19,7 @@ function rig(result) {
  const saveButton={disabled:false},editForm={inert:false,addEventListener(type,fn){assert.equal(type,'submit');callback=fn;}};
  const currentUser={id:'admin-a',app_metadata:{organization_id:'org-a'}};
  const job={stale:false,needsReload(){return this.stale;},saveUnverified(){this.stale=true;uncertain++;},
-   saved(){this.stale=true;},async reconcileSaved(){reloads++;return ()=>{continued++;};}};
+   saved(){this.stale=true;},selectedUpdatedAt(){return '2026-10-01T12:00:00Z';},async reconcileSaved(){reloads++;return ()=>{continued++;};}};
  const ctx={editForm,saveEditButton:saveButton,JobWorkspace:job,adminSessionEpoch:1,
   currentUser,accessToken:'token-a',editWorkOrderIdInput:{value:'job-a'},
   editWoNumberInput:{value:' WO '},editPropertyAddressInput:{value:' ROAD '},
@@ -42,6 +42,7 @@ test('409 conflict preserves unsaved edit and blocks duplicate submit until relo
  const h=rig(conflict());await h.run();
  assert.equal(h.calls.calls,1);assert.equal(h.job.stale,true);
  assert.equal(h.ctx.editInstructionsInput.value,'DRAFT');
+ assert.equal(h.writes[0].expectedWorkOrderUpdatedAt,'2026-10-01T12:00:00Z');
  assert.match(h.notices.at(-1).message,/server rejected.*conflict/i);
  assert.match(h.notices.at(-1).message,/do not resubmit/);
  await h.run();assert.equal(h.calls.calls,1);
