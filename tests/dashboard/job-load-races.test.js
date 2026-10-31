@@ -38,6 +38,7 @@ function rig({initiallyDirty=false}={}) {
    'let adminSessionEpoch=2, accessToken="token-one";',
    'let currentUser={id:"admin-one",app_metadata:{organization_id:"org-one"}};',
    'let selectedRow={id:"job-original"};',
+   'let pending=null;',
    loadSource,reconSource,
    'globalThis.loadJob=load;globalThis.reconcileJob=reconcileSaved;',
    'globalThis.setSelection=v=>selection=v;',
@@ -129,6 +130,15 @@ test('post-save reread cannot reopen a job after account or selected UUID change
    assert.equal(result,null);
    assert.equal(h.actions.length,0,mode);
  }
+});
+
+
+test('post-save reread on same account and selection preserves pending destination',async()=>{
+ const h=rig();
+ const task=h.ctx.reconcileJob('job-original');
+ h.finish({id:'job-original'});
+ assert.equal(await task,null);
+ assert.deepEqual(h.actions.map(x=>x.id),['job-original']);
 });
 
 test('existing opened workspace and saved-reload use one selection owner',()=>{
