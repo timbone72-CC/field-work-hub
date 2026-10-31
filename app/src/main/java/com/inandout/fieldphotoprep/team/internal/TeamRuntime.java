@@ -13,6 +13,7 @@ final class TeamRuntime {
     final AssignmentRepository assignments;
     final ActionSyncCoordinator sync;
     final PhotoOwner photos;
+    final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
     private final Object actionCreationLock = new Object();
 
@@ -22,7 +23,10 @@ final class TeamRuntime {
         assignments = new AssignmentRepository(api, new RoomAssignmentStore(dao));
         photos = new PhotoOwner(context, dao, sessions);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
-        scheduler = new ActionScheduler(context, dao);
+        PhotoTransferDao transferDao = TeamDatabase.getInstance(context).photoTransferDao();
+        transfers = new PhotoTransferCoordinator(dao, transferDao, photos, sessions, api,
+                sync.drainLock, BuildConfig.FIELD_SYNC_ENABLED);
+        scheduler = new ActionScheduler(context, dao, transferDao);
     }
 
     static TeamRuntime get(Context context) {
@@ -42,8 +46,10 @@ final class TeamRuntime {
             SupabaseApi.AuthSession s =
                     sessions.authorized(generation, expected.userId, expected.organizationId, true);
             if (BuildConfig.FIELD_SYNC_ENABLED) {
-                scheduler.ensure(s);
                 sync.drain(s.userId, s.organizationId, () -> false);
+                transfers.stageAccepted(s.userId, s.organizationId, () -> false);
+                // App refresh only wakes the durable worker; byte transfer never blocks the UI.
+                scheduler.ensure(s);
             }
             return reconcile(s, generation);
         }
@@ -76,7 +82,12 @@ final class TeamRuntime {
                             }
                         },
                         new RoomAssignmentStore(dao));
-        return guarded.refresh(expected);
+        List<SupabaseApi.WorkOrder> rows = guarded.refresh(expected);
+        SupabaseApi.AuthSession current = sessions.authorized(
+                generation, expected.userId, expected.organizationId, false);
+        if ("CONTRACTOR".equals(current.role))
+            api.attachPendingTeamHandoffConsents(current.accessToken, rows);
+        return rows;
     }
 
     FieldAction create(SupabaseApi.AuthSession expected, long gen, String wo, String run, String kind)
@@ -105,6 +116,26 @@ final class TeamRuntime {
                 if (!sessions.matches(gen, expected.userId, expected.organizationId))
                     throw new SessionCoordinator.SessionChanged();
                 api.respondReassignment(s.accessToken, wo, accept);
+            }
+        }
+    }
+
+    void respondTeamHandoffConsent(SupabaseApi.AuthSession expected, long gen,
+            String workOrderId, String requestId, boolean accept) throws Exception {
+        if (!BuildConfig.FIELD_SYNC_ENABLED)
+            throw new IllegalStateException("Recovery mode is read only.");
+        synchronized (sync.drainLock) {
+            synchronized (actionCreationLock) {
+                // Consent is online only; never send an approval while local
+                // actions or protected photo evidence are not fully settled.
+                if (accept) sync.requireHandoffReady(expected.userId,
+                        expected.organizationId, workOrderId);
+                SupabaseApi.AuthSession s = sessions.authorized(
+                        gen, expected.userId, expected.organizationId, true);
+                if (!"CONTRACTOR".equals(s.role)
+                        || !sessions.matches(gen, expected.userId, expected.organizationId))
+                    throw new SessionCoordinator.SessionChanged();
+                api.respondTeamHandoffConsent(s.accessToken, requestId, accept);
             }
         }
     }

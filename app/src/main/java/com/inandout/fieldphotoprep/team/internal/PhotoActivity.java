@@ -103,14 +103,12 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         if (session == null || wo == null || run == null) { finish(); return; }
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(12), dp(12), dp(12), dp(12));
-        root.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(dp(12), insets.getSystemWindowInsetTop() + dp(12), dp(12),
-                    insets.getSystemWindowInsetBottom() + dp(12));
-            return insets;
-        });
+        root.setBackgroundColor(FwhVisualStyle.CANVAS);
+        FwhImmersiveNavigation.protect(this, root, dp(16), dp(12), dp(16), dp(12));
         message = new TextView(this);
-        message.setTextSize(15);
+        message.setTextSize(20);
+        FwhVisualStyle.heading(message);
+        message.setPadding(dp(2), dp(4), dp(2), dp(8));
         root.addView(message);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -121,7 +119,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     }
 
     @Override protected void onStart() { super.onStart(); lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START); }
-    @Override protected void onResume() { super.onResume(); lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME); if (content != null && !cameraScreen) showItems(); }
+    @Override protected void onResume() { super.onResume(); FwhImmersiveNavigation.enter(this); lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME); if (content != null && !cameraScreen) showItems(); }
     @Override protected void onPause() { lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE); super.onPause(); }
     @Override protected void onStop() { lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_STOP); super.onStop(); }
     @Override protected void onDestroy() {
@@ -155,16 +153,19 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     private Button button(String label, LinearLayout target, Runnable work) {
         Button b = new Button(this);
         b.setText(label);
-        b.setAllCaps(false);
-        target.addView(b);
+        FwhVisualStyle.button(b, false);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(8);
+        target.addView(b, params);
         b.setOnClickListener(v -> work.run());
         return b;
     }
     private TextView text(String value, LinearLayout target) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextSize(17);
-        t.setPadding(0, dp(5), 0, dp(5));
+        t.setTextSize(14);
+        FwhVisualStyle.body(t);
+        t.setPadding(dp(4), dp(3), dp(4), dp(5));
         target.addView(t);
         return t;
     }
@@ -193,25 +194,38 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
     private void renderItems(CachedWorkOrder row, PhotoRequirements req, List<ProtectedPhoto> photos, List<FieldAction> actions) {
         requirements = req;
         content.removeAllViews();
-        message.setText(row.woNumber + " · Photos");
+        message.setText("Photos");
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(2), dp(4), dp(2), dp(14));
         scroll.addView(list);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        text(req.summary(), list);
+        LinearLayout summaryPanel = new LinearLayout(this);
+        summaryPanel.setOrientation(LinearLayout.VERTICAL);
+        summaryPanel.setPadding(dp(12), dp(10), dp(12), dp(10));
+        FwhVisualStyle.panel(summaryPanel);
+        LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(-1, -2);
+        summaryParams.bottomMargin = dp(12);
+        list.addView(summaryPanel, summaryParams);
+        TextView jobNumber = text("WO " + row.woNumber, summaryPanel);
+        jobNumber.setTextColor(FwhVisualStyle.TEAL);
+        text(req.summary(), summaryPanel);
         int total = 0;
         for (ProtectedPhoto p : photos) if (p.readable()) total++;
-        text("Saved photos: " + total + " · Delivery pending", list);
+        text("Saved photos: " + total + " · Delivery pending", summaryPanel);
         boolean started = !row.startedAt.isEmpty(), complete = false;
         for (FieldAction a : actions) if (a.workOrderId.equals(wo) && a.runId.equals(run)) {
             if ("START".equals(a.kind)) started = true;
             if ("COMPLETE".equals(a.kind)) complete = true;
         }
         boolean frozen = complete || photos.stream().anyMatch(p -> !p.finishSetId.isEmpty());
-        if (frozen) text("Finish saved. Originals are protected while delivery is pending.", list);
-        if (!row.conflictReason.isEmpty()) text("Needs review. Your photos are preserved. Contact Admin.", list);
-        if (!BuildConfig.FIELD_SYNC_ENABLED) text("Recovery mode: saved evidence is read only.", list);
+        if (frozen) text("Finish saved. Originals are protected while delivery is pending.", summaryPanel);
+        if (!row.conflictReason.isEmpty()) {
+            TextView warning = text("Needs review. Your photos are preserved. Contact Admin.", summaryPanel);
+            warning.setTextColor(FwhVisualStyle.WARN);
+        }
+        if (!BuildConfig.FIELD_SYNC_ENABLED) text("Recovery mode: saved evidence is read only.", summaryPanel);
         boolean editable = started && BuildConfig.FIELD_SYNC_ENABLED && !frozen && row.conflictReason.isEmpty()
                 && !"FIELD_COMPLETE".equals(row.fieldStatus) && !"CANCELLED".equals(row.fieldStatus);
         for (PhotoRequirements.Item i : req.items) if (i.enabled) {
@@ -225,11 +239,18 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         for (ProtectedPhoto p : photos) if (!"DISCARDED".equals(p.state)) {
             LinearLayout rowView = new LinearLayout(this);
             rowView.setOrientation(LinearLayout.HORIZONTAL);
-            list.addView(rowView);
+            rowView.setGravity(Gravity.CENTER_VERTICAL);
+            rowView.setPadding(dp(8), dp(6), dp(8), dp(6));
+            FwhVisualStyle.panel(rowView);
+            LinearLayout.LayoutParams photoRowParams = new LinearLayout.LayoutParams(-1, -2);
+            photoRowParams.bottomMargin = dp(8);
+            list.addView(rowView, photoRowParams);
             ImageView thumbnail = new ImageView(this);
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = 16;
             thumbnail.setImageBitmap(BitmapFactory.decodeFile(p.originalPath, options));
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumbnail.setContentDescription("Saved job photo preview");
             rowView.addView(thumbnail, new LinearLayout.LayoutParams(dp(64), dp(64)));
             PhotoRequirements.Item i = req.enabledItem(p.itemId);
             Button review = button((i == null ? "Extra" : i.label) + " · " + ("WAITING".equals(p.state) ? "Saved" : p.state), rowView, () -> review(p, editable));
@@ -291,7 +312,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.VERTICAL);
         top.setPadding(dp(10), dp(6), dp(10), dp(6));
-        top.setBackgroundColor(Color.argb(165, 0, 0, 0));
+        top.setBackgroundColor(Color.argb(215, 26, 43, 65));
         itemPicker = compactButton("Select photo item");
         itemPicker.setTextSize(14);
         itemPicker.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
@@ -299,6 +320,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         itemPicker.setEllipsize(android.text.TextUtils.TruncateAt.END);
         itemPicker.setContentDescription("Choose a required photo item or Extra photos");
         itemPicker.setOnClickListener(v -> showCameraItemPicker());
+        itemPicker.setBackground(rounded(FwhVisualStyle.TEAL, 12));
         top.addView(itemPicker, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout controls = new LinearLayout(this);
@@ -325,11 +347,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         cameraRoot.addView(top, topParams);
         buildZoomSlider(landscape);
         if (landscape) buildLandscapeControls(); else buildPortraitControls();
-        cameraRoot.setOnApplyWindowInsetsListener((view, insets) -> {
-            view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
-                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
-            return insets;
-        });
+        FwhImmersiveNavigation.protect(this, cameraRoot, 0, 0, 0, 0);
         setContentView(cameraRoot);
         zoomGestureDetector = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector detector) { return applyPinchZoom(detector.getScaleFactor()); }
@@ -369,7 +387,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(10), dp(7), dp(10), dp(8));
-        panel.setBackgroundColor(Color.argb(175, 0, 0, 0));
+        panel.setBackgroundColor(Color.argb(205, 26, 43, 65));
         panel.addView(makeZoomPresets(false), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -393,7 +411,7 @@ public final class PhotoActivity extends Activity implements LifecycleOwner {
         rail.setOrientation(LinearLayout.VERTICAL);
         rail.setGravity(Gravity.CENTER_HORIZONTAL);
         rail.setPadding(dp(7), dp(7), dp(7), dp(7));
-        rail.setBackgroundColor(Color.argb(180, 0, 0, 0));
+        rail.setBackgroundColor(Color.argb(215, 26, 43, 65));
         rail.addView(makeZoomPresets(true), new LinearLayout.LayoutParams(-1, 0, 1));
         shutter = makeShutter();
         rail.addView(shutter, new LinearLayout.LayoutParams(dp(68), dp(68)));

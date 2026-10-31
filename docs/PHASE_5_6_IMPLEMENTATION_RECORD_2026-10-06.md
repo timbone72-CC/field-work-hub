@@ -1,0 +1,89 @@
+# Phase 5–6 dashboard workflow — implementation record
+
+Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
+**This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
+
+## Current evidence checklist — refreshed 2026-10-31 CDT
+
+### 2026-10-31 10:10 CDT — live read-only continuation / no provider action
+
+- **GitHub:** draft PR #40 on `feat/phase-5-6-dashboard-workflow` at pre-note source `4fd8884ffcad221df8801637ebdaa8d26d34b192`, following the accepted manual Drive transfer. Exact-head Admin Dashboard Gate `41213288401`, FWH Database Gate `41213288397` and Android Team Client CI `41213288383` all **SUCCESS**. This checkpoint only changes this record; no new runtime test or physical test is claimed.
+- **Live FWH Team TEST (independently read-only):** 121 installed migrations; `client-delivery` v54 ACTIVE. SQL counts: **1** dispatch-permit row, **1** DELIVERING outbox, **1** UPLOADING session, **0** VERIFIED PHOTO file plans and **0** final delivery receipts. No original Google PHOTO-ID metadata or media observation was made.
+- **Security readback:** advisors still report **74 INFO** private-table RLS/no-policy, **36 WARN** authenticated-executable security-definer RPC, **1 WARN** Auth leaked-password protection. Examined private delivery/owner tables have no anon/authenticated CRUD; `private.supervisor_assignment_actions` still lacks RLS but has no direct anon/authenticated CRUD. This is targeted read-only inventory, **not** an end-to-end privilege PASS or approval to alter grants.
+- **Priority:** The separate manual TEST ZIP → Drive transfer is already **PASS**; do not repeat. The **automatic original-ID diagnostic remains restricted**: no worker invocation, retry, new ID, session/marker/permit reset, Send, receipt, cleanup, deployment bypass or PR merge. Continue automatic provider reconciliation only after legitimate clearance of the existing deployment/diagnostic restriction; then require the original exact-ID read-only evidence before any continuation decision. Wider roles/notification/email/device and premerge gates remain PENDING. FPP unchanged.
+
+
+### Ownership and verified source
+
+- **Active scope:** Draft/open/unmerged [PR #40](https://github.com/timbone72-CC/field-work-hub/pull/40), branch `feat/phase-5-6-dashboard-workflow`. PR #49 is a separate Android navigation design plan, not a replacement Phase 5/6 runtime owner.
+- **Approved authority:** Complete parent Phase 5 and Phase 6 plans, plus the approved shared-access amendment. Prior roadmap/Phase 0–4 accepted evidence remains valid within its witnessed boundary. **Explicit Level-3 approval before merging PR #40 is PENDING.**
+- **Source rollback baseline:** main `62244e2c4c11831d4e8104821f851f19124b2616`. **Pre-archive documentation HEAD:** `b64ccf8b61ca5810f4ca0acc87d04f79a7f80aa4`; this archival change may be reverted as documentation without reverting runtime code or accepted tests.
+- **Exact pre-archive source HEAD `b64ccf8b61ca5810f4ca0acc87d04f79a7f80aa4`:** Admin Dashboard Gate [40870499704](https://github.com/timbone72-CC/field-work-hub/actions/runs/40870499704), FWH Database Gate [40870499696](https://github.com/timbone72-CC/field-work-hub/actions/runs/40870499696), and Android Team Client CI [40870499671](https://github.com/timbone72-CC/field-work-hub/actions/runs/40870499671) all **SUCCESS**. This is automated SOURCE evidence, not new hosted/phone/Google proof. Subsequent documentary commits do not by themselves require rerunning those complete runtime suites.
+- **Current HEAD rule:** Recheck PR, branch, final runtime revision and relevant CI during every takeover; never assume this dated SHA remains current.
+
+- **2026-10-29 original TEST evidence (archived verbatim in [history part 20](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_20.md)):** The operator confirmed original PHOTO absent from the inspected Drive folder; this does not prove the reserved-ID result. Protected journal unchanged; no denied diagnostic or blind retry. Later read-only evidence and gates below take precedence.
+
+- **Dated handoff preservation:** The October 29 20:11 hosted-parity and earlier read-only takeover snapshots are preserved verbatim in [history part 18](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_18.md); current evidence and continuation above supersede those dated status descriptions.
+
+### Actual completion and outstanding gates
+
+| Scope | Current precise evidence |
+| --- | --- |
+| Earlier phases | Preserve previously accepted Phases 0–4 evidence. Roadmap still identifies a distinct Phase 2 real-client reassignment/receipt smoke as **PENDING** absent independently accepted completion. |
+| Phase 5A–5C/5E | Company configuration, private holding, protected Finish-bound receipts and Admin photo review have genuine narrower TEST/phone/browser accepted results plus implemented source and tests. **Final-client-delivery-gated original cleanup and whole Phase 5 acceptance remain incomplete.** |
+| Phase 5D — Google delivery | **DEPLOYED/SOURCE-PARITY PASS (v54, 14/14); PROVIDER DELIVERY BLOCKED/UNVERIFIED.** Original reserved photo ID has no new provider metadata observation or verified final receipt; prior safety restriction still lacks clearance for the diagnostic operation, and protected original session/held permit remain unresolved. |
+| Phase 6A–6D | Work-order workspace, requirement/template, repeat/follow-up and separate human Accept, bulk review and cross-run package/history have substantial source/CI results. October 29 historical-visit copy and Accept presentation are within the last source CI; do not infer hosted/browser acceptance from those tests. |
+| Phase 6E–6F | Alerts, roles/teams, recovery and ZIP photo export have source/automated evidence, not blanket real supported OS/browser push, TEST mailbox/recovery, signed-in independent-company/office-role or physical-device completion. A simulated database/JWT-claim RLS test is **not** a genuine cross-company signed-in browser test. |
+| Phases 7–8 | **PLANNED**, not launched or production-ready. |
+
+### Deployed source and protected provider state (distinct evidence boundaries)
+
+- Current hosted source: Team TEST `client-delivery` **v54 ACTIVE**, **14/14** source-content parity against pre-documentation PR #40 head `b68ce084`; its revised diagnostic and one-step chunk modules are now **hosted**, not yet approved/invoked as a provider test. **121 migrations** is the last verified SQL inventory, not a fresh count after deployment. The previously recorded v53/9-of-14 result is superseded.
+- Original frozen TEST delivery: **one HELD global dispatch permit**, original expired delivery attempt, encrypted `UPLOADING` session revision 3, persisted upload offset **262144 / 404185**, original one-shot identities and markers held, **zero verified PHOTO plans and zero final delivery receipts**. The saved offset is not independent proof of Google media bytes.
+- Original saved-session diagnostic: `HELD_TEST_SESSION_UNAVAILABLE_404`, which is **not proof** that the original preallocated Drive file ID is nonexistent, accessible or safe to retry.
+- Previously accepted real Drive evidence: the separate fourth disposable synthetic TEST Google upload completed exact remote ID/size/SHA-256 verification. That narrower provider result does **not** prove FWH protected-package end-to-end delivery.
+- **Disposable current FWH TEST environment:** The operator confirmed October 27 that current FWH contains no customer work and fake photo bytes can be lost in controlled isolated TEST experiments. This does not automatically authorize resetting original held journal/ID, encrypted session, one-shot markers or permit; these are needed for truthful reconciliation. The original FPP app and any later customer work are excluded.
+
+### Critical priority, blockers and exact continuation
+
+**2026-10-31 — MANUAL TEST TRANSFER PASS / accepted physical provider gate:** The operator extracted the existing previously verified TEST ZIP and manually uploaded exactly one eligible, individually approved disposable JPEG through the ordinary signed-in Workspace Drive browser into `FWH_MANUAL_TEST_ONLY` under the independently confirmed configured FWH CLIENT TEST / FWH TEST DELIVERY Shared Drive root. Independent Google Drive connector folder/metadata reads confirmed exact destination parent, one JPEG and **279,184 bytes**. The uploaded Google file was independently downloaded back from the provider; SHA-256 of the downloaded bytes exactly matched the operator's local JPEG and its ZIP checksum manifest, and the returned bytes were a valid **1536×2048 JPEG**. This completes the **approved manual TEST-only provider-transfer gate — PASS**, not automatic server-mediated client delivery or a FWH provider receipt. Do not redo ZIP download, preview, approval, extraction or upload. All original held upload identities, encrypted session/offset, permit and one-shot markers retain their existing restrictions; no `Send`, `DELIVERED`, cleanup, retry, release or merge was performed. **Next unresolved dependency remains the legally authorized original automatic PHOTO-ID/provider reconciliation; deployment safety restriction remains in force.**
+
+### Record size and archival discipline — keep handoffs readable
+
+- **Automated enforcement (October 29):** Existing Admin Dashboard Gate CI runs `tests/ci/test_phase56_record_size.py` and `ci/check_phase56_record_size.py` against the current source checkout. It counts UTF-8 bytes on **this active file only**, fails closed for missing/unreadable/invalid UTF-8 or size **over 24,576 bytes**, and leaves archive parts excluded. Focused fixture tests verify exact boundary, oversized, Unicode-byte, missing and invalid cases; PR-head CI is the final workflow gate. No change to GitHub protection settings, phase gate or provider behavior.
+- **Active record size limit: 24 KiB (24,576 UTF-8 bytes).** Aim for approximately 12 KiB or less, and **start archival before it reaches 18 KiB**; do not allow appended dated notes to regenerate a giant active record.
+- Update this CURRENT checklist **during the same completed implementation/evidence batch**: exact source/head/tested revision, actual hosted state, accepted observations, distinct PENDING/BLOCKED gates, precise next dependency, and necessary approval. Keep dated claims tied to their original SHA or test observation.
+- When historical detail accumulates, **copy the complete dated evidence into a numbered, immutable archive continuation in `docs/archive/phase-5-6/`**, preserve its exact text and links, reference its location in the index below, and remove only duplicated old narrative from the *active* record. Keep the latest relevant concise status and reproducible evidence pointers. **Do not delete evidence, rewrite a FAIL into a PASS, or reinterpret old “next” directions as current.**
+- **No additional governance system, approval, device gate or full regression test** arises solely from historical archiving. A documentation-only diff/archive-integrity review suffices. Never rewrite `GOVERNANCE.md` to facilitate document cleanup.
+- New conversations must read `AGENTS.md`, `GOVERNANCE.md`, `PROJECT_PROFILE.md`, `RULE_INDEX.md`, applicable contracts/plans, this active record, and current PR/external state in the governed order. If status cannot be verified, report it as **UNVERIFIED** rather than guessing.
+
+## Frozen, losslessly preserved implementation history
+
+The prior 5,216-line record at blob `d7c380ab1a22858baf02c5d2860e1a24dbfc2898`, authoritative PR #40 source HEAD `b64ccf8b61ca5810f4ca0acc87d04f79a7f80aa4`, was split at existing Markdown section boundaries into **17 frozen parts**. Their contents remain **verbatim**, ordered and complete; concatenating parts 01–17 reproduces the previous record exactly. The archives are durable historical evidence, **not** separate active implementation records.
+
+| Part | Archived evidence | Original line range and opening heading |
+| --- | --- | --- |
+| 01 | [Frozen part 01](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_01.md) | Original lines 1–308; ## Current evidence checklist — Phase 5/6 (maintained status, 2026-10-28 CDT) |
+| 02 | [Frozen part 02](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_02.md) | Original lines 309–594; ### Phase 5D operator first-photo attempt status — 2026-10-25 CDT, HOLD |
+| 03 | [Frozen part 03](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_03.md) | Original lines 595–876; ### 2026-10-23 CDT — operator-approved TEST key preserved; recovery pre-HTTP stop; readiness renewal cont |
+| 04 | [Frozen part 04](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_04.md) | Original lines 877–1168; ### 2026-10-23 CDT — hosted v20 configuration-category diagnostic deployed, original TEST queue preserved |
+| 05 | [Frozen part 05](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_05.md) | Original lines 1169–1531; ### Prepared ledger — exact native evidence and handoff |
+| 06 | [Frozen part 06](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_06.md) | Original lines 1532–1928; ### Folder-map server adapter continuation — 2026-10-10 |
+| 07 | [Frozen part 07](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_07.md) | Original lines 1929–2240; ## Phase 6F — existing verified Supervisor enrollment and grant lifecycle (2026-10-12) |
+| 08 | [Frozen part 08](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_08.md) | Original lines 2241–2525; ## Phase 5E — exact recovery-JPEG integrity at browser export (2026-10-12) |
+| 09 | [Frozen part 09](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_09.md) | Original lines 2526–2831; ## Phase 5C — real Chrome Admin authenticated private JPEG preview visually PASSED (2026-10-13) |
+| 10 | [Frozen part 10](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_10.md) | Original lines 2832–3143; ## Phase 6C — owner confirms same-WO follow-up control visible; client assignment still pending (2026-10- |
+| 11 | [Frozen part 11](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_11.md) | Original lines 3144–3464; ## Phase 5D — repeated TEST destination denial, laptop launcher parity unverified (2026-10-14) |
+| 12 | [Frozen part 12](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_12.md) | Original lines 3465–3833; ## Phase 5A/5D — preserved client-folder retries across Auth token rotation (2026-10-15) |
+| 13 | [Frozen part 13](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_13.md) | Original lines 3834–4118; ## Phase 5D — approved independent disposable provider-file TEST retry (2026-10-17) |
+| 14 | [Frozen part 14](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_14.md) | Original lines 4119–4403; ## Phase 5A/5D — operator-private TEST service preflight runner staged (2026-10-18) |
+| 15 | [Frozen part 15](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_15.md) | Original lines 4404–4717; ## Phase 5D — post-isolation provider-independent readiness reconciliation (2026-10-19 CDT) |
+| 16 | [Frozen part 16](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_16.md) | Original lines 4718–5078; ### Phase 5D — missing active flag establishes intended default OFF (2026-10-20 CDT) |
+| 17 | [Frozen part 17](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_17.md) | Original lines 5079–5215; ## 2026-10-26 — Phase 6A cross-page navigation: one confirmed unsaved-change decision (CI PASS) |
+| 18 | [Dated handoff part 18](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_18.md) | Post-freeze October 29 hosted-parity and read-only takeover checklist bullets, preserved verbatim |
+| 19 | [Dated handoff part 19](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_19.md) | Previous manual TEST handoff text, preserved verbatim |
+| 20 | [Dated handoff part 20](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_20.md) | October 29 operator observed Drive absence and original held-state evidence, preserved verbatim |
+| 21 | [Dated handoff part 21](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_21.md) | Oct 30 pre-deployment source-only status, preserved verbatim |
+| 22 | [Dated handoff part 22](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_22.md) | Oct 29 provider-priority handoff, preserved verbatim before consolidation |
+
+| 23 | [Dated handoff part 23](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_23.md) | Superseded Oct 30–31 manual export/Drive pre-PASS checkpoints and security priority register, verbatim |\n\n**Precedence:** Latest independently supported evidence for the same precise boundary controls current status; do not upgrade SOURCE-ONLY or simulated checks to hosted, real Google, signed-in or device PASS. Archive creation changes no runtime, SQL, Auth, tests, CI, hosting, Google Drive, held permit/session/photos, FPP or governing documents.

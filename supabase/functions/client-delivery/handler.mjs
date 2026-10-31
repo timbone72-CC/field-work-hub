@@ -1,0 +1,708 @@
+// PRIVATE backend-only, default OFF. No browser CORS or client-triggered Send.
+// When explicitly activated with the dedicated worker secret and a live fenced
+// server lease, source-only continuation can make ONE guarded provider step.
+// The hosted TEST function remains read-only; no scheduler or cleanup here.
+import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
+import {createDriveClient,DriveUncertain} from './drive-client.mjs';
+import {createServiceLedger} from './service-ledger.mjs';
+import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeliveryParent,
+ continueTrustedGeographicLeaf,continueTrustedPackageFolder,
+ continueTrustedDeliveryFile,inspectExpiredReservedParent,
+ recoverAndContinueOriginalTestParentOnce,
+ reconcileOriginalAttemptedTestParentOnce,
+ continueOriginalVerifiedTestToWorkOrderOnce,
+ continueOriginalVerifiedTestToPackageOnce,
+ continueOriginalVerifiedTestFirstPhotoOnce,
+ continueOriginalTestSavedFirstPhotoOnce} from './worker-runtime.mjs';
+import {createSessionVault} from './session-vault.mjs';
+import {inspectOriginalHeldFirstPhotoSession,
+ inspectOriginalHeldFirstPhotoFile} from './held-session-probe.mjs';
+import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
+
+function reply(status,code) {
+ return new Response(JSON.stringify({status:code}),{status,headers:{
+  'Content-Type':'application/json','Cache-Control':'no-store, private'
+ }});
+}
+// Authenticated worker diagnostics record only an explicit allowlist of
+// failure codes and bounded provider HTTP status. No raw error message,
+// response body, credential, upload URI or file identity is ever logged.
+const SAFE_TEST_ERRORS=new Set([
+ 'PROVIDER_IDENTITY_UNCERTAIN','PROVIDER_AUTH_DENIED','PROVIDER_RETRY_REQUIRED',
+ 'PROVIDER_RESPONSE_UNCERTAIN','PROVIDER_OUTCOME_UNCERTAIN',
+ 'REMOTE_ID_CONFLICT_RECONCILE','PROVIDER_REDIRECT_FORBIDDEN',
+ 'PROTECTED_SOURCE_CHUNK_UNAVAILABLE','JOURNAL_DECRYPTION_FAILED',
+ 'SERVICE_RPC_OUTCOME_UNCERTAIN','SERVICE_RPC_UNAVAILABLE',
+ 'SERVICE_RPC_AUTH_DENIED','REMOTE_CONTENT_UNVERIFIED',
+ 'WORKSPACE_ACCOUNT_MISMATCH','UPLOAD_SESSION_START_UNCERTAIN',
+ 'UPLOAD_SESSION_START_UNCONFIRMED','PROVIDER_OFFSET_UNCERTAIN'
+]);
+export function safeTrustedDeliveryDiagnostic(error){
+ return Object.freeze({
+  code:error instanceof DriveUncertain&&SAFE_TEST_ERRORS.has(error.code)
+   ?error.code:'UNCLASSIFIED_UNCERTAIN',
+  provider_http_status:error instanceof DriveUncertain?error.providerHttpStatus:null,
+  provider_step:error instanceof DriveUncertain?error.providerStep:null
+ });
+}
+function noteTrustedDeliveryFailure(operation,error){
+ const diag=safeTrustedDeliveryDiagnostic(error);
+ console.warn('FWH_TRUSTED_DELIVERY_DIAGNOSTIC',JSON.stringify({operation,...diag}));
+}
+// Compare fixed-length private worker key without early return on mismatch.
+function sameSecret(x,y){
+ if(typeof x!=='string'||typeof y!=='string'||!x||!y)return false;
+ const a=new TextEncoder().encode(x),b=new TextEncoder().encode(y);
+ let different=a.length^b.length;
+ for(let i=0;i<Math.max(a.length,b.length);i++)
+  different|=(a[i]??0)^(b[i]??0);
+ return different===0;
+}
+export function createDeliveryHandler({
+  enabled=false,workerSecret,expectedAccount,expectedDriveId,
+  testPreflightEnabled=false,testRecoveryEnabled=false,
+  recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
+  reconcileOriginalTestParent=reconcileOriginalAttemptedTestParentOnce,
+  continueVerifiedOriginalTestWO=continueOriginalVerifiedTestToWorkOrderOnce,
+  continueVerifiedOriginalTestPackage=continueOriginalVerifiedTestToPackageOnce,
+  continueVerifiedOriginalTestFirstPhoto=continueOriginalVerifiedTestFirstPhotoOnce,
+  continueOriginalSavedTestPhoto=continueOriginalTestSavedFirstPhotoOnce,
+  inspectHeldTestSession=inspectOriginalHeldFirstPhotoSession,
+  inspectHeldTestFile=inspectOriginalHeldFirstPhotoFile,
+  testEvidenceClass,testRootFolderId,internalDriveId,
+  testWorkspaceDomain,testReleasePackageId,testReleaseDestinationId,
+  clientId,clientSecret,refreshToken,oauthScope,
+  supabaseUrl,serviceRoleJwt,sessionVaultKey,
+  fetcher=fetch,makeWorkerId=()=>crypto.randomUUID()
+}={}){
+ return async request=>{
+  if(request.method!=='POST')return reply(405,'POST_ONLY');
+  // No credential-less status, probe or public health route.
+  if(!workerSecret||workerSecret.length<32
+   ||!sameSecret(request.headers.get('x-fwh-delivery-secret'),workerSecret))
+   return reply(401,'WORKER_UNAUTHORIZED');
+  // Separate read-only TEST credential probe may run while Send is OFF.
+  // No provider work is permitted when both capabilities are disabled.
+  if(enabled===true&&testPreflightEnabled===true)
+    return reply(503,'CONFLICTING_WORKER_MODES');
+  // This independent capability is OFF unless explicitly enabled for the
+  // original two-photo disposable TEST reservation. Never turn on the
+  // general delivery worker or scheduler to recover an expired lease.
+  if(testRecoveryEnabled===true&&(enabled===true||testPreflightEnabled!==true))
+    return reply(503,'CONFLICTING_WORKER_MODES');
+  if(testRecoveryEnabled===true){
+    let only;
+    try{
+      if(request.headers.get('content-type')!=='application/json')
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const body=await request.clone().text();
+      if(body.length>512)return reply(413,'REQUEST_TOO_LARGE');
+      only=JSON.parse(body);
+    }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
+    if(only?.operation==='recover_original_parent_once'){
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>DRIVE_ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain)
+        ||!workerSecret||workerSecret.length<32)
+        return reply(503,'TEST_RECOVERY_SCOPE_NOT_CONFIGURED');
+      if(!expectedAccount||!oauthScope||!supabaseUrl||!serviceRoleJwt
+        ||!clientId||!clientSecret||!refreshToken)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const proof=await recoverOriginalTestParent({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          makeRequestId:makeWorkerId,fetcher
+        });
+        if(proof?.state==='ORIGINAL_TEST_PARENT_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_PARENT_VERIFIED');
+      }catch{
+        // A lost database/Google response may follow a durable attempt:
+        // no fallback, retry, permit release, new remote ID or secret leak.
+      }
+      return reply(503,'ORIGINAL_TEST_RECOVERY_UNVERIFIED');
+    }
+    if(only?.operation==='reconcile_original_attempted_parent_once'){
+      // No caller-supplied IDs, permits, proof or replacement worker identity.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>DRIVE_ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain)
+        ||!workerSecret||workerSecret.length<32)
+        return reply(503,'TEST_RECONCILIATION_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt
+        ||!clientId||!clientSecret||!refreshToken)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const proof=await reconcileOriginalTestParent({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          fetcher
+        });
+        if(proof?.state==='ORIGINAL_TEST_PARENT_RECONCILED')
+          return reply(200,'ORIGINAL_TEST_PARENT_RECONCILED');
+      }catch{
+        // A lost GET/RPC/release reply is an UNCERTAIN original attempt.
+        // Never start a new recovery, release speculatively, or create an ID.
+      }
+      return reply(503,'ORIGINAL_TEST_RECONCILIATION_UNVERIFIED');
+    }
+    if(only?.operation==='continue_verified_original_wo_once'){
+      // EXACT source-side TEST operation. No caller-set worker, package,
+      // parent/child Google ID, proof, request, or retry override.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>DRIVE_ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'TEST_WO_CONTINUATION_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const result=await continueVerifiedOriginalTestWO({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          makeRequestId:makeWorkerId,fetcher
+        });
+        if(result?.state==='ORIGINAL_TEST_WORK_ORDER_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_WORK_ORDER_VERIFIED');
+      }catch{
+        // Uncertain SQL/Google outcome is STOP: never repeat, replace an ID,
+        // claim a different worker or release the durable permit speculatively.
+      }
+      return reply(503,'ORIGINAL_TEST_WORK_ORDER_UNVERIFIED');
+    }
+    if(only?.operation==='continue_verified_original_package_once'){
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'TEST_PACKAGE_CONTINUATION_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const result=await continueVerifiedOriginalTestPackage({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          makeRequestId:makeWorkerId,fetcher
+        });
+        if(result?.state==='ORIGINAL_TEST_PACKAGE_FOLDER_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_PACKAGE_FOLDER_VERIFIED');
+      }catch{
+        // A lost SQL/Google acknowledgement is not permission to retry.
+      }
+      return reply(503,'ORIGINAL_TEST_PACKAGE_FOLDER_UNVERIFIED');
+    }
+    if(only?.operation==='inspect_original_held_first_photo_file'){
+      // Only the EXACT original reserved PHOTO ID is inspected, once in
+      // a distinct operator-gated session. Do not create/restart the upload.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'HELD_FILE_PROBE_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      try{
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const o=await inspectHeldTestFile({
+          ledger,tokenProvider,fetcher,testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,
+          testRootId:testRootFolderId,expectedDriveId,expectedEmail:expectedAccount
+        });
+        const allowed=new Set([
+          'HELD_TEST_FILE_UNAVAILABLE_404','HELD_TEST_FILE_PRESENT_CANDIDATE',
+          'HELD_TEST_FILE_IDENTITY_MISMATCH','HELD_TEST_FILE_AUTH_DENIED',
+          'HELD_TEST_FILE_PROVIDER_UNCERTAIN'
+        ]);
+        if(allowed.has(o?.status)
+          &&(o.http_status===null||[200,404].includes(o.http_status)))
+          return new Response(JSON.stringify({
+            status:o.status,http_status:o.http_status
+          }),{status:200,headers:{
+            'Content-Type':'application/json','Cache-Control':'no-store, private'
+          }});
+      }catch{
+        // Fail closed without logging Drive identity, OAuth or SQL evidence.
+      }
+      return reply(503,'HELD_TEST_FILE_DIAGNOSTIC_UNVERIFIED');
+    }
+    if(only?.operation==='inspect_original_held_first_photo_session'){
+      // Status-only forensic endpoint for the ALREADY held TEST dispatch.
+      // Never acquire/release its permit, renew its lease, start a session
+      // or send image bytes. No client-selected remote identities.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'HELD_TEST_PROBE_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      let vault;
+      try{vault=await createSessionVault({base64Key:sessionVaultKey});}
+      catch{return reply(503,'SESSION_KEY_NOT_CONFIGURED');}
+      try{
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const outcome=await inspectHeldTestSession({
+          ledger,tokenProvider,vault,fetcher,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,
+          testRootId:testRootFolderId,expectedDriveId,
+          expectedEmail:expectedAccount
+        });
+        const classes=new Set([
+          'HELD_TEST_SESSION_INCOMPLETE',
+          'HELD_TEST_SESSION_COMPLETE_CANDIDATE',
+          'HELD_TEST_SESSION_UNAVAILABLE_404',
+          'HELD_TEST_SESSION_AUTH_DENIED',
+          'HELD_TEST_SESSION_PROVIDER_OTHER',
+          'HELD_TEST_SESSION_TRANSPORT_UNCERTAIN'
+        ]);
+        if(classes.has(outcome?.status)
+          &&(outcome.http_status===null
+            ||(Number.isInteger(outcome.http_status)
+              &&outcome.http_status>=200&&outcome.http_status<=599))
+          &&Number.isSafeInteger(outcome.saved_offset)
+          &&outcome.saved_offset>=1
+          &&(outcome.provider_offset===null
+            ||(Number.isSafeInteger(outcome.provider_offset)
+              &&outcome.provider_offset>=0)))
+          return new Response(JSON.stringify({
+            status:outcome.status,http_status:outcome.http_status,
+            saved_offset:outcome.saved_offset,
+            provider_offset:outcome.provider_offset
+          }),{status:200,headers:{
+            'Content-Type':'application/json','Cache-Control':'no-store, private'
+          }});
+      }catch{
+        // Do not surface provider URLs, session ciphertext, account emails,
+        // headers or raw error bodies to operator output or function logs.
+      }
+      return reply(503,'HELD_TEST_SESSION_DIAGNOSTIC_UNVERIFIED');
+    }
+    if(only?.operation==='continue_original_saved_first_photo_once'){
+      // Distinct one-shot continuation: the initial original-photo journal
+      // already exists, and ONLY that immutable encrypted session may resume.
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'TEST_SAVED_FIRST_PHOTO_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      let vault;
+      try{vault=await createSessionVault({base64Key:sessionVaultKey});}
+      catch{return reply(503,'SESSION_KEY_NOT_CONFIGURED');}
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const result=await continueOriginalSavedTestPhoto({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,
+          testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+          projectUrl:supabaseUrl,serviceRoleJwt,vault,fetcher,
+          makeRequestId:makeWorkerId
+        });
+        if(result?.state==='ORIGINAL_TEST_SAVED_FIRST_PHOTO_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_SAVED_FIRST_PHOTO_VERIFIED');
+        if(result?.state==='ORIGINAL_TEST_SAVED_FIRST_PHOTO_PROGRESS_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_SAVED_FIRST_PHOTO_PROGRESS_VERIFIED');
+      }catch(error){
+        noteTrustedDeliveryFailure('ORIGINAL_TEST_SAVED_PHOTO',error);
+        // Never restart the prior Google upload, generate an ID or release an
+        // uncertain dispatch. A lost SQL/provider reply is not a retry permit.
+      }
+      return reply(503,'ORIGINAL_TEST_SAVED_FIRST_PHOTO_UNVERIFIED');
+    }
+    if(only?.operation==='continue_verified_original_first_photo_once'){
+      if(Array.isArray(only)||Object.keys(only).length!==1)
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      const ID=/^[A-Za-z0-9_-]{10,160}$/;
+      if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+        ||![testReleasePackageId,testReleaseDestinationId].every(x=>UUID.test(x??''))
+        ||![testRootFolderId,expectedDriveId,internalDriveId].every(x=>ID.test(x??''))
+        ||new Set([testRootFolderId,expectedDriveId,internalDriveId]).size!==3
+        ||typeof testWorkspaceDomain!=='string'||!testWorkspaceDomain
+        ||typeof expectedAccount!=='string'
+        ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+        return reply(503,'TEST_FIRST_PHOTO_SCOPE_NOT_CONFIGURED');
+      if(!oauthScope||!supabaseUrl||!serviceRoleJwt||!clientId
+        ||!clientSecret||!refreshToken||!workerSecret)
+        return reply(503,'BACKEND_NOT_CONFIGURED');
+      let vault;
+      try{vault=await createSessionVault({base64Key:sessionVaultKey});}
+      catch{return reply(503,'SESSION_KEY_NOT_CONFIGURED');}
+      try{
+        const tokenProvider=createWorkspaceTokenProvider({
+          clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher
+        });
+        const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+        const result=await continueVerifiedOriginalTestFirstPhoto({
+          ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+          testPackageId:testReleasePackageId,testDestinationId:testReleaseDestinationId,
+          testRootId:testRootFolderId,projectUrl:supabaseUrl,
+          serviceRoleJwt,vault,fetcher,makeRequestId:makeWorkerId
+        });
+        if(result?.state==='ORIGINAL_TEST_FIRST_PHOTO_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_FIRST_PHOTO_VERIFIED');
+        if(result?.state==='ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED')
+          return reply(200,'ORIGINAL_TEST_FIRST_PHOTO_PROGRESS_VERIFIED');
+      }catch{
+        // Lost session/Google/SQL result keeps original IDs and permit.
+      }
+      return reply(503,'ORIGINAL_TEST_FIRST_PHOTO_UNVERIFIED');
+    }
+  }
+  // Preserve the EXACT hosted v11 read-only TEST gate on a future worker
+  // rollout. No second OAuth/root-check implementation and no database RPC.
+  // The existing adapter independently rejects preallocate, Send and every
+  // mutating operation before touching Google or Supabase.
+  if(enabled!==true&&testPreflightEnabled===true)
+    return createReadOnlyTestHandler({
+      deliveryActive:false,testEnabled:true,testEvidenceClass,workerSecret,
+      expectedEmail:expectedAccount,expectedDriveId,
+      clientRootId:testRootFolderId,internalDriveId,
+      workspaceDomain:testWorkspaceDomain,clientId,clientSecret,
+      refreshToken,oauthScope,makeVault:()=>createSessionVault({base64Key:sessionVaultKey}),fetcher
+    })(request);
+  if(enabled!==true)
+    return reply(503,'WORKER_NOT_ACTIVATED');
+  let payload;
+  try{
+    if(request.headers.get('content-type')!=='application/json')
+      return reply(400,'EXACT_REQUEST_REQUIRED');
+    const body=await request.text();
+    if(body.length>512)return reply(413,'REQUEST_TOO_LARGE');
+    payload=JSON.parse(body);
+  }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
+  // Only a trusted backend caller holding the dedicated worker secret may
+  // name an existing leased continuation. The service ledger rechecks the
+  // exact frozen package/worker/generation before every remote operation.
+  // One invocation performs at most ONE existing folder or file step.
+  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  const fields={
+    preallocate:['operation'],
+    advance_once:['operation'],
+    check_backend_readonly:['operation'],
+    inspect_expired_readonly:['operation'],
+    reconcile_parent:['operation','package_id','worker_id','generation','kind'],
+    reconcile_geographic_leaf:['operation','package_id','worker_id','generation','kind'],
+    reconcile_package_folder:['operation','package_id','worker_id','generation','plan_id'],
+    transfer_one_chunk:['operation','package_id','worker_id','generation','plan_id']
+  };
+  const required=fields[payload?.operation];
+  if(!payload||Array.isArray(payload)||!required
+    ||Object.keys(payload).length!==required.length
+    ||required.some(k=>!Object.hasOwn(payload,k)))
+    return reply(400,'EXACT_REQUEST_REQUIRED');
+  if(!['preallocate','advance_once','check_backend_readonly','inspect_expired_readonly'].includes(payload.operation)){
+    if(!UUID.test(payload.package_id??'')||!UUID.test(payload.worker_id??'')
+      ||!Number.isSafeInteger(payload.generation)||payload.generation<1
+      ||(payload.plan_id!==undefined&&!UUID.test(payload.plan_id))
+      ||(payload.operation==='reconcile_parent'
+        &&!['STATE','COUNTY','CITY'].includes(payload.kind))
+      ||(payload.operation==='reconcile_geographic_leaf'
+        &&!['ADDRESS','WORK_ORDER'].includes(payload.kind)))
+      return reply(400,'EXACT_REQUEST_REQUIRED');
+  }  // The currently approved rollout is for ONE isolated, existing two-photo
+  // TEST package. Other packages/destinations never reach Google writes.
+  // Fail before the durable dispatch permit for malformed/out-of-scope input.
+  const testOnly=testEvidenceClass==='DISPOSABLE_FWH_TEST_ONLY';
+  const DRIVE_ID=/^[A-Za-z0-9_-]{10,160}$/;
+  // No production/general-client activation in this approved TEST rollout.
+  if(!testOnly||!UUID.test(testReleasePackageId??'')
+    ||!UUID.test(testReleaseDestinationId??'')
+    ||!DRIVE_ID.test(testRootFolderId??'')
+    ||!DRIVE_ID.test(expectedDriveId??'')
+    ||!DRIVE_ID.test(internalDriveId??'')
+    ||!testWorkspaceDomain
+    ||typeof expectedAccount!=='string'
+    ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain)
+    ||testRootFolderId===expectedDriveId
+    ||testRootFolderId===internalDriveId||expectedDriveId===internalDriveId)
+    return reply(503,'TEST_RELEASE_SCOPE_NOT_CONFIGURED');
+  if(testOnly&&payload.package_id!==undefined
+     &&payload.package_id!==testReleasePackageId)
+    return reply(403,'TEST_RELEASE_SCOPE_DENIED');
+
+  if(!expectedAccount||!expectedDriveId||!oauthScope||!supabaseUrl
+     ||!serviceRoleJwt||!clientId||!clientSecret||!refreshToken)
+    return reply(503,'BACKEND_NOT_CONFIGURED');
+  // Explicit worker-secret-only, TEST-scoped connection diagnosis. This
+  // existing service adapter uses ONLY an allowlisted read-only RPC; it never
+  // acquires a dispatch permit, claims work or contacts Google. Always return
+  // redacted fixed statuses rather than an environment value or exception.
+  if(payload.operation==='check_backend_readonly'){
+    let readLedger;
+    try{readLedger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});}
+    catch(error){
+      if(error?.code==='SERVICE_BACKEND_URL_INVALID')
+        return reply(503,'BACKEND_URL_INVALID');
+      if(error?.code==='SERVICE_BACKEND_KEY_FORMAT_INVALID')
+        return reply(503,'BACKEND_KEY_FORMAT_INVALID');
+      return reply(503,'BACKEND_ADAPTER_NOT_CONFIGURED');
+    }
+    try{
+      const observed=await readLedger.readActiveLease();
+      if(['NONE','ACTIVE','BLOCKED_UNCERTAIN'].includes(observed?.state))
+        return reply(200,'BACKEND_READ_ONLY_OK');
+      return reply(503,'BACKEND_READ_ONLY_RESPONSE_INVALID');
+    }catch(error){
+      if(error?.code==='SERVICE_RPC_AUTH_DENIED')
+        return reply(503,'BACKEND_READ_ONLY_AUTH_DENIED');
+      if(error?.code==='SERVICE_RPC_UNAVAILABLE')
+        return reply(503,'BACKEND_READ_ONLY_RPC_UNAVAILABLE');
+      if(error?.code==='SERVICE_RPC_OUTCOME_UNCERTAIN')
+        return reply(503,'BACKEND_READ_ONLY_NETWORK_UNAVAILABLE');
+      return reply(503,'BACKEND_READ_ONLY_UNVERIFIED');
+    }
+  }
+  // Validate the original OAuth adapter before the durable dispatch permit.
+  // Bad local client credentials/scope cannot perform a provider write and
+  // must not leave the non-expiring single-flight permit held. Constructing
+  // the adapter refreshes NO token and performs NO network request.
+  let tokenProvider;
+  try {
+    tokenProvider=createWorkspaceTokenProvider({
+      clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
+  } catch {return reply(503,'BACKEND_OAUTH_NOT_CONFIGURED');}
+  // Original expired TEST folder inspection: no dispatch permit, SQL write,
+  // worker heartbeat, recovery CAS, remote POST or new file ID. The exact
+  // package/destination/root are server-only settings, not caller fields.
+  if(payload.operation==='inspect_expired_readonly'){
+    try{
+      const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+      const found=await inspectExpiredReservedParent({
+        ledger,tokenProvider,expectedEmail:expectedAccount,
+        expectedDriveId,testPackageId:testReleasePackageId,
+        testDestinationId:testReleaseDestinationId,testRootId:testRootFolderId,
+        fetcher
+      });
+      if(found.state==='ORIGINAL_RESERVED_ID_NOT_FOUND')
+        return reply(200,'ORIGINAL_ID_NOT_FOUND_READ_ONLY');
+    }catch{
+      // Includes present/inaccessible IDs, stale/mismatched TEST state,
+      // backend denial and ambiguous provider failures. No IDs or tokens.
+      return reply(503,'ORIGINAL_ID_INSPECTION_UNVERIFIED');
+    }
+    return reply(503,'ORIGINAL_ID_INSPECTION_UNVERIFIED');
+  }
+  // The original SQL lease protects each transaction, not simultaneous
+  // Edge processes while their Google HTTP operations are in flight. Every
+  // mutating worker route shares ONE persisted dispatch permit, across all
+  // Supabase Edge instances. Read-only TEST mode never takes the permit.
+  // Check the current encrypted-session key BEFORE the durable permit is
+  // acquired. advance_once may select a file step even if the caller supplies
+  // no plan identity; an absent/malformed key must not strand the singleton.
+  // This does not decrypt prior sessions or authorize replacement keys/IDs.
+  let vault;
+  if(payload.operation==='advance_once'||payload.operation==='transfer_one_chunk'){
+    try{vault=await createSessionVault({base64Key:sessionVaultKey});}
+    catch{return reply(503,'SESSION_KEY_NOT_CONFIGURED');}
+  }
+  let ledger,dispatchId;
+  try{
+    dispatchId=makeWorkerId();
+    if(!UUID.test(dispatchId))throw Error('INVALID_DISPATCH_ID');
+    ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+    if(testOnly){
+      const original=ledger;
+      const validClaim=claim=>{
+        const m=claim?.manifest;
+        return claim?.package_id===testReleasePackageId
+          &&claim?.destination_id===testReleaseDestinationId
+          &&m?.package_id===testReleasePackageId
+          &&m?.destination_id===testReleaseDestinationId
+          &&m?.destination_root===testRootFolderId
+          &&Array.isArray(m?.selected_photos)
+          &&m.selected_photos.length===2
+          &&m.selected_photos.every(p=>UUID.test(p.photo_id??''));
+      };
+      ledger={
+        ...original,
+        claim:async worker=>{
+          // The original broad service_claim_delivery chooses NEXT queued
+          // work and can mutate an unrelated package before a Node check.
+          // This TEST branch only calls the not-yet-installed service-role
+          // atomic exact-package claim. A missing RPC DENIES, never falls
+          // back to the broad claim or allocates a new remote identity.
+          const claim=await original.claimExactTest(
+            worker,testReleasePackageId,testReleaseDestinationId,testRootFolderId);
+          if(claim?.claimed===false)return claim;
+          if(!validClaim(claim))throw Error('TEST_RELEASE_SCOPE_MISMATCH');
+          return claim;
+        },
+        readActiveLease:async()=>{
+          const old=await original.readActiveLease();
+          if(old?.state==='ACTIVE'&&!validClaim(old))
+            throw Error('TEST_RELEASE_SCOPE_MISMATCH');
+          return old;
+        }
+      };
+    }
+    const acquired=await ledger.acquireDispatch(dispatchId);
+    if(acquired?.acquired===false)return reply(503,'WORKER_BUSY');
+    if(acquired?.acquired!==true)throw Error('DISPATCH_PERMIT_UNVERIFIED');
+  }catch{return reply(503,'DISPATCH_PERMIT_UNAVAILABLE');}
+  // Only a positively verified step may release the permit. On crash,
+  // unexpected response, lease expiry or ambiguous provider outcome it
+  // intentionally persists until the original identities are reconciled.
+  // No TTL, finally{} release, or automatic second attempt is allowed.
+  const complete=async status=>{
+    const receipt=await ledger.releaseDispatch(dispatchId);
+    if(receipt?.released!==true)throw Error('DISPATCH_RELEASE_UNVERIFIED');
+    return reply(200,status);
+  };
+  try{
+    if(payload.operation==='advance_once'){
+      // Leases are recovered exclusively from the service-only immutable
+      // outbox; callers supply NO package/user/worker/file identities.
+      const result=await advanceTrustedDeliveryOneStep({
+        tokenProvider,ledger,makeWorkerId,
+        expectedEmail:expectedAccount,expectedDriveId,fetcher,
+        projectUrl:supabaseUrl,serviceRoleJwt,
+        // The vault was validated before the original dispatch permit.
+        makeVault:async()=>vault
+      });
+      if(result.state==='NO_ELIGIBLE_PACKAGES')
+        return await complete('NO_ELIGIBLE_PACKAGES');
+      if(result.state==='PARENT_STEP_VERIFIED')
+        return await complete('PARENT_STEP_VERIFIED');
+      if(result.state==='PACKAGE_IDENTITIES_PREALLOCATED')
+        return await complete('PREALLOCATED_ONLY');
+      if(result.state==='PACKAGE_FOLDER_STEP_VERIFIED')
+        return await complete('FOLDER_STEP_VERIFIED');
+      if(result.state==='FILE_STEP_VERIFIED')
+        return await complete('FILE_STEP_VERIFIED');
+      if(result.state==='FILE_STEP_PENDING')
+        return await complete('FILE_STEP_PENDING');
+      if(result.state==='PACKAGE_DELIVERED')
+        return await complete('FINAL_DELIVERY_VERIFIED');
+      if(result.state==='FINAL_PROVIDER_RECHECK_REQUIRED')
+        return await complete('FINAL_PROVIDER_RECHECK_REQUIRED');
+      return reply(503,'TRUSTED_STEP_UNVERIFIED');
+    }
+    if(payload.operation==='preallocate'){
+      const result=await prepareTrustedDelivery({
+        tokenProvider,ledger,workerId:makeWorkerId(),
+        expectedEmail:expectedAccount,expectedDriveId,fetcher
+      });
+      if(result.claimed===false)return await complete('NO_ELIGIBLE_PACKAGES');
+      if(result.provider_writes_performed!==false)
+        return reply(503,'PROVIDER_NOT_READY');
+      return await complete('PREALLOCATED_ONLY');
+    }
+    const lease={
+      tokenProvider,ledger,workerId:payload.worker_id,
+      generation:payload.generation,packageId:payload.package_id,
+      expectedEmail:expectedAccount,expectedDriveId,fetcher
+    };
+    let result;
+    if(payload.operation==='reconcile_parent')
+      result=await continueTrustedDeliveryParent({...lease,kind:payload.kind});
+    else if(payload.operation==='reconcile_geographic_leaf')
+      result=await continueTrustedGeographicLeaf({...lease,kind:payload.kind});
+    else if(payload.operation==='reconcile_package_folder')
+      result=await continueTrustedPackageFolder({...lease,planId:payload.plan_id});
+    else if(payload.operation==='transfer_one_chunk'){
+      // The protected AES-GCM key was validated before taking the permit.
+      // A wrong historical key still fails closed on original ciphertext.
+      result=await continueTrustedDeliveryFile({...lease,planId:payload.plan_id,
+        projectUrl:supabaseUrl,serviceRoleJwt,vault});
+    }
+    if(result?.state==='PARENT_VERIFIED'
+      ||result?.state==='FOLDER_VERIFIED')return await complete('FOLDER_STEP_VERIFIED');
+    if(['FILE_VERIFIED','PROGRESS','NEEDS_INDEPENDENT_GET'].includes(result?.state))
+      return await complete(result.state==='FILE_VERIFIED'?'FILE_STEP_VERIFIED':'FILE_STEP_PENDING');
+    return reply(503,'TRUSTED_STEP_UNVERIFIED');
+  }catch (error) {
+    noteTrustedDeliveryFailure('TRUSTED_PROVIDER',error);
+    // Never expose a live OAuth token, session URI, Supabase key, package ID
+    // or provider error body in responses to callers.
+    return reply(503,'TRUSTED_PROVIDER_UNAVAILABLE');
+  }
+ };
+}

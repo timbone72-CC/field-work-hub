@@ -15,6 +15,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Enforce active Phase 5/6 handoff size (24 KiB)
+        run: |
+          python3 -m unittest discover -s tests/ci -p 'test_phase56_record_size.py' -v
+          python3 ci/check_phase56_record_size.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -42,8 +46,8 @@ jobs:
             echo 'Every sessionStorage operation must use the one dedicated Admin session key.' >&2
             exit 1
           fi
-          if grep -R -n 'localStorage' dashboard | grep -v 'WO_NUMBER_MODE_STORAGE_KEY'; then
-            echo 'localStorage is allowed only for the non-sensitive WO-number mode preference.' >&2
+          if grep -R -n 'localStorage' dashboard | grep -v 'WO_NUMBER_MODE_STORAGE_KEY' | grep -v -E '^dashboard/job-workspace.js:[0-9]+:.*JOB_VIEW_STORAGE_KEY'; then
+            echo 'localStorage is allowed only for the dedicated non-sensitive numbering and account-scoped job-view preferences.' >&2
             exit 1
           fi
           if grep -R -n -E 'sb_secret_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]{30,}' supabase/functions 2>/dev/null; then
@@ -53,13 +57,46 @@ jobs:
       - name: Check dashboard JavaScript syntax
         run: |
           node --check dashboard/photo-requirements.js
+          node --check dashboard/job-workspace.js
+          node --check dashboard/notifications.js
+          node --check dashboard/push-device.js
+          node --check dashboard/push-sw.js
+          node --check supabase/functions/admin-web-push/handler.mjs
+          node --check dashboard/private-review.js
           node --check dashboard/app.js
           node --check dashboard/auto-refresh.js
+          node --check dashboard/owner-management.js
+          node --check dashboard/test-other-org-first-admin.js
+          node --check supabase/functions/admin-invite-contractor/test-other-org-first-admin.mjs
+          node --check dashboard/staffing.js
+          node --check dashboard/recovery.js
           node --check dashboard/session.js
           node --check dashboard/contractors.js
           node --check dashboard/contractor-invite.js
+          node --check dashboard/admin-invite.js
+          node --check supabase/functions/admin-invite-contractor/scoped-admin-invite.mjs
       - name: Test automatic Admin updates and session races
         run: node --test tests/dashboard/*.test.js
+      - name: Verify trusted private photo bytes and failure handling
+        run: node --test tests/functions/*.test.mjs
+      - name: Validate read-only real Storage provider gate without secrets or external calls
+        run: node --test tests/provider/*.test.mjs
+      - name: Install isolated browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/fwh-browser" --no-audit --no-fund playwright@1.56.1
+          node "$RUNNER_TEMP/fwh-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Verify compact workspace in disposable desktop and mobile browsers
+        env:
+          NODE_PATH: ${{ runner.temp }}/fwh-browser/node_modules
+          FWH_BROWSER_OUTPUT: ${{ runner.temp }}/fwh-browser-evidence
+        run: node tests/dashboard/browser/workspace.cjs
+      - name: Upload disposable workspace browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fwh-workspace-browser-evidence
+          path: ${{ runner.temp }}/fwh-browser-evidence/
+          if-no-files-found: ignore
       - name: Verify refresh-safe Admin tab session
         shell: bash
         run: |
@@ -70,14 +107,13 @@ jobs:
           grep -q 'refresh_token' dashboard/session.js
           grep -q 'clearAdminSession' dashboard/session.js
           grep -q 'session.js?v=' dashboard/index.html
-      - name: Verify authorization gate markers
+      - name: Verify partial-page authorization boundary
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'TEST-0001' dashboard/app.js
-          grep -q 'TEST-0002-ADMIN-ONLY' dashboard/app.js
           grep -q 'TEST-OTHER-ORG-CONTROL' dashboard/app.js
-          grep -q 'RLS CHECK: PASS' dashboard/app.js
+          grep -q 'row.organization_id !== expectedOrganizationId' dashboard/app.js
+          node --test tests/dashboard/job-workspace.test.js
           if grep -n -E 'organization_id=|assigned_user_id=' dashboard/app.js; then
             echo 'Dashboard work-order read request must not use client-side authorization filters.' >&2
             exit 1
@@ -136,6 +172,74 @@ jobs:
             exit 1
           fi
           grep -q 'deleteUser' supabase/functions/admin-invite-contractor/index.ts
+      - name: Verify protected preview operator helper syntax and no automatic dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ci/stage_phase56_review_preview.sh
+          grep -q 'gh workflow run pages.yml' ci/stage_phase56_review_preview.sh
+          grep -q 'protected-or-unknown' ci/stage_phase56_review_preview.sh
+          grep -q 'gh api -X DELETE' ci/stage_phase56_review_preview.sh
+          grep -q -- '--verify-only' ci/stage_phase56_review_preview.sh
+          grep -q 'git show FETCH_HEAD:dashboard/index.html' ci/stage_phase56_review_preview.sh
+          if grep -q 'git show origin/main:dashboard/index.html' ci/stage_phase56_review_preview.sh; then
+            echo 'Do not require origin/main tracking ref in checkout' >&2
+            exit 1
+          fi
+      - name: Check out published-main dashboard source for isolated preview packaging
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: preview-main
+      - name: Build NON-DEPLOYING main-preserving Phase 5C preview bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f preview-main/dashboard/index.html
+          test -f dashboard/private-review.js
+          test -f dashboard/index.html
+          mkdir -p phase56-preview-site
+          cp -a preview-main/dashboard/. phase56-preview-site/
+          mkdir -p phase56-preview-site/phase56-review
+          cp -a dashboard/. phase56-preview-site/phase56-review/
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import subprocess
+
+          baseline = Path("preview-main/dashboard")
+          staged = Path("phase56-preview-site")
+          candidate = staged / "phase56-review"
+          for original in baseline.rglob("*"):
+              if original.is_file():
+                  copy = staged / original.relative_to(baseline)
+                  assert copy.is_file()
+                  assert hashlib.sha256(original.read_bytes()).digest() == hashlib.sha256(copy.read_bytes()).digest(), original
+          assert "private-review.js" not in (staged / "index.html").read_text()
+          assert (candidate / "private-review.js").is_file()
+          html = (candidate / "index.html").read_text()
+          assert 'id="job-photos"' in html
+          assert 'private-review.js?v=' in html
+          assert 'id="private-review-status"' in html
+          assert "admin-private-photo" in (candidate / "private-review.js").read_text()
+          assert "fwh-review-private" in (candidate / "private-review.js").read_text()
+          main_sha = subprocess.check_output(["git", "-C", "preview-main", "rev-parse", "HEAD"], text=True).strip()
+          candidate_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          (candidate / "PREVIEW-PROVENANCE.txt").write_text(
+              "NON-DEPLOYED TEST-ONLY PREVIEW BUNDLE.\n"
+              "Protected github-pages approval is separately required for any live browser test.\n"
+              f"Main dashboard baseline: {main_sha}\nPhase 5/6 draft candidate: {candidate_sha}\n"
+              "Public Admin root preserved byte-for-byte from main; draft UI under /phase56-review/.\n"
+              "Do not merge PR or publish this artifact as a production update.\n")
+          print("NON-DEPLOYED same-origin candidate prepared:", candidate_sha)
+          print("Main dashboard preserved byte-for-byte:", main_sha)
+          PY
+      - name: Preserve reversible, undeployed Admin preview bundle as CI evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: fwh-phase56-admin-preview-undeployed
+          path: phase56-preview-site/
+          if-no-files-found: error
       - name: Upload admin dashboard
         uses: actions/upload-artifact@v4
         with:
