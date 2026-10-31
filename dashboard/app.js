@@ -681,6 +681,9 @@ function fillAssigneeSelect(select, users, placeholder, selectedUserId = '') {
 
 function renderWorkOrders(rows, organizationId) {
   JobWorkspace.page(rows);
+  // Reordered/filtered results must never move focus onto a different WO.
+  const focused=document.activeElement;
+  const focusedWorkOrderId=workOrders.contains(focused) ? focused?.dataset?.jobOpenId : null;
   workOrders.replaceChildren();
   const userById = new Map(assignableUsers.map(user => [user.user_id, user]));
   const table = document.createElement('table');
@@ -715,6 +718,12 @@ function renderWorkOrders(rows, organizationId) {
     }
   }
   workOrders.append(table);
+  if (focusedWorkOrderId) {
+    const match=[...workOrders.querySelectorAll('[data-job-open-id]')]
+      .find(button=>button.dataset.jobOpenId===focusedWorkOrderId);
+    if (match) match.focus({preventScroll:true});
+    else document.getElementById('job-search')?.focus({preventScroll:true});
+  }
 }
 
 function openEditor(workOrderId, selectedRow = null) {

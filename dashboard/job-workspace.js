@@ -266,6 +266,8 @@ const JobWorkspace = (() => {
   }
   function addressContext() {
     const list=el('job-address-work-orders');
+    const focused=document.activeElement;
+    const focusedWorkOrderId=list.contains(focused) ? focused?.dataset?.addressOpenId : null;
     list.replaceChildren();
     const matches=JobAddressContext.siblings(addressRows,selectedRow);
     el('job-address-context').hidden=!selectedRow;
@@ -275,12 +277,18 @@ const JobWorkspace = (() => {
     for (const item of matches) {
       const button=document.createElement('button');
       button.type='button'; button.className='secondary';
+      button.dataset.addressOpenId=item.id;
       button.textContent=String(item.wo_number||'Work order');
       button.setAttribute('aria-label',`Open work order ${item.wo_number}`);
       button.setAttribute('aria-current',String(item.id===selectedRow.id));
       button.disabled=item.id===selectedRow.id;
       button.addEventListener('click',()=>choose(item.id));
       list.append(button);
+    }
+    if (focusedWorkOrderId) {
+      const match=[...list.children].find(button=>
+        button.dataset.addressOpenId===focusedWorkOrderId && !button.disabled);
+      (match || el('job-address-load')).focus({preventScroll:true});
     }
   }
   async function loadAddressContext(offset=0) {

@@ -1148,6 +1148,10 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('#job-page-info').textContent.includes('No jobs'));
     assert.match(await page.locator('#job-context').innerText(), /outside the current page/);
     assert.equal(await page.locator('#edit-work-order-id').inputValue(), uuid(3));
+    assert.equal(await page.locator('#edit-instructions').inputValue(), 'Keep across automatic refresh',
+      'A filtered-out job cannot lose its selected unsaved draft');
+    assert.equal(await page.locator('#job-next').isDisabled(), true,
+      'A filtered-out job cannot navigate by its old row index');
     await page.locator('#cancel-edit').click(); await page.locator('#job-discard').click();
     await page.locator('#job-status').selectOption(''); await page.locator('#job-page-size').selectOption('50');
     await page.locator('#job-search').fill('100 Example Street'); await page.locator('#job-filters button[type="submit"]').click();
@@ -1161,6 +1165,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('.job-table tbody tr').count(), 0, 'Stale filtered page must not replace newer search');
     await page.locator('#job-search').fill(''); await page.locator('#job-filters button[type="submit"]').click();
     await wait(page, () => document.querySelectorAll('.job-table tbody tr').length === 50);
+    // Focus restoration uses UUID, never the recycled table row position.
+    const focusAfterRefresh=await page.evaluate(() => {
+      const original=workOrderRows, org=currentUser.app_metadata.organization_id;
+      const first=document.querySelector('.job-link');
+      const id=first.dataset.jobOpenId;
+      first.focus();
+      renderWorkOrders(original,org);
+      const same=document.activeElement?.dataset?.jobOpenId;
+      const filtered=original.filter(row=>row.id!==id);
+      filtered.page={...original.page};
+      workOrderRows=filtered;
+      renderWorkOrders(filtered,org);
+      const fallback=document.activeElement?.id;
+      workOrderRows=original;
+      renderWorkOrders(original,org);
+      return {id,same,fallback};
+    });
+    assert.equal(focusAfterRefresh.same,focusAfterRefresh.id,
+      'Repainting a job must not steal keyboard focus');
+    assert.equal(focusAfterRefresh.fallback,'job-search',
+      'Removing the focused job must focus Search, not a different job');
     await page.locator('#job-page-next').click(); await wait(page, () => document.querySelector('#job-page-info').textContent.includes('51–100'));
     await page.locator('.job-link').first().click(); await wait(page, () => document.querySelector('dialog').open);
     // Phase 6A: Previous on the first job of page 2 crosses back to page 1;
