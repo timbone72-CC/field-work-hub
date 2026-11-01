@@ -207,3 +207,63 @@ grant execute on function
   private.service_release_package_dispatch(uuid,uuid,uuid,bigint),
   public.service_release_package_dispatch(uuid,uuid,uuid,bigint)
   to service_role;
+
+
+-- Read-only continuation ownership proof; an acquired slot alone does not
+-- authorize Google writes. No time-based takeover or original permit release.
+create function private.service_read_package_dispatch_owner(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint
+) returns jsonb language plpgsql security definer set search_path='' as $owner$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ o private.client_delivery_outbox%rowtype;
+ pkg private.client_packages%rowtype;
+begin
+ if p_package is null or p_worker is null or p_request is null
+   or p_generation is null or p_generation<1 then
+   raise exception 'Exact owner required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config where singleton;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then return '{"active":false}'::jsonb;end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package;
+ if held.package_id is null or held.worker_id is distinct from p_worker
+   or held.request_id is distinct from p_request
+   or held.generation is distinct from p_generation
+ then return '{"active":false}'::jsonb;end if;
+ select * into o from private.client_delivery_outbox where package_id=p_package;
+ select * into pkg from private.client_packages where id=p_package;
+ if o.package_id is null or pkg.id is null or o.state<>'DELIVERING'
+   or pkg.status<>'DELIVERING' or o.worker_id is distinct from p_worker
+   or o.lease_generation is distinct from p_generation
+   or o.lease_until is null or o.lease_until<=clock_timestamp()
+   or held.organization_id is distinct from pkg.organization_id
+   or held.destination_id is distinct from pkg.destination_id
+   or held.destination_id is distinct from o.destination_id
+   or o.approved_sha256 is distinct from pkg.approved_sha256
+   or pkg.approved_sha256 is null or pkg.approved_manifest is null
+   or pkg.approved_manifest->>'package_id' is distinct from p_package::text
+   or pkg.approved_manifest->>'destination_id' is distinct from held.destination_id::text
+ then return '{"active":false}'::jsonb;end if;
+ return jsonb_build_object(
+  'active',true,'package_id',p_package,'worker_id',p_worker,
+  'request_id',p_request,'generation',p_generation,
+  'destination_id',held.destination_id,'approved_sha256',o.approved_sha256,
+  'manifest',pkg.approved_manifest);
+end;
+$owner$;
+create function public.service_read_package_dispatch_owner(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_read_package_dispatch_owner(
+  p_package,p_worker,p_request,p_generation)
+$wrap$;
+revoke all on function
+ private.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint),
+ public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)
+ from public,anon,authenticated,service_role;
+grant execute on function
+ private.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint),
+ public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)
+ to service_role;

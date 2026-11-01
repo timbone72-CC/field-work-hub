@@ -77,3 +77,44 @@ test('missing package RPC fails closed without any fallback to broad claim or gl
   e=>e.code==='SERVICE_RPC_UNAVAILABLE');
  assert.deepEqual(calls,['/rest/v1/rpc/service_claim_package_and_acquire_dispatch']);
 });
+
+
+test('exact package owner RPC is read-only and validates every input before network',async()=>{
+ const calls=[];
+ const ledger=makeLedger(async(url,init)=>{
+  calls.push([new URL(url).pathname,JSON.parse(init.body)]);
+  return Response.json({active:false});
+ });
+ assert.deepEqual(await ledger.readPackageDispatchOwner(
+  ids.package,ids.worker,ids.request,1),{active:false});
+ assert.deepEqual(calls,[['/rest/v1/rpc/service_read_package_dispatch_owner',
+  {p_package:ids.package,p_worker:ids.worker,p_request:ids.request,p_generation:1}]]);
+ for(const args of [
+  ['wrong',ids.worker,ids.request,1],[ids.package,'bad',ids.request,1],
+  [ids.package,ids.worker,'bad',1],[ids.package,ids.worker,ids.request,0]
+ ])assert.throws(()=>ledger.readPackageDispatchOwner(...args),
+  e=>e.code==='PACKAGE_DISPATCH_SCOPE_INVALID');
+ assert.equal(calls.length,1);
+});
+
+test('package worker preflight denies stale worker and mismatched frozen destination',async()=>{
+ const {verifyPackageScopedDeliveryOwner}=await import(
+  '../../supabase/functions/client-delivery/worker-runtime.mjs');
+ const scope={packageId:ids.package,workerId:ids.worker,requestId:ids.request,
+  generation:1,destinationId:ids.destination,rootId:ids.root};
+ const valid={active:true,package_id:ids.package,worker_id:ids.worker,
+  request_id:ids.request,generation:1,destination_id:ids.destination,
+  approved_sha256:'a'.repeat(64),manifest:{
+   package_id:ids.package,destination_id:ids.destination,destination_root:ids.root}};
+ const ledger=reply=>({readPackageDispatchOwner:async()=>reply});
+ assert.equal((await verifyPackageScopedDeliveryOwner({
+  ...scope,ledger:ledger(valid)})).approvedSha256,'a'.repeat(64));
+ for(const reply of [
+  {active:false},{...valid,generation:2},
+  {...valid,worker_id:ids.destination},
+  {...valid,manifest:{...valid.manifest,destination_root:'wrong_folder_root_123456'}},
+  {...valid,approved_sha256:''}
+ ])await assert.rejects(verifyPackageScopedDeliveryOwner({
+  ...scope,ledger:ledger(reply)}),
+  e=>e.code==='PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+});

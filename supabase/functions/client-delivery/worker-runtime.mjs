@@ -1492,3 +1492,31 @@ export async function proveInactiveClientDestinationFolder({
   verified:true,active:false,replayed:receipt.replayed,
   provider_writes_performed:mayPost});
 }
+
+
+// Fail-closed new package owner preflight. A positive snapshot is necessary,
+// NOT a replacement for atomic step and shared-parent fencing before writes.
+export async function verifyPackageScopedDeliveryOwner({
+ ledger,packageId,workerId,requestId,generation,destinationId,rootId
+}={}){
+ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const hash=/^[a-f0-9]{64}$/;
+ const remote=/^[A-Za-z0-9_-]{10,160}$/;
+ if(![packageId,workerId,requestId,destinationId].every(x=>uuid.test(x??''))
+   ||!Number.isSafeInteger(generation)||generation<1
+   ||!remote.test(rootId??'')
+   ||typeof ledger?.readPackageDispatchOwner!=='function')
+   throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
+ const proof=await ledger.readPackageDispatchOwner(
+   packageId,workerId,requestId,generation);
+ if(proof?.active!==true||proof.package_id!==packageId
+   ||proof.worker_id!==workerId||proof.request_id!==requestId
+   ||proof.generation!==generation||proof.destination_id!==destinationId
+   ||!hash.test(proof.approved_sha256??'')
+   ||proof.manifest?.package_id!==packageId
+   ||proof.manifest?.destination_id!==destinationId
+   ||proof.manifest?.destination_root!==rootId)
+   throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ return Object.freeze({packageId,workerId,requestId,generation,
+   destinationId,rootId,approvedSha256:proof.approved_sha256});
+}

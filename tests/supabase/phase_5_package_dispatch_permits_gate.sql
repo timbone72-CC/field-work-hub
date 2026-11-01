@@ -12,6 +12,7 @@ declare
   old_function text:='public.service_acquire_delivery_dispatch(uuid)';
   claim_function text:='public.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid)';
   release_function text:='public.service_release_package_dispatch(uuid,uuid,uuid,bigint)';
+  read_function text:='public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)';
   claim_source text;
   release_source text;
 begin
@@ -36,6 +37,11 @@ begin
     or has_table_privilege('service_role',
        'private.client_delivery_package_dispatch_config','UPDATE')
   then raise exception 'Direct package permit/control table access must be denied';end if;
+  if to_regprocedure(read_function) is null
+    or not has_function_privilege('service_role',read_function,'EXECUTE')
+    or has_function_privilege('anon',read_function,'EXECUTE')
+    or has_function_privilege('authenticated',read_function,'EXECUTE')
+  then raise exception 'Package owner proof must be service only';end if;
   if to_regprocedure(claim_function) is null
     or to_regprocedure(release_function) is null
     or to_regprocedure(old_function) is null
@@ -64,6 +70,10 @@ begin
     gen_random_uuid(),gen_random_uuid());
   if result is distinct from '{"claimed": false, "acquired": false}'::jsonb
   then raise exception 'Default-OFF claim must deny without mutating';end if;
+  result:=private.service_read_package_dispatch_owner(
+    gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),1);
+  if result is distinct from '{"active":false}'::jsonb
+  then raise exception 'Inactive permit owner proof must deny';end if;
   begin
     perform private.service_release_package_dispatch(
       gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),1);
