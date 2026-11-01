@@ -5,6 +5,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_claim_package_and_acquire_dispatch','service_release_package_dispatch',
  'service_read_package_dispatch_owner',
+ 'service_begin_package_dispatch_step','service_complete_package_dispatch_step',
  'service_read_active_delivery_lease','service_read_expired_test_delivery_reservation',
  'service_resume_and_acquire_exact_test_dispatch',
  'service_read_attempted_exact_test_parent',
@@ -160,6 +161,27 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       return rpc('service_read_package_dispatch_owner',{
         p_package:pkg,p_worker:worker,p_request:request,
         p_generation:generation
+      });
+    },
+    // Durable one-step-per-package admission. A crash/lost response holds the
+    // original step row; no timeout release or fallback to legacy dispatch.
+    beginPackageStep:(pkg,worker,request,generation,step)=>{
+      if(![pkg,worker,request,step].every(x=>typeof x==='string'&&UUID.test(x))
+        ||!Number.isSafeInteger(generation)||generation<1)
+        throw new DriveUncertain('PACKAGE_STEP_SCOPE_INVALID');
+      return rpc('service_begin_package_dispatch_step',{
+        p_package:pkg,p_worker:worker,p_request:request,
+        p_generation:generation,p_step:step
+      });
+    },
+    completePackageStep:(pkg,worker,request,generation,step,outcome)=>{
+      if(![pkg,worker,request,step].every(x=>typeof x==='string'&&UUID.test(x))
+        ||!Number.isSafeInteger(generation)||generation<1
+        ||!['VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP'].includes(outcome))
+        throw new DriveUncertain('PACKAGE_STEP_SCOPE_INVALID');
+      return rpc('service_complete_package_dispatch_step',{
+        p_package:pkg,p_worker:worker,p_request:request,
+        p_generation:generation,p_step:step,p_outcome:outcome
       });
     },
     // Read-only ORIGINAL unexpired lease from durable outbox; never reclaim.

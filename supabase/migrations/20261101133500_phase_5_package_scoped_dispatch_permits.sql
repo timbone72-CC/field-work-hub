@@ -321,3 +321,130 @@ begin
  end if;
 end;
 $guard$;
+
+
+-- Per-invocation durable single-flight. Crash/unknown network outcome keeps
+-- its unfinished attempt forever until separate exact-ID reconciliation.
+-- No TTL steal, retry scheduler or client/table privilege.
+create table private.client_delivery_package_step_attempts(
+  step_id uuid primary key,
+  package_id uuid not null references private.client_packages(id) on delete restrict,
+  worker_id uuid not null,
+  request_id uuid not null,
+  generation bigint not null check(generation>0),
+  started_at timestamptz not null default clock_timestamp(),
+  verified_at timestamptz,
+  verified_outcome text,
+  check ((verified_at is null and verified_outcome is null)
+    or (verified_at is not null and verified_outcome is not null))
+);
+create unique index client_delivery_one_active_step_per_package
+ on private.client_delivery_package_step_attempts(package_id)
+ where verified_at is null;
+create index client_delivery_package_step_history_idx
+ on private.client_delivery_package_step_attempts(package_id,started_at);
+alter table private.client_delivery_package_step_attempts enable row level security;
+revoke all on private.client_delivery_package_step_attempts
+ from public,anon,authenticated,service_role;
+
+create function private.service_begin_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,p_step uuid
+) returns jsonb language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $begin$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ inserted uuid;
+begin
+ if p_package is null or p_worker is null or p_request is null
+   or p_generation is null or p_generation<1 or p_step is null
+ then raise exception 'Exact step owner required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config
+   where singleton for share;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then return jsonb_build_object('acquired',false);end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package for update;
+ if held.package_id is null or held.worker_id is distinct from p_worker
+   or held.request_id is distinct from p_request
+   or held.generation is distinct from p_generation
+ then raise exception 'Package step requires exact permit' using errcode='42501';end if;
+ perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ insert into private.client_delivery_package_step_attempts(
+   step_id,package_id,worker_id,request_id,generation)
+ values(p_step,p_package,p_worker,p_request,p_generation)
+ on conflict do nothing returning step_id into inserted;
+ if inserted is null then return jsonb_build_object('acquired',false);end if;
+ return jsonb_build_object('acquired',true,'step_id',p_step,
+  'package_id',p_package,'generation',p_generation);
+end;
+$begin$;
+
+create function private.service_complete_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,
+ p_step uuid,p_outcome text
+) returns jsonb language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $complete$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ step private.client_delivery_package_step_attempts%rowtype;
+begin
+ if p_package is null or p_worker is null or p_request is null
+   or p_step is null or p_generation is null or p_generation<1
+   or p_outcome not in ('VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP')
+ then raise exception 'Verified exact step outcome required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config
+   where singleton for share;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then raise exception 'Package step cutover inactive' using errcode='42501';end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package for update;
+ if held.package_id is null or held.worker_id is distinct from p_worker
+   or held.request_id is distinct from p_request
+   or held.generation is distinct from p_generation
+ then raise exception 'Exact permit changed' using errcode='42501';end if;
+ select * into step from private.client_delivery_package_step_attempts
+   where step_id=p_step for update;
+ if step.step_id is null or step.package_id is distinct from p_package
+   or step.worker_id is distinct from p_worker
+   or step.request_id is distinct from p_request
+   or step.generation is distinct from p_generation
+   or step.verified_at is not null
+ then raise exception 'Exact unfinished step required' using errcode='42501';end if;
+ perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ -- Does not mark package or remote object delivered. The trusted worker
+ -- must first prove its result using the existing exact-ID/byte RPC/GET path.
+ update private.client_delivery_package_step_attempts
+   set verified_at=clock_timestamp(),verified_outcome=p_outcome
+   where step_id=p_step and verified_at is null;
+ if not found then raise exception 'Step completion uncertain' using errcode='40001';end if;
+ return jsonb_build_object('completed',true,'step_id',p_step);
+end;
+$complete$;
+
+create function public.service_begin_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,p_step uuid
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_begin_package_dispatch_step(
+  p_package,p_worker,p_request,p_generation,p_step)
+$wrap$;
+create function public.service_complete_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,
+ p_step uuid,p_outcome text
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_complete_package_dispatch_step(
+  p_package,p_worker,p_request,p_generation,p_step,p_outcome)
+$wrap$;
+revoke all on function
+ private.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ private.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text),
+ public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)
+ from public,anon,authenticated,service_role;
+grant execute on function
+ private.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ private.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text),
+ public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)
+ to service_role;

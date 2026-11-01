@@ -118,3 +118,52 @@ test('package worker preflight denies stale worker and mismatched frozen destina
   ...scope,ledger:ledger(reply)}),
   e=>e.code==='PACKAGE_DISPATCH_OWNER_UNVERIFIED');
 });
+
+
+test('new step owner has exact service-only begin/complete calls and rejects invalid scope',async()=>{
+ const calls=[];
+ const ledger=makeLedger(async(url,init)=>{
+  calls.push([new URL(url).pathname,JSON.parse(init.body)]);
+  if(url.endsWith('/service_begin_package_dispatch_step'))
+   return Response.json({acquired:false});
+  if(url.endsWith('/service_complete_package_dispatch_step'))
+   return Response.json({completed:true,step_id:ids.request});
+  throw Error('UNEXPECTED_RPC');
+ });
+ const step='55555555-5555-4555-8555-555555555555';
+ assert.deepEqual(await ledger.beginPackageStep(
+  ids.package,ids.worker,ids.request,1,step),{acquired:false});
+ assert.deepEqual(await ledger.completePackageStep(
+  ids.package,ids.worker,ids.request,1,step,'VERIFIED_METADATA_STEP'),
+  {completed:true,step_id:ids.request});
+ assert.deepEqual(calls.map(x=>x[0]),[
+  '/rest/v1/rpc/service_begin_package_dispatch_step',
+  '/rest/v1/rpc/service_complete_package_dispatch_step'
+ ]);
+ assert.deepEqual(calls[0][1],{p_package:ids.package,p_worker:ids.worker,
+  p_request:ids.request,p_generation:1,p_step:step});
+ assert.deepEqual(calls[1][1],{...calls[0][1],p_outcome:'VERIFIED_METADATA_STEP'});
+ for(const args of [
+  [ids.package,ids.worker,ids.request,1,'bad'],
+  [ids.package,ids.worker,ids.request,0,step],
+  ['bad',ids.worker,ids.request,1,step]
+ ])assert.throws(()=>ledger.beginPackageStep(...args),
+  e=>e.code==='PACKAGE_STEP_SCOPE_INVALID');
+ assert.throws(()=>ledger.completePackageStep(
+  ids.package,ids.worker,ids.request,1,step,'UNCERTAIN'),
+  e=>e.code==='PACKAGE_STEP_SCOPE_INVALID');
+ assert.equal(calls.length,2);
+});
+
+test('missing durable package step RPC never falls back to legacy worker permit',async()=>{
+ const paths=[];
+ const ledger=makeLedger(async(url)=>{
+  paths.push(new URL(url).pathname);
+  return Response.json({error:'RPC unavailable'},{status:404});
+ });
+ const step='55555555-5555-4555-8555-555555555555';
+ await assert.rejects(ledger.beginPackageStep(
+  ids.package,ids.worker,ids.request,1,step),
+  e=>e.code==='SERVICE_RPC_UNAVAILABLE');
+ assert.deepEqual(paths,['/rest/v1/rpc/service_begin_package_dispatch_step']);
+});

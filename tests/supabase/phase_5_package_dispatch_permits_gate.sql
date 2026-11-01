@@ -13,6 +13,8 @@ declare
   claim_function text:='public.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid)';
   release_function text:='public.service_release_package_dispatch(uuid,uuid,uuid,bigint)';
   read_function text:='public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)';
+  step_begin text:='public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid)';
+  step_end text:='public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)';
   claim_source text;
   release_source text;
   central_guard text;
@@ -38,6 +40,18 @@ begin
     or has_table_privilege('service_role',
        'private.client_delivery_package_dispatch_config','UPDATE')
   then raise exception 'Direct package permit/control table access must be denied';end if;
+  if to_regprocedure(step_begin) is null or to_regprocedure(step_end) is null
+    or not has_function_privilege('service_role',step_begin,'EXECUTE')
+    or not has_function_privilege('service_role',step_end,'EXECUTE')
+    or has_function_privilege('anon',step_begin,'EXECUTE')
+    or has_function_privilege('authenticated',step_end,'EXECUTE')
+    or has_table_privilege('service_role',
+       'private.client_delivery_package_step_attempts','INSERT')
+    or has_table_privilege('authenticated',
+       'private.client_delivery_package_step_attempts','SELECT')
+    or not (select relrowsecurity from pg_class
+       where oid='private.client_delivery_package_step_attempts'::regclass)
+  then raise exception 'Durable step gate must be private/service-only';end if;
   if to_regprocedure(read_function) is null
     or not has_function_privilege('service_role',read_function,'EXECUTE')
     or has_function_privilege('anon',read_function,'EXECUTE')
@@ -79,6 +93,10 @@ begin
     gen_random_uuid(),gen_random_uuid());
   if result is distinct from '{"claimed": false, "acquired": false}'::jsonb
   then raise exception 'Default-OFF claim must deny without mutating';end if;
+  result:=private.service_begin_package_dispatch_step(
+   gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),1,gen_random_uuid());
+  if result is distinct from '{"acquired":false}'::jsonb
+  then raise exception 'Default OFF package step unexpectedly admitted';end if;
   result:=private.service_read_package_dispatch_owner(
     gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),1);
   if result is distinct from '{"active":false}'::jsonb
