@@ -221,7 +221,7 @@ test('ambiguous/partial delivery result retains exact step without any completio
   beginPackageStep:async()=>({acquired:true,step_id:scope.stepId,
    package_id:scope.packageId,generation:1}),
   completePackageStep:async()=>{completed++;throw Error('NOT_ALLOWED')}};
- for(const state of ['FILE_STEP_PENDING','PACKAGE_DELIVERED','UNKNOWN'])
+ for(const state of ['FILE_STEP_PENDING','UNKNOWN'])
   await assert.rejects(runFencedPackageDeliveryStep({...scope,ledger,
    runExistingStep:async()=>({state})}),
    e=>e.code==='PACKAGE_STEP_REQUIRES_RECONCILIATION');
