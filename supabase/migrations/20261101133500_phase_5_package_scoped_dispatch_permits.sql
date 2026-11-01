@@ -267,3 +267,57 @@ grant execute on function
  private.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint),
  public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)
  to service_role;
+
+
+-- Cutover-safe central lease guard. Every existing parent/file/session/receipt
+-- mutation calls this SAME authority. Default OFF retains the legacy path,
+-- while either cutover flag bars unpermitted legacy writes. Only BOTH flags
+-- and a matching immutable package permit permit the new generation.
+-- This is NOT a per-invocation Google POST fence; separate bounded step
+-- serialization is still required before enabling either flag.
+create or replace function private.service_delivery_guard(
+ p_package uuid,p_worker uuid,p_generation bigint
+) returns void language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $guard$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ o private.client_delivery_outbox%rowtype;
+ pkg private.client_packages%rowtype;
+begin
+ select * into cfg from private.client_delivery_package_dispatch_config
+  where singleton for share;
+ if cfg.singleton is null then
+  raise exception 'Dispatch configuration missing' using errcode='42501';
+ end if;
+ if cfg.enabled or cfg.legacy_worker_off_verified then
+  if not cfg.enabled or not cfg.legacy_worker_off_verified then
+   raise exception 'Delivery cutover not complete' using errcode='42501';
+  end if;
+  select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package for share;
+  if held.package_id is null or held.worker_id is distinct from p_worker
+    or held.generation is distinct from p_generation
+  then raise exception 'Package dispatch owner not verified' using errcode='42501';end if;
+ end if;
+ select * into o from private.client_delivery_outbox
+  where package_id=p_package for update;
+ if o.package_id is null or o.state<>'DELIVERING'
+   or o.worker_id is distinct from p_worker
+   or o.lease_generation is distinct from p_generation
+   or o.lease_until is null or o.lease_until<=clock_timestamp()
+ then raise exception 'Delivery lease stale or uncertain' using errcode='40001';end if;
+ if cfg.enabled then
+  select * into pkg from private.client_packages where id=p_package;
+  if pkg.id is null or pkg.status<>'DELIVERING'
+   or held.organization_id is distinct from pkg.organization_id
+   or held.destination_id is distinct from pkg.destination_id
+   or held.destination_id is distinct from o.destination_id
+   or pkg.approved_sha256 is null
+   or o.approved_sha256 is distinct from pkg.approved_sha256
+   or pkg.approved_manifest->>'package_id' is distinct from p_package::text
+   or pkg.approved_manifest->>'destination_id' is distinct from held.destination_id::text
+  then raise exception 'Frozen package authority changed' using errcode='42501';end if;
+ end if;
+end;
+$guard$;
