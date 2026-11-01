@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-01 (America/Chicago)  
 **Plan ID:** `phase5d-per-package-delivery-permits` — revision 1  
-**Status:** **PROPOSED / DESIGN APPROVAL PENDING — NO RUNTIME IMPLEMENTATION AUTHORIZED BY THIS DOCUMENT**  
+**Status:** **DESIGN APPROVED — IMPLEMENTATION AUTHORIZED ON PR #40; TEST PROVIDER GATES / LEVEL-3 PRE-MERGE APPROVAL STILL PENDING**  
 **Owner:** Existing Phase 5/6 scope `dashboard-workflow-enhancement-plan`, draft PR #40, branch `feat/phase-5-6-dashboard-workflow`  
 **Risk:** Level 1 documentation; proposed Level 3 database, security, provider concurrency, retry and recovery implementation. Separate explicit Level 3 pre-merge approval remains required.
 
@@ -75,7 +75,7 @@ The design is ready for review when it specifies the SQL atomic boundary, shared
 
 ## 8. Decision and exact next step
 
-**Pending operator decision:** Approve/revise/reject this permanent per-package-permit architecture, **including an initial TEST concurrency cap of two** and the legacy original remaining quarantined. This is a material Phase 5 amendment; discussion of the proposal is not an implicit approval. On approval, fold the design into the approved Phase 5 plan and implement on **existing PR #40**, starting with exact SQL/service-call inventory and additive, fail-closed migration. Do not run a fresh photo or retry original evidence merely because this plan exists.
+**Decision recorded 2026-11-01, 07:28 America/Chicago (CST):** The operator explicitly replied **“Plan approved”** to revision 1 of this complete permanent per-package-permit amendment, including initial TEST concurrency cap two, package-scoped failure isolation, shared-parent fencing, and quarantined original evidence. This is material Phase 5 design approval and authorizes governed source implementation on **existing PR #40**. It is **not** provider-test authorization to retry the blocked October 26 operation, a release of the original HELD permit, production activation, or the separate Level-3 pre-merge approval. Next: integrate approved design into Phase 5 parent plan, inventory exact SQL/service callers, implement additive fail-closed schema and focused tests, then stage source-worker integration under the documented boundaries.
 
 ## Appendix A — prior fresh-photo proposal and read-only preflight, preserved verbatim
 
