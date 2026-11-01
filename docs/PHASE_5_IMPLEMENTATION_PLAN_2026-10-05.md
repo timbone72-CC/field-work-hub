@@ -220,6 +220,15 @@ Stage exact APK/dashboard/function/migration revisions, rollback artifact and on
 
 Phase 5 complete only when **usable private review, guarded On/Off package release, exact configured Drive delivery, protected interruption/restart, rejected-evidence retention and final-delivery-gated cleanup are proven**, required exact-head automation and live parity pass, explicit Level 3 merge approval is recorded and integration/publication checks agree. No runtime or physical evidence is claimed by this approved planning update.
 
+## Approved Phase 5D package-scoped delivery concurrency amendment — 2026-11-01
+
+The operator explicitly approved [revision 1 of the per-package delivery permit amendment](PHASE_5D_PER_PACKAGE_DELIVERY_PERMITS_PLAN_2026-11-01.md) by replying **“Plan approved”** on 2026-11-01 at approximately 07:28 America/Chicago (CST). This material approved replacement **supersedes only the prior global-singleton delivery permit/concurrency assumption**, not the rest of the October 5 Phase 5 plan or accepted evidence.
+
+- **One trusted delivery system, per-package arbitration:** A durable, private package-scoped permit and original lease/fencing owner replaces the single global provider-dispatch permit for *new* eligible work. A package with UNCERTAIN provider outcome remains frozen until exact-ID reconciliation; unrelated approved packages may progress independently. Cap first authorized TEST activation at two in-flight packages.
+- **Shared provider hierarchy:** Preserve exact company/root/destination revision, geographic/WO/package parent maps; serialize reservations and provider creates on each shared immutable parent-map identity so parallel packages cannot create duplicate folders. Preserve original file IDs, manifest hashes, receipts and protected cleanup gate.
+- **Legacy and rollout:** The existing occupied global singleton, original reserved PHOTO-ID, encrypted UPLOADING session and one-shot evidence remain quarantined and unchanged. Prevent old/new worker overlap and broad claims at cutover; do not use a new permit or TEST photo as a route to retry the October 26 restricted diagnostic or original upload. Existing FWH TEST photos are disposable but uncertain remote-operation evidence is not silently reset.
+- **Implementation/verification:** Follow the linked detailed design's additive SQL, atomic ownership, least-privilege RPC, worker integration, fair bounded scheduler, cross-package/parent collision, crash/ambiguous response, rollback, and smallest real provider gate. Source implementation may proceed on the *same authoritative draft PR #40*; the separate Level-3 pre-merge approval remains pending and no automatic client delivery may activate merely because this design was approved.
+
 ## 11. Official implementation references checked for planning
 
 Recheck current versions before runtime integration; these references support the chosen boundaries, not a claim that provider gates passed.
