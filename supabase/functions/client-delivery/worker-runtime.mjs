@@ -1499,7 +1499,7 @@ export async function proveInactiveClientDestinationFolder({
 export async function verifyPackageScopedDeliveryOwner({
  ledger,packageId,workerId,requestId,generation,destinationId,rootId
 }={}){
- const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  const hash=/^[a-f0-9]{64}$/;
  const remote=/^[A-Za-z0-9_-]{10,160}$/;
  if(![packageId,workerId,requestId,destinationId].every(x=>uuid.test(x??''))

@@ -153,7 +153,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     },
     // Package-specific owner proof. Never falls back to a legacy lease.
     readPackageDispatchOwner:(pkg,worker,request,generation)=>{
-      if(![pkg,worker,request].every(x=>typeof x==='string'&&UUID.test(x))
+      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      if(![pkg,worker,request].every(x=>typeof x==='string'&&uuid.test(x))
         ||!Number.isSafeInteger(generation)||generation<1)
         throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
       return rpc('service_read_package_dispatch_owner',{
