@@ -166,7 +166,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     // Durable one-step-per-package admission. A crash/lost response holds the
     // original step row; no timeout release or fallback to legacy dispatch.
     beginPackageStep:(pkg,worker,request,generation,step)=>{
-      if(![pkg,worker,request,step].every(x=>typeof x==='string'&&UUID.test(x))
+      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      if(![pkg,worker,request,step].every(x=>typeof x==='string'&&uuid.test(x))
         ||!Number.isSafeInteger(generation)||generation<1)
         throw new DriveUncertain('PACKAGE_STEP_SCOPE_INVALID');
       return rpc('service_begin_package_dispatch_step',{
@@ -175,7 +176,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       });
     },
     completePackageStep:(pkg,worker,request,generation,step,outcome)=>{
-      if(![pkg,worker,request,step].every(x=>typeof x==='string'&&UUID.test(x))
+      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      if(![pkg,worker,request,step].every(x=>typeof x==='string'&&uuid.test(x))
         ||!Number.isSafeInteger(generation)||generation<1
         ||!['VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP'].includes(outcome))
         throw new DriveUncertain('PACKAGE_STEP_SCOPE_INVALID');
