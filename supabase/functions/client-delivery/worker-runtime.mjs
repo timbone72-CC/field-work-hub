@@ -1520,3 +1520,46 @@ export async function verifyPackageScopedDeliveryOwner({
  return Object.freeze({packageId,workerId,requestId,generation,
    destinationId,rootId,approvedSha256:proof.approved_sha256});
 }
+
+
+// Compose the EXISTING trusted delivery step behind a durable package-local
+// single-flight gate. No alternative queue/Google client or automatic recovery.
+// A lost SQL reply, ambiguous provider result or partial chunk leaves the
+// exact step OPEN; other packages may proceed under their own permits.
+export async function runFencedPackageDeliveryStep({
+  ledger,packageId,workerId,requestId,generation,destinationId,rootId,
+  stepId,runExistingStep
+}={}){
+  const owner=await verifyPackageScopedDeliveryOwner({
+    ledger,packageId,workerId,requestId,generation,destinationId,rootId
+  });
+  if(typeof runExistingStep!=='function'
+    ||typeof ledger.beginPackageStep!=='function'
+    ||typeof ledger.completePackageStep!=='function')
+    throw new DriveUncertain('PACKAGE_STEP_NOT_CONFIGURED');
+  // The service RPC serializes all Edge invocations for this package. It
+  // revalidates the live permit/lease, so an earlier read is not enough.
+  const acquired=await ledger.beginPackageStep(
+    packageId,workerId,requestId,generation,stepId);
+  if(acquired?.acquired===false)
+    return Object.freeze({state:'PACKAGE_STEP_BUSY'});
+  if(acquired?.acquired!==true||acquired.step_id!==stepId
+    ||acquired.package_id!==packageId||acquired.generation!==generation)
+    throw new DriveUncertain('PACKAGE_STEP_OWNER_UNVERIFIED');
+  // Never release from finally. Only the existing coordinator's positively
+  // verified, durable states can permit this exact step to be completed.
+  const result=await runExistingStep(owner);
+  const metadata=result?.state==='PACKAGE_IDENTITIES_PREALLOCATED';
+  const verified=['PARENT_STEP_VERIFIED','PACKAGE_FOLDER_STEP_VERIFIED',
+    'FILE_STEP_VERIFIED'].includes(result?.state);
+  // FILE_STEP_PENDING can mean an independent Google GET is still required.
+  // PACKAGE_DELIVERED requires final-receipt-specific fencing in a later batch.
+  if(!metadata&&!verified)
+    throw new DriveUncertain('PACKAGE_STEP_REQUIRES_RECONCILIATION');
+  const committed=await ledger.completePackageStep(
+    packageId,workerId,requestId,generation,stepId,
+    metadata?'VERIFIED_METADATA_STEP':'VERIFIED_PROVIDER_STEP');
+  if(committed?.completed!==true||committed.step_id!==stepId)
+    throw new DriveUncertain('PACKAGE_STEP_COMPLETION_UNVERIFIED');
+  return Object.freeze({state:result.state});
+}

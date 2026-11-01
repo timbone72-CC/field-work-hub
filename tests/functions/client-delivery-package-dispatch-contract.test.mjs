@@ -167,3 +167,63 @@ test('missing durable package step RPC never falls back to legacy worker permit'
   e=>e.code==='SERVICE_RPC_UNAVAILABLE');
  assert.deepEqual(paths,['/rest/v1/rpc/service_begin_package_dispatch_step']);
 });
+
+
+test('same-package duplicate wakeup cannot enter trusted provider step',async()=>{
+ const {runFencedPackageDeliveryStep}=await import(
+  '../../supabase/functions/client-delivery/worker-runtime.mjs');
+ const scope={packageId:ids.package,workerId:ids.worker,requestId:ids.request,
+  destinationId:ids.destination,rootId:ids.root,generation:1};
+ const owner={active:true,package_id:ids.package,worker_id:ids.worker,
+  request_id:ids.request,generation:1,destination_id:ids.destination,
+  approved_sha256:'a'.repeat(64),manifest:{package_id:ids.package,
+   destination_id:ids.destination,destination_root:ids.root}};
+ let active=false,entered=0,completed=0,release,enteredSignal;
+ const enteredPromise=new Promise(resolve=>{enteredSignal=resolve});
+ const waiting=new Promise(resolve=>{release=resolve});
+ const ledger={
+  readPackageDispatchOwner:async()=>owner,
+  beginPackageStep:async(pkg,worker,request,gen,step)=>{
+   if(active)return {acquired:false};
+   active=true;return {acquired:true,package_id:pkg,generation:gen,step_id:step};
+  },
+  completePackageStep:async(_p,_w,_r,_g,step)=>{
+   completed++;active=false;return {completed:true,step_id:step};
+  }
+ };
+ const first=runFencedPackageDeliveryStep({...scope,ledger,
+  stepId:'55555555-5555-4555-8555-555555555555',
+  runExistingStep:async()=>{entered++;enteredSignal();await waiting;
+   return {state:'PARENT_STEP_VERIFIED'};}});
+ await enteredPromise;
+ const second=await runFencedPackageDeliveryStep({...scope,ledger,
+  stepId:'66666666-6666-4666-8666-666666666666',
+  runExistingStep:async()=>{entered++;return {state:'PARENT_STEP_VERIFIED'}}});
+ assert.deepEqual(second,{state:'PACKAGE_STEP_BUSY'});
+ assert.equal(entered,1);
+ release();
+ assert.deepEqual(await first,{state:'PARENT_STEP_VERIFIED'});
+ assert.equal(completed,1);
+});
+
+test('ambiguous/partial delivery result retains exact step without any completion',async()=>{
+ const {runFencedPackageDeliveryStep}=await import(
+  '../../supabase/functions/client-delivery/worker-runtime.mjs');
+ const scope={packageId:ids.package,workerId:ids.worker,requestId:ids.request,
+  destinationId:ids.destination,rootId:ids.root,generation:1,
+  stepId:'55555555-5555-4555-8555-555555555555'};
+ const owner={active:true,package_id:ids.package,worker_id:ids.worker,
+  request_id:ids.request,generation:1,destination_id:ids.destination,
+  approved_sha256:'a'.repeat(64),manifest:{package_id:ids.package,
+   destination_id:ids.destination,destination_root:ids.root}};
+ let completed=0;
+ const ledger={readPackageDispatchOwner:async()=>owner,
+  beginPackageStep:async()=>({acquired:true,step_id:scope.stepId,
+   package_id:scope.packageId,generation:1}),
+  completePackageStep:async()=>{completed++;throw Error('NOT_ALLOWED')}};
+ for(const state of ['FILE_STEP_PENDING','PACKAGE_DELIVERED','UNKNOWN'])
+  await assert.rejects(runFencedPackageDeliveryStep({...scope,ledger,
+   runExistingStep:async()=>({state})}),
+   e=>e.code==='PACKAGE_STEP_REQUIRES_RECONCILIATION');
+ assert.equal(completed,0);
+});
