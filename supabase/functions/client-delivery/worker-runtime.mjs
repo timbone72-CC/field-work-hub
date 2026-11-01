@@ -1552,13 +1552,15 @@ export async function runFencedPackageDeliveryStep({
   const metadata=result?.state==='PACKAGE_IDENTITIES_PREALLOCATED';
   const verified=['PARENT_STEP_VERIFIED','PACKAGE_FOLDER_STEP_VERIFIED',
     'FILE_STEP_VERIFIED'].includes(result?.state);
+  const final=result?.state==='PACKAGE_DELIVERED';
   // FILE_STEP_PENDING can mean an independent Google GET is still required.
-  // PACKAGE_DELIVERED requires final-receipt-specific fencing in a later batch.
-  if(!metadata&&!verified)
+  // PACKAGE_DELIVERED is fenced by the exact SQL final receipt.
+  if(!metadata&&!verified&&!final)
     throw new DriveUncertain('PACKAGE_STEP_REQUIRES_RECONCILIATION');
   const committed=await ledger.completePackageStep(
     packageId,workerId,requestId,generation,stepId,
-    metadata?'VERIFIED_METADATA_STEP':'VERIFIED_PROVIDER_STEP');
+    final?'VERIFIED_FINAL_RECEIPT':metadata
+      ?'VERIFIED_METADATA_STEP':'VERIFIED_PROVIDER_STEP');
   if(committed?.completed!==true||committed.step_id!==stepId)
     throw new DriveUncertain('PACKAGE_STEP_COMPLETION_UNVERIFIED');
   return Object.freeze({state:result.state});

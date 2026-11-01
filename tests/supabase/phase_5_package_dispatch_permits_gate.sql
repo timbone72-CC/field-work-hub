@@ -77,6 +77,8 @@ begin
     or position('private.client_delivery_final_receipts' in release_source)=0
     or position('o.state' in release_source)=0
   then raise exception 'Exact atomic package ownership or final receipt fence missing';end if;
+  if position('private.client_delivery_package_step_attempts' in release_source)=0
+  then raise exception 'Unfinished package step cannot release permit';end if;
   central_guard:=pg_get_functiondef(
    'private.service_delivery_guard(uuid,uuid,bigint)'::regprocedure);
   if position('private.client_delivery_package_dispatch_permits' in central_guard)=0
@@ -84,6 +86,7 @@ begin
     or position('held.worker_id is distinct from p_worker' in central_guard)=0
     or position('o.lease_generation is distinct from p_generation' in central_guard)=0
     or position('for share' in lower(central_guard))=0
+    or position('private.client_delivery_package_step_attempts' in central_guard)=0
   then raise exception 'Central legacy/package cutover fence missing';end if;
   select count(*) into before_old from private.client_delivery_dispatch_permit;
   select count(*) into before_new from private.client_delivery_package_dispatch_permits;

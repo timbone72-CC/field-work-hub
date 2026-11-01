@@ -179,7 +179,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
       if(![pkg,worker,request,step].every(x=>typeof x==='string'&&uuid.test(x))
         ||!Number.isSafeInteger(generation)||generation<1
-        ||!['VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP'].includes(outcome))
+        ||!['VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP',
+          'VERIFIED_FINAL_RECEIPT'].includes(outcome))
         throw new DriveUncertain('PACKAGE_STEP_SCOPE_INVALID');
       return rpc('service_complete_package_dispatch_step',{
         p_package:pkg,p_worker:worker,p_request:request,

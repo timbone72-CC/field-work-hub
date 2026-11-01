@@ -227,3 +227,28 @@ test('ambiguous/partial delivery result retains exact step without any completio
    e=>e.code==='PACKAGE_STEP_REQUIRES_RECONCILIATION');
  assert.equal(completed,0);
 });
+
+
+test('verified final receipt is the only terminal step allowed to finish',async()=>{
+ const {runFencedPackageDeliveryStep}=await import(
+  '../../supabase/functions/client-delivery/worker-runtime.mjs');
+ const step='55555555-5555-4555-8555-555555555555',calls=[];
+ const ledger={readPackageDispatchOwner:async()=>({
+   active:true,package_id:ids.package,worker_id:ids.worker,
+   request_id:ids.request,generation:1,destination_id:ids.destination,
+   approved_sha256:'a'.repeat(64),manifest:{
+    package_id:ids.package,destination_id:ids.destination,destination_root:ids.root}
+  }),
+  beginPackageStep:async()=>({acquired:true,step_id:step,
+   package_id:ids.package,generation:1}),
+  completePackageStep:async(...args)=>{
+   calls.push(args);return {completed:true,step_id:step};
+  }};
+ assert.deepEqual(await runFencedPackageDeliveryStep({ledger,
+   packageId:ids.package,workerId:ids.worker,requestId:ids.request,generation:1,
+   destinationId:ids.destination,rootId:ids.root,stepId:step,
+   runExistingStep:async()=>({state:'PACKAGE_DELIVERED'})
+ }),{state:'PACKAGE_DELIVERED'});
+ assert.equal(calls.length,1);
+ assert.equal(calls[0][5],'VERIFIED_FINAL_RECEIPT');
+});

@@ -171,6 +171,8 @@ begin
     or o.state<>'DELIVERED' or receipt.package_id is null
     or receipt.approved_sha256 is distinct from o.approved_sha256
     or receipt.destination_id is distinct from held.destination_id
+    or exists (select 1 from private.client_delivery_package_step_attempts s
+        where s.package_id=p_package and s.verified_at is null)
   then raise exception 'Original package owner/final receipt not verified'
     using errcode='42501';end if;
   delete from private.client_delivery_package_dispatch_permits
@@ -269,6 +271,31 @@ grant execute on function
  to service_role;
 
 
+-- Per-invocation durable single-flight. Crash/unknown network outcome keeps
+-- its unfinished attempt forever until separate exact-ID reconciliation.
+-- No TTL steal, retry scheduler or client/table privilege.
+create table private.client_delivery_package_step_attempts(
+  step_id uuid primary key,
+  package_id uuid not null references private.client_packages(id) on delete restrict,
+  worker_id uuid not null,
+  request_id uuid not null,
+  generation bigint not null check(generation>0),
+  started_at timestamptz not null default clock_timestamp(),
+  verified_at timestamptz,
+  verified_outcome text,
+  check ((verified_at is null and verified_outcome is null)
+    or (verified_at is not null and verified_outcome is not null))
+);
+create unique index client_delivery_one_active_step_per_package
+ on private.client_delivery_package_step_attempts(package_id)
+ where verified_at is null;
+create index client_delivery_package_step_history_idx
+ on private.client_delivery_package_step_attempts(package_id,started_at);
+alter table private.client_delivery_package_step_attempts enable row level security;
+revoke all on private.client_delivery_package_step_attempts
+ from public,anon,authenticated,service_role;
+
+
 -- Cutover-safe central lease guard. Every existing parent/file/session/receipt
 -- mutation calls this SAME authority. Default OFF retains the legacy path,
 -- while either cutover flag bars unpermitted legacy writes. Only BOTH flags
@@ -299,6 +326,13 @@ begin
   if held.package_id is null or held.worker_id is distinct from p_worker
     or held.generation is distinct from p_generation
   then raise exception 'Package dispatch owner not verified' using errcode='42501';end if;
+  if not exists (
+    select 1 from private.client_delivery_package_step_attempts s
+    where s.package_id=p_package and s.worker_id=p_worker
+      and s.request_id=held.request_id and s.generation=p_generation
+      and s.verified_at is null
+  ) then raise exception 'Active exact package step required'
+      using errcode='42501';end if;
  end if;
  select * into o from private.client_delivery_outbox
   where package_id=p_package for update;
@@ -323,30 +357,6 @@ end;
 $guard$;
 
 
--- Per-invocation durable single-flight. Crash/unknown network outcome keeps
--- its unfinished attempt forever until separate exact-ID reconciliation.
--- No TTL steal, retry scheduler or client/table privilege.
-create table private.client_delivery_package_step_attempts(
-  step_id uuid primary key,
-  package_id uuid not null references private.client_packages(id) on delete restrict,
-  worker_id uuid not null,
-  request_id uuid not null,
-  generation bigint not null check(generation>0),
-  started_at timestamptz not null default clock_timestamp(),
-  verified_at timestamptz,
-  verified_outcome text,
-  check ((verified_at is null and verified_outcome is null)
-    or (verified_at is not null and verified_outcome is not null))
-);
-create unique index client_delivery_one_active_step_per_package
- on private.client_delivery_package_step_attempts(package_id)
- where verified_at is null;
-create index client_delivery_package_step_history_idx
- on private.client_delivery_package_step_attempts(package_id,started_at);
-alter table private.client_delivery_package_step_attempts enable row level security;
-revoke all on private.client_delivery_package_step_attempts
- from public,anon,authenticated,service_role;
-
 create function private.service_begin_package_dispatch_step(
  p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,p_step uuid
 ) returns jsonb language plpgsql security definer
@@ -369,12 +379,12 @@ begin
    or held.request_id is distinct from p_request
    or held.generation is distinct from p_generation
  then raise exception 'Package step requires exact permit' using errcode='42501';end if;
- perform private.service_delivery_guard(p_package,p_worker,p_generation);
  insert into private.client_delivery_package_step_attempts(
    step_id,package_id,worker_id,request_id,generation)
  values(p_step,p_package,p_worker,p_request,p_generation)
  on conflict do nothing returning step_id into inserted;
  if inserted is null then return jsonb_build_object('acquired',false);end if;
+ perform private.service_delivery_guard(p_package,p_worker,p_generation);
  return jsonb_build_object('acquired',true,'step_id',p_step,
   'package_id',p_package,'generation',p_generation);
 end;
@@ -392,7 +402,8 @@ declare
 begin
  if p_package is null or p_worker is null or p_request is null
    or p_step is null or p_generation is null or p_generation<1
-   or p_outcome not in ('VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP')
+   or (p_outcome is null or p_outcome not in (
+     'VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP','VERIFIED_FINAL_RECEIPT'))
  then raise exception 'Verified exact step outcome required' using errcode='22023';end if;
  select * into cfg from private.client_delivery_package_dispatch_config
    where singleton for share;
@@ -412,7 +423,20 @@ begin
    or step.generation is distinct from p_generation
    or step.verified_at is not null
  then raise exception 'Exact unfinished step required' using errcode='42501';end if;
- perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ if p_outcome='VERIFIED_FINAL_RECEIPT' then
+  if not exists (
+    select 1 from private.client_delivery_final_receipts f
+      join private.client_delivery_outbox o on o.package_id=f.package_id
+      join private.client_packages pkg on pkg.id=f.package_id
+      where f.package_id=p_package and pkg.status='DELIVERED'
+        and o.state='DELIVERED' and f.approved_sha256=o.approved_sha256
+        and f.destination_id=held.destination_id
+        and f.approved_sha256=pkg.approved_sha256
+  ) then raise exception 'Exact final receipt required'
+    using errcode='42501';end if;
+ else
+  perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ end if;
  -- Does not mark package or remote object delivered. The trusted worker
  -- must first prove its result using the existing exact-ID/byte RPC/GET path.
  update private.client_delivery_package_step_attempts
