@@ -59,3 +59,5 @@ The prior 5,216-line record at blob `d7c380ab1a22858baf02c5d2860e1a24dbfc2898`, 
 
 | 44 | [Dated handoff part 44](2026-11-02/PHASE_5_6_HISTORY_PART_44.md) | Superseded hosted v57/v54 checkpoints and Phase 5D status row preserved verbatim |
 
+
+| 45 | [Dated handoff part 45](2026-11-02/PHASE_5_6_HISTORY_PART_45.md) | Superseded first-step provider context, old UUID defect, and pre-staging snapshot, preserved verbatim |
