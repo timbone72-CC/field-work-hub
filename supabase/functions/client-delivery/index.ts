@@ -5,9 +5,11 @@
 import {createDeliveryHandler} from './handler.mjs';
 import {selectHostedServiceCredential} from './service-ledger.mjs';
 Deno.serve(createDeliveryHandler({
- enabled:Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true',
+ // Phase 5D hosted cutover staging: MUTATING modes hard OFF, regardless of
+ // existing environment secrets. No legacy worker or provider operation.
+ enabled:false,
  // Dedicated OFF-by-default new-package runner. No caller package IDs.
- pinnedTestEnabled:Deno.env.get('FWH_CLIENT_NEW_PACKAGE_TEST_ENABLED')==='true',
+ pinnedTestEnabled:false,
  pinnedTestPackageId:Deno.env.get('FWH_CLIENT_NEW_TEST_PACKAGE_ID')??'',
  pinnedTestDestinationId:Deno.env.get('FWH_CLIENT_NEW_TEST_DESTINATION_ID')??'',
  pinnedTestRootFolderId:Deno.env.get('FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID')??'',
@@ -15,7 +17,7 @@ Deno.serve(createDeliveryHandler({
  testPreflightEnabled:Deno.env.get('FWH_CLIENT_TEST_PREFLIGHT_ENABLED')==='true',
  // Separate, explicitly enabled original-ID disposable TEST recovery only.
  // This does NOT turn on generic delivery, scheduler, Send or cleanup.
- testRecoveryEnabled:Deno.env.get('FWH_CLIENT_TEST_RECOVERY_ENABLED')==='true',
+ testRecoveryEnabled:false,
  testEvidenceClass:Deno.env.get('FWH_TEST_EVIDENCE_CLASS')??'',
  testRootFolderId:Deno.env.get('FWH_CLIENT_TEST_ROOT_FOLDER_ID')??'',
  internalDriveId:Deno.env.get('FWH_INTERNAL_SHARED_DRIVE_ID')??'',
