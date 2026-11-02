@@ -106,7 +106,9 @@ const ClientRelease = (() => {
         : 'No verified active destination. Package approval and Send remain blocked.';
       el('release-coverage').textContent=(tooMany?'Photo selection is unavailable until paging is verified. ':'')
         +(response.coverage_message||'Select eligible verified photos from original and corrective visits; all selected photos must pass exact package coverage.');
-      status('release-status',pkg ? `Package ${pkg.status}; explicit Send is separate.`
+      status('release-status',pkg?.status==='APPROVED' && pkg.send_blocked_reason
+        ? `Package APPROVED. ${pkg.send_blocked_reason}`
+        : pkg ? `Package ${pkg.status}; explicit Send is separate.`
         : 'No package saved. Choose your photos and save a draft.');
       loaded=true;buttons();
     }catch(error){if(valid(n,id,token)){status('release-status',error.message);status('review-policy-status',error.message);loaded=false;buttons();}}
