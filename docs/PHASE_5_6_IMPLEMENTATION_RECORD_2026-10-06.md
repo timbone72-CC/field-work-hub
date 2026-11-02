@@ -5,7 +5,7 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 ## Current execution priority — operator direction 2026-11-01
 
-**CONDITIONAL MERGE / SEND FIX (2026-11-02):** Merge authorized **when safe**. Source now blocks Admin Send when dispatch is OFF and explains paused delivery. TEST SQL installation and exact-head CI are pending. Merge publishes the Admin root, not SQL/APK. No merge yet.
+**CONDITIONAL MERGE / SEND FIX (2026-11-02):** Merge authorized **when safe**. Admin Send now denies when dispatch is OFF and explains paused delivery. TEST migration 129 installed, exact source match, original HELD/receipt intact. Latest-head CI/remaining staged-activation checks pending. Merge publishes Admin root, not SQL/APK. No merge yet.
 
 **CURRENT VERIFIED DELIVERY — 2026-11-02:** The ONE controlled disposable FWH TEST package `f42e05df-de7a-4d20-8dee-f55e09511d1f` (`FPP-000003`) reached **DELIVERED**. Fresh read-only SQL on Team TEST `vyocaujuwrivoqynvitm` confirmed package **DELIVERED**, outbox **DELIVERED**, **one durable final receipt** confirmed at `2026-11-02 17:13:48.821909 UTC`, PHOTO/MANIFEST/FOLDER file plans all **VERIFIED** with remote evidence, **zero unfinished** package steps, attempts **1** and lease generation **1**, and worker/lease cleared. The eight-step ledger contains five `VERIFIED_PROVIDER_STEP`, one `VERIFIED_METADATA_STEP`, one historical `RECONCILED_FAILED_FINAL_NO_RECEIPT`, and one later `VERIFIED_FINAL_RECEIPT`. The operator's final-delivery evidence also reported verified Google objects; this record's new independent recheck was **database read-only**, not a new Google provider call. Do not replay the successful delivery.
 
