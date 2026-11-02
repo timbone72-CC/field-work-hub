@@ -129,6 +129,12 @@ def run():
         first, second = list(pool.map(begin, [new_id(), new_id()]))
     admitted = [r for r in (first, second) if r["acquired"]]
     assert len(admitted) == 1 and sum(not r["acquired"] for r in (first, second)) == 1
+    # Confirm exactly one parent/provider step, before expiring the saved
+    # lease to test real same-permit continuation. No Google calls are made.
+    verified_step = admitted[0]["step_id"]
+    assert query("select public.service_complete_package_dispatch_step("
+                 "%s,%s,%s,1,%s,'VERIFIED_PROVIDER_STEP')",
+                 (pkg_a, worker_a, request_a, verified_step))["completed"]
     # An unrelated package is not held hostage by the unfinished step.
     step_b = new_id()
     assert query("select public.service_begin_package_dispatch_step(%s,%s,%s,1,%s)",
@@ -138,6 +144,40 @@ def run():
                  (pkg_b, worker_b, request_b, step_b))["completed"]
     assert query("select public.service_begin_package_dispatch_step(%s,%s,%s,1,%s)",
                  (pkg_b, worker_b, request_b, new_id()))["acquired"]
+    # Fixture-only 10-second expiry (not hosted); exact worker/generation
+    # and previous verified provider step are unchanged.
+    with psycopg.connect(DSN) as c:
+        c.execute("update private.client_delivery_outbox "
+                  "set lease_until=now()-interval '10 seconds' "
+                  "where package_id=%s and worker_id=%s and lease_generation=1",
+                  (pkg_a, worker_a))
+    descriptor=query("select public.service_read_pinned_package_dispatch(%s,%s,%s)",
+                     (pkg_a,dest,ROOT))
+    assert descriptor["resumable"] is True and descriptor["active"] is False, descriptor
+    assert descriptor["worker_id"] == str(worker_a)
+    assert descriptor["request_id"] == str(request_a)
+    assert descriptor["generation"] == 1
+    # Real two-connection race: one can renew the SAME permit and the second
+    # must be rejected after the first makes the lease current.
+    def resume(proof_id):
+        try:
+            return query("select public.service_resume_pinned_package_dispatch("
+                         "%s,%s,%s,%s,%s,1,'disposable@example.invalid',%s,%s,now(),%s)",
+                         (pkg_a,dest,ROOT,worker_a,request_a,DRIVE,
+                          "synthetic_permission_id_001",proof_id))
+        except psycopg.errors.InsufficientPrivilege:
+            return None
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(resume,[new_id(),new_id()]))
+    assert sum(r is not None and r.get("resumed") is True for r in results)==1,results
+    renewed=next(r for r in results if r is not None)
+    assert renewed["worker_id"]==str(worker_a)
+    assert renewed["request_id"]==str(request_a)
+    assert renewed["generation"]==1
+    assert query("select public.service_read_package_dispatch_owner(%s,%s,%s,1)",
+                 (pkg_a,worker_a,request_a))["active"]
+    assert query("select count(*) from private.client_delivery_package_step_attempts "
+                 "where package_id=%s and verified_at is null",(pkg_b,))==1
     try:
         query("select public.service_release_package_dispatch(%s,%s,%s,1)",
               (pkg_a, worker_a, request_a))
@@ -149,14 +189,14 @@ def run():
         assert c.execute("select count(*) from private.client_delivery_package_dispatch_permits"
                          ).fetchone()[0] == 2
         assert c.execute("select count(*) from private.client_delivery_package_step_attempts"
-                         " where verified_at is null").fetchone()[0] == 2
+                         " where verified_at is null").fetchone()[0] == 1
         # A finished metadata step does not invent a final receipt.
         assert c.execute("select count(*) from private.client_delivery_final_receipts"
                          ).fetchone()[0] == 0
         c.execute("update private.client_delivery_package_dispatch_config set "
                   "enabled=false,legacy_worker_off_verified=false where singleton")
-    print("PASS package-scoped two-connection claims, duplicate step fence, "
-          "independent recovery and no synthetic final receipt")
+    print("PASS package claims, exact expired-lease renewal race, untouched "
+          "uncertain unrelated step and no synthetic final receipt")
 
 
 if __name__ == "__main__":
