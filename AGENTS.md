@@ -15,6 +15,8 @@ Before starting/resuming runtime or phase work, inspect current main, open relev
 
 Before runtime changes, also read CHANGE_CONTROL_CONTRACT.md and TESTING_CONTRACT.md. Read INTEGRATION_CONTRACT.md for Supabase/Auth/RLS, Room/offline work, reassignment, photos, background sync, provider storage, uploads, cleanup or another integration boundary. Read docs/PHASE_STAGING_DOCTRINE.md and the current/next phase for phase transitions or genuine physical/provider gates. Documentation-only work must read the affected document and applicable governance/change rules.
 
+**Mandatory FWH resilience check:** Apply [the Failure Containment and Recovery Standard](GOVERNANCE.md#fwh-failure-containment-and-recovery-standard) to each feature, fix and integration: identify the smallest affected failure domain, safe independent work, durable evidence, retry/reconciliation boundary, visible problem and recovery path. Use the existing Integration and Testing Contracts and approved phase gates; never turn an isolated failure into a blanket stop or repeat already accepted tests without a changed boundary. This does not weaken mandatory fail-closed security or release gates.
+
 ## Required work classification
 
 Record goal, scope key, affected surfaces, Level 1/2/3, authoritative line, relevant packs, protected behavior, external systems, rollback and exact verification boundary. Reclassify if scope expands. Never start a competing overlapping implementation line; continue or explicitly supersede the existing line.
