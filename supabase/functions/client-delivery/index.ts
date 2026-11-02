@@ -1,15 +1,14 @@
-// Candidate only. NOT deployed as the current TEST worker: the confirmed
-// client TEST destination is verified but INACTIVE and no real Send gate passed.
-// A later authorized rollout needs a private scheduler and dedicated worker
-// secret; hosting the current read-only TEST preflight does not enable Send.
+// FWH Team TEST, explicit operator-authorized isolated ONE-PACKAGE candidate.
+// Never enable generic client delivery, legacy TEST recovery or a scheduler.
+// Must remain SOURCE-ONLY until focused CI and hosted parity are confirmed.
 import {createDeliveryHandler} from './handler.mjs';
 import {selectHostedServiceCredential} from './service-ledger.mjs';
 Deno.serve(createDeliveryHandler({
- // Phase 5D hosted cutover staging: MUTATING modes hard OFF, regardless of
- // existing environment secrets. No legacy worker or provider operation.
+ // Phase 5D: general delivery and legacy recovery stay compiled OFF.
+ // The ONLY enabled mutation is the authenticated frozen one-package step.
  enabled:false,
- // Dedicated OFF-by-default new-package runner. No caller package IDs.
- pinnedTestEnabled:false,
+ // No caller-selected package or destination IDs; this one flag is explicit.
+ pinnedTestEnabled:true,
  pinnedTestPackageId:'f42e05df-de7a-4d20-8dee-f55e09511d1f',
  pinnedTestDestinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',
  pinnedTestRootFolderId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK',
