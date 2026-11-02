@@ -197,3 +197,23 @@ test('only verified final delivery can close a package slot',async()=>{
  assert.equal(ledger.releases,1);
  assert.equal(ledger.permits.size,0);
 });
+
+
+test('new-mode coordinator refuses legacy lease read even when one is held',async()=>{
+ const {advanceTrustedDeliveryOneStep}=await import(
+  '../../supabase/functions/client-delivery/worker-runtime.mjs');
+ const claim=fixtureClaim(pkg,uuid(70),uuid(71));
+ let oldReads=0,anyProvider=0;
+ const ledger={
+  readActiveLease:async()=>{oldReads++;throw Error('ORIGINAL_HELD_READ_FORBIDDEN')},
+  claim:async()=>{throw Error('BROAD_CLAIM_FORBIDDEN')},
+  heartbeat:async()=>{},
+  nextReservedItem:async()=>({state:'UNRECOGNIZED'})
+ };
+ await assert.rejects(advanceTrustedDeliveryOneStep({
+  ledger,packageClaim:claim,makeWorkerId:ids(),
+  tokenProvider:async()=>{anyProvider++;throw Error('PROVIDER_NOT_ALLOWED')},
+  expectedEmail:config.expectedAccount,expectedDriveId:config.expectedDriveId
+ }),e=>e.code==='FROZEN_DELIVERY_ITEM_UNVERIFIED');
+ assert.equal(oldReads,0);assert.equal(anyProvider,0);
+});

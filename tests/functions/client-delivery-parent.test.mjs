@@ -53,3 +53,46 @@ test('wrong frozen parent denies before provider write',async()=>{
  await assert.rejects(()=>reconcileOnePreallocatedParent(r));
  assert.equal(r.events.includes('POST'),false);
 });
+
+
+test('two separately owned packages share one parent CAS and never duplicate Google POST',async()=>{
+ const r=rig('ADDRESS','RESERVED'),otherPack=uuid(91),otherWorker=uuid(92);
+ const events=[],bothRead=[];
+ let releaseReads;
+ const barrier=new Promise(resolve=>{releaseReads=resolve});
+ let attempted=false,posts=0;
+ const db={...r.ledger,
+  readParent:async(p)=>{
+   bothRead.push(p);
+   if(bothRead.length===2)releaseReads();
+   await barrier;
+   return {exists:true,...r.map};
+  },
+  beginParentCreate:async()=>{
+   events.push('CAS');
+   if(attempted)return {state:'VERIFY_EXISTING',map_id:r.map.map_id,
+    file_id:folder,parent_id:root};
+   attempted=true;return {state:'MAY_CREATE',map_id:r.map.map_id,
+    file_id:folder,parent_id:root};
+  }
+ };
+ const drive={...r.drive,
+  createPreallocatedFolder:async()=>{
+   posts++;events.push('POST');
+  },
+  verifyFile:async()=>{
+   events.push('GET');return {id:folder,parent:root,
+    name:r.map.remote_name,mime:'application/vnd.google-apps.folder',
+    drive_id:driveId,trashed:false,appProperties:r.map.appProperties,
+    sha256:null,size:null};
+  }
+ };
+ const a=reconcileOnePreallocatedParent({...r,ledger:db,drive});
+ const b=reconcileOnePreallocatedParent({...r,ledger:db,drive,
+  packageId:otherPack,workerId:otherWorker});
+ assert.equal((await a).state,'PARENT_VERIFIED');
+ assert.equal((await b).state,'PARENT_VERIFIED');
+ assert.deepEqual(bothRead.sort(),[pack,otherPack].sort());
+ assert.equal(posts,1);
+ assert.equal(events.filter(x=>x==='CAS').length,2);
+});
