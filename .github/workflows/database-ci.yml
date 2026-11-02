@@ -103,5 +103,7 @@ jobs:
           python3 tests/supabase/phase_5_verification_races.py
       - name: Verify package-scoped two-connection races in isolated CI PostgreSQL
         run: python3 tests/supabase/phase_5_package_dispatch_races.py
+      - name: Verify exact failed final-step reconciliation in disposable PostgreSQL
+        run: python3 tests/supabase/phase_5_exact_failed_final_step_reconciliation.py
       - name: Verify nonretryable conflicts through disposable PostgREST 14.5
         run: python3 tests/supabase/phase_6_nonretryable_conflict_http.py
