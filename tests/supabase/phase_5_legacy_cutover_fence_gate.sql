@@ -42,6 +42,23 @@ begin
    exception when sqlstate '42501' then denied:=true;end;
    if not denied then raise exception 'Unpermitted original outbox update allowed';end if;
  end if;
+ -- The finalizer's DELIVERING->DELIVERED lease cleanup is the sole
+ -- permitted exception, and it needs the original worker, exact active
+ -- step, immutable final receipt, and no non-terminal field changes.
+ -- Source assertions supplement the live rollback-only denial above.
+ if position('old.state=''DELIVERING'' and new.state=''DELIVERED''' in
+   pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
+   or position('old.worker_id is distinct from held.worker_id' in
+     pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
+   or position('s.request_id=held.request_id' in
+     pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
+   or position('r.approved_sha256=old.approved_sha256' in
+     pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
+   or position('new.worker_id is not null or new.lease_until is not null' in
+     pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
+   or position('to_jsonb(new)' in
+     pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
+ then raise exception 'Terminal release must require immutable verified owner and receipt';end if;
  if (select count(*) from private.client_delivery_dispatch_permit)<>original_count
  then raise exception 'Original singleton mutated in cutover test';end if;
  raise notice 'PASS: both legacy mutation backstops deny at rollback-only cutover';
