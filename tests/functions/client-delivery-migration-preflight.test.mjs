@@ -25,7 +25,7 @@ test('read-only exact-head Team dry-run accepts 129 installed and zero pending; 
  writeFileSync(join(dir,'supabase','config.toml'),'fixture\n');
  const installed='20261102164852_phase_5_terminal_delivery_owner_transition.sql';
  const middle='20261102164945_phase_5_exact_failed_final_step_reconciliation.sql';
- const expected='20261102214000_phase_5_admin_send_dispatch_readiness.sql';
+ const expected='20261102215955_phase_5_admin_send_dispatch_readiness.sql';
  for(let i=0;i<126;i++)writeFileSync(join(dir,'supabase','migrations',
    'fixture_'+String(i).padStart(3,'0')+'.sql'),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',installed),'-- disposable\n');
