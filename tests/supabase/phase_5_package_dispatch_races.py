@@ -25,6 +25,11 @@ def query(sql, args=()):
 
 
 def setup(pinned_test_package=None):
+    root = ROOT if pinned_test_package is None else '1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'
+    actor_email = ('dispatch-race@example.invalid' if pinned_test_package is None
+                   else 'dispatch-race-final@example.invalid')
+    provider_email = ('disposable@example.invalid' if pinned_test_package is None
+                      else 'disposable-final@example.invalid')
     org, company, admin, dest = [new_id() for _ in range(4)]
     packages = []
     with psycopg.connect(DSN) as c:
@@ -32,32 +37,33 @@ def setup(pinned_test_package=None):
         assert c.info.host in ("localhost", "127.0.0.1", "::1")
         c.execute("insert into public.organizations(id,name) values(%s,'DISPOSABLE DISPATCH RACE')", (org,))
         c.execute("insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)"
-                  " values(%s,'dispatch-race@example.invalid',now(),%s)",
-                  (admin, Jsonb({"role": "ADMIN", "organization_id": str(org)})))
+                  " values(%s,%s,now(),%s)",
+                  (admin, actor_email, Jsonb({"role": "ADMIN", "organization_id": str(org)})))
         c.execute("insert into private.client_companies(id,organization_id,name)"
                   " values(%s,%s,'DISPOSABLE CLIENT')", (company, org))
         c.execute("insert into private.client_delivery_destinations("
                   "id,organization_id,company_id,provider,provider_identity,"
                   "root_folder_id,verified,verified_at,verification_receipt,active)"
-                  " values(%s,%s,%s,'GOOGLE_DRIVE','disposable@example.invalid',%s,true,now(),'{}'::jsonb,true)",
-                  (dest, org, company, ROOT))
+                  " values(%s,%s,%s,'GOOGLE_DRIVE',%s,%s,true,now(),'{}'::jsonb,true)",
+                  (dest, org, company, provider_email, root))
         rev = c.execute("select revision from private.client_delivery_destinations "
                         "where id=%s", (dest,)).fetchone()[0]
         # Root proof is synthetic and confined to the destroyed CI database.
         # It is never used as Google evidence outside this SQL race fixture.
         preflight_id, reserve_action, proof_action = [new_id() for _ in range(3)]
-        proof_id = "disposable_ci_remote_proof_123456789"
+        proof_id = ('disposable_ci_remote_proof_123456789' if pinned_test_package is None
+                    else 'disposable_ci_final_proof_123456789')
         c.execute("insert into private.client_delivery_destination_preflights("
                   "action_id,destination_id,organization_id,company_id,"
                   "expected_revision,provider_identity,root_folder_id,shared_drive_id)"
-                  " values(%s,%s,%s,%s,%s,'disposable@example.invalid',%s,%s)",
-                  (preflight_id, dest, org, company, rev, ROOT, DRIVE))
+                  " values(%s,%s,%s,%s,%s,%s,%s,%s)",
+                  (preflight_id, dest, org, company, rev, provider_email, root, DRIVE))
         c.execute("insert into private.client_destination_provider_proof_reservations("
                   "destination_id,action_id,preflight_action_id,organization_id,company_id,"
                   "expected_revision,provider_identity,root_folder_id,drive_id,"
                   "proof_folder_id,proof_folder_name) values("
-                  "%s,%s,%s,%s,%s,%s,'disposable@example.invalid',%s,%s,%s,%s)",
-                  (dest, reserve_action, preflight_id, org, company, rev, ROOT, DRIVE,
+                  "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                  (dest, reserve_action, preflight_id, org, company, rev, provider_email, root, DRIVE,
                    proof_id, "FWH DISPOSABLE CLIENT PROOF 1234567890ab"))
         c.execute("insert into private.client_destination_provider_proof_receipts("
                   "destination_id,action_id,proof_folder_id,proof_drive_id)"
@@ -78,7 +84,7 @@ def setup(pinned_test_package=None):
                                 (wo,)).fetchone()
             assert run_row and run_row[0], "Work-order run trigger missing"
             manifest = {"package_id": str(pkg), "destination_id": str(dest),
-                        "destination_root": ROOT, "destination_revision": str(rev),
+                        "destination_root": root, "destination_revision": str(rev),
                         "folder_layout": "ADDRESS_WORK_ORDER",
                         "selected_photos": [{"photo_id": str(new_id())}]}
             # The fixed-ID failed-final-step fixture must also have frozen
@@ -125,8 +131,8 @@ def setup(pinned_test_package=None):
         for pkg in packages:
             proof = c.execute(
                 "select private.service_record_pinned_package_provider_check("
-                "%s,%s,%s,'disposable@example.invalid',%s,%s,now(),%s)",
-                (pkg, dest, ROOT, DRIVE, "synthetic_permission_id_001", new_id())
+                "%s,%s,%s,%s,%s,%s,now(),%s)",
+                (pkg, dest, root, provider_email, DRIVE, "synthetic_permission_id_001", new_id())
             ).fetchone()[0]
             assert proof["verified"] is True and proof["package_id"] == str(pkg)
 
