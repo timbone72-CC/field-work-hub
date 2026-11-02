@@ -102,6 +102,33 @@ def main():
             c.rollback()
         else:
             raise AssertionError("Wrong unfinished step must be denied")
+        # Gate ON must deny remediation, without touching the pending marker.
+        c.execute("savepoint gate_on_denial")
+        c.execute("update private.client_delivery_package_dispatch_config"
+                  " set enabled=true where singleton")
+        try:
+            c.execute("select private.service_reconcile_exact_failed_final_step(%s,%s)",
+                      (package, step))
+        except psycopg.errors.InsufficientPrivilege:
+            c.execute("rollback to savepoint gate_on_denial")
+        else:
+            raise AssertionError("Gate ON permitted recovery")
+        c.execute("release savepoint gate_on_denial")
+        # Even in the exact owner scope, a pre-existing final receipt
+        # must fail closed; the synthetic row is entirely rolled back.
+        c.execute("savepoint receipt_denial")
+        c.execute("insert into private.client_delivery_final_receipts("
+                  "package_id,approved_sha256,destination_id,drive_folder_id,files)"
+                  " values(%s,%s,%s,%s,%s)",
+                  (package, sha, destination, FOLDER, Jsonb([])))
+        try:
+            c.execute("select private.service_reconcile_exact_failed_final_step(%s,%s)",
+                      (package, step))
+        except psycopg.errors.InsufficientPrivilege:
+            c.execute("rollback to savepoint receipt_denial")
+        else:
+            raise AssertionError("Existing final receipt permitted recovery")
+        c.execute("release savepoint receipt_denial")
         response = c.execute(
             "select private.service_reconcile_exact_failed_final_step(%s,%s)",
             (package, step),
