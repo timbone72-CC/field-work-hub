@@ -5,6 +5,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_claim_package_and_acquire_dispatch','service_release_package_dispatch',
  'service_read_package_dispatch_owner','service_read_pinned_package_dispatch',
+ 'service_record_pinned_package_provider_check',
  'service_begin_package_dispatch_step','service_complete_package_dispatch_step',
  'service_read_active_delivery_lease','service_read_expired_test_delivery_reservation',
  'service_resume_and_acquire_exact_test_dispatch',
@@ -138,6 +139,23 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       return rpc('service_claim_package_and_acquire_dispatch',{
         p_package:pkg,p_destination:dest,p_root:root,
         p_worker:worker,p_request:request
+      });
+    },
+    // Existing trusted worker, service-only package preflight. Never renews
+    // global worker readiness or touches the original singleton.
+    recordPinnedPackageProviderCheck:(pkg,dest,root,proof,observed,request)=>{
+      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      if(![pkg,dest,request].every(x=>uuid.test(x??''))
+        ||!/^[A-Za-z0-9_-]{10,160}$/.test(root??'')
+        ||!/^[A-Za-z0-9_-]{10,160}$/.test(proof?.drive_id??'')
+        ||typeof proof?.account!=='string'
+        ||typeof proof?.permission_id!=='string'
+        ||!Number.isFinite(Date.parse(observed??'')))
+        throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+      return rpc('service_record_pinned_package_provider_check',{
+        p_package:pkg,p_destination:dest,p_root:root,p_account:proof.account,
+        p_drive:proof.drive_id,p_permission:proof.permission_id,
+        p_observed_at:observed,p_request:request
       });
     },
     // No generic unlock: the exact package/worker/request/fence are required
