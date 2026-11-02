@@ -18,7 +18,9 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 **Future-session instruction:** Start from this approved new-package path and recheck actual PR head/CI/TEST parity. Do not promote the old incident as a global development blocker. Consult that historical case only when its original operation, collision safety, or rollback genuinely requires it. The prior handoff is preserved verbatim in [part 36](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_36.md). Do not repeat accepted manual-transfer or two-Admin browser tests.
 
 
-**2026-11-01/02 Phase 5D — live queued TEST and hosted v57 OFF VERIFIED:** Team TEST `vyocaujuwrivoqynvitm` has 125 migrations including `20261102014012_phase_5_package_readonly_provider_revalidation` (service-only 5-minute package-local proof gate). Existing rollback-only SQL race and stale-global-readiness tests remain accepted. PR #40 source runtime `2b6c8fb3`: Database `41387526818`, Admin `41387526831`, Android `41387526811`, Governance `41387524015` all SUCCESS. Hosted `client-delivery` **v57 ACTIVE** with **14/14 exact source files matching** that runtime. Exact one-photo package is `QUEUED`, outbox attempts 0, approved hash frozen; pin identity is compiled in but `enabled:false`, `pinnedTestEnabled:false`, `testRecoveryEnabled:false`. Postdeploy DB: `{enabled:false,legacy_worker_off_verified:true,max_in_flight:2}`; original held permit 1, new permits/provider proofs/steps/final receipts all 0. This proves OFF staging, **not** live Google OAuth, account/root GET, automatic delivery, or a final receipt. Earlier v56 staging and original incident are preserved in [part 43](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_43.md).
+**2026-11-02 live read-only takeover (no writes):** GitHub PR #40 head `2509a88c0ccc27b8a406f7cd579ced09e19be604` is draft/unmerged, 0 behind main. Seven CI runs on that SHA all SUCCESS (database, dashboard, Android and governance). Live Team TEST `vyocaujuwrivoqynvitm` has 125 migrations; hosted `client-delivery` v59 ACTIVE and **14/14 deployed source files match GitHub exactly**. Database package cutover is `enabled=false`, `legacy_worker_off_verified=true`, `max_in_flight=2`. Frozen one-photo package `f42e05df-de7a-4d20-8dee-f55e09511d1f` and its outbox remain QUEUED with 0 attempts and no worker, exact destination/root/hash unchanged; destination active and verified. New package permits, new provider checks, step attempts and package final receipts each equal **0**. Operator's earlier `TEST_PROVIDER_VERIFIED_READ_ONLY` remains accepted; a *fresh package-local* Google check has not yet been recorded. No TEST Google/SQL changes, handler invocation or new physical test occurred in this takeover.
+
+**Next controlled reality boundary:** Only the already-approved disposable `FPP-000003` one-package operator POST may be attempted once, after revalidating the same authenticated provider/account, worker configuration, exact approved manifest and coordinated TEST database cutover. The v59 handler must perform and durably record a fresh package-scoped Google read-only proof before its first permit/remote write. Gate must not be left ON without the coordinated request. If the request fails or becomes uncertain, restore package admission OFF where safe, retain all durable attempt/remote identities, inspect exact evidence, and **do not blindly retry**. General delivery, original held recovery, cleanup, FPP and Level-3 merge remain OFF/pending.
 
 ### Previously verified Phase 6 evidence
 
@@ -45,14 +47,13 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 | --- | --- |
 | Earlier phases | Preserve previously accepted Phases 0–4 evidence. Roadmap still identifies a distinct Phase 2 real-client reassignment/receipt smoke as **PENDING** absent independently accepted completion. |
 | Phase 5A–5C/5E | Company configuration, private holding, protected Finish-bound receipts and Admin photo review have genuine narrower TEST/phone/browser accepted results plus implemented source and tests. **Final-client-delivery-gated original cleanup and whole Phase 5 acceptance remain incomplete.** |
-| Phase 5D — new package permits | **Admin-approved one-photo package QUEUED; hosted v57 14/14 parity, modes OFF.** Database 125; original held. Fresh provider GET and actual one-step delivery pending. |
+| Phase 5D — new package permits | One approved disposable photo queued; hosted v59 exact-source parity and TEST SQL preflight verified read-only. Package gate OFF, fresh package-local provider proof and first successful one-step delivery still pending. |
 | Phase 6A–6D | Work-order workspace, requirement/template, repeat/follow-up and separate human Accept, bulk review and cross-run package/history have substantial source/CI results. October 29 historical-visit copy and Accept presentation are within the last source CI; do not infer hosted/browser acceptance from those tests. |
 | Phase 6E–6F | Alerts, roles/teams, recovery and ZIP photo export have source/automated evidence, not blanket real supported OS/browser push, TEST mailbox/recovery, signed-in independent-company/office-role or physical-device completion. A simulated database/JWT-claim RLS test is **not** a genuine cross-company signed-in browser test. |
 | Phases 7–8 | **PLANNED**, not launched or production-ready. |
 
 ### Deployed source and protected provider state (distinct evidence boundaries)
 
-- Current hosted source: Team TEST `client-delivery` **v54 ACTIVE**, **14/14** source-content parity against pre-documentation PR #40 head `b68ce084`; its revised diagnostic and one-step chunk modules are now **hosted**, not yet approved/invoked as a provider test. **122 migrations** is the independently verified Oct 31 SQL inventory; the previous 121 snapshot has been superseded. The previously recorded v53/9-of-14 result is superseded.
 - Original frozen TEST delivery: **one HELD global dispatch permit**, original expired delivery attempt, encrypted `UPLOADING` session revision 3, persisted upload offset **262144 / 404185**, original one-shot identities and markers held, **zero verified PHOTO plans and zero final delivery receipts**. The saved offset is not independent proof of Google media bytes.
 - Original saved-session diagnostic: `HELD_TEST_SESSION_UNAVAILABLE_404`, which is **not proof** that the original preallocated Drive file ID is nonexistent, accessible or safe to retry.
 - Previously accepted real Drive evidence: the separate fourth disposable synthetic TEST Google upload completed exact remote ID/size/SHA-256 verification. That narrower provider result does **not** prove FWH protected-package end-to-end delivery.
@@ -68,61 +69,6 @@ The authoritative record has a **24 KiB (24,576 UTF-8 bytes) hard CI limit**. Pe
 
 ## Frozen, losslessly preserved implementation history
 
-The prior 5,216-line record at blob `d7c380ab1a22858baf02c5d2860e1a24dbfc2898`, authoritative PR #40 source HEAD `b64ccf8b61ca5810f4ca0acc87d04f79a7f80aa4`, was split at existing Markdown section boundaries into **17 frozen parts**. Their contents remain **verbatim**, ordered and complete; concatenating parts 01–17 reproduces the previous record exactly. The archives are durable historical evidence, **not** separate active implementation records.
-
-| Part | Archived evidence | Original line range and opening heading |
-| --- | --- | --- |
-| 01 | [Frozen part 01](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_01.md) | Original lines 1–308; ## Current evidence checklist — Phase 5/6 (maintained status, 2026-10-28 CDT) |
-| 02 | [Frozen part 02](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_02.md) | Original lines 309–594; ### Phase 5D operator first-photo attempt status — 2026-10-25 CDT, HOLD |
-| 03 | [Frozen part 03](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_03.md) | Original lines 595–876; ### 2026-10-23 CDT — operator-approved TEST key preserved; recovery pre-HTTP stop; readiness renewal cont |
-| 04 | [Frozen part 04](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_04.md) | Original lines 877–1168; ### 2026-10-23 CDT — hosted v20 configuration-category diagnostic deployed, original TEST queue preserved |
-| 05 | [Frozen part 05](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_05.md) | Original lines 1169–1531; ### Prepared ledger — exact native evidence and handoff |
-| 06 | [Frozen part 06](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_06.md) | Original lines 1532–1928; ### Folder-map server adapter continuation — 2026-10-10 |
-| 07 | [Frozen part 07](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_07.md) | Original lines 1929–2240; ## Phase 6F — existing verified Supervisor enrollment and grant lifecycle (2026-10-12) |
-| 08 | [Frozen part 08](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_08.md) | Original lines 2241–2525; ## Phase 5E — exact recovery-JPEG integrity at browser export (2026-10-12) |
-| 09 | [Frozen part 09](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_09.md) | Original lines 2526–2831; ## Phase 5C — real Chrome Admin authenticated private JPEG preview visually PASSED (2026-10-13) |
-| 10 | [Frozen part 10](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_10.md) | Original lines 2832–3143; ## Phase 6C — owner confirms same-WO follow-up control visible; client assignment still pending (2026-10- |
-| 11 | [Frozen part 11](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_11.md) | Original lines 3144–3464; ## Phase 5D — repeated TEST destination denial, laptop launcher parity unverified (2026-10-14) |
-| 12 | [Frozen part 12](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_12.md) | Original lines 3465–3833; ## Phase 5A/5D — preserved client-folder retries across Auth token rotation (2026-10-15) |
-| 13 | [Frozen part 13](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_13.md) | Original lines 3834–4118; ## Phase 5D — approved independent disposable provider-file TEST retry (2026-10-17) |
-| 14 | [Frozen part 14](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_14.md) | Original lines 4119–4403; ## Phase 5A/5D — operator-private TEST service preflight runner staged (2026-10-18) |
-| 15 | [Frozen part 15](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_15.md) | Original lines 4404–4717; ## Phase 5D — post-isolation provider-independent readiness reconciliation (2026-10-19 CDT) |
-| 16 | [Frozen part 16](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_16.md) | Original lines 4718–5078; ### Phase 5D — missing active flag establishes intended default OFF (2026-10-20 CDT) |
-| 17 | [Frozen part 17](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_17.md) | Original lines 5079–5215; ## 2026-10-26 — Phase 6A cross-page navigation: one confirmed unsaved-change decision (CI PASS) |
-| 18 | [Dated handoff part 18](archive/phase-5-6/2026-10-29/PHASE_5_6_HISTORY_PART_18.md) | Post-freeze October 29 hosted-parity and read-only takeover checklist bullets, preserved verbatim |
-| 19 | [Dated handoff part 19](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_19.md) | Previous manual TEST handoff text, preserved verbatim |
-| 20 | [Dated handoff part 20](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_20.md) | October 29 operator observed Drive absence and original held-state evidence, preserved verbatim |
-| 21 | [Dated handoff part 21](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_21.md) | Oct 30 pre-deployment source-only status, preserved verbatim |
-| 22 | [Dated handoff part 22](archive/phase-5-6/2026-10-30/PHASE_5_6_HISTORY_PART_22.md) | Oct 29 provider-priority handoff, preserved verbatim before consolidation |
-
-| 23 | [Dated handoff part 23](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_23.md) | Superseded Oct 30–31 manual export/Drive pre-PASS checkpoints and security priority register, verbatim |
-| 24 | [Dated handoff part 24](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_24.md) | Oct 31 10:10 read-only SQL, CI, security advisor snapshot, preserved verbatim |
-| 25 | [Dated handoff part 25](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_25.md) | Two Oct 31 takeover/CI/support notes replaced by concise latest status, preserved verbatim |
-| 26 | [Dated handoff part 26](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_26.md) | Prior 6A/6B Create & Assign source checkpoint, verbatim |
-| 27 | [Dated handoff part 27](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_27.md) | Previous current-status and Phase 6A filter recovery notes, preserved verbatim |
-| 28 | [Dated handoff part 28](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_28.md) | Previous Phase 6A asynchronous selected-workspace handoff, verbatim |
-| 29 | [Dated handoff part 29](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_29.md) | Previous Phase 6A selection/focus verification, verbatim |
-| 30 | [Dated handoff part 30](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_30.md) | Prior selected-WO auto-refresh handoff, verbatim |
-| 31 | [Dated handoff part 31](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_31.md) | Previous explicit stale-job Reload recovery, verbatim |
-| 32 | [Dated handoff part 32](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_32.md) | Superseded concurrent-edit, accepted manual TEST transfer, and archival policy text, verbatim |
-| 33 | [Dated handoff part 33](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_33.md) | Superseded predeployment and source-only Phase 6A notes preserved verbatim; current release-readiness gate in active record |
-
-| 34 | [Dated handoff part 34](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_34.md) | Superseded Oct 31 current handoff, same-Admin acceptance and original office-seat repair evidence preserved verbatim |
-| 35 | [Dated handoff part 35](archive/phase-5-6/2026-10-31/PHASE_5_6_HISTORY_PART_35.md) | Superseded October 31 PR/CI handoff and Phase 6A actor-gate text preserved verbatim |
-| 36 | [Dated handoff part 36](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_36.md) | Superseded legacy-first status, older CI notes and original provider priority, verbatim |
-
-| 37 | [Dated handoff part 37](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_37.md) | Superseded Nov 1 source/CI notes, preserved verbatim |
-
-| 38 | [Dated handoff part 38](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_38.md) | Superseded next-batch and status row, verbatim |
-
-| 39 | [Dated handoff part 39](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_39.md) | Pre-staging Nov 1 handoff text, verbatim |
-
-| 40 | [Dated handoff part 40](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_40.md) | Initial staging note prior to uncovered legacy-RPC cutover gap, verbatim |
-
-| 41 | [Dated handoff part 41](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_41.md) | Prior legacy blocker / staging note preserved verbatim |
-
-| 42 | [Dated handoff part 42](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_42.md) | Superseded hosted cutover and older CI snapshots, verbatim |
-
-| 43 | [Dated handoff part 43](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_43.md) | Pre-package-readiness cutover evidence preserved verbatim |
+[Numbered immutable history index (parts 01–44)](archive/phase-5-6/HISTORY_INDEX.md). Historical notes there are evidence archives, not the current status or a second implementation record.
 
 **Precedence:** Latest independently supported evidence for the same precise boundary controls current status; do not upgrade SOURCE-ONLY or simulated checks to hosted, real Google, signed-in or device PASS. Archive creation changes no runtime, SQL, Auth, tests, CI, hosting, Google Drive, held permit/session/photos, FPP or governing documents.
