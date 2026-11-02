@@ -125,6 +125,34 @@ test('fresh provider-proof RPC preserves normal UUIDs and requires exact scope',
  assert.equal(calls.length,1,'malformed provider evidence must not write a proof');
 });
 
+test('expired package lease renewal sends exactly the saved owner and fresh GET proof',async()=>{
+ const calls=[],stamp='2026-11-02T13:21:39.271Z';
+ const proof={account:'fixture@example.invalid',drive_id:'test_shared_drive_12345',
+  permission_id:'test_permission_123456'};
+ const ledger=makeLedger(async(url,init)=>{
+  calls.push([new URL(url).pathname,JSON.parse(init.body)]);
+  return Response.json({resumed:true,active:true});
+ });
+ assert.deepEqual(await ledger.resumePinnedPackageDispatch(
+  ids.package,ids.destination,ids.root,ids.worker,ids.request,1,
+  proof,stamp,ids.request),{resumed:true,active:true});
+ assert.deepEqual(calls,[['/rest/v1/rpc/service_resume_pinned_package_dispatch',{
+  p_package:ids.package,p_destination:ids.destination,p_root:ids.root,
+  p_worker:ids.worker,p_request:ids.request,p_generation:1,
+  p_account:proof.account,p_drive:proof.drive_id,p_permission:proof.permission_id,
+  p_observed_at:stamp,p_proof_request:ids.request
+ }]]);
+ for(const args of [
+  [ids.package,ids.destination,ids.root,'wrong',ids.request,1,proof,stamp,ids.request],
+  [ids.package,ids.destination,ids.root,ids.worker,'wrong',1,proof,stamp,ids.request],
+  [ids.package,ids.destination,ids.root,ids.worker,ids.request,0,proof,stamp,ids.request],
+  [ids.package,ids.destination,'bad/root',ids.worker,ids.request,1,proof,stamp,ids.request],
+  [ids.package,ids.destination,ids.root,ids.worker,ids.request,1,{...proof,permission_id:null},stamp,ids.request]
+ ])assert.throws(()=>ledger.resumePinnedPackageDispatch(...args),
+  e=>e.code==='PACKAGE_DISPATCH_SCOPE_INVALID');
+ assert.equal(calls.length,1);
+});
+
 test('exact package owner RPC is read-only and validates every input before network',async()=>{
  const calls=[];
  const ledger=makeLedger(async(url,init)=>{
