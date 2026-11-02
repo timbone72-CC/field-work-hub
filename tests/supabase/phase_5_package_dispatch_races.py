@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 
 DSN = os.environ["FWH_TEST_DATABASE_URL"]
 ROOT = "disposable_ci_drive_root_1234567890"
+DRIVE = "disposable_ci_shared_drive_123456"
 HASH = "a" * 64
 
 
@@ -42,6 +43,25 @@ def setup():
                   (dest, org, company, ROOT))
         rev = c.execute("select revision from private.client_delivery_destinations "
                         "where id=%s", (dest,)).fetchone()[0]
+        # Root proof is synthetic and confined to the destroyed CI database.
+        # It is never used as Google evidence outside this SQL race fixture.
+        preflight_id, reserve_action, proof_action = [new_id() for _ in range(3)]
+        proof_id = "disposable_ci_remote_proof_123456789"
+        c.execute("insert into private.client_delivery_destination_preflights("
+                  "action_id,destination_id,organization_id,company_id,"
+                  "expected_revision,provider_identity,root_folder_id,shared_drive_id)"
+                  " values(%s,%s,%s,%s,%s,'disposable@example.invalid',%s,%s)",
+                  (preflight_id, dest, org, company, rev, ROOT, DRIVE))
+        c.execute("insert into private.client_destination_provider_proof_reservations("
+                  "destination_id,action_id,preflight_action_id,organization_id,company_id,"
+                  "expected_revision,provider_identity,root_folder_id,drive_id,"
+                  "proof_folder_id,proof_folder_name) values("
+                  "%s,%s,%s,%s,%s,%s,'disposable@example.invalid',%s,%s,%s,%s)",
+                  (dest, reserve_action, preflight_id, org, company, rev, ROOT, DRIVE,
+                   proof_id, "FWH DISPOSABLE CLIENT PROOF 1234567890ab"))
+        c.execute("insert into private.client_destination_provider_proof_receipts("
+                  "destination_id,action_id,proof_folder_id,proof_drive_id)"
+                  " values(%s,%s,%s,%s)", (dest, proof_action, proof_id, DRIVE))
         c.execute("insert into private.client_delivery_runtime("
                   "organization_id,worker_ready,last_verified_at,worker_identity)"
                   " values(%s,true,now(),'DISPOSABLE_CI')", (org,))
@@ -75,6 +95,17 @@ def setup():
             packages.append(pkg)
         c.execute("update private.client_delivery_package_dispatch_config set "
                   "enabled=true,legacy_worker_off_verified=true where singleton")
+        # A fresh package-specific synthetic receipt is mandatory before claim.
+        # The production worker obtains equivalent evidence from READ-ONLY
+        # Google about/files GETs, never this CI database fixture path.
+        for pkg in packages:
+            proof = c.execute(
+                "select private.service_record_pinned_package_provider_check("
+                "%s,%s,%s,'disposable@example.invalid',%s,%s,now(),%s)",
+                (pkg, dest, ROOT, DRIVE, "synthetic_permission_id_001", new_id())
+            ).fetchone()[0]
+            assert proof["verified"] is True and proof["package_id"] == str(pkg)
+
     return dest, packages
 
 
