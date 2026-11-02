@@ -81,7 +81,7 @@ begin
     or k.approved_manifest->>'destination_id' is distinct from d.id::text
     or k.approved_manifest->>'destination_root' is distinct from d.root_folder_id
     or k.approved_manifest->>'destination_revision' is distinct from d.revision::text
-    or k.approved_manifest->>'folder_layout'<>'ADDRESS_WORK_ORDER'
+    or k.approved_manifest->>'folder_layout' is distinct from 'ADDRESS_WORK_ORDER'
     or jsonb_array_length(coalesce(k.approved_manifest->'selected_photos','[]'::jsonb))<>1
     or o.approved_sha256 is distinct from k.approved_sha256
     or o.lease_until is null or o.lease_until>=clock_timestamp()
@@ -130,11 +130,19 @@ begin
     or (select count(*) from private.client_delivery_file_plans
        where package_id=p_package and kind='PHOTO'
          and drive_file_id='1i9946peeZzZV6UsOduyy89HdGSr1VTnk'
-         and drive_parent_id=folder.drive_file_id and expected_size=279184)<>1
+         and drive_parent_id=folder.drive_file_id and expected_size=279184
+         and photo_id::text is not distinct from
+             k.approved_manifest->'selected_photos'->0->>'photo_id'
+         and expected_sha256 is not distinct from
+             k.approved_manifest->'selected_photos'->0->>'observed_sha256'
+         and expected_size is not distinct from
+             (k.approved_manifest->'selected_photos'->0->>'observed_size')::bigint
+        )<>1
     or (select count(*) from private.client_delivery_file_plans
        where package_id=p_package and kind='MANIFEST'
          and drive_file_id='13M3HTcYkZ6yHfN2TaX-2i15KkMMHJgWM'
          and drive_parent_id=folder.drive_file_id and expected_size=1382
+         and expected_size=octet_length(k.approved_manifest::text)
          and expected_sha256=k.approved_sha256)<>1
   then raise exception 'Original provider receipts not fully preserved'
     using errcode='42501';end if;
