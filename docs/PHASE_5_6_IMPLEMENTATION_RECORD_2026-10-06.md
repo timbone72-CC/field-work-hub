@@ -45,6 +45,8 @@ The existing read-only `ci/phase5d_team_migration_preflight.sh` still required *
 
 **2026-10-19 real foreign-company Admin isolation — PASS:** Signed-in other-company TEST Admin could not see original-company WOs in exact/scoped reads; private-photo signer returned **403 `PHOTO_ACCESS_DENIED`** (Auth/sign-out logged, sign-out 204). This *specific* real browser denial is accepted; do not repeat. Other role/team/provider isolation scenarios remain unproven.
 
+**2026-10-22 exact TEST package preview — narrow PASS:** For `TEST-0003-DASHBOARD`, Admin reviewed two APPROVED photos (original/corrective run); server preview agreed on manifest SHA-256, photo order, destination and layout. Package remained **DRAFT** with no Send or final receipt. Preserve this accepted preview evidence; do not confuse it with Google delivery.
+
 ### Previously verified Phase 6 evidence
 
 **2026-10-31 Phase 6A real two-Admin browser conflict/recovery — PASS:** TEST WO `FPP-000003`: Product Owner saved `TEST TWO ADMINS - OWNER SAVED FIRST`; independent signed-in Incognito Admin's stale save was blocked with unsaved text retained. Operator clicked **Reload Job**, discarded only the stale TEST edit, and screenshot confirmed the owner's committed marker, not the stale marker; independent SQL readback agrees. Previously accepted same-account/two-session conflict test also PASS; do not repeat. This covers distinct-account browser conflict/recovery, not entire Phase 6.
