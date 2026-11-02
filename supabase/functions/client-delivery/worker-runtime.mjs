@@ -1586,12 +1586,34 @@ export async function runFencedPackageDeliveryStep({
 }
 
 
+// Fresh Google account and exact root GET. READ-ONLY. Never touches original.
+export async function verifyPinnedPackageProviderReadOnly({
+ tokenProvider,rootId,expectedEmail,expectedDriveId,fetcher=fetch
+}={}){
+ if(typeof tokenProvider!=='function')throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+ const token=await tokenProvider();
+ if(typeof token?.accessToken!=='string'||token.accessToken.length<20
+   ||!Number.isInteger(token.expiresInSeconds)||token.expiresInSeconds<60)
+   throw new DriveUncertain('WORKSPACE_AUTHORIZATION_REQUIRED');
+ const drive=createDriveClient({accessToken:token.accessToken,fetcher});
+ const identity=await drive.verifyProviderIdentity(expectedEmail);
+ const root=await drive.verifyDestination({folderId:rootId,expectedDriveId});
+ if(identity?.account?.toLowerCase()!==expectedEmail?.toLowerCase()
+   ||!identity?.permission_id
+   ||root?.id!==rootId||root?.drive_id!==expectedDriveId
+   ||root.can_add_children!==true)
+   throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+ return Object.freeze({account:identity.account,
+   permission_id:identity.permission_id,drive_id:root.drive_id});
+}
+
 // One source-only, package-pinned TEST wakeup through the SAME existing worker.
 // No public package/plan selection and absolutely no legacy permit fallback.
 export async function advancePinnedTestPackageOneStep({
  ledger,packageId,destinationId,rootId,makeWorkerId,
  tokenProvider,expectedEmail,expectedDriveId,projectUrl,serviceRoleJwt,
- makeVault,fetcher=fetch,advanceStep=advanceTrustedDeliveryOneStep
+ makeVault,fetcher=fetch,advanceStep=advanceTrustedDeliveryOneStep,
+ verifyReadOnlyProvider=verifyPinnedPackageProviderReadOnly
 }={}){
  const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  const HASH=/^[a-f0-9]{64}$/;
@@ -1599,7 +1621,7 @@ export async function advancePinnedTestPackageOneStep({
    ||!/^[A-Za-z0-9_-]{10,160}$/.test(rootId??'')
    ||!['readPinnedPackageDispatch','claimPackageAndAcquireDispatch',
        'releasePackageDispatch','readPackageDispatchOwner','beginPackageStep',
-       'completePackageStep'].every(k=>typeof ledger?.[k]==='function')
+       'completePackageStep','recordPinnedPackageProviderCheck'].every(k=>typeof ledger?.[k]==='function')
    ||typeof makeWorkerId!=='function'
    ||typeof advanceStep!=='function')
    throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
@@ -1609,6 +1631,20 @@ export async function advancePinnedTestPackageOneStep({
    if(current.active!==true)throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
    claim=current;
  }else if(current?.present===false&&current.active===false){
+   const proof=await verifyReadOnlyProvider({
+     tokenProvider,rootId,expectedEmail,expectedDriveId,fetcher});
+   if(proof?.account?.toLowerCase()!==expectedEmail?.toLowerCase()
+     ||proof?.drive_id!==expectedDriveId
+     ||typeof proof?.permission_id!=='string'||!proof.permission_id)
+     throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+   const proofRequest=makeWorkerId();
+   if(!UUID.test(proofRequest??''))
+     throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+   const verified=await ledger.recordPinnedPackageProviderCheck(
+     packageId,destinationId,rootId,proof,new Date().toISOString(),proofRequest);
+   if(verified?.verified!==true||verified.package_id!==packageId
+     ||verified.request_id!==proofRequest)
+     throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_UNVERIFIED');
    const worker=makeWorkerId(),request=makeWorkerId();
    if(!UUID.test(worker??'')||!UUID.test(request??'')||worker===request)
      throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
