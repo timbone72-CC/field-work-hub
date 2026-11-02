@@ -105,6 +105,17 @@ The first Team version succeeds when:
 
 **Admin creates and assigns a work order on a PC/laptop → the contractor receives it on Android → the assignment remains usable without internet → the contractor starts/finishes field work and takes protected photos offline → work/photo state survives restart → after Finish Field Work the frozen evidence set synchronizes safely when connectivity permits → the office receives photos privately and reviews/prepares an eligible client package → Admin approves and explicitly sends that package → confirmed selected evidence reaches the exact configured company destination without loss, wrong placement, or blind duplicates.**
 
+## Cross-phase release readiness — failure containment and recovery (approved 2026-11-01)
+
+The operator approved the permanent [FWH Failure Containment and Recovery Standard](../GOVERNANCE.md#fwh-failure-containment-and-recovery-standard). **Each planned feature and existing phase gate must demonstrate that a single failed operation stays isolated where independent progress is safe, protected work survives interruption, the problem is visible, and retry/recovery does not duplicate or misattribute effects.** Shared authorization/provider outages may affect multiple operations; do not claim guaranteed availability or relax fail-closed safeguards.
+
+- **Phase 5 (delivery/photo protection):** A failed or ambiguous photo/package must preserve exact remote identities and originals; unrelated eligible packages and local work remain operational under verified package/parent fencing. Never claim a final receipt or allow cleanup before provider truth.
+- **Phase 6 (multi-user/Admin):** An individual device, assignment, save conflict, contractor connection, alert or recovery-email failure must not silently discard another user's work or block otherwise authorized independent work. Display actionable status and distinct pending/confirmed facts.
+- **Phase 7 (internal field-test pilot):** Exercise the combined approved real workflow with targeted interrupted upload/reconnect/restart and unaffected-job scenarios not already proven; preserve previously accepted test evidence. Record narrow PASS/FAIL/BLOCKED and the working recovery path before treating the pilot as ready.
+- **Phase 8 (production readiness):** Prove operational monitoring, clearly owned intervention and supportable rollback/recovery under documented provider/credential, device-update and data-retention policies. Unknown provider identity or security/tenant risk still stops the affected action.
+
+This is a **cross-cutting acceptance criterion within existing Phase 5–8 plans**, not a new phase, blanket approval, repeat of accepted tests or automatic blocker on unrelated approved development. `INTEGRATION_CONTRACT.md` and `TESTING_CONTRACT.md` specify the corresponding behavior and proportional proof; the single authoritative implementation record tracks current evidence.
+
 ## Governing build rule
 
 Build the smallest architecture that safely performs the real workflow.
