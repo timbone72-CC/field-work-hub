@@ -14,6 +14,7 @@ declare
   release_function text:='public.service_release_package_dispatch(uuid,uuid,uuid,bigint)';
   read_function text:='public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)';
   step_begin text:='public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid)';
+  pinned_read text:='public.service_read_pinned_package_dispatch(uuid,uuid,text)';
   step_end text:='public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)';
   claim_source text;
   release_source text;
@@ -40,6 +41,11 @@ begin
     or has_table_privilege('service_role',
        'private.client_delivery_package_dispatch_config','UPDATE')
   then raise exception 'Direct package permit/control table access must be denied';end if;
+  if to_regprocedure(pinned_read) is null
+    or not has_function_privilege('service_role',pinned_read,'EXECUTE')
+    or has_function_privilege('anon',pinned_read,'EXECUTE')
+    or has_function_privilege('authenticated',pinned_read,'EXECUTE')
+  then raise exception 'Pinned package snapshot must be service-only';end if;
   if to_regprocedure(step_begin) is null or to_regprocedure(step_end) is null
     or not has_function_privilege('service_role',step_begin,'EXECUTE')
     or not has_function_privilege('service_role',step_end,'EXECUTE')
@@ -96,6 +102,10 @@ begin
     gen_random_uuid(),gen_random_uuid());
   if result is distinct from '{"claimed": false, "acquired": false}'::jsonb
   then raise exception 'Default-OFF claim must deny without mutating';end if;
+  result:=private.service_read_pinned_package_dispatch(
+    gen_random_uuid(),gen_random_uuid(),'safe_test_root_123456');
+  if result is distinct from '{"present":false,"active":false}'::jsonb
+  then raise exception 'Default OFF pinned snapshot must deny';end if;
   result:=private.service_begin_package_dispatch_step(
    gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),1,gen_random_uuid());
   if result is distinct from '{"acquired":false}'::jsonb

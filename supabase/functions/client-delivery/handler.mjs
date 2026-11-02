@@ -13,7 +13,8 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  continueOriginalVerifiedTestToWorkOrderOnce,
  continueOriginalVerifiedTestToPackageOnce,
  continueOriginalVerifiedTestFirstPhotoOnce,
- continueOriginalTestSavedFirstPhotoOnce} from './worker-runtime.mjs';
+ continueOriginalTestSavedFirstPhotoOnce,
+ advancePinnedTestPackageOneStep} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
 import {inspectOriginalHeldFirstPhotoSession,
  inspectOriginalHeldFirstPhotoFile} from './held-session-probe.mjs';
@@ -60,6 +61,9 @@ function sameSecret(x,y){
 }
 export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
+  pinnedTestEnabled=false,pinnedTestPackageId,pinnedTestDestinationId,
+  pinnedTestRootFolderId,
+  runPinnedTestStep=advancePinnedTestPackageOneStep,
   testPreflightEnabled=false,testRecoveryEnabled=false,
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
   reconcileOriginalTestParent=reconcileOriginalAttemptedTestParentOnce,
@@ -81,6 +85,79 @@ export function createDeliveryHandler({
   if(!workerSecret||workerSecret.length<32
    ||!sameSecret(request.headers.get('x-fwh-delivery-secret'),workerSecret))
    return reply(401,'WORKER_UNAUTHORIZED');
+  // Separate sealed TEST-only operation. It accepts no client-selected IDs,
+  // cannot execute legacy delivery, and requires a verified new-package cutover
+  // in the service-only database before any provider operation can run.
+  if(pinnedTestEnabled===true){
+    if(enabled===true||testRecoveryEnabled===true)
+      return reply(503,'CONFLICTING_WORKER_MODES');
+    let body;
+    try{
+      if(request.headers.get('content-type')!=='application/json')
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const raw=await request.text();
+      if(raw.length>512)return reply(413,'REQUEST_TOO_LARGE');
+      body=JSON.parse(raw);
+    }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
+    if(!body||Array.isArray(body)
+      ||Object.keys(body).length!==1
+      ||body.operation!=='new_test_package_step_once')
+      return reply(400,'EXACT_REQUEST_REQUIRED');
+    const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+    const driveId=/^[A-Za-z0-9_-]{10,160}$/;
+    if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+      ||!uuid.test(pinnedTestPackageId??'')
+      ||!uuid.test(pinnedTestDestinationId??'')
+      ||!uuid.test(testReleasePackageId??'')
+      ||pinnedTestPackageId===testReleasePackageId
+      ||!driveId.test(pinnedTestRootFolderId??'')
+      ||!driveId.test(expectedDriveId??'')
+      ||!driveId.test(internalDriveId??'')
+      ||pinnedTestRootFolderId===expectedDriveId
+      ||pinnedTestRootFolderId===internalDriveId
+      ||expectedDriveId===internalDriveId
+      ||typeof expectedAccount!=='string'
+      ||!testWorkspaceDomain
+      ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+      return reply(503,'NEW_TEST_SCOPE_NOT_CONFIGURED');
+    if(!supabaseUrl||!serviceRoleJwt||!clientId||!clientSecret
+      ||!refreshToken||!oauthScope)
+      return reply(503,'BACKEND_NOT_CONFIGURED');
+    let vault,tokenProvider,ledger;
+    try{
+      // Both are validated before the exact durable claim/step.
+      vault=await createSessionVault({base64Key:sessionVaultKey});
+      tokenProvider=createWorkspaceTokenProvider({
+        clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
+      ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+    }catch{return reply(503,'NEW_TEST_BACKEND_NOT_CONFIGURED');}
+    try{
+      const result=await runPinnedTestStep({
+        ledger,packageId:pinnedTestPackageId,
+        destinationId:pinnedTestDestinationId,rootId:pinnedTestRootFolderId,
+        tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+        projectUrl:supabaseUrl,serviceRoleJwt,
+        makeVault:async()=>vault,makeWorkerId,fetcher
+      });
+      if(result?.state==='PACKAGE_STEP_BUSY')
+        return reply(503,'PACKAGE_STEP_BUSY');
+      const statuses={
+        PACKAGE_IDENTITIES_PREALLOCATED:'PREALLOCATED_ONLY',
+        PARENT_STEP_VERIFIED:'PARENT_STEP_VERIFIED',
+        PACKAGE_FOLDER_STEP_VERIFIED:'FOLDER_STEP_VERIFIED',
+        FILE_STEP_VERIFIED:'FILE_STEP_VERIFIED',
+        FILE_STEP_PROGRESS_VERIFIED:'FILE_PROGRESS_VERIFIED',
+        PACKAGE_DELIVERED:'FINAL_DELIVERY_VERIFIED'
+      };
+      if(Object.hasOwn(statuses,result?.state))
+        return reply(200,statuses[result.state]);
+      return reply(503,'NEW_TEST_STEP_UNVERIFIED');
+    }catch(error){
+      noteTrustedDeliveryFailure('NEW_TEST_PACKAGE_STEP',error);
+      // No automatic retry, no reset of unfinished step or provider identity.
+      return reply(503,'NEW_TEST_STEP_UNVERIFIED');
+    }
+  }
   // Separate read-only TEST credential probe may run while Send is OFF.
   // No provider work is permitted when both capabilities are disabled.
   if(enabled===true&&testPreflightEnabled===true)

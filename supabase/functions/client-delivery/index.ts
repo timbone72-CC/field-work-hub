@@ -6,6 +6,11 @@ import {createDeliveryHandler} from './handler.mjs';
 import {selectHostedServiceCredential} from './service-ledger.mjs';
 Deno.serve(createDeliveryHandler({
  enabled:Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true',
+ // Dedicated OFF-by-default new-package runner. No caller package IDs.
+ pinnedTestEnabled:Deno.env.get('FWH_CLIENT_NEW_PACKAGE_TEST_ENABLED')==='true',
+ pinnedTestPackageId:Deno.env.get('FWH_CLIENT_NEW_TEST_PACKAGE_ID')??'',
+ pinnedTestDestinationId:Deno.env.get('FWH_CLIENT_NEW_TEST_DESTINATION_ID')??'',
+ pinnedTestRootFolderId:Deno.env.get('FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID')??'',
  // Independent TEST-only identity/root GET gate; this cannot enable Send.
  testPreflightEnabled:Deno.env.get('FWH_CLIENT_TEST_PREFLIGHT_ENABLED')==='true',
  // Separate, explicitly enabled original-ID disposable TEST recovery only.
