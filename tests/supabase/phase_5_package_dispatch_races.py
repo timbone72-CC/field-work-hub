@@ -105,8 +105,7 @@ def setup(pinned_test_package=None):
                     "select octet_length(%s::jsonb::text)", (Jsonb(manifest),)
                 ).fetchone()[0] == 1382
                 approved_hash = c.execute(
-                    "select encode(extensions.digest("
-                    "convert_to(%s::jsonb::text,'UTF8'),'sha256'),'hex')",
+                    "select encode(sha256(convert_to(%s::jsonb::text,'UTF8')),'hex')",
                     (Jsonb(manifest),)
                 ).fetchone()[0]
             c.execute("insert into private.client_packages("

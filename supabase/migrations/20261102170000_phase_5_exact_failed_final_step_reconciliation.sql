@@ -83,8 +83,7 @@ begin
     or k.approved_manifest->>'destination_revision' is distinct from d.revision::text
     or k.approved_manifest->>'folder_layout' is distinct from 'ADDRESS_WORK_ORDER'
     or jsonb_array_length(coalesce(k.approved_manifest->'selected_photos','[]'::jsonb))<>1
-    or k.approved_sha256 is distinct from encode(extensions.digest(
-        convert_to(k.approved_manifest::text,'UTF8'),'sha256'),'hex')
+    or k.approved_sha256 is distinct from encode(sha256(convert_to(k.approved_manifest::text,'UTF8')),'hex')
     or o.approved_sha256 is distinct from k.approved_sha256
     or o.lease_until is null or o.lease_until>=clock_timestamp()
     or pending.worker_id is distinct from held.worker_id
