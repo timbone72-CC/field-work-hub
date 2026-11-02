@@ -176,8 +176,10 @@ def run():
     assert renewed["generation"]==1
     assert query("select public.service_read_package_dispatch_owner(%s,%s,%s,1)",
                  (pkg_a,worker_a,request_a))["active"]
-    assert query("select count(*) from private.client_delivery_package_step_attempts "
-                 "where package_id=%s and verified_at is null",(pkg_b,))==1
+    with psycopg.connect(DSN) as c:
+        assert c.execute("select count(*) from private.client_delivery_package_step_attempts "
+                         "where package_id=%s and verified_at is null",
+                         (pkg_b,)).fetchone()[0] == 1
     try:
         query("select public.service_release_package_dispatch(%s,%s,%s,1)",
               (pkg_a, worker_a, request_a))
