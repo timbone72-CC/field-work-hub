@@ -210,6 +210,19 @@ When local and server state disagree:
 - do not invent conflict resolution in UI code;
 - surface an approved pending/conflict state until the roadmap-defined rule resolves it.
 
+## Failure isolation and truthful recovery across systems
+
+Apply the [FWH Failure Containment and Recovery Standard](GOVERNANCE.md#fwh-failure-containment-and-recovery-standard) before adding or modifying any cross-system operation. Define which work can proceed safely when one dependency fails, which durable identity/queue/receipt owns recovery, and which condition genuinely requires a broader stop. Do not create a substitute authority or provider path to hide a failure.
+
+- **Phone/offline and local storage:** A failed capture, sync, app restart or individual work-order action must preserve protected photos, owner/run bindings and durable pending actions. Unaffected locally authorized work orders remain usable where offline rules permit; do not claim server acceptance during an outage or erase evidence on reinstall/update.
+- **Authentication, Supabase and scoped roles:** Denied, expired or unreachable authorization stops affected privileged operations, not unrelated valid sessions or safe local work. Never bypass RLS/role checks or use a cached claim as fresh authorization. Present sign-in/reconnect/recovery explicitly; distinguish local pending from server-confirmed state.
+- **Client Drive / upload / provider identity:** An unknown remote outcome freezes the exact package/photo/attempt with its preallocated ID, session, offsets and immutable destination until same-ID reconciliation. Independently authorized other packages may continue only under verified per-package fencing and shared-parent protection. Shared provider credentials, quotas or folder ownership can be real common failure domains; report them rather than assuming independence.
+- **Admin conflicts, assignments and updates:** A stale edit or failed save retains unsaved input and targets only the affected revision/action. Other jobs and authenticated users proceed if their own state is valid. A failed application update must preserve persisted Room/schema compatibility and protected offline work; recovery builds must not downgrade or destroy it.
+- **Optional notifications/recovery email:** Failure to enqueue, send, deliver or display an alert never fabricates a work-order state or blocks valid capture, review, dispatch or independently safe delivery. Keep meaningful issue status available in the authenticated UI; reserve mandatory recovery/authentication gates for operations that actually depend on them.
+- **Observable recovery:** Use truthful states (locally pending, retry-safe, uncertain/held, authorization denied, verified), bounded diagnostic categories without secrets, a named owner and actionable next step. Retry only when known safe and idempotent; reconcile uncertain external effects without a second remote identity. No false `DELIVERED`, client-visible confirmation or cleanup.
+
+Failure containment is not a blanket promise of uptime during an entire shared service outage. Stop the smallest independently verifiable scope while preserving the existing security, release and provider gates. Verify with the proportionate cases in `TESTING_CONTRACT.md` and record genuine live/provider evidence separately from simulations.
+
 ## Restart/recovery rules
 
 Any integration that can leave work in flight must define restart behavior before implementation:
