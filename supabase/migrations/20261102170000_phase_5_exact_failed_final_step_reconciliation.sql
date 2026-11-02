@@ -96,7 +96,7 @@ begin
     or exists (select 1 from private.client_delivery_final_receipts
        where package_id=p_package)
     or (select count(*) from private.client_delivery_dispatch_permit)<>1
-    or (select count(*) from private.client_delivery_package_dispatch_permits)<>1
+    or (select count(*) from private.client_delivery_package_dispatch_permits where package_id=p_package)<>1
     or (select count(*) from private.client_delivery_package_step_attempts s
        where s.package_id=p_package and s.verified_at is null)<>1
     or (select count(*) from private.client_delivery_package_step_attempts s

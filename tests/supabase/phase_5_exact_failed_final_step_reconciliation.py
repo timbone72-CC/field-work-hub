@@ -174,7 +174,7 @@ def main():
             s.verified_at is null and s.verified_outcome is null as still_pending,
             s.started_at between '2026-11-02 15:12+00'::timestamptz and '2026-11-02 15:15+00'::timestamptz as failure_window,
             (select count(*) from private.client_delivery_dispatch_permit)=1 as original_one,
-            (select count(*) from private.client_delivery_package_dispatch_permits)=1 as scoped_one,
+            (select count(*) from private.client_delivery_package_dispatch_permits where package_id=k.id)=1 as scoped_one,
             (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id and verified_at is null)=1 as one_pending,
             (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id and verified_outcome='VERIFIED_PROVIDER_STEP')=5 as provider_five,
             (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id and verified_outcome='VERIFIED_METADATA_STEP')=1 as metadata_one,
