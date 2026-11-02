@@ -215,7 +215,7 @@ jobs:
                   copy = staged / original.relative_to(baseline)
                   assert copy.is_file()
                   assert hashlib.sha256(original.read_bytes()).digest() == hashlib.sha256(copy.read_bytes()).digest(), original
-          assert "private-review.js" not in (staged / "index.html").read_text()
+          assert "private-review.js?v=" in (staged / "index.html").read_text()
           assert (candidate / "private-review.js").is_file()
           html = (candidate / "index.html").read_text()
           assert 'id="job-photos"' in html
@@ -228,9 +228,9 @@ jobs:
           (candidate / "PREVIEW-PROVENANCE.txt").write_text(
               "NON-DEPLOYED TEST-ONLY PREVIEW BUNDLE.\n"
               "Protected github-pages approval is separately required for any live browser test.\n"
-              f"Main dashboard baseline: {main_sha}\nPhase 5/6 draft candidate: {candidate_sha}\n"
-              "Public Admin root preserved byte-for-byte from main; draft UI under /phase56-review/.\n"
-              "Do not merge PR or publish this artifact as a production update.\n")
+              f"Main dashboard baseline: {main_sha}\nPhase 5/6 CI candidate: {candidate_sha}\n"
+              "Public Admin root preserved byte-for-byte from main; CI candidate under /phase56-review/.\n"
+              "Do not publish this CI artifact as the Admin root; normal main Pages deployment owns that.\n")
           print("NON-DEPLOYED same-origin candidate prepared:", candidate_sha)
           print("Main dashboard preserved byte-for-byte:", main_sha)
           PY
