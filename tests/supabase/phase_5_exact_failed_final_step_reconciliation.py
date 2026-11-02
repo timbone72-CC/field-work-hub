@@ -137,13 +137,15 @@ def main():
         assert c.execute(
             "select status from private.client_packages where id=%s", (package,)
         ).fetchone()[0] == "DELIVERING"
+        c.execute("savepoint duplicate_recovery")
         try:
             c.execute("select private.service_reconcile_exact_failed_final_step(%s,%s)",
                       (package, step))
         except psycopg.errors.InsufficientPrivilege:
-            c.rollback()
+            c.execute("rollback to savepoint duplicate_recovery")
         else:
             raise AssertionError("Second recovery must be denied")
+        c.execute("release savepoint duplicate_recovery")
         assert c.execute(
             "select count(*) from private.client_delivery_failed_final_step_reconciliations"
             " where package_id=%s", (package,)
