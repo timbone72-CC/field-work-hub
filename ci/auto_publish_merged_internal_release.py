@@ -59,7 +59,7 @@ def api(path, *, allow404=False):
 
 def unique_pr_field(body, name):
     matches = re.findall(
-        r"(?mi)^\s*-\s*" + re.escape(name) + r"\s*:\s*([^\r\n]*)$",
+        r"(?mi)^[ \t]*-[ \t]*" + re.escape(name) + r"[ \t]*:[ \t]*([^\r\n]*)$",
         body,
     )
     require(len(matches) == 1, "Missing or duplicated release authority: " + name)
