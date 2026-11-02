@@ -1593,7 +1593,7 @@ export async function advancePinnedTestPackageOneStep({
  tokenProvider,expectedEmail,expectedDriveId,projectUrl,serviceRoleJwt,
  makeVault,fetcher=fetch,advanceStep=advanceTrustedDeliveryOneStep
 }={}){
- const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  const HASH=/^[a-f0-9]{64}$/;
  if(!UUID.test(packageId??'')||!UUID.test(destinationId??'')
    ||!/^[A-Za-z0-9_-]{10,160}$/.test(rootId??'')

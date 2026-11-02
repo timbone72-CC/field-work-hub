@@ -22,7 +22,7 @@ const config={
  oauthScope:'https://www.googleapis.com/auth/drive',
  supabaseUrl:'https://fwh-test.supabase.co',
  serviceRoleJwt:'header.payload.signature',
- sessionVaultKey:Buffer.alloc(32,7).toString('base64')
+ sessionVaultKey:Buffer.alloc(32,7).toString('base64').replace(/=+$/,'')
 };
 const req=(body={operation:'new_test_package_step_once'},secret=WORKER_KEY)=>
  new Request('https://fixture.invalid',{method:'POST',headers:{
