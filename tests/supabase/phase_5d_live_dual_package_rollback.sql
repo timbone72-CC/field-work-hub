@@ -10,6 +10,7 @@ declare
  pkg uuid[]:=array[]::uuid[];
  worker uuid[]:=array[]::uuid[];
  request_uuid uuid[]:=array[]::uuid[];
+ step_uuid uuid[]:=array[]::uuid[];
  claim jsonb; step jsonb; check_owner jsonb; blocked boolean;
  n integer:=0; new_pkg uuid; action_uuid uuid; original_pkg uuid;
 begin
@@ -72,11 +73,23 @@ begin
      pkg[n],worker[n],request_uuid[n],1,gen_random_uuid());
    if step->>'acquired' is distinct from 'true' then
      raise exception 'Package % step admission failed: %',n,step;end if;
+   step_uuid:=array_append(step_uuid,(step->>'step_id')::uuid);
  end loop;
  step:=private.service_begin_package_dispatch_step(
    pkg[2],worker[2],request_uuid[2],1,gen_random_uuid());
  if step->>'acquired' is distinct from 'false' then
    raise exception 'Unresolved package allowed duplicate step';end if;
+ -- Package 2 remains HELD. An independent package can still finish a
+ -- database-only verified metadata step and admit a later step.
+ claim:=private.service_complete_package_dispatch_step(
+    pkg[1],worker[1],request_uuid[1],1,step_uuid[1],'VERIFIED_METADATA_STEP');
+ if claim->>'completed' is distinct from 'true' then
+   raise exception 'Unaffected package could not complete metadata';end if;
+ step:=private.service_begin_package_dispatch_step(
+    pkg[1],worker[1],request_uuid[1],1,gen_random_uuid());
+ if step->>'acquired' is distinct from 'true' then
+   raise exception 'Held unrelated package blocked independent continuation';end if;
+
  blocked:=false;
  begin
    perform private.service_release_package_dispatch(
@@ -101,8 +114,10 @@ begin
  if (select count(*) from private.client_delivery_package_dispatch_permits)<>2
   or (select count(*) from private.client_delivery_package_step_attempts
       where verified_at is null)<>2
+  or (select count(*) from private.client_delivery_package_step_attempts
+      where verified_at is not null)<>1
  then raise exception 'Independent package/step isolation failed';end if;
- raise notice 'PASS: two real-schema package claims and live steps, duplicate held, old worker denied';
+ raise notice 'PASS: two real-schema owners, independent recovery, held step, legacy denied';
 end;
 $live$;
 rollback;
