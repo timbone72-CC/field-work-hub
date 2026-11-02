@@ -179,6 +179,24 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
         p_package:pkg,p_destination:dest,p_root:root
       });
     },
+    // Same-owner expired lease renewal. Service-only SQL atomically checks
+    // original worker/request/generation, verified steps and fresh provider GET.
+    resumePinnedPackageDispatch:(pkg,dest,root,worker,request,generation,proof,observed,proofRequest)=>{
+      const drive=/^[A-Za-z0-9_-]{10,160}$/;
+      if(![pkg,dest,worker,request,proofRequest].every(x=>typeof x==='string'&&UUID.test(x))
+        ||!Number.isSafeInteger(generation)||generation<1
+        ||!drive.test(root??'')||!drive.test(proof?.drive_id??'')
+        ||typeof proof?.account!=='string'
+        ||typeof proof?.permission_id!=='string'
+        ||!Number.isFinite(Date.parse(observed??'')))
+        throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
+      return rpc('service_resume_pinned_package_dispatch',{
+        p_package:pkg,p_destination:dest,p_root:root,
+        p_worker:worker,p_request:request,p_generation:generation,
+        p_account:proof.account,p_drive:proof.drive_id,p_permission:proof.permission_id,
+        p_observed_at:observed,p_proof_request:proofRequest
+      });
+    },
     // Package-specific owner proof. Never falls back to a legacy lease.
     readPackageDispatchOwner:(pkg,worker,request,generation)=>{
       const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
