@@ -163,10 +163,10 @@ class AutoPublisherPolicyTests(unittest.TestCase):
         self.assertNotIn("\nconcurrency:", pre_jobs)
         policy, publish = jobs.split("\n  publish:", 1)
         self.assertNotIn("concurrency:", policy)
-        self.assertIn("    concurrency:\n      group: fwh-internal-ui-test-publication\n"
+        self.assertIn("    concurrency:\n      group: fwh-internal-test-publication\n"
                       "      cancel-in-progress: false", publish)
-        self.assertIn("github.event.workflow_run.event == 'pull_request'", publish)
-        self.assertIn("github.event.workflow_run.head_branch == 'feat/phase-5-6-dashboard-workflow'", publish)
+        self.assertIn("github.event.workflow_run.event == 'push'", publish)
+        self.assertIn("github.event.workflow_run.head_branch == 'main'", publish)
 
     def test_kill_switch_keeps_publisher_off_without_api_or_files(self):
         with patch.dict("os.environ", {"FWH_UI_AUTO_RELEASE_ENABLED": "false"}):
