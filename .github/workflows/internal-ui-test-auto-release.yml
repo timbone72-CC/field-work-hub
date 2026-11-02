@@ -1,13 +1,15 @@
-name: FWH Verified Internal UI TEST Publisher
+name: FWH Verified Internal TEST APK Publisher
 
-# The trusted workflow definition must live on main before this can publish.
-# PR source is NEVER checked out, evaluated or executed in this privileged job.
+# This workflow is trusted main-only. Release requires a merged, operator-approved,
+# version-only PR and exact-main push CI; no PR source is executed with write access.
 on:
   pull_request:
     paths:
       - ".github/workflows/internal-ui-test-auto-release.yml"
       - "ci/auto_publish_verified_ui.py"
       - "tests/ci/test_auto_publish_verified_ui.py"
+      - "ci/auto_publish_merged_internal_release.py"
+      - "tests/ci/test_auto_publish_merged_internal_release.py"
   workflow_run:
     workflows:
       - "Android Team Client CI"
@@ -30,21 +32,21 @@ jobs:
         with:
           python-version: '3.12'
       - name: Verify fail-closed publisher policy
-        run: python3 -m unittest discover -s tests/ci -p 'test_auto_publish_verified_ui.py' -v
+        run: python3 -m unittest discover -s tests/ci -p 'test_auto_publish_*.py' -v
 
   publish:
     # The workflow-run event comes from GitHub itself, not from PR source.
     if: >-
       github.event_name == 'workflow_run' &&
-      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'feat/phase-5-6-dashboard-workflow' &&
+      github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == 'timbone72-CC/field-work-hub'
     runs-on: ubuntu-latest
-    # Restrict the queue to eligible publish jobs only. Ineligible push/completion
-    # workflows must NOT evict the final verified PR release event from the queue.
+    # Serialise only eligible main-push publishing events. Do not cancel an
+    # in-flight release verification on another successful CI completion.
     concurrency:
-      group: fwh-internal-ui-test-publication
+      group: fwh-internal-test-publication
       cancel-in-progress: false
     permissions:
       contents: write
@@ -60,9 +62,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Recheck publisher fail-closed tests before privileged operation
-        run: python3 -m unittest discover -s tests/ci -p 'test_auto_publish_verified_ui.py' -v
+        run: python3 -m unittest discover -s tests/ci -p 'test_auto_publish_*.py' -v
       - name: Publish only final-ready, verified, newer public TEST APK
         env:
           GH_TOKEN: ${{ github.token }}
           FWH_UI_AUTO_RELEASE_ENABLED: ${{ vars.FWH_UI_AUTO_RELEASE_ENABLED || 'true' }}
-        run: python3 ci/auto_publish_verified_ui.py
+        run: python3 ci/auto_publish_merged_internal_release.py
