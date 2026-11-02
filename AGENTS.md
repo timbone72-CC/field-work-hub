@@ -15,6 +15,8 @@ Before starting/resuming runtime or phase work, inspect current main, open relev
 
 Before runtime changes, also read CHANGE_CONTROL_CONTRACT.md and TESTING_CONTRACT.md. Read INTEGRATION_CONTRACT.md for Supabase/Auth/RLS, Room/offline work, reassignment, photos, background sync, provider storage, uploads, cleanup or another integration boundary. Read docs/PHASE_STAGING_DOCTRINE.md and the current/next phase for phase transitions or genuine physical/provider gates. Documentation-only work must read the affected document and applicable governance/change rules.
 
+**Mandatory FWH resilience check:** Apply [the Failure Containment and Recovery Standard](GOVERNANCE.md#fwh-failure-containment-and-recovery-standard) to each feature, fix and integration: identify the smallest affected failure domain, safe independent work, durable evidence, retry/reconciliation boundary, visible problem and recovery path. Use the existing Integration and Testing Contracts and approved phase gates; never turn an isolated failure into a blanket stop or repeat already accepted tests without a changed boundary. This does not weaken mandatory fail-closed security or release gates.
+
 ## Required work classification
 
 Record goal, scope key, affected surfaces, Level 1/2/3, authoritative line, relevant packs, protected behavior, external systems, rollback and exact verification boundary. Reclassify if scope expands. Never start a competing overlapping implementation line; continue or explicitly supersede the existing line.
@@ -22,6 +24,14 @@ Record goal, scope key, affected surfaces, Level 1/2/3, authoritative line, rele
 Keep one owner for server authority, Android local evidence, field workflow, camera, remote identity, retry and cleanup. Preserve protected originals and offline evidence, immutable photo/work-order/run and remote destination binding, least-privilege contractor access, and fail-closed uncertain remote outcomes. Do not copy FPP's local SAF folder workflow into Team's server-mediated company Drive architecture.
 
 Do not change the original FPP repository, Android app/package, Supabase, Drive folders, production data or permissions as part of FWH work. Never commit service secrets, contractor/customer PII, field photos, production signing material or auth refresh tokens to this public repository.
+
+## Current FWH TEST-only evidence classification — operator confirmation 2026-10-27
+
+The operator has confirmed that the **current Field Work Hub installation is not public, has no customer work, and its current FWH files/photos are disposable TEST data**. This describes the present FWH TEST environment, not the separate original Field Photo Prep app and not a permanent promise about future real work.
+
+For an explicitly isolated, identity-verified disposable FWH TEST fixture, loss or deliberately approved cleanup of the *fake photo bytes* is an acceptable test outcome. This does **not** automatically make every database record, Google ID, encrypted session, dispatch permit, or one-shot attempt marker safe to reset: while an uncertain remote outcome is being investigated, preserve the identity/journal evidence needed to classify it truthfully. Ordinary TEST cleanup may follow an exact-scoped recorded procedure instead of treating every disposable image as irreplaceable customer evidence.
+
+Do not silently infer that FPP or later live FWH data are disposable; reclassify protection before production or customer intake. Current explicit platform deployment safety restrictions cannot be bypassed by relabeling work as TEST. Retain the single governed PR/branch and required Level-3 gates.
 
 ## Verification and stop
 

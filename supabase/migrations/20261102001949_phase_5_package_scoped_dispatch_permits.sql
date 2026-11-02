@@ -1,0 +1,519 @@
+-- Phase 5D: additive package-scoped dispatch authority. SOURCE ONLY.
+-- This migration does not touch the original singleton dispatch/held photo,
+-- create a scheduler, enable Send, contact Google, or activate the new worker.
+-- The cutover stays disabled until a separately verified legacy-worker OFF gate.
+--
+-- One permit per immutable package; no timeout-driven takeover or global
+-- permit clearing. Existing provider identities and outbox lease remain owners.
+create table private.client_delivery_package_dispatch_config (
+  singleton boolean primary key default true check (singleton),
+  enabled boolean not null default false,
+  legacy_worker_off_verified boolean not null default false,
+  max_in_flight integer not null default 2 check (max_in_flight=2)
+);
+insert into private.client_delivery_package_dispatch_config(singleton)
+  values(true);
+
+create table private.client_delivery_package_dispatch_permits (
+  package_id uuid primary key references private.client_packages(id) on delete restrict,
+  organization_id uuid not null,
+  destination_id uuid not null references private.client_delivery_destinations(id)
+    on delete restrict,
+  worker_id uuid not null,
+  request_id uuid not null unique,
+  generation bigint not null check (generation>0),
+  acquired_at timestamptz not null default clock_timestamp()
+);
+create index client_delivery_package_permit_org_idx
+  on private.client_delivery_package_dispatch_permits(organization_id);
+alter table private.client_delivery_package_dispatch_config enable row level security;
+alter table private.client_delivery_package_dispatch_permits enable row level security;
+revoke all on private.client_delivery_package_dispatch_config,
+  private.client_delivery_package_dispatch_permits
+  from public,anon,authenticated,service_role;
+-- Deliberately NO direct table grant and NO public mutating function.
+
+-- Atomic exact eligible-package claim plus durable permit creation.
+-- A single config row lock serializes capacity checks across Edge instances;
+-- the target outbox row is locked BEFORE its state changes. Never invoke the
+-- old broad claim (which can select a different queued package).
+create function private.service_claim_package_and_acquire_dispatch(
+  p_package uuid,p_destination uuid,p_root text,p_worker uuid,p_request uuid
+) returns jsonb language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $claim$
+declare
+  cfg private.client_delivery_package_dispatch_config%rowtype;
+  o private.client_delivery_outbox%rowtype;
+  k private.client_packages%rowtype;
+  taken uuid;
+  next_generation bigint;
+begin
+  if p_package is null or p_destination is null or p_worker is null
+    or p_request is null or p_root is null
+    or p_root !~ '^[A-Za-z0-9_-]{10,160}$'
+  then
+    raise exception 'Exact package dispatch identities required'
+      using errcode='22023';
+  end if;
+  select * into cfg from private.client_delivery_package_dispatch_config
+    where singleton for update;
+  if cfg.singleton is null then
+    raise exception 'Package dispatch configuration missing'
+      using errcode='42501';
+  end if;
+  -- The original singleton and original held attempt are NEVER repurposed.
+  -- The migration leaves both switches false. Cutover is a separate gate.
+  if not cfg.enabled or not cfg.legacy_worker_off_verified
+  then return jsonb_build_object('claimed',false,'acquired',false);end if;
+  if (select count(*) from private.client_delivery_package_dispatch_permits)
+      >=cfg.max_in_flight
+  then return jsonb_build_object('claimed',false,'acquired',false);end if;
+
+  select * into o from private.client_delivery_outbox
+    where package_id=p_package for update;
+  if o.package_id is null or o.state<>'QUEUED'
+    or o.attempts<>0 or o.worker_id is not null
+  then return jsonb_build_object('claimed',false,'acquired',false);end if;
+  select * into k from private.client_packages where id=p_package for update;
+  if k.id is null or k.status<>'QUEUED'
+    or k.destination_id is distinct from p_destination
+    or o.destination_id is distinct from p_destination
+    or o.approved_sha256 is distinct from k.approved_sha256
+    or k.approved_sha256 is null
+    or k.approved_manifest is null
+    or k.approved_manifest->>'package_id' is distinct from p_package::text
+    or k.approved_manifest->>'destination_id' is distinct from p_destination::text
+    or k.approved_manifest->>'destination_root' is distinct from p_root
+    or exists(select 1 from private.client_delivery_final_receipts f
+       where f.package_id=p_package)
+    or not exists(select 1 from private.client_delivery_runtime rt
+       where rt.organization_id=k.organization_id and rt.worker_ready
+         and rt.last_verified_at>=now()-interval '24 hours'
+         and rt.worker_identity is not null)
+    or not exists(select 1 from private.client_delivery_destinations d
+       where d.id=p_destination and d.organization_id=k.organization_id
+         and d.company_id=k.company_id and d.verified and d.active
+         and d.root_folder_id=p_root
+         and d.revision=(k.approved_manifest->>'destination_revision')::uuid)
+  then raise exception 'Frozen package or destination not eligible'
+    using errcode='42501';end if;
+
+  next_generation:=o.lease_generation+1;
+  if next_generation<=0 then
+    raise exception 'Invalid lease generation' using errcode='40001';end if;
+  insert into private.client_delivery_package_dispatch_permits(
+    package_id,organization_id,destination_id,worker_id,request_id,generation
+  ) values(p_package,k.organization_id,p_destination,p_worker,p_request,next_generation)
+    on conflict (package_id) do nothing returning package_id into taken;
+  if taken is null then
+    return jsonb_build_object('claimed',false,'acquired',false);
+  end if;
+  update private.client_delivery_outbox
+    set state='DELIVERING',worker_id=p_worker,
+        lease_generation=next_generation,
+        lease_until=clock_timestamp()+interval '2 minutes',
+        last_heartbeat_at=clock_timestamp(),attempts=attempts+1
+    where package_id=p_package and state='QUEUED'
+      and attempts=0 and worker_id is null
+    returning * into o;
+  if o.package_id is null then
+    raise exception 'Package claim confirmation uncertain'
+      using errcode='40001';end if;
+  update private.client_packages set status='DELIVERING'
+    where id=p_package and status='QUEUED';
+  if not found then
+    raise exception 'Package status confirmation uncertain'
+      using errcode='40001';end if;
+  return jsonb_build_object(
+    'claimed',true,'acquired',true,'package_id',p_package,
+    'worker_id',p_worker,'request_id',p_request,
+    'generation',next_generation,'expires_at',o.lease_until,
+    'approved_sha256',o.approved_sha256,'destination_id',p_destination,
+    'manifest',k.approved_manifest);
+end;
+$claim$;
+
+-- Release is deliberately stricter than the historical per-step permit:
+-- only an independently durable final delivery receipt may close this slot.
+-- A bounded worker continuation/reconciliation RPC must be designed before
+-- a long-running in-progress package can be resumed across invocations.
+-- UNCERTAIN, partial, expired, lost-reply or failed operations retain permit.
+create function private.service_release_package_dispatch(
+  p_package uuid,p_worker uuid,p_request uuid,p_generation bigint
+) returns jsonb language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $release$
+declare
+  cfg private.client_delivery_package_dispatch_config%rowtype;
+  held private.client_delivery_package_dispatch_permits%rowtype;
+  o private.client_delivery_outbox%rowtype;
+  receipt private.client_delivery_final_receipts%rowtype;
+begin
+  if p_package is null or p_worker is null or p_request is null
+    or p_generation is null or p_generation<1
+  then raise exception 'Exact package dispatch owner required'
+    using errcode='22023';end if;
+  select * into cfg from private.client_delivery_package_dispatch_config
+    where singleton for update;
+  if cfg.singleton is null or not cfg.legacy_worker_off_verified
+  then raise exception 'Package dispatch cutover not verified'
+    using errcode='42501';end if;
+  select * into held from private.client_delivery_package_dispatch_permits
+    where package_id=p_package for update;
+  select * into o from private.client_delivery_outbox
+    where package_id=p_package for update;
+  select * into receipt from private.client_delivery_final_receipts
+    where package_id=p_package;
+  if held.package_id is null
+    or held.worker_id is distinct from p_worker
+    or held.request_id is distinct from p_request
+    or held.generation is distinct from p_generation
+    or o.package_id is null or o.lease_generation<>p_generation
+    or o.state<>'DELIVERED' or receipt.package_id is null
+    or receipt.approved_sha256 is distinct from o.approved_sha256
+    or receipt.destination_id is distinct from held.destination_id
+    or exists (select 1 from private.client_delivery_package_step_attempts s
+        where s.package_id=p_package and s.verified_at is null)
+  then raise exception 'Original package owner/final receipt not verified'
+    using errcode='42501';end if;
+  delete from private.client_delivery_package_dispatch_permits
+    where package_id=p_package and request_id=p_request
+      and worker_id=p_worker and generation=p_generation;
+  if not found then raise exception 'Permit release not confirmed'
+    using errcode='40001';end if;
+  return jsonb_build_object('released',true);
+end;
+$release$;
+
+create function public.service_claim_package_and_acquire_dispatch(
+ p_package uuid,p_destination uuid,p_root text,p_worker uuid,p_request uuid
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_claim_package_and_acquire_dispatch(
+   p_package,p_destination,p_root,p_worker,p_request)
+$wrap$;
+create function public.service_release_package_dispatch(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_release_package_dispatch(
+   p_package,p_worker,p_request,p_generation)
+$wrap$;
+
+revoke all on function
+  private.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid),
+  public.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid),
+  private.service_release_package_dispatch(uuid,uuid,uuid,bigint),
+  public.service_release_package_dispatch(uuid,uuid,uuid,bigint)
+  from public,anon,authenticated,service_role;
+grant execute on function
+  private.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid),
+  public.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid),
+  private.service_release_package_dispatch(uuid,uuid,uuid,bigint),
+  public.service_release_package_dispatch(uuid,uuid,uuid,bigint)
+  to service_role;
+
+
+-- Read-only continuation ownership proof; an acquired slot alone does not
+-- authorize Google writes. No time-based takeover or original permit release.
+create function private.service_read_package_dispatch_owner(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint
+) returns jsonb language plpgsql security definer set search_path='' as $owner$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ o private.client_delivery_outbox%rowtype;
+ pkg private.client_packages%rowtype;
+begin
+ if p_package is null or p_worker is null or p_request is null
+   or p_generation is null or p_generation<1 then
+   raise exception 'Exact owner required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config where singleton;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then return '{"active":false}'::jsonb;end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package;
+ if held.package_id is null or held.worker_id is distinct from p_worker
+   or held.request_id is distinct from p_request
+   or held.generation is distinct from p_generation
+ then return '{"active":false}'::jsonb;end if;
+ select * into o from private.client_delivery_outbox where package_id=p_package;
+ select * into pkg from private.client_packages where id=p_package;
+ if o.package_id is null or pkg.id is null or o.state<>'DELIVERING'
+   or pkg.status<>'DELIVERING' or o.worker_id is distinct from p_worker
+   or o.lease_generation is distinct from p_generation
+   or o.lease_until is null or o.lease_until<=clock_timestamp()
+   or held.organization_id is distinct from pkg.organization_id
+   or held.destination_id is distinct from pkg.destination_id
+   or held.destination_id is distinct from o.destination_id
+   or o.approved_sha256 is distinct from pkg.approved_sha256
+   or pkg.approved_sha256 is null or pkg.approved_manifest is null
+   or pkg.approved_manifest->>'package_id' is distinct from p_package::text
+   or pkg.approved_manifest->>'destination_id' is distinct from held.destination_id::text
+ then return '{"active":false}'::jsonb;end if;
+ return jsonb_build_object(
+  'active',true,'package_id',p_package,'worker_id',p_worker,
+  'request_id',p_request,'generation',p_generation,
+  'destination_id',held.destination_id,'approved_sha256',o.approved_sha256,
+  'manifest',pkg.approved_manifest);
+end;
+$owner$;
+create function public.service_read_package_dispatch_owner(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_read_package_dispatch_owner(
+  p_package,p_worker,p_request,p_generation)
+$wrap$;
+revoke all on function
+ private.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint),
+ public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)
+ from public,anon,authenticated,service_role;
+grant execute on function
+ private.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint),
+ public.service_read_package_dispatch_owner(uuid,uuid,uuid,bigint)
+ to service_role;
+
+
+-- Per-invocation durable single-flight. Crash/unknown network outcome keeps
+-- its unfinished attempt forever until separate exact-ID reconciliation.
+-- No TTL steal, retry scheduler or client/table privilege.
+create table private.client_delivery_package_step_attempts(
+  step_id uuid primary key,
+  package_id uuid not null references private.client_packages(id) on delete restrict,
+  worker_id uuid not null,
+  request_id uuid not null,
+  generation bigint not null check(generation>0),
+  started_at timestamptz not null default clock_timestamp(),
+  verified_at timestamptz,
+  verified_outcome text,
+  check ((verified_at is null and verified_outcome is null)
+    or (verified_at is not null and verified_outcome is not null))
+);
+create unique index client_delivery_one_active_step_per_package
+ on private.client_delivery_package_step_attempts(package_id)
+ where verified_at is null;
+create index client_delivery_package_step_history_idx
+ on private.client_delivery_package_step_attempts(package_id,started_at);
+alter table private.client_delivery_package_step_attempts enable row level security;
+revoke all on private.client_delivery_package_step_attempts
+ from public,anon,authenticated,service_role;
+
+
+-- Cutover-safe central lease guard. Every existing parent/file/session/receipt
+-- mutation calls this SAME authority. Default OFF retains the legacy path,
+-- while either cutover flag bars unpermitted legacy writes. Only BOTH flags
+-- and a matching immutable package permit permit the new generation.
+-- This is NOT a per-invocation Google POST fence; separate bounded step
+-- serialization is still required before enabling either flag.
+create or replace function private.service_delivery_guard(
+ p_package uuid,p_worker uuid,p_generation bigint
+) returns void language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $guard$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ o private.client_delivery_outbox%rowtype;
+ pkg private.client_packages%rowtype;
+begin
+ select * into cfg from private.client_delivery_package_dispatch_config
+  where singleton for share;
+ if cfg.singleton is null then
+  raise exception 'Dispatch configuration missing' using errcode='42501';
+ end if;
+ if cfg.enabled or cfg.legacy_worker_off_verified then
+  if not cfg.enabled or not cfg.legacy_worker_off_verified then
+   raise exception 'Delivery cutover not complete' using errcode='42501';
+  end if;
+  select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package for share;
+  if held.package_id is null or held.worker_id is distinct from p_worker
+    or held.generation is distinct from p_generation
+  then raise exception 'Package dispatch owner not verified' using errcode='42501';end if;
+  if not exists (
+    select 1 from private.client_delivery_package_step_attempts s
+    where s.package_id=p_package and s.worker_id=p_worker
+      and s.request_id=held.request_id and s.generation=p_generation
+      and s.verified_at is null
+  ) then raise exception 'Active exact package step required'
+      using errcode='42501';end if;
+ end if;
+ select * into o from private.client_delivery_outbox
+  where package_id=p_package for update;
+ if o.package_id is null or o.state<>'DELIVERING'
+   or o.worker_id is distinct from p_worker
+   or o.lease_generation is distinct from p_generation
+   or o.lease_until is null or o.lease_until<=clock_timestamp()
+ then raise exception 'Delivery lease stale or uncertain' using errcode='40001';end if;
+ if cfg.enabled then
+  select * into pkg from private.client_packages where id=p_package;
+  if pkg.id is null or pkg.status<>'DELIVERING'
+   or held.organization_id is distinct from pkg.organization_id
+   or held.destination_id is distinct from pkg.destination_id
+   or held.destination_id is distinct from o.destination_id
+   or pkg.approved_sha256 is null
+   or o.approved_sha256 is distinct from pkg.approved_sha256
+   or pkg.approved_manifest->>'package_id' is distinct from p_package::text
+   or pkg.approved_manifest->>'destination_id' is distinct from held.destination_id::text
+  then raise exception 'Frozen package authority changed' using errcode='42501';end if;
+ end if;
+end;
+$guard$;
+
+
+create function private.service_begin_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,p_step uuid
+) returns jsonb language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $begin$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ inserted uuid;
+begin
+ if p_package is null or p_worker is null or p_request is null
+   or p_generation is null or p_generation<1 or p_step is null
+ then raise exception 'Exact step owner required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config
+   where singleton for share;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then return jsonb_build_object('acquired',false);end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package for update;
+ if held.package_id is null or held.worker_id is distinct from p_worker
+   or held.request_id is distinct from p_request
+   or held.generation is distinct from p_generation
+ then raise exception 'Package step requires exact permit' using errcode='42501';end if;
+ insert into private.client_delivery_package_step_attempts(
+   step_id,package_id,worker_id,request_id,generation)
+ values(p_step,p_package,p_worker,p_request,p_generation)
+ on conflict do nothing returning step_id into inserted;
+ if inserted is null then return jsonb_build_object('acquired',false);end if;
+ perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ return jsonb_build_object('acquired',true,'step_id',p_step,
+  'package_id',p_package,'generation',p_generation);
+end;
+$begin$;
+
+create function private.service_complete_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,
+ p_step uuid,p_outcome text
+) returns jsonb language plpgsql security definer
+set search_path='' set lock_timeout='5s' as $complete$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ step private.client_delivery_package_step_attempts%rowtype;
+begin
+ if p_package is null or p_worker is null or p_request is null
+   or p_step is null or p_generation is null or p_generation<1
+   or (p_outcome is null or p_outcome not in (
+     'VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP','VERIFIED_FINAL_RECEIPT'))
+ then raise exception 'Verified exact step outcome required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config
+   where singleton for share;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then raise exception 'Package step cutover inactive' using errcode='42501';end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+   where package_id=p_package for update;
+ if held.package_id is null or held.worker_id is distinct from p_worker
+   or held.request_id is distinct from p_request
+   or held.generation is distinct from p_generation
+ then raise exception 'Exact permit changed' using errcode='42501';end if;
+ select * into step from private.client_delivery_package_step_attempts
+   where step_id=p_step for update;
+ if step.step_id is null or step.package_id is distinct from p_package
+   or step.worker_id is distinct from p_worker
+   or step.request_id is distinct from p_request
+   or step.generation is distinct from p_generation
+   or step.verified_at is not null
+ then raise exception 'Exact unfinished step required' using errcode='42501';end if;
+ if p_outcome='VERIFIED_FINAL_RECEIPT' then
+  if not exists (
+    select 1 from private.client_delivery_final_receipts f
+      join private.client_delivery_outbox o on o.package_id=f.package_id
+      join private.client_packages pkg on pkg.id=f.package_id
+      where f.package_id=p_package and pkg.status='DELIVERED'
+        and o.state='DELIVERED' and f.approved_sha256=o.approved_sha256
+        and f.destination_id=held.destination_id
+        and f.approved_sha256=pkg.approved_sha256
+  ) then raise exception 'Exact final receipt required'
+    using errcode='42501';end if;
+ else
+  perform private.service_delivery_guard(p_package,p_worker,p_generation);
+ end if;
+ -- Does not mark package or remote object delivered. The trusted worker
+ -- must first prove its result using the existing exact-ID/byte RPC/GET path.
+ update private.client_delivery_package_step_attempts
+   set verified_at=clock_timestamp(),verified_outcome=p_outcome
+   where step_id=p_step and verified_at is null;
+ if not found then raise exception 'Step completion uncertain' using errcode='40001';end if;
+ return jsonb_build_object('completed',true,'step_id',p_step);
+end;
+$complete$;
+
+create function public.service_begin_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,p_step uuid
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_begin_package_dispatch_step(
+  p_package,p_worker,p_request,p_generation,p_step)
+$wrap$;
+create function public.service_complete_package_dispatch_step(
+ p_package uuid,p_worker uuid,p_request uuid,p_generation bigint,
+ p_step uuid,p_outcome text
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_complete_package_dispatch_step(
+  p_package,p_worker,p_request,p_generation,p_step,p_outcome)
+$wrap$;
+revoke all on function
+ private.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ private.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text),
+ public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)
+ from public,anon,authenticated,service_role;
+grant execute on function
+ private.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid),
+ private.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text),
+ public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)
+ to service_role;
+
+
+-- Exact TEST package owner read for separately authorized future wakeups.
+-- A caller may name ONLY the trusted server-configured package/destination/root.
+-- No lease renewal, legacy singleton read/acquire, takeover or provider write.
+create function private.service_read_pinned_package_dispatch(
+ p_package uuid,p_destination uuid,p_root text
+) returns jsonb language plpgsql security definer set search_path='' as $pinned$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ proof jsonb;
+begin
+ if p_package is null or p_destination is null or p_root is null
+   or p_root !~ '^[A-Za-z0-9_-]{10,160}$'
+ then raise exception 'Exact server pinned package scope required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config where singleton;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then return '{"present":false,"active":false}'::jsonb;end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+  where package_id=p_package;
+ if held.package_id is null then return '{"present":false,"active":false}'::jsonb;end if;
+ if held.destination_id is distinct from p_destination
+ then return '{"present":true,"active":false}'::jsonb;end if;
+ proof:=private.service_read_package_dispatch_owner(
+  p_package,held.worker_id,held.request_id,held.generation);
+ if proof->>'active'<>'true'
+   or proof->'manifest'->>'destination_root' is distinct from p_root
+ then return '{"present":true,"active":false}'::jsonb;end if;
+ return proof||jsonb_build_object('present',true,'claimed',true,'acquired',true);
+end;
+$pinned$;
+create function public.service_read_pinned_package_dispatch(
+ p_package uuid,p_destination uuid,p_root text
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_read_pinned_package_dispatch(p_package,p_destination,p_root)
+$wrap$;
+revoke all on function
+ private.service_read_pinned_package_dispatch(uuid,uuid,text),
+ public.service_read_pinned_package_dispatch(uuid,uuid,text)
+ from public,anon,authenticated,service_role;
+grant execute on function
+ private.service_read_pinned_package_dispatch(uuid,uuid,text),
+ public.service_read_pinned_package_dispatch(uuid,uuid,text)
+ to service_role;

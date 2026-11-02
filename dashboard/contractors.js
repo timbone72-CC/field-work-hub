@@ -25,12 +25,12 @@ function ensureContractorManagementUi() {
   const createSection = document.querySelector('#results-card .admin-action');
   if (!createSection) return;
 
-  const section = document.createElement('section');
+  const section = document.createElement('details');
   section.className = 'admin-action';
   section.id = 'contractor-management-section';
   section.setAttribute('aria-labelledby', 'contractor-management-heading');
   section.innerHTML = `
-    <h2 id="contractor-management-heading">Contractors</h2>
+    <summary id="contractor-management-heading">Manage Contractors</summary>
     <p class="muted">Create a Contractor setup link without choosing or seeing their password. Seats and account roles are enforced by the server.</p>
     <p id="contractor-seat-summary" class="muted">Loading Contractor seats…</p>
     <form id="contractor-invite-form" class="admin-form" autocomplete="off">

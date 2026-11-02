@@ -76,6 +76,12 @@ abstract class CachedWorkOrderDao {
             String completed,
             String updated);
 
+    @Query("UPDATE cached_work_orders SET acknowledgment_received_at=:confirmed WHERE"
+            + " cache_owner_user_id=:owner AND organization_id=:org AND work_order_id=:wo"
+            + " AND run_id=:run AND assignment_instance_id=:instance")
+    abstract void confirmedAckCache(String owner,String org,String wo,String run,
+                                     String instance,String confirmed);
+
     boolean hasEvidence(CachedWorkOrder row, List<FieldAction> actions) {
         if (!row.startedAt.isEmpty()) return true;
         return hasLocalActions(row, actions) || !photos(row.cacheOwnerUserId, row.organizationId, row.workOrderId, row.runId).isEmpty();
@@ -83,7 +89,8 @@ abstract class CachedWorkOrderDao {
 
     private boolean hasLocalActions(CachedWorkOrder row, List<FieldAction> actions) {
         for (FieldAction a : actions)
-            if (a.workOrderId.equals(row.workOrderId) && a.runId.equals(row.runId)) return true;
+            if (a.workOrderId.equals(row.workOrderId) && a.runId.equals(row.runId)
+                    && (!"ACK".equals(a.kind) || !"ACCEPTED".equals(a.state))) return true;
         return false;
     }
 
@@ -91,7 +98,7 @@ abstract class CachedWorkOrderDao {
     void replaceForOwner(String owner, String org, List<CachedWorkOrder> downloaded) {
         List<FieldAction> actions = actions(owner, org);
         List<CachedWorkOrder> existing = listForOwner(owner, org);
-        java.util.Set<String> protectedWos = new java.util.HashSet<>();
+        java.util.Set<String> protectedRuns = new java.util.HashSet<>();
         for (CachedWorkOrder old : existing) {
             CachedWorkOrder next = null;
             for (CachedWorkOrder row : downloaded)
@@ -109,22 +116,22 @@ abstract class CachedWorkOrderDao {
                 if (evidence) {
                     markRunConflict(
                             owner, org, old.workOrderId, old.runId, "ASSIGNMENT_UNAVAILABLE");
-                    protectedWos.add(old.workOrderId);
+                    protectedRuns.add(old.workOrderId + ":" + old.runId);
                 } else delete(owner, org, old.workOrderId, old.runId);
             } else if (evidence && !sameRequirements(old.requirementSnapshotJson, next.requirementSnapshotJson)) {
                 markRunConflict(owner, org, old.workOrderId, old.runId, "REQUIREMENTS_CHANGED");
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             } else if (!old.conflictReason.isEmpty()) {
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             } else if (evidence && isOlder(next.serverUpdatedAt, old.serverUpdatedAt)) {
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             } else if (evidence && statusRank(next.fieldStatus) < statusRank(old.fieldStatus)) {
                 markRunConflict(owner, org, old.workOrderId, old.runId, "STATE_CHANGED");
-                protectedWos.add(old.workOrderId);
+                protectedRuns.add(old.workOrderId + ":" + old.runId);
             }
         }
         for (CachedWorkOrder row : downloaded)
-            if (!protectedWos.contains(row.workOrderId))
+            if (!protectedRuns.contains(row.workOrderId + ":" + row.runId))
                 insertAll(java.util.Collections.singletonList(row));
     }
 
@@ -184,7 +191,15 @@ abstract class CachedWorkOrderDao {
             throw new IllegalStateException(
                     "Refresh Assignments online before starting this work, or contact Admin if it"
                         + " needs review.");
-        PhotoRequirements requirements = PhotoRequirements.parse(row.requirementSnapshotJson);
+        if ("ACK".equals(kind)
+                && !"ASSIGNED".equals(row.fieldStatus)
+                && !"IN_PROGRESS".equals(row.fieldStatus)
+                && !"FIELD_COMPLETE".equals(row.fieldStatus))
+            throw new IllegalStateException("This assignment cannot be accepted.");
+        if ("ACK".equals(kind) && !row.acknowledgmentReceivedAt.isEmpty())
+            throw new IllegalStateException("This assignment is already acknowledged.");
+        PhotoRequirements requirements = "ACK".equals(kind)
+                ? null : PhotoRequirements.parse(row.requirementSnapshotJson);
         java.time.Instant event = java.time.Instant.parse(eventTime);
         FieldAction start = null;
         for (FieldAction a : actions(session.userId, session.organizationId))
@@ -195,7 +210,9 @@ abstract class CachedWorkOrderDao {
                     return a;
                 if (a.kind.equals("START")) start = a;
             }
-        if ("START".equals(kind)) {
+        if ("ACK".equals(kind)) {
+            // Deliberate Accept is independent of Start, and never freezes photos.
+        } else if ("START".equals(kind)) {
             if (!"ASSIGNED".equals(row.fieldStatus))
                 throw new IllegalStateException("This work cannot be started.");
         } else if ("COMPLETE".equals(kind)) {
@@ -219,7 +236,7 @@ abstract class CachedWorkOrderDao {
                         eventTime,
                         System.currentTimeMillis(),
                         nextSequence());
-        a.requirementRevision = requirements.revision;
+        if (requirements != null) a.requirementRevision = requirements.revision;
         if ("COMPLETE".equals(kind)) freezePhotos(row, requirements, a);
         insertAction(a);
         return a;
@@ -227,8 +244,13 @@ abstract class CachedWorkOrderDao {
 
     @Query("SELECT * FROM protected_photos WHERE ownerId=:owner AND organizationId=:org AND workOrderId=:wo AND runId=:run ORDER BY id")
     abstract List<ProtectedPhoto> photos(String owner, String org, String wo, String run);
+    @Query("SELECT * FROM protected_photos WHERE ownerId=:owner AND organizationId=:org AND state IN ('WAITING','PROBLEM') ORDER BY id LIMIT :limit OFFSET :offset")
+    abstract List<ProtectedPhoto> recoveryPhotos(String owner, String org, int limit, int offset);
     @Query("SELECT * FROM protected_photos ORDER BY id") abstract List<ProtectedPhoto> allPhotos();
     @Query("SELECT * FROM protected_photos WHERE id=:id") abstract ProtectedPhoto photo(String id);
+    @Query("SELECT * FROM photo_transfers WHERE photoId=:id") abstract PhotoTransfer transfer(String id);
+    @Query("SELECT count(*) FROM protected_photos p JOIN field_actions a ON a.finishSetId=p.finishSetId AND a.ownerId=p.ownerId AND a.organizationId=p.organizationId AND a.workOrderId=p.workOrderId AND a.runId=p.runId AND a.assignmentInstanceId=p.assignmentInstanceId AND a.requirementRevision=p.requirementRevision WHERE p.ownerId=:owner AND p.organizationId=:org AND p.state='WAITING' AND p.finishSetId<>'' AND a.state='ACCEPTED' AND a.kind='COMPLETE' AND a.canonicalStatus='FIELD_COMPLETE' AND a.acceptedAt<>'' AND NOT EXISTS (SELECT 1 FROM photo_transfers t WHERE t.photoId=p.id)")
+    abstract int unstagedAcceptedPhotos(String owner, String org);
     @Insert(onConflict=OnConflictStrategy.ABORT) abstract void insertPhoto(ProtectedPhoto p);
     @Query("UPDATE protected_photos SET state=:state,originalBytes=:bytes,problem=:problem WHERE id=:id AND state='CAPTURING'")
     abstract void publishCapture(String id,String state,long bytes,String problem);
@@ -342,6 +364,11 @@ abstract class CachedWorkOrderDao {
         a.serverUpdatedAt = result.updatedAt;
         a.acceptedAt = result.acceptedAt;
         updateAction(a);
+        if ("ACK".equals(a.kind)) {
+            confirmedAckCache(a.ownerId,a.organizationId,a.workOrderId,a.runId,
+                    a.assignmentInstanceId,result.acknowledgmentReceivedAt);
+            return;
+        }
         canonicalCache(
                 a.ownerId,
                 a.organizationId,

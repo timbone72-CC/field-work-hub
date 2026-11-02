@@ -81,7 +81,7 @@ passwordForm.addEventListener('submit', async (event) => {
 
     const done = document.createElement('p');
     done.className = 'muted';
-    done.textContent = 'Your Contractor account is ready. Open the Field Photo Prep Team app and sign in with this email and the password you just chose.';
+    done.textContent = 'Your Contractor account is ready. Open the Field Work Hub app and sign in with this email and the password you just chose.';
     inviteCheck.insertAdjacentElement('afterend', done);
   } catch (error) {
     setSetupStatus(error instanceof Error ? error.message : 'Unable to finish account setup.', true);
@@ -121,7 +121,7 @@ async function bootInvite() {
     const invitationMarker = invitedUser.user_metadata?.team_invitation_id;
 
     if (metadata.role !== 'CONTRACTOR' || !metadata.organization_id || !invitationMarker) {
-      throw new Error('This is not a valid Field Photo Prep Team Contractor setup link.');
+      throw new Error('This is not a valid Field Work Hub Contractor setup link.');
     }
 
     inviteCheck.className = 'check pass';

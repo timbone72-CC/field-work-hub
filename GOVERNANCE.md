@@ -38,6 +38,14 @@ FWH is the multi-user, offline-capable work-order system; FPP is the separate wo
 
 Preserve FWH's server-controlled organization/role/assignment authority, protected offline evidence, immutable work-order/run/photo identities, fail-closed uncertain remote outcomes and exact server-mediated delivery. No governance/branding task silently changes them.
 
+## FWH Failure Containment and Recovery Standard
+
+**Permanent, cross-phase rule — operator approved 2026-11-01:** A failure in one operation, work order, delivery package, contractor account, device or external integration must **not unnecessarily interrupt independently safe operations**. Preserve durable work and evidence, prevent duplicate or conflicting actions, show truthful affected status and a concrete recovery path, and restore progress without silently reassigning authority or data. When continuing risks integrity, security, authorization or uncertain remote writes, stop **the smallest provably isolatable failure domain**, not the whole system by default.
+
+Every new or changed runtime boundary must identify (1) the failure domain and any truly shared dependency; (2) which unrelated actions can safely continue; (3) durable state and evidence retained before failure; (4) known-safe retry versus identity-bound reconciliation or human intervention; (5) user/Admin-visible problem and next action; and (6) recovery, rollback and narrowly scoped verification. A shared service outage can genuinely affect multiple operations: never invent independent availability, bypass revoked access, replace a remote identity, or claim success to keep the interface moving.
+
+**Enforcement:** `INTEGRATION_CONTRACT.md` specifies cross-system failure behavior; `TESTING_CONTRACT.md` requires proportionate failure and recovery evidence; `docs/ROADMAP.md` incorporates the standard into existing Phase 5–8 release criteria. The authoritative scope record tracks actual PASS/PENDING/BLOCKED evidence. This is **not a new phase**, automatic approval, separate testing campaign, or permission to repeat accepted physical tests. A required failure blocks that affected gate and applicable merge/release, but unrelated approved development may continue safely.
+
 ## Classification, approvals and batching
 
 The existing CHANGE_CONTROL_CONTRACT.md defines Level 1/2/3 and approvals. If uncertain, classify upward; scope expansion requires reassessment. Level 3 always requires **explicit operator pre-merge approval**. Design approval and a PR field marked APPROVED are not independent proof of that operator decision.

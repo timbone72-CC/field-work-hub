@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set Up Field Work Hub Admin</title>
+  <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
+  <link rel="stylesheet" href="styles.css?v=modern-premium-stage8-setup-20261017">
+</head>
+<body class="fwh-setup-page">
+  <main class="shell">
+    <section class="card">
+      <p class="eyebrow">Field Work Hub</p>
+      <h1>Set Up Your Admin Account</h1>
+      <p class="muted">Open your approved setup link, then choose your password. The person who invited you will not see it.</p>
+
+      <div id="invite-check" class="check" role="status" aria-live="polite">Checking invitation…</div>
+      <form id="password-form" class="admin-form hidden" autocomplete="off">
+        <p id="invite-identity" class="muted"></p>
+        <label>New password
+          <input id="new-password" type="password" required minlength="10" autocomplete="new-password">
+        </label>
+        <label>Confirm password
+          <input id="confirm-password" type="password" required minlength="10" autocomplete="new-password">
+        </label>
+        <button id="set-password" type="submit">Finish Admin Setup</button>
+        <p id="setup-status" class="status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+  <script src="admin-invite.js?v=phase6f-scoped-invite-20261012-1" defer></script>
+</body>
+</html>

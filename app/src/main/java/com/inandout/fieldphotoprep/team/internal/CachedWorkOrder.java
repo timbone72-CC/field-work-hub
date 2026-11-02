@@ -104,6 +104,14 @@ final class CachedWorkOrder {
     @ColumnInfo(name = "conflict_reason", defaultValue = "''")
     public String conflictReason = "";
 
+    @NonNull
+    @ColumnInfo(name = "acknowledgment_received_at", defaultValue = "''")
+    public String acknowledgmentReceivedAt = "";
+
+    @NonNull
+    @ColumnInfo(name = "reopen_reason", defaultValue = "''")
+    public String reopenReason = "";
+
     CachedWorkOrder(
             @NonNull String cacheOwnerUserId,
             @NonNull String organizationId,

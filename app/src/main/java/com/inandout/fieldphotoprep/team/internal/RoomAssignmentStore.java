@@ -41,6 +41,8 @@ final class RoomAssignmentStore implements AssignmentStore {
                             workOrder.serverUpdatedAt,
                             lastSuccessfulSyncEpochMs);
             cached.assignmentInstanceId = workOrder.assignmentInstanceId;
+            cached.acknowledgmentReceivedAt = workOrder.acknowledgmentReceivedAt;
+            cached.reopenReason = workOrder.reopenReason;
             rows.add(cached);
         }
         dao.replaceForOwner(session.userId, session.organizationId, rows);
@@ -72,15 +74,24 @@ final class RoomAssignmentStore implements AssignmentStore {
                             row.serverUpdatedAt);
             workOrder.requirementSnapshotJson = row.requirementSnapshotJson;
             workOrder.assignmentInstanceId = row.assignmentInstanceId;
+            workOrder.acknowledgmentReceivedAt = row.acknowledgmentReceivedAt;
+            workOrder.reopenReason = row.reopenReason;
             workOrder.conflictReason = row.conflictReason;
             for (FieldAction a : dao.actions(session.userId, session.organizationId)) {
                 if (a.workOrderId.equals(row.workOrderId)
                         && a.runId.equals(row.runId)
-                        && !"ACCEPTED".equals(a.state)) {
-                    if ("CONFLICT".equals(a.state) || a.reason.startsWith("PROTOCOL"))
-                        workOrder.conflictReason = a.reason;
-                    else if ("COMPLETE".equals(a.kind) || workOrder.pendingKind.isEmpty())
-                        workOrder.pendingKind = a.kind;
+                        && a.assignmentInstanceId.equals(row.assignmentInstanceId)) {
+                    if ("ACK".equals(a.kind) && "ACCEPTED".equals(a.state)
+                            && workOrder.acknowledgmentReceivedAt.isEmpty())
+                        workOrder.acknowledgmentReceivedAt = a.acceptedAt;
+                    if (!"ACCEPTED".equals(a.state)) {
+                        if ("CONFLICT".equals(a.state) || a.reason.startsWith("PROTOCOL"))
+                            workOrder.conflictReason = a.reason;
+                        else if ("ACK".equals(a.kind))
+                            workOrder.acceptPending = true;
+                        else if ("COMPLETE".equals(a.kind) || workOrder.pendingKind.isEmpty())
+                            workOrder.pendingKind = a.kind;
+                    }
                 }
             }
             result.add(workOrder);

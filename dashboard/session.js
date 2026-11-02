@@ -60,6 +60,9 @@ async function restoreAdminSession() {
     try {
       currentUser = await fetchCurrentUser();
     } catch (firstError) {
+      // A timeout / offline response is not an expired JWT. Rotating a
+      // refresh token on network uncertainty risks losing a usable session.
+      if (epoch !== adminSessionEpoch || firstError?.status !== 401) throw firstError;
       session = await refreshAdminSession(session.refresh_token);
       if (epoch !== adminSessionEpoch) return;
       storeAdminSession(session);
@@ -69,8 +72,14 @@ async function restoreAdminSession() {
 
     if (epoch !== adminSessionEpoch) return;
     const metadata = currentUser.app_metadata || {};
-    if (metadata.role !== 'ADMIN' || !metadata.organization_id) {
-      throw new Error('Stored session is not authorized as a Team Admin.');
+    if (!metadata.organization_id || !['ADMIN', 'SUPERVISOR'].includes(metadata.role)) {
+      throw new Error('Stored session is not authorized for office access.');
+    }
+    if (metadata.role === 'SUPERVISOR') {
+      await showScopedStaffingPortal(metadata.organization_id);
+      if (epoch !== adminSessionEpoch) return;
+      setLoginStatus('', false);
+      return;
     }
 
     const [rows, users] = await Promise.all([
@@ -84,14 +93,95 @@ async function restoreAdminSession() {
     setLoginStatus('', false);
   } catch (error) {
     if (epoch !== adminSessionEpoch) return;
-    clearAdminSession();
+    if (error?.status === 403 && accessToken && currentUser?.id) {
+      try {
+        await RecoveryGallery.show();
+        if (epoch === adminSessionEpoch) {
+          setLoginStatus('', false);
+          return; // Valid Auth and exact server-restricted photo recovery; no work access.
+        }
+      } catch {
+        // Server must reauthorize every requested recovery object.
+      }
+    }
+    RecoveryGallery.reset();
+    const transient = transientAdminConnectionError(error);
+    // Fail closed for visible data, but do not destroy the protected tab
+    // refresh credential merely because an authorized read timed out.
+    if (!transient) clearAdminSession();
     pendingAdminSession = null;
     accessToken = null;
     currentUser = null;
     assignableUsers = [];
     workOrderRows = [];
-    setLoginStatus('Your dashboard session could not be restored. Sign in again.', false);
+    setLoginStatus(error?.requestStage ? adminLoginFailureMessage(error) : transient
+      ? 'The connection timed out while restoring your Admin session. Your saved session was preserved; no work data was opened. Try reloading after the connection recovers.'
+      : 'Your dashboard session could not be restored. Sign in again.', transient);
   }
+}
+
+function transientAdminConnectionError(error) {
+  // Only transport/transient HTTP failures are retryable. Invalid or
+  // forbidden credentials must still remove the stored operational session.
+  return error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    || error?.name === 'TypeError'
+    || [408, 429, 500, 502, 503, 504].includes(error?.status);
+}
+
+// Fixed labels only: never retain URLs, query strings, credentials or server
+// message/details fields in diagnostics. Keep them in the existing error path.
+function adminRequestStage(url) {
+  const path = String(url).split('?')[0];
+  if (path === `${SUPABASE_URL}/auth/v1/token`) return 'signing in';
+  if (path === `${SUPABASE_URL}/auth/v1/user`) return 'verifying your account';
+  if (path === `${SUPABASE_URL}/rest/v1/work_orders`) return 'loading work orders';
+  if (path === `${SUPABASE_URL}/rest/v1/rpc/admin_list_assignable_users`) return 'loading contractors';
+  return 'contacting the dashboard service';
+}
+
+function adminConnectionFailure(error, stage, startedAt) {
+  const failure = new Error('Field Work Hub connection failed.');
+  failure.name = ['TimeoutError', 'AbortError', 'TypeError'].includes(error?.name) ? error.name : 'Error';
+  failure.requestStage = stage;
+  failure.elapsedMs = Math.max(0, Date.now() - startedAt);
+  return failure;
+}
+
+async function adminHttpFailure(response, stage = 'contacting the dashboard service', startedAt = Date.now()) {
+  const failure = new Error('Field Work Hub request was rejected.');
+  failure.status = response.status;
+  failure.requestStage = stage;
+  try {
+    const body = await response.json();
+    // These codes contain no operator-provided text. Discard every other field.
+    if (typeof body?.code === 'string' && /^PGRST\d{3}$/.test(body.code)) failure.code = body.code;
+    if (['invalid_credentials', 'refresh_token_not_found', 'refresh_token_already_used'].includes(body?.error_code)) {
+      failure.code = body.error_code;
+    }
+    if (body?.message === 'JWT issued at future') failure.validationReason = 'token time validation';
+    if (body?.message === 'JWT expired') failure.validationReason = 'token expiry validation';
+    if (response.status === 403 && body?.message === 'Office work access disabled') {
+      failure.accessReason = 'Office work access disabled';
+    }
+  } catch {
+    // HTTP denial remains a denial even if its body cannot be read.
+  }
+  failure.elapsedMs = Math.max(0, Date.now() - startedAt);
+  failure.message = adminLoginFailureMessage(failure);
+  return failure;
+}
+
+function adminLoginFailureMessage(error) {
+  const stage = error.requestStage || 'checking sign-in';
+  const elapsed = `${(Math.max(0, Number(error.elapsedMs) || 0) / 1000).toFixed(1)} s`;
+  const detail = [error.status ? `HTTP ${error.status}` : '', error.code || '', elapsed].filter(Boolean).join('; ');
+  if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+    return `The connection timed out while ${stage} (${detail}). This does not mean your password is wrong. No work data was opened.`;
+  }
+  if (!error.status) return `The connection failed while ${stage} (${detail}). No work data was opened.`;
+  const reason = error.validationReason ? ` The service reported ${error.validationReason}.` : '';
+  const accessReason = error.accessReason ? ` ${error.accessReason}.` : '';
+  return `The service rejected the request while ${stage} (${detail}).${reason}${accessReason} No work data was opened.`;
 }
 
 async function refreshAdminSession(refreshToken) {
@@ -99,23 +189,33 @@ async function refreshAdminSession(refreshToken) {
     throw new Error('No refresh token is available.');
   }
 
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-    signal: AbortSignal.timeout(30_000)
-  });
-
-  if (!response.ok) {
-    const error = new Error(await readableError(response, 'Unable to refresh the Admin session.'));
-    error.status = response.status;
-    throw error;
+  const startedAt = Date.now();
+  const stage = 'refreshing your session';
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(30_000)
+    });
+  } catch (error) {
+    throw adminConnectionFailure(error, stage, startedAt);
   }
 
-  const session = await response.json();
+  if (!response.ok) {
+    throw await adminHttpFailure(response, stage, startedAt);
+  }
+
+  let session;
+  try {
+    session = await response.json();
+  } catch (error) {
+    throw adminConnectionFailure(error, stage, startedAt);
+  }
   if (!session.access_token || !session.refresh_token) {
     throw new Error('Supabase did not return a complete refreshed session.');
   }
@@ -195,8 +295,9 @@ async function ensureFreshAdminSession() {
       if (epoch !== adminSessionEpoch || !accessToken) throw new Error('The Admin session changed.');
       const user = refreshed.user;
       const metadata = user && user.app_metadata;
-      if (!metadata || metadata.role !== 'ADMIN' || !metadata.organization_id
+      if (!metadata || !['ADMIN', 'SUPERVISOR'].includes(metadata.role) || !metadata.organization_id
           || (previousUser && (user.id !== previousUser.id
+            || metadata.role !== previousUser.app_metadata.role
             || metadata.organization_id !== previousUser.app_metadata.organization_id))) {
         expireAdminSession();
         throw new Error('This session is no longer authorized as a Team Admin.');
@@ -207,7 +308,7 @@ async function ensureFreshAdminSession() {
       storeAdminSession(refreshed);
     } catch (error) {
       if (epoch === adminSessionEpoch && (error.status === 400 || error.status === 401)) {
-        expireAdminSession();
+        expireAdminSession(error.requestStage ? error.message : undefined);
       }
       throw error;
     }
@@ -220,9 +321,9 @@ async function ensureFreshAdminSession() {
   }
 }
 
-function expireAdminSession() {
+function expireAdminSession(message = 'Your dashboard session expired. Sign in again.') {
   signOutButton.click();
-  setLoginStatus('Your dashboard session expired. Sign in again.', true);
+  setLoginStatus(message, true);
 }
 
 async function adminFetch(url, options = {}) {
@@ -234,20 +335,37 @@ async function adminFetch(url, options = {}) {
     adminWritesPending++;
     adminWriteRevision++;
   }
+  const startedAt = Date.now();
+  const stage = adminRequestStage(url);
   try {
-    const response = await fetch(url, {
-      ...options,
-      signal: options.signal || AbortSignal.timeout(30_000),
-      headers: { ...options.headers, apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${accessToken}` }
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        signal: options.signal || AbortSignal.timeout(30_000),
+        headers: { ...options.headers, apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${accessToken}` }
+      });
+    } catch (error) {
+      throw adminConnectionFailure(error, stage, startedAt);
+    }
     if (epoch !== adminSessionEpoch || !accessToken) throw new Error('The Admin session changed.');
     if (response.status === 401) {
-      expireAdminSession();
-      throw new Error('Your dashboard session expired. Sign in again.');
+      const error = await adminHttpFailure(response, stage, startedAt);
+      // Reading an error body can overlap sign-out / a different login.
+      if (epoch !== adminSessionEpoch || !accessToken) throw new Error('The Admin session changed.');
+      expireAdminSession(error.message);
+      throw error;
     }
+    response.adminRequestStage = stage;
+    response.adminRequestStartedAt = startedAt;
     const readJson = response.json.bind(response);
     response.json = async () => {
-      const payload = await readJson();
+      let payload;
+      try {
+        payload = await readJson();
+      } catch (error) {
+        throw adminConnectionFailure(error, stage, startedAt);
+      }
       if (epoch !== adminSessionEpoch || !accessToken) throw new Error('The Admin session changed.');
       return payload;
     };

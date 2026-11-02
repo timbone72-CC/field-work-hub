@@ -159,6 +159,18 @@ Changes affecting offline work or retry must include at least:
 - stale server data does not silently overwrite protected local progress;
 - reconnection converges or surfaces a conflict instead of guessing.
 
+## Failure-containment and recoverability evidence
+
+For a new or materially changed boundary, use the approved [FWH Failure Containment and Recovery Standard](GOVERNANCE.md#fwh-failure-containment-and-recovery-standard) with the relevant existing phase test suite. Test **both sides** of an affected failure domain: the risky operation stops safely and a genuinely independent eligible operation can continue. Do not infer independence when the dependency (service, authorization, company root, rate limit or provider quota) is shared.
+
+Select proportionate checks for the actual touched boundary:
+- Lost connection, denied Auth/RLS, failed preparation/provider response, server restart, expired worker lease or lost acknowledgment: retained original/local outbox/remote IDs and truthful status; never false success or premature cleanup.
+- Duplicate/overlapping requests, two workers/packages/users/organizations and shared-parent folder creation: per-identity single-flight, current authorization, immutable destination, no duplicate remote files or cross-tenant access.
+- Known-safe retry, uncertain upload, recovery after restart and stale response: safe idempotent continuation where proven; otherwise the affected operation stays held and requires exact-ID reconciliation.
+- Admin save conflict, optional alert/email outage and app-update failure: unrelated jobs remain functional where authorized; unsaved input, local records and old supported data remain recoverable; a useful problem/recovery message is surfaced.
+
+Use mocked/source/SQL failure injection for deterministic cases, and **only the smallest previously unproven physical/device/provider gate** for outcomes that software cannot verify. Record exact failure scope, retained evidence, unaffected progress, user-visible status, recovery result and PASS/FAIL/BLOCKED in the current authoritative implementation record. Reuse accepted earlier phone/provider tests; a changed failure boundary, not reassurance, justifies a targeted retest. No extra numbered phase, redundant complete suite, or separate approval is created by this standard.
+
 ## Failure gate
 
 A required test failure stops:

@@ -216,3 +216,1449 @@ button.secondary {
 .photo-item details { grid-column: 1 / -1; }
 .photo-total { display: flex; gap: 20px; align-items: center; }
 @media (max-width: 620px) { .photo-item { grid-template-columns: 1fr; } .photo-total { display: block; } }
+
+/* Bounded job navigation and one selected-job workspace. */
+[hidden] { display: none !important; }
+.shell { width: min(1240px, calc(100% - 32px)); }
+#login-card { max-width: 700px; margin-inline: auto; }
+.admin-action { margin: 14px 0; }
+.admin-action summary { cursor: pointer; font-weight: 750; }
+.check { margin: 16px 0 6px; padding: 10px 14px; }
+.job-filters { max-width: none; grid-template-columns: 130px minmax(180px, 1fr) 150px 145px 100px auto; align-items: end; gap: 10px; }
+.job-filters label { font-size: .85rem; }
+.job-filters input, .job-filters select { padding: 10px; }
+.job-pagination, .workspace-navigation, .workspace-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.job-pagination { justify-content: flex-end; }
+.job-pagination p { margin-right: auto; }
+.work-orders { display: block; max-height: 58vh; overflow: auto; border-radius: 10px; }
+.job-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .9rem; }
+.job-table th { position: sticky; top: 0; z-index: 1; background: #eef1f5; }
+.job-table th, .job-table td { padding: 12px; border-bottom: 1px solid #d8dbe0; vertical-align: top; }
+.job-table td:first-child { min-width: 230px; }
+.job-table small { display: block; color: #5f6368; margin-top: 5px; }
+.job-table tr:hover { background: #f5f8fc; }
+button.job-link { background: none; color: #135796; padding: 0 0 5px; text-align: left; border-radius: 0; }
+.job-link:hover { text-decoration: underline; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.job-workspace { width: min(900px, calc(100vw - 40px)); max-height: 90dvh; overflow: auto; padding: 24px; border: 1px solid #b7c5d4; border-radius: 16px; color: #1d1d1f; }
+.job-workspace::backdrop { background: rgb(16 28 43 / 55%); }
+.workspace-header h2 { margin: 0; }
+.workspace-header p { margin: 8px 0; }
+.workspace-tabs { border-bottom: 1px solid #d8dbe0; margin-top: 20px; padding-bottom: 12px; }
+.workspace-tabs button { background: #edf1f6; color: #263848; }
+.workspace-tabs button[aria-pressed="true"] { background: #175b90; color: #fff; }
+#edit-wo-form { max-width: none; }
+[data-job-panel] { display: grid; gap: 16px; }
+.job-workspace .edit-actions { display: flex; position: sticky; bottom: -24px; background: #fff; padding: 16px 0; border-top: 1px solid #d8dbe0; }
+.unsaved-choice { border: 1px solid #d9bb68; background: #fff7df; border-radius: 10px; padding: 16px; margin-top: 16px; }
+button:focus-visible, summary:focus-visible { outline: 3px solid #3a82c0; outline-offset: 3px; }
+@media (max-width: 1000px) { .job-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) {
+  .shell { width: calc(100% - 20px); margin: 10px auto; }
+  .card { padding: 16px; }
+  .job-filters { grid-template-columns: 1fr 1fr; }
+  .job-pagination .secondary, .workspace-navigation .secondary { width: auto; margin: 0; }
+  .job-workspace { width: calc(100vw - 16px); max-height: 96dvh; padding: 16px; }
+  .job-workspace .edit-actions { bottom: -16px; }
+  .workspace-tabs { gap: 6px; }
+  .workspace-tabs button { padding: 10px; font-size: .86rem; }
+  .job-table th, .job-table td { padding: 10px; }
+}
+
+/* Phase 5C private review is inside the existing job workspace, not a new page. */
+#private-review-list { display: grid; gap: 12px; }
+.private-review-photo { display: grid; gap: 10px; padding: 14px; border: 1px solid #d8dbe0; border-radius: 10px; }
+.private-review-photo p { margin: 0; }
+.private-review-preview { max-width: 100%; }
+.private-review-preview img { max-width: 100%; max-height: 50vh; object-fit: contain; border-radius: 8px; }
+.private-review-photo .workspace-navigation button { margin: 0; }
+.private-review-photo input { max-width: 550px; }
+@media (max-width: 620px) {
+  .private-review-photo .workspace-navigation { display: grid; grid-template-columns: 1fr; }
+  .private-review-photo .workspace-navigation button { width: 100%; }
+}
+
+/* One workspace: long manifest IDs never stretch the mobile dialog. */
+.release-preview { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 300px; overflow-y: auto; padding: 12px; border: 1px solid #d8dbe0;
+  border-radius: 8px; font-size: .8rem; background: #f6f8fb; }
+#job-delivery .check { display: flex; gap: 10px; align-items: center; }
+#release-photo-list { max-height: 280px; overflow: auto; display: grid; gap: 6px; }
+#job-delivery .workspace-navigation button { flex: 0 1 auto; }
+@media (max-width: 620px) {
+  #job-delivery .workspace-navigation button { width: 100%; }
+  .release-preview { max-height: 220px; }
+}
+
+/* Phase 6F shares the existing Admin surface; person UUID fallbacks and
+   continuity choices must wrap rather than cover other mobile controls. */
+#owner-office-console .row { align-items: center; flex-wrap: wrap; margin: 10px 0; }
+#owner-office-console .row span { flex: 1 1 220px; overflow-wrap: anywhere; }
+#owner-office-console select { max-width: 100%; }
+#owner-supervisor-team-panel button { margin: 4px 8px 4px 0; }
+#owner-access-review-panel label { display: block; margin: 12px 0; overflow-wrap: anywhere; }
+#owner-access-review-panel select { display: block; width: min(100%, 460px); margin-top: 8px; }
+@media (max-width: 620px) {
+  #owner-office-console .row { display: block; }
+  #owner-office-console .row button,
+  #owner-office-console .row select { width: 100%; margin-top: 8px; }
+}
+
+/* Modern Premium foundation — Stage 1 (presentation only).
+   Existing IDs, data-driven visibility, button actions, and permission states
+   remain owned by the preexisting dashboard scripts. */
+:root {
+  color-scheme: light;
+  --fwh-navy: #173047;
+  --fwh-navy-deep: #102437;
+  --fwh-teal: #0d7173;
+  --fwh-teal-soft: #e7f5f3;
+  --fwh-ink: #233649;
+  --fwh-muted: #526679;
+  --fwh-border: #d8e3ec;
+  --fwh-surface: #ffffff;
+  --fwh-canvas: #f1f5f8;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--fwh-ink);
+  background: var(--fwh-canvas);
+}
+body {
+  color: var(--fwh-ink);
+  background:
+    radial-gradient(ellipse at 95% 0%, rgba(13,113,115,.085), transparent 38%),
+    linear-gradient(180deg, #ecf2f6 0%, #f6f8fb 60%, #f1f5f8 100%);
+}
+.shell {
+  width: min(1280px, calc(100% - 44px));
+  margin: 32px auto 72px;
+}
+.card {
+  background: var(--fwh-surface);
+  border: 1px solid var(--fwh-border);
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 12px 36px rgba(17,40,61,.065);
+}
+#login-card {
+  max-width: 570px;
+  margin: min(11vh, 100px) auto 0;
+  padding: clamp(24px, 5vw, 44px);
+  border-top: 5px solid var(--fwh-teal);
+}
+#login-card h1 { color: var(--fwh-navy); }
+#login-card .eyebrow { color: var(--fwh-teal); }
+#results-card { padding: clamp(18px, 3vw, 32px); }
+#results-card > .row.between.gap {
+  align-items: center;
+  padding: clamp(20px, 3vw, 30px);
+  border-radius: 16px;
+  background: linear-gradient(115deg, var(--fwh-navy-deep), #244966);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(12,36,58,.14);
+}
+#results-card > .row.between.gap h2 {
+  color: #fff;
+  margin: 0;
+  font-size: clamp(1.3rem, 2.4vw, 1.9rem);
+}
+#results-card > .row.between.gap .eyebrow { color: #bde6e1; }
+#results-card #sign-out {
+  width: auto;
+  margin: 0;
+  background: rgba(255,255,255,.14);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.45);
+}
+#results-card #sign-out:hover { background: rgba(255,255,255,.22); }
+h1, h2, h3 { color: var(--fwh-navy); letter-spacing: -.018em; }
+h1 { font-weight: 750; }
+h2 { font-size: clamp(1.35rem, 2.3vw, 1.7rem); }
+h3 { font-size: 1.1rem; }
+.eyebrow {
+  color: var(--fwh-teal);
+  font-size: .74rem;
+  font-weight: 800;
+  letter-spacing: .11em;
+}
+.muted { color: var(--fwh-muted); }
+label { color: var(--fwh-ink); font-weight: 650; }
+input, select, textarea {
+  color: var(--fwh-ink);
+  background: #fff;
+  border: 1px solid #abbcc9;
+  border-radius: 10px;
+  min-height: 44px;
+}
+textarea { min-height: 100px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--fwh-teal);
+  outline-offset: 3px;
+}
+button {
+  min-height: 42px;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--fwh-navy);
+  font-weight: 700;
+  transition: background-color .14s ease, box-shadow .14s ease;
+}
+button.secondary {
+  background: #eaf0f5;
+  border: 1px solid #c8d6e0;
+  color: var(--fwh-navy);
+}
+button:disabled { cursor: not-allowed; opacity: .58; }
+@media (hover: hover) {
+  button:not(:disabled):hover { background: #28516d; }
+  button.secondary:not(:disabled):hover { background: #dce8ef; }
+}
+.check { border-radius: 10px; }
+#results-card > #rls-result { margin-top: 18px; }
+#results-card > .admin-action {
+  background: #fbfdfe;
+  border: 1px solid var(--fwh-border);
+  border-radius: 15px;
+  box-shadow: 0 2px 9px rgba(19,47,69,.035);
+  margin: 18px 0;
+  padding: clamp(16px, 2.5vw, 23px);
+}
+#results-card > details.admin-action > summary {
+  color: var(--fwh-navy);
+  font-size: 1.06rem;
+  line-height: 1.5;
+}
+#results-card > details.admin-action[open] > summary {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--fwh-border);
+}
+#results-card > h2 {
+  margin: 32px 0 8px;
+  padding-top: 8px;
+}
+#results-card > h2 + .muted { margin-top: 0; }
+#job-filters {
+  max-width: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+  padding: clamp(16px, 2.5vw, 22px);
+  margin: 20px 0 16px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 15px;
+  background: #f8fbfd;
+}
+#job-filters label { min-width: 0; font-size: .82rem; }
+#job-filters input, #job-filters select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+}
+#job-filters button { min-width: 0; }
+#results-card > .job-pagination { margin: 14px 0; }
+#work-orders {
+  max-height: 58vh;
+  overflow: auto;
+  border: 1px solid var(--fwh-border);
+  background: #fff;
+  border-radius: 14px;
+}
+.job-table { color: var(--fwh-ink); }
+.job-table th {
+  color: var(--fwh-navy);
+  background: #eaf1f6;
+  font-weight: 750;
+  border-bottom: 1px solid #c6d5df;
+}
+.job-table td { border-bottom-color: #e1e9ef; }
+.job-table tbody tr:nth-child(even) { background: #fafcfd; }
+.job-table tr:hover { background: var(--fwh-teal-soft); }
+#work-orders button.job-link {
+  color: #0a6063;
+  font-weight: 750;
+  min-height: 0;
+  border-radius: 3px;
+}
+.job-workspace {
+  background: var(--fwh-surface);
+  border: 1px solid #aec4d2;
+  border-top: 5px solid var(--fwh-teal);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(12,31,47,.2);
+}
+.job-workspace::backdrop { background: rgb(10 25 39 / 65%); }
+.workspace-header .eyebrow { margin-bottom: 6px; }
+.workspace-header h2 { margin: 0; }
+.workspace-header #job-address { font-weight: 650; }
+.workspace-tabs {
+  gap: 8px;
+  border-bottom: 1px solid var(--fwh-border);
+  padding: 12px 0;
+}
+.workspace-tabs button {
+  color: var(--fwh-navy);
+  background: #f1f5f8;
+  border: 1px solid #d5e0e8;
+  border-radius: 9px;
+  font-weight: 650;
+}
+.workspace-tabs button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--fwh-teal);
+  border-color: var(--fwh-teal);
+}
+@media (hover: hover) {
+  .workspace-tabs button[aria-pressed="true"]:not(:disabled):hover {
+    background: #0b6264;
+  }
+}
+.job-workspace .edit-actions {
+  background: var(--fwh-surface);
+  border-top-color: var(--fwh-border);
+}
+.choice-group, .private-review-photo, .work-order {
+  background: #fff;
+  border-color: var(--fwh-border);
+  border-radius: 12px;
+}
+.receipt.received { color: #22513e; }
+.receipt.waiting, .handoff.pending { color: #664e15; }
+@media (max-width: 1000px) {
+  #job-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .shell { width: calc(100% - 24px); margin: 12px auto 40px; }
+  #job-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #results-card > .row.between.gap { display: flex; flex-wrap: wrap; gap: 14px; }
+  #results-card #sign-out { width: auto; }
+  .job-workspace { width: calc(100vw - 16px); max-height: 96dvh; padding: 16px; }
+}
+@media (max-width: 440px) {
+  #results-card { padding: 12px; }
+  #job-filters { grid-template-columns: minmax(0, 1fr); }
+  #results-card > .row.between.gap { padding: 18px; }
+  .job-pagination { flex-wrap: wrap; }
+  .workspace-tabs button { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+}
+
+/* Modern Premium Stage 2: real, contextual Admin destinations.
+   No existing action, native details state, role authority, or modal is replaced. */
+.fwh-primary-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 20px 0 6px;
+  padding: 8px;
+  background: #eef4f8;
+  border: 1px solid var(--fwh-border);
+  border-radius: 14px;
+}
+.fwh-primary-nav button {
+  color: var(--fwh-navy);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 9px 17px;
+  font-weight: 700;
+}
+.fwh-primary-nav button[aria-current="page"] {
+  color: #fff;
+  background: var(--fwh-navy);
+  box-shadow: 0 2px 8px rgba(15, 35, 54, .15);
+}
+@media (hover: hover) {
+  .fwh-primary-nav button:not([aria-current="page"]):hover {
+    background: #deeaef;
+  }
+  .fwh-primary-nav button[aria-current="page"]:hover {
+    background: var(--fwh-navy-deep);
+  }
+}
+/* Only the contextual top-level view changes. A selected-job dialog stays
+   mounted and modal, and does not have its own visibility overwritten here. */
+#results-card[data-fwh-view]:not([data-fwh-view="home"]) > #fwh-home-panel,
+#results-card[data-fwh-view]:not([data-fwh-view="work"]) > #fwh-work-page,
+#results-card[data-fwh-view]:not([data-fwh-view="create"]) > #create-wo-details,
+#results-card[data-fwh-view]:not([data-fwh-view="alerts"]) > #notification-center,
+#results-card[data-fwh-view]:not([data-fwh-view="team"]) > #owner-office-console,
+#results-card[data-fwh-view]:not([data-fwh-view="team"]) > #contractor-management-section {
+  display: none;
+}
+.fwh-home-panel {
+  padding: clamp(18px, 3vw, 28px) 4px 12px;
+}
+.fwh-home-panel h2 { margin: 4px 0 8px; }
+.fwh-home-panel > .muted { max-width: 65ch; margin: 0 0 24px; }
+.fwh-home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.fwh-home-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(17, 40, 61, .045);
+}
+.fwh-home-tile h3 { margin: 0; }
+.fwh-home-tile p {
+  flex: 1;
+  margin: 0 0 8px;
+  color: var(--fwh-muted);
+  line-height: 1.55;
+}
+.fwh-home-tile button {
+  align-self: flex-start;
+  background: var(--fwh-teal);
+}
+@media (hover: hover) {
+  .fwh-home-tile button:hover { background: #0a5e60; }
+}
+#fwh-work-page { min-width: 0; padding-top: 12px; }
+#fwh-work-page > h2 { margin-top: 20px; }
+#results-card[data-fwh-view="create"] > #create-wo-details,
+#results-card[data-fwh-view="alerts"] > #notification-center,
+#results-card[data-fwh-view="team"] > #owner-office-console {
+  margin-top: 20px;
+}
+@media (max-width: 900px) {
+  .fwh-home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .fwh-primary-nav { gap: 4px; }
+  .fwh-primary-nav button { flex: 1 1 auto; padding: 9px 12px; }
+  .fwh-home-grid { grid-template-columns: minmax(0, 1fr); }
+  .fwh-home-tile { padding: 18px; }
+}
+
+/* Modern Premium Stage 3: hierarchy of the real selected work order only.
+   Status, six tabs, Save/Close, safety warnings, and secondary job actions remain. */
+#edit-work-order-section.job-workspace {
+  width: min(980px, calc(100vw - 34px));
+  max-height: 94dvh;
+  padding: clamp(16px, 2.6vw, 28px);
+  overflow-x: hidden;
+}
+#edit-work-order-section .workspace-header {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+#edit-work-order-section .fwh-job-identity {
+  min-width: 0;
+  padding: clamp(18px, 3vw, 26px);
+  border-radius: 14px;
+  background: linear-gradient(118deg, var(--fwh-navy-deep), #254d69);
+  color: #fff;
+}
+#edit-work-order-section .fwh-job-identity .eyebrow {
+  color: #a8e2dd;
+  margin: 0 0 5px;
+}
+#edit-work-order-section #edit-heading {
+  color: #fff;
+  margin: 0;
+  font-size: clamp(1.45rem, 2.8vw, 2.1rem);
+  line-height: 1.24;
+  overflow-wrap: anywhere;
+}
+#edit-work-order-section #job-address {
+  color: #fff;
+  font-size: clamp(1.02rem, 1.7vw, 1.22rem);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  margin: 8px 0 6px;
+}
+#edit-work-order-section #job-facts,
+#edit-work-order-section #job-receipt {
+  color: #d9e8f1;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  margin: 4px 0;
+}
+#edit-work-order-section .fwh-job-guidance {
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid #b4dfd9;
+  border-left: 4px solid var(--fwh-teal);
+  border-radius: 12px;
+  background: #eaf7f5;
+}
+#edit-work-order-section .fwh-job-guidance-text {
+  flex: 1 1 230px;
+  min-width: 0;
+}
+#edit-work-order-section .fwh-job-guidance-label {
+  margin: 0 0 4px;
+  color: #315e61;
+  font-size: .74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+#edit-work-order-section #job-next-action {
+  margin: 0;
+  color: var(--fwh-navy-deep);
+  line-height: 1.5;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+#edit-work-order-section #job-next-action-open {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  color: #fff;
+  background: var(--fwh-teal);
+  border-color: var(--fwh-teal);
+}
+@media (hover: hover) {
+  #edit-work-order-section #job-next-action-open:not(:disabled):hover {
+    background: #0a5d61;
+  }
+}
+#edit-work-order-section .fwh-job-pager {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+#edit-work-order-section .fwh-job-pager button {
+  width: auto;
+  margin: 0;
+  font-size: .88rem;
+  min-height: 40px;
+}
+#edit-work-order-section #job-context {
+  font-size: .88rem;
+  line-height: 1.45;
+  margin: -5px 0 0;
+}
+#edit-work-order-section .fwh-job-repeat {
+  gap: 9px;
+  align-items: center;
+  padding: 12px 14px;
+  background: #f5f8fa;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+}
+#edit-work-order-section .fwh-job-repeat button {
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  font-size: .88rem;
+}
+#edit-work-order-section #job-address-context {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+  min-width: 0;
+}
+#edit-work-order-section .workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 10px 0 14px;
+}
+#edit-work-order-section .workspace-tabs button {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 6px;
+  margin: 0;
+  text-align: center;
+  overflow-wrap: break-word;
+  line-height: 1.25;
+}
+#edit-work-order-section .workspace-tabs button[aria-pressed="true"] {
+  box-shadow: inset 0 -3px 0 rgba(255,255,255,.38);
+}
+#edit-work-order-section #edit-wo-form {
+  margin-top: 4px;
+  min-width: 0;
+}
+#edit-work-order-section [data-job-panel] {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+  padding: clamp(14px, 2.5vw, 24px);
+}
+#edit-work-order-section [data-job-panel] h3 { margin: 0 0 12px; }
+#edit-work-order-section .unsaved-choice {
+  border-left: 4px solid #c68c21;
+  line-height: 1.5;
+}
+#edit-work-order-section .edit-actions {
+  gap: 10px;
+  z-index: 2;
+}
+@media (max-width: 760px) {
+  #edit-work-order-section .workspace-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  #edit-work-order-section .workspace-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #edit-work-order-section.job-workspace {
+    width: calc(100vw - 12px);
+    max-height: 97dvh;
+    padding: 12px;
+  }
+  #edit-work-order-section .fwh-job-guidance { align-items: stretch; }
+  #edit-work-order-section #job-next-action-open {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+  #edit-work-order-section .fwh-job-pager,
+  #edit-work-order-section .fwh-job-repeat { display: flex; }
+  #edit-work-order-section .fwh-job-pager button,
+  #edit-work-order-section .fwh-job-repeat button {
+    flex: 1 1 135px;
+    min-width: 0;
+    white-space: normal;
+  }
+  #edit-work-order-section .edit-actions { bottom: -12px; }
+}
+@media (max-width: 345px) {
+  #edit-work-order-section .workspace-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Modern Premium Stage 4: presentation-only Create & Assign screen.
+   Reuse the exact existing fields, requirements editor, and submit handler. */
+#results-card > #create-wo-details {
+  min-width: 0;
+  border-top: 4px solid var(--fwh-teal);
+  background: linear-gradient(180deg, #f3f9fb, #fff 185px);
+  padding: clamp(18px, 3vw, 30px);
+}
+#results-card > #create-wo-details > summary {
+  color: var(--fwh-navy-deep);
+  font-weight: 800;
+  font-size: clamp(1.12rem, 2vw, 1.42rem);
+}
+#results-card > #create-wo-details > .muted {
+  max-width: 72ch;
+  line-height: 1.55;
+}
+#results-card #create-wo-form {
+  max-width: none;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 19px;
+  margin-top: 22px;
+}
+#results-card #create-wo-form > .choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: #f1f7fa;
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+}
+#results-card #create-wo-form > .choice-group legend {
+  color: var(--fwh-navy);
+  padding: 0 8px;
+}
+#results-card #create-wo-form > .choice-group .choice-row {
+  min-width: 0;
+  padding: 13px;
+  align-items: flex-start;
+  border: 1px solid #cbdae3;
+  border-radius: 11px;
+  background: #fff;
+  line-height: 1.45;
+}
+#results-card #create-wo-form .choice-row input {
+  flex: 0 0 auto;
+}
+#results-card #create-wo-form .choice-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#results-card #create-wo-form > .remember-choice {
+  font-size: .89rem;
+  line-height: 1.4;
+}
+#results-card #create-wo-form > .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+#results-card #create-wo-form label,
+#results-card #create-wo-form .form-grid,
+#results-card #create-wo-form input,
+#results-card #create-wo-form textarea,
+#results-card #create-wo-form select {
+  min-width: 0;
+  max-width: 100%;
+}
+#results-card #create-wo-form > #create-photo-requirements {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: clamp(16px, 2.5vw, 24px);
+  border: 1px solid var(--fwh-border);
+  border-radius: 14px;
+  background: #f8fbfc;
+}
+#results-card #create-photo-requirements > h3 {
+  margin: 0;
+  color: var(--fwh-navy-deep);
+}
+#results-card #create-photo-requirements .photo-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+#results-card #create-photo-requirements .photo-total > label:first-child {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+#results-card #create-photo-requirements .photo-total > label:first-child input[type="checkbox"] {
+  order: -1;
+  margin: 0;
+}
+#results-card #create-photo-requirements .photo-item {
+  min-width: 0;
+  background: #fff;
+  border-color: var(--fwh-border);
+}
+#results-card #create-wo-form > #create-wo {
+  justify-self: end;
+  width: auto;
+  min-width: 220px;
+  margin: 0;
+  padding: 13px 24px;
+  color: #fff;
+  background: var(--fwh-teal);
+}
+#results-card #create-wo-form > #create-status {
+  margin-top: -10px;
+  line-height: 1.5;
+}
+@media (max-width: 680px) {
+  #results-card #create-wo-form > .choice-group,
+  #results-card #create-wo-form > .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #results-card #create-photo-requirements .photo-total {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #results-card #create-wo-form > #create-wo {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+}
+
+
+/* Modern Premium Stage 5: presentation of existing, server-owned Alerts.
+   Keep every alert action, notification preference, device gate and status. */
+#results-card > #notification-center {
+  min-width: 0;
+  border-top: 4px solid var(--fwh-teal);
+  padding: clamp(18px, 3vw, 30px);
+  background: linear-gradient(180deg, #f3f9fb, #fff 190px);
+}
+#results-card > #notification-center > summary {
+  color: var(--fwh-navy-deep);
+  font-size: clamp(1.12rem, 2vw, 1.42rem);
+  font-weight: 800;
+}
+#results-card > #notification-center > .muted {
+  line-height: 1.6;
+  max-width: 78ch;
+}
+#notification-center > .workspace-navigation {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 12px;
+}
+#notification-center > .workspace-navigation > button {
+  width: auto;
+  margin: 0;
+}
+#notification-center #notification-count {
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #eaf3f6;
+  color: var(--fwh-navy-deep);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+#notification-center #notification-status {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#notification-center #notification-list {
+  min-width: 0;
+  margin: 14px 0 25px;
+}
+#notification-center #notification-list > ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#notification-center .notification-item {
+  min-width: 0;
+  padding: 17px 19px;
+  border: 1px solid var(--fwh-border);
+  border-left: 4px solid var(--fwh-teal);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgb(19 47 69 / 4%);
+}
+#notification-center .notification-item > strong {
+  display: block;
+  color: var(--fwh-navy-deep);
+  font-size: 1.04rem;
+}
+#notification-center .notification-item > p {
+  margin: 8px 0 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+#notification-center .notification-item .workspace-navigation {
+  gap: 9px;
+  align-items: stretch;
+}
+#notification-center .notification-item .workspace-navigation > button {
+  width: auto;
+  margin: 0;
+  min-height: 42px;
+}
+#notification-center > .form-grid {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 12px;
+  background: #f8fbfc;
+}
+#notification-center > .form-grid > button {
+  width: auto;
+  margin: 0;
+}
+#notification-center #notification-push-status {
+  margin: 20px 0 8px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#notification-center > .workspace-navigation > label {
+  min-width: min(245px, 100%);
+}
+#notification-center #notification-settings {
+  min-width: 0;
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--fwh-border);
+}
+#notification-center #notification-settings > h3 {
+  margin: 0 0 18px;
+  color: var(--fwh-navy-deep);
+}
+#notification-center #notification-settings > .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px;
+  margin: 0 0 20px;
+  background: #f8fbfc;
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+}
+#notification-center .notification-preference {
+  display: grid;
+  grid-template-columns: minmax(145px, 1.1fr) minmax(240px, 2fr) minmax(90px, 112px) minmax(135px, auto);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 10px;
+  padding: 16px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 12px;
+  background: #fff;
+}
+#notification-center .notification-preference > strong {
+  min-width: 0;
+  grid-column: 1;
+  color: var(--fwh-navy);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+#notification-center .notification-preference > .workspace-navigation {
+  grid-column: 2;
+  gap: 8px;
+}
+#notification-center .notification-preference .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  min-width: 0;
+  border: 1px solid #d8e4eb;
+  background: #f4f8fa;
+  color: var(--fwh-ink);
+  font-size: .86rem;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: normal;
+}
+#notification-center .notification-preference .check > input {
+  flex: none;
+  margin: 0;
+}
+#notification-center .notification-preference > input[type="number"] {
+  grid-column: 3;
+  width: 100%;
+  min-width: 0;
+}
+#notification-center .notification-preference > button {
+  grid-column: 4;
+  margin: 0;
+  width: auto;
+  line-height: 1.35;
+  white-space: normal;
+}
+#notification-center .notification-preference > .notification-quiet {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+#notification-center .notification-quiet > .form-grid {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 980px) {
+  #notification-center .notification-preference {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  #notification-center .notification-preference > strong {
+    grid-column: 1 / -1;
+  }
+  #notification-center .notification-preference > .workspace-navigation {
+    grid-column: 1 / -1;
+  }
+  #notification-center .notification-preference > input[type="number"] {
+    grid-column: 1;
+    max-width: 160px;
+  }
+  #notification-center .notification-preference > button {
+    grid-column: 2;
+  }
+}
+@media (max-width: 620px) {
+  #notification-center > .workspace-navigation,
+  #notification-center .notification-item .workspace-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  #notification-center > .workspace-navigation > button,
+  #notification-center .notification-item .workspace-navigation > button {
+    flex: 1 1 145px;
+    width: auto;
+    margin: 0;
+  }
+  #notification-center > .form-grid,
+  #notification-center #notification-settings > .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #notification-center > .form-grid > button {
+    width: 100%;
+  }
+  #notification-center .notification-preference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #notification-center .notification-preference > strong,
+  #notification-center .notification-preference > .workspace-navigation,
+  #notification-center .notification-preference > input[type="number"],
+  #notification-center .notification-preference > button {
+    grid-column: 1;
+  }
+  #notification-center .notification-preference > button {
+    width: 100%;
+  }
+  #notification-center .notification-preference > .workspace-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  #notification-center .notification-item {
+    padding: 14px;
+  }
+}
+
+
+/* Modern Premium Stage 6 — Team & Access presentation only.
+   Existing owner/ordinary-Admin modules own DOM, permission gates, and actions. */
+#results-card[data-fwh-view="team"] > #contractor-management-section,
+#results-card[data-fwh-view="team"] > #owner-office-console {
+  min-width: 0;
+  border-top: 4px solid var(--fwh-teal);
+  background: linear-gradient(180deg, #f3f9fb, #fff 205px);
+  padding: clamp(18px, 3vw, 30px);
+  overflow-wrap: anywhere;
+}
+#results-card #contractor-management-section > summary,
+#results-card #owner-office-console > summary {
+  font-size: clamp(1.12rem, 2vw, 1.42rem);
+  font-weight: 800;
+  color: var(--fwh-navy-deep);
+  line-height: 1.4;
+}
+#results-card #contractor-management-section > .muted,
+#results-card #owner-office-console > .muted {
+  max-width: 80ch;
+  line-height: 1.6;
+}
+#results-card #contractor-seat-summary {
+  padding: 12px 16px;
+  margin: 18px 0;
+  color: var(--fwh-navy-deep);
+  font-weight: 750;
+  background: var(--fwh-teal-soft);
+  border: 1px solid #b4dfd9;
+  border-radius: 11px;
+  line-height: 1.55;
+}
+#results-card #contractor-invite-form,
+#results-card #owner-office-console .admin-form {
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+  gap: 16px;
+  padding: clamp(16px, 2.5vw, 22px);
+  border: 1px solid var(--fwh-border);
+  border-radius: 13px;
+  background: #f8fbfc;
+}
+#results-card #contractor-invite-form > label,
+#results-card #owner-office-console form > label {
+  min-width: 0;
+}
+#results-card #contractor-invite-form .edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin: 4px 0 0;
+}
+#results-card #contractor-invite-form .edit-actions > button {
+  width: auto;
+  min-width: 180px;
+  flex: 1 1 210px;
+  margin: 0;
+}
+#results-card #contractor-invite-button,
+#results-card #owner-office-limit-save,
+#results-card #owner-admin-invite-submit {
+  color: #fff;
+  background: var(--fwh-teal);
+}
+#results-card #contractor-setup-link-result,
+#results-card #owner-admin-invite-link-result {
+  min-width: 0;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid #b4dfd9;
+  border-radius: 12px;
+  background: #edf7f6;
+}
+#results-card #contractor-setup-link,
+#results-card #owner-admin-invite-link {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+#results-card #pending-contractor-invitations {
+  display: grid;
+  gap: 12px;
+  max-height: none;
+  overflow: visible;
+  margin-top: 20px;
+  padding: 0;
+}
+#results-card #pending-contractor-invitations > h3 {
+  margin: 0 0 2px;
+  color: var(--fwh-navy-deep);
+}
+#results-card #pending-contractor-invitations .work-order {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--fwh-border);
+  border-left: 4px solid var(--fwh-teal);
+  border-radius: 12px;
+}
+#results-card #pending-contractor-invitations .work-order button {
+  width: auto;
+  margin: 10px 0 0;
+}
+#results-card #owner-office-console > h3 {
+  margin: 28px 0 10px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid var(--fwh-border);
+  color: var(--fwh-navy-deep);
+  font-size: 1.12rem;
+}
+#results-card #owner-office-console > #owner-office-refresh {
+  width: auto;
+  margin: 9px 0 13px;
+}
+#results-card #owner-office-capacity {
+  min-width: 0;
+  padding: 15px;
+  margin: 12px 0 18px;
+  color: var(--fwh-navy-deep);
+  border: 1px solid #b4dfd9;
+  border-radius: 12px;
+  background: var(--fwh-teal-soft);
+  line-height: 1.55;
+}
+#results-card #owner-office-console > #owner-enrollment {
+  margin: 16px 0 20px;
+  background: #f8fbfc;
+  border-color: var(--fwh-border);
+  border-radius: 12px;
+}
+#results-card #owner-office-console > #owner-enrollment > summary {
+  color: var(--fwh-navy);
+}
+#results-card #owner-office-console #owner-enrollment-team-field,
+#results-card #owner-office-console #owner-supervisor-team-panel,
+#results-card #owner-office-console #owner-access-review-panel {
+  max-width: 100%;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+  background: #fff;
+}
+#results-card #owner-supervisor-list,
+#results-card #owner-contractor-roster,
+#results-card #owner-office-people {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  margin: 15px 0 22px;
+}
+#results-card #owner-supervisor-list > .row,
+#results-card #owner-contractor-roster > .row,
+#results-card #owner-office-people > .row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--fwh-border);
+  border-radius: 11px;
+  background: #fff;
+}
+#results-card #owner-supervisor-list .row > span,
+#results-card #owner-contractor-roster .row > span,
+#results-card #owner-office-people .row > span {
+  flex: 1 1 215px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+#results-card #owner-supervisor-list .row > button,
+#results-card #owner-contractor-roster .row > button,
+#results-card #owner-office-people .row > button {
+  width: auto;
+  margin: 0;
+}
+#results-card #owner-office-console input,
+#results-card #owner-office-console select,
+#results-card #owner-office-console textarea,
+#results-card #contractor-management-section input,
+#results-card #contractor-management-section textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+#results-card #owner-office-console .status,
+#results-card #contractor-management-section .status {
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+@media (max-width: 680px) {
+  #results-card #owner-office-console .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #results-card #owner-supervisor-list > .row,
+  #results-card #owner-contractor-roster > .row,
+  #results-card #owner-office-people > .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #results-card #owner-supervisor-list > .row > button,
+  #results-card #owner-contractor-roster > .row > button,
+  #results-card #owner-office-people > .row > button,
+  #results-card #owner-supervisor-list > .row > select,
+  #results-card #owner-contractor-roster > .row > select {
+    width: 100%;
+    min-width: 0;
+  }
+  #results-card #owner-office-console .admin-form > button,
+  #results-card #contractor-invite-form .edit-actions > button,
+  #results-card #pending-contractor-invitations .work-order button {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+  #results-card #pending-contractor-invitations .work-order button {
+    margin-top: 10px;
+  }
+  #results-card #owner-office-console > #owner-office-refresh {
+    width: 100%;
+  }
+}
+
+
+/* Modern Premium Stage 7 — existing Supervisor work presentation only. */
+#staffing-card { min-width:0; border-top:5px solid var(--fwh-teal); border-radius:18px;
+  background:linear-gradient(180deg,#f3f9fb,#fff 240px); }
+#staffing-card > .row.between.gap { display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+  margin:0 0 18px; padding:clamp(16px,3vw,25px); border-radius:13px;
+  background:linear-gradient(120deg,var(--fwh-navy-deep),#244d66); }
+#staffing-card > .row.between.gap > div { flex:1 1 240px; min-width:0; }
+#staffing-card > .row.between.gap .eyebrow { color:#a8e2dd; }
+#staffing-card > .row.between.gap h2 { color:#fff; margin:0 0 7px;
+  font-size:clamp(1.35rem,2.8vw,1.9rem); line-height:1.25; }
+#staffing-card > .row.between.gap #staffing-account { color:#d9e8f1; overflow-wrap:anywhere; }
+#staffing-card #staffing-sign-out { width:auto; margin:0; border:1px solid #8cb9c3; background:#e9f3f6; }
+#staffing-card > .muted, #staffing-card .subsection > .muted { max-width:82ch; line-height:1.55; }
+#staffing-card > #staffing-capacity { padding:13px 16px; margin:18px 0 14px;
+  border:1px solid #b4dfd9; border-radius:11px; background:var(--fwh-teal-soft);
+  color:var(--fwh-navy-deep); font-weight:750; line-height:1.5; }
+#staffing-card > #staffing-refresh { width:auto; min-height:42px; margin:0 0 12px; }
+#staffing-card > #staffing-invite-form, #staffing-card #staffing-roster-form,
+#staffing-card #staffing-work-edit-form, #staffing-card #staffing-handoff-form {
+  width:100%; max-width:none; min-width:0; gap:16px; padding:clamp(16px,2.3vw,23px);
+  background:#f8fbfc; border:1px solid var(--fwh-border); border-radius:13px; }
+#staffing-card > #staffing-invite-form { margin:20px 0; }
+#staffing-card input, #staffing-card textarea, #staffing-card select { min-width:0; max-width:100%; }
+#staffing-card #staffing-invite-form > button, #staffing-card #staffing-roster-submit,
+#staffing-card #staffing-work-edit-submit { justify-self:start; width:auto; min-width:220px;
+  background:var(--fwh-teal); color:#fff; }
+#staffing-card > .subsection { min-width:0; margin:22px 0; padding:clamp(16px,2.7vw,24px);
+  border:1px solid var(--fwh-border); border-radius:15px; background:#fff; }
+#staffing-card > .subsection > h3 { margin:0 0 12px; color:var(--fwh-navy-deep); }
+#staffing-card .table-scroll { max-width:100%; min-width:0; overflow-x:auto;
+  border:1px solid var(--fwh-border); border-radius:12px; }
+#staffing-card .table-scroll table { min-width:640px; width:100%;
+  border-collapse:collapse; text-align:left; font-size:.9rem; }
+#staffing-card .table-scroll th { padding:12px; background:#eaf1f6; color:var(--fwh-navy-deep); font-weight:750; }
+#staffing-card .table-scroll td { padding:12px; border-top:1px solid var(--fwh-border); overflow-wrap:anywhere; }
+#staffing-card .table-scroll tbody tr:nth-child(even) { background:#f8fbfc; }
+#staffing-card #staffing-work-more { width:auto; margin-top:12px; }
+#staffing-card #staffing-work-detail { min-width:0; padding:clamp(14px,2.5vw,22px); margin-top:18px;
+  border:1px solid #b4dfd9; border-radius:12px; background:#f3faf9; }
+#staffing-card #staffing-work-detail > .row.between.gap { display:flex; flex-wrap:wrap; align-items:center; }
+#staffing-card #staffing-work-detail-fields { min-width:0; overflow-wrap:anywhere; line-height:1.55; }
+#staffing-card #staffing-handoff-review, #staffing-card #staffing-link-result {
+  min-width:0; padding:14px; border:1px solid #b4dfd9; border-radius:11px; background:#eaf7f5; }
+#staffing-card .status, #staffing-card [role="status"] { overflow-wrap:anywhere; line-height:1.5; }
+@media (max-width:680px) {
+  #staffing-card > .row.between.gap { align-items:stretch; }
+  #staffing-card #staffing-sign-out, #staffing-card > #staffing-refresh,
+  #staffing-card #staffing-invite-form > button, #staffing-card #staffing-roster-submit,
+  #staffing-card #staffing-work-edit-submit, #staffing-card #staffing-handoff-form > button,
+  #staffing-card #staffing-handoff-confirm, #staffing-card #staffing-work-more,
+  #staffing-card #staffing-work-detail-close, #staffing-card #staffing-link-result > button {
+    width:100%; min-width:0; margin:0;
+  }
+  #staffing-card #staffing-work-detail > .row.between.gap { display:flex; flex-wrap:wrap; gap:8px; }
+}
+
+
+/* Modern Premium Stage 8: appearance-only invitation setup screens.
+   Invitation check, token handling and password submission retain their owners. */
+body.fwh-setup-page .shell { width:min(590px,calc(100% - 32px)); margin:clamp(22px,8vh,90px) auto 60px; }
+body.fwh-setup-page .shell > .card { min-width:0; padding:clamp(22px,4vw,42px);
+  border-top:5px solid var(--fwh-teal); border-radius:20px;
+  background:linear-gradient(180deg,#f1f8fb,#fff 210px); box-shadow:0 16px 45px rgb(17 40 61 / 9%); }
+body.fwh-setup-page .eyebrow { color:var(--fwh-teal); }
+body.fwh-setup-page h1 { color:var(--fwh-navy-deep); font-size:clamp(1.55rem,4vw,2.2rem);
+  line-height:1.2; margin:0 0 12px; overflow-wrap:anywhere; }
+body.fwh-setup-page .shell > .card > .muted { max-width:55ch; line-height:1.6; margin:0 0 20px; }
+body.fwh-setup-page #invite-check { min-width:0; margin:18px 0; padding:14px 17px;
+  border:1px solid #c7dce5; border-left:4px solid var(--fwh-teal);
+  border-radius:12px; background:#f1f7f9; color:var(--fwh-navy-deep);
+  font-size:.94rem; line-height:1.55; font-weight:700; overflow-wrap:anywhere; }
+body.fwh-setup-page #invite-check.check.pass { background:#e9f7ee; color:#22513e;
+  border-color:#8bc49e; border-left-color:#33875b; }
+body.fwh-setup-page #password-form:not(.hidden) { display:grid; min-width:0; width:100%;
+  max-width:none; gap:18px; margin:22px 0 0; padding:clamp(17px,3vw,24px);
+  border:1px solid var(--fwh-border); border-radius:14px; background:#f8fbfc; }
+body.fwh-setup-page #invite-identity { margin:0; padding:11px 14px; border:1px solid #b4dfd9;
+  border-radius:10px; background:var(--fwh-teal-soft); color:var(--fwh-navy-deep);
+  font-weight:700; line-height:1.5; overflow-wrap:anywhere; }
+body.fwh-setup-page #password-form > label { min-width:0; gap:8px; color:var(--fwh-ink); }
+body.fwh-setup-page #password-form input { min-width:0; width:100%; max-width:100%; min-height:46px; }
+body.fwh-setup-page #set-password { margin:4px 0 0; min-height:48px; background:var(--fwh-teal); color:#fff; }
+body.fwh-setup-page #setup-status { margin:0; line-height:1.6; overflow-wrap:anywhere; }
+@media (max-width:620px) {
+  body.fwh-setup-page .shell { width:calc(100% - 20px); margin:14px auto 36px; }
+  body.fwh-setup-page .shell > .card { padding:19px 16px; }
+  body.fwh-setup-page #password-form:not(.hidden) { padding:17px 14px; }
+  body.fwh-setup-page #set-password { width:100%; }
+}
+
+
+/* Modern Premium Stage 9: restricted photo recovery presentation only.
+   The original recovery.js still owns every auth guard, preview and download. */
+#recovery-card {
+  min-width:0;
+  border-top:5px solid var(--fwh-teal);
+  border-radius:18px;
+  padding:clamp(20px,3vw,34px);
+  background:linear-gradient(180deg,#f2f9fb,#fff 220px);
+}
+#recovery-card > h2 {
+  margin:0 0 12px;
+  color:var(--fwh-navy-deep);
+  font-size:clamp(1.5rem,3vw,2rem);
+  line-height:1.2;
+}
+#recovery-card > h2::before {
+  content:"FIELD WORK HUB · EVIDENCE RECOVERY";
+  display:block;
+  margin:0 0 11px;
+  color:var(--fwh-teal);
+  font-size:.7rem;
+  font-weight:800;
+  letter-spacing:.11em;
+}
+#recovery-card > p:not(.status) {
+  max-width:75ch;
+  line-height:1.65;
+  color:var(--fwh-muted);
+  overflow-wrap:anywhere;
+}
+#recovery-card > .status {
+  padding:13px 16px;
+  margin:20px 0 17px;
+  background:#eef7f7;
+  border:1px solid #b8dcd9;
+  border-radius:11px;
+  color:var(--fwh-navy-deep);
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+#recovery-card > .status.error {
+  border-color:#e1b3b3;
+  background:#fff3f3;
+}
+#recovery-card > div:first-of-type {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  min-width:0;
+  max-height:310px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:14px;
+  border:1px solid var(--fwh-border);
+  border-radius:13px;
+  background:#f8fbfc;
+}
+#recovery-card > div:first-of-type > button {
+  min-width:0;
+  width:100%;
+  margin:0;
+  padding:13px 14px;
+  min-height:48px;
+  text-align:left;
+  border:1px solid #c9dce4;
+  border-left:4px solid var(--fwh-teal);
+  background:#fff;
+  color:var(--fwh-navy);
+  font-weight:700;
+  line-height:1.4;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+#recovery-card > div:first-of-type > button:focus-visible {
+  outline:3px solid var(--fwh-teal);
+  outline-offset:2px;
+}
+#recovery-card > img:not([hidden]) {
+  max-width:100%;
+  max-height:370px;
+  width:auto;
+  height:auto;
+  margin:20px auto;
+  object-fit:contain;
+  border:1px solid var(--fwh-border);
+  border-radius:12px;
+  box-shadow:0 3px 14px rgb(17 40 61 / 8%);
+}
+#recovery-card > .workspace-navigation {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:stretch;
+  margin-top:18px;
+  padding:16px;
+  background:#f8fbfc;
+  border:1px solid var(--fwh-border);
+  border-radius:13px;
+}
+#recovery-card > .workspace-navigation > button {
+  flex:1 1 155px;
+  width:auto;
+  min-width:0;
+  min-height:46px;
+  margin:0;
+  padding:10px 14px;
+  line-height:1.4;
+  white-space:normal;
+}
+@media (max-width:680px) {
+  #recovery-card > div:first-of-type {
+    grid-template-columns:minmax(0,1fr);
+    max-height:290px;
+    padding:10px;
+  }
+  #recovery-card > .workspace-navigation {
+    flex-direction:column;
+    padding:12px;
+  }
+  #recovery-card > .workspace-navigation > button {
+    flex:0 0 auto;
+    width:100%;
+  }
+}

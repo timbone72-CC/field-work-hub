@@ -1,0 +1,10 @@
+# Phase 5–6 history part 44 — superseded checkpoints, 2026-11-02
+
+These excerpts are preserved verbatim from the prior authoritative record. Historical evidence only; the current implementation record controls present status.
+
+**2026-11-01/02 Phase 5D — live queued TEST and hosted v57 OFF VERIFIED:** Team TEST `vyocaujuwrivoqynvitm` has 125 migrations including `20261102014012_phase_5_package_readonly_provider_revalidation` (service-only 5-minute package-local proof gate). Existing rollback-only SQL race and stale-global-readiness tests remain accepted. PR #40 source runtime `2b6c8fb3`: Database `41387526818`, Admin `41387526831`, Android `41387526811`, Governance `41387524015` all SUCCESS. Hosted `client-delivery` **v57 ACTIVE** with **14/14 exact source files matching** that runtime. Exact one-photo package is `QUEUED`, outbox attempts 0, approved hash frozen; pin identity is compiled in but `enabled:false`, `pinnedTestEnabled:false`, `testRecoveryEnabled:false`. Postdeploy DB: `{enabled:false,legacy_worker_off_verified:true,max_in_flight:2}`; original held permit 1, new permits/provider proofs/steps/final receipts all 0. This proves OFF staging, **not** live Google OAuth, account/root GET, automatic delivery, or a final receipt. Earlier v56 staging and original incident are preserved in [part 43](archive/phase-5-6/2026-11-01/PHASE_5_6_HISTORY_PART_43.md).
+
+
+- Current hosted source: Team TEST `client-delivery` **v54 ACTIVE**, **14/14** source-content parity against pre-documentation PR #40 head `b68ce084`; its revised diagnostic and one-step chunk modules are now **hosted**, not yet approved/invoked as a provider test. **122 migrations** is the independently verified Oct 31 SQL inventory; the previous 121 snapshot has been superseded. The previously recorded v53/9-of-14 result is superseded.
+
+| Phase 5D — new package permits | **Admin-approved one-photo package QUEUED; hosted v57 14/14 parity, modes OFF.** Database 125; original held. Fresh provider GET and actual one-step delivery pending. |
