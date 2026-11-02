@@ -157,6 +157,27 @@ def run():
     assert descriptor["worker_id"] == str(worker_a)
     assert descriptor["request_id"] == str(request_a)
     assert descriptor["generation"] == 1
+    # A wrong saved worker/request may not renew the existing owner.
+    for wrong_worker,wrong_request in [(new_id(),request_a),(worker_a,new_id())]:
+        try:
+            query("select public.service_resume_pinned_package_dispatch("
+                  "%s,%s,%s,%s,%s,1,'disposable@example.invalid',%s,%s,now(),%s)",
+                  (pkg_a,dest,ROOT,wrong_worker,wrong_request,DRIVE,
+                   "synthetic_permission_id_001",new_id()))
+        except psycopg.errors.InsufficientPrivilege:
+            pass
+        else:
+            raise AssertionError("Mismatched package lease owner renewed")
+    # The other package's previously unfinished step must deny continuation,
+    # without suppressing this independently verified package.
+    with psycopg.connect(DSN) as c:
+        c.execute("update private.client_delivery_outbox "
+                  "set lease_until=now()-interval '10 seconds' "
+                  "where package_id=%s and worker_id=%s and lease_generation=1",
+                  (pkg_b,worker_b))
+    held=query("select public.service_read_pinned_package_dispatch(%s,%s,%s)",
+               (pkg_b,dest,ROOT))
+    assert held=={"present":True,"active":False},held
     # Real two-connection race: one can renew the SAME permit and the second
     # must be rejected after the first makes the lease current.
     def resume(proof_id):
