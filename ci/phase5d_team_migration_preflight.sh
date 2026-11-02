@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# All 119 canonical migrations are installed. Verify that the linked
+# All 128 canonical migrations are installed. Verify that the linked
 # Team TEST database has ZERO pending migrations before provider testing.
 # Never apply from this helper.
 # It does not install
@@ -10,8 +10,8 @@ set -euo pipefail
 repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
-expected_count=119
-last_installed="20261024220000_phase_5_original_test_first_photo_continuation.sql"
+expected_count=128
+last_installed="20261102164945_phase_5_exact_failed_final_step_reconciliation.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do

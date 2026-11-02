@@ -15,7 +15,7 @@ function stub(path,text){
  writeFileSync(path,'#!/usr/bin/env bash\nset -euo pipefail\n'+text+'\n');
  chmodSync(path,0o700);
 }
-test('read-only exact-head Team dry-run accepts 119 installed and zero pending; uncertain cases fail closed',t=>{
+test('read-only exact-head Team dry-run accepts 128 installed and zero pending; uncertain cases fail closed',t=>{
  const tmp=mkdtempSync(join(tmpdir(),'fwh-phase5d-migration-test-'));
  t.after(()=>rmSync(tmp,{recursive:true,force:true}));
  const bin=join(tmp,'bin'),dir=join(tmp,'source');
@@ -23,9 +23,9 @@ test('read-only exact-head Team dry-run accepts 119 installed and zero pending; 
  mkdirSync(join(dir,'supabase','.temp'));
  writeFileSync(join(dir,'AGENTS.md'),'fixture\n');
  writeFileSync(join(dir,'supabase','config.toml'),'fixture\n');
- const installed='20261024210000_phase_5_original_verified_wo_package_continuation.sql';
- const expected='20261024220000_phase_5_original_test_first_photo_continuation.sql';
- for(let i=0;i<117;i++)writeFileSync(join(dir,'supabase','migrations',
+ const installed='20261102164852_phase_5_terminal_delivery_owner_transition.sql';
+ const expected='20261102164945_phase_5_exact_failed_final_step_reconciliation.sql';
+ for(let i=0;i<126;i++)writeFileSync(join(dir,'supabase','migrations',
    'fixture_'+String(i).padStart(3,'0')+'.sql'),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',installed),'-- disposable\n');
  writeFileSync(join(dir,'supabase','migrations',expected),'-- disposable\n');
@@ -85,6 +85,13 @@ test('read-only exact-head Team dry-run accepts 119 installed and zero pending; 
  writeFileSync(join(dir,'supabase','.temp','project-ref'),'different-project\n');
  r=execute();assert.match(r.stderr,/STOP: Linked Supabase project/);
  writeFileSync(join(dir,'supabase','.temp','project-ref'),REF+'\n');
+ // Even if the count is right, an older source checkout is not safe.
+ unlinkSync(join(dir,'supabase','migrations',expected));
+ writeFileSync(join(dir,'supabase','migrations','fixture_replacement.sql'),'-- disposable\n');
+ r=execute();assert.notEqual(r.status,0);
+ assert.match(r.stderr,/STOP: Missing known-installed canonical migration/);
+ unlinkSync(join(dir,'supabase','migrations','fixture_replacement.sql'));
+ writeFileSync(join(dir,'supabase','migrations',expected),'-- disposable\n');
  unlinkSync(join(dir,'supabase','migrations','fixture_000.sql'));
  r=execute();assert.match(r.stderr,/STOP: Canonical source migration count changed/);
 });
