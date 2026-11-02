@@ -59,6 +59,37 @@ begin
    or position('to_jsonb(new)' in
      pg_get_functiondef('private.service_legacy_dispatch_cutover_row_guard()'::regprocedure))=0
  then raise exception 'Terminal release must require immutable verified owner and receipt';end if;
+ -- Only a private, test-ID-pinned human reconciliation may close the
+ -- one known failed final step. This is never an ordinary verified result.
+ if to_regprocedure('private.service_reconcile_exact_failed_final_step(uuid,uuid)') is null
+    or has_function_privilege('service_role',
+      'private.service_reconcile_exact_failed_final_step(uuid,uuid)','EXECUTE')
+    or has_function_privilege('anon',
+      'private.service_reconcile_exact_failed_final_step(uuid,uuid)','EXECUTE')
+    or has_function_privilege('authenticated',
+      'private.service_reconcile_exact_failed_final_step(uuid,uuid)','EXECUTE')
+    or not (select relrowsecurity from pg_class
+      where oid='private.client_delivery_failed_final_step_reconciliations'::regclass)
+    or has_table_privilege('service_role',
+      'private.client_delivery_failed_final_step_reconciliations','INSERT')
+ then raise exception 'Exact failed-step reconciliation is exposed';end if;
+ if position('RECONCILED_FAILED_FINAL_NO_RECEIPT' in
+     pg_get_functiondef('private.service_reconcile_exact_failed_final_step(uuid,uuid)'::regprocedure))=0
+    or position('k.status<>''DELIVERING''' in
+     pg_get_functiondef('private.service_reconcile_exact_failed_final_step(uuid,uuid)'::regprocedure))=0
+    or position('cfg.enabled is distinct from false' in
+     pg_get_functiondef('private.service_reconcile_exact_failed_final_step(uuid,uuid)'::regprocedure))=0
+    or position('pending.request_id is distinct from held.request_id' in
+     pg_get_functiondef('private.service_reconcile_exact_failed_final_step(uuid,uuid)'::regprocedure))=0
+    or position('private.client_delivery_final_receipts' in
+     pg_get_functiondef('private.service_reconcile_exact_failed_final_step(uuid,uuid)'::regprocedure))=0
+ then raise exception 'Reconciliation source no longer denies unsafe state';end if;
+ denied:=false;
+ begin
+  perform private.service_reconcile_exact_failed_final_step(
+    gen_random_uuid(),gen_random_uuid());
+ exception when sqlstate '42501' then denied:=true;end;
+ if not denied then raise exception 'Unknown final step was reconciled';end if;
  if (select count(*) from private.client_delivery_dispatch_permit)<>original_count
  then raise exception 'Original singleton mutated in cutover test';end if;
  raise notice 'PASS: both legacy mutation backstops deny at rollback-only cutover';
