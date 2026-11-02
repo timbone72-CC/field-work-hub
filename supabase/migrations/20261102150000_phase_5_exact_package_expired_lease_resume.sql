@@ -1,6 +1,8 @@
 -- Phase 5D: preserve and resume a single expired package dispatch owner.
 -- This is additive/default OFF. No legacy singleton, new permit, cleanup or scheduler.
 -- A verified prior step and a fresh exact Google GET are required before renewal.
+-- Each renewal grants only two minutes; there is no arbitrary elapsed-day
+-- takeover or abandonment of a still-owned, fully verified package.
 create or replace function private.service_read_pinned_package_dispatch(
  p_package uuid,p_destination uuid,p_root text
 ) returns jsonb language plpgsql security definer set search_path='' as $pinned$
@@ -49,7 +51,6 @@ begin
   or k.approved_manifest->>'destination_revision' is distinct from d.revision::text
   or o.approved_sha256 is null or o.approved_sha256 is distinct from k.approved_sha256
   or o.lease_until is null or o.lease_until>clock_timestamp()
-  or o.lease_until<clock_timestamp()-interval '24 hours'
   or exists(select 1 from private.client_delivery_package_step_attempts s
     where s.package_id=p_package and s.verified_at is null)
   or not exists(select 1 from private.client_delivery_package_step_attempts s
@@ -132,7 +133,6 @@ begin
   or lower(d.provider_identity) is distinct from lower(p_account)
   or provider.destination_id is null or provider.proof_drive_id is distinct from p_drive
   or o.lease_until is null or o.lease_until>clock_timestamp()
-  or o.lease_until<clock_timestamp()-interval '24 hours'
   or exists(select 1 from private.client_delivery_final_receipts f where f.package_id=p_package)
   or exists(select 1 from private.client_delivery_package_step_attempts s
     where s.package_id=p_package and s.verified_at is null)
