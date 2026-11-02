@@ -30,6 +30,19 @@ def main():
         assert k
         org, company, sha, frozen = k
         photo_id = uuid.UUID(frozen["selected_photos"][0]["photo_id"])
+        # The hosted TEST environment retains one protected legacy
+        # singleton. Emulate ONLY that ledger fact in disposable CI, with
+        # legacy cutover OFF during fixture insertion.
+        c.execute("update private.client_delivery_package_dispatch_config"
+                  " set enabled=false,legacy_worker_off_verified=false where singleton")
+        c.execute("insert into private.client_delivery_dispatch_permit("
+                  "singleton,request_id) values(true,%s) on conflict do nothing",
+                  (uuid.uuid4(),))
+        assert c.execute(
+            "select count(*) from private.client_delivery_dispatch_permit"
+        ).fetchone()[0] == 1
+        c.execute("update private.client_delivery_package_dispatch_config"
+                  " set enabled=true,legacy_worker_off_verified=true where singleton")
         c.execute("insert into private.client_delivery_package_dispatch_permits("
                   "package_id,organization_id,destination_id,worker_id,request_id,generation)"
                   " values(%s,%s,%s,%s,%s,1)",
