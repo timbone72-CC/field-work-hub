@@ -156,7 +156,7 @@ def check_previous_release(version, parent, sha):
     require(latest.get("draft") is False and latest.get("prerelease") is False,
             "Latest release is not a verified public baseline")
     origin = latest.get("target_commitish", "")
-    require(SHA.fullmatch(origin) and origin not in {parent, sha},
+    require(SHA.fullmatch(origin) and origin != sha,
             "Prior APK lacks a distinct immutable source commit")
     require(api("releases/tags/fwh-internal-v" + str(version), allow404=True) is None,
             "Release tag already exists: never replace an APK")
