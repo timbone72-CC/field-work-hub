@@ -5,6 +5,8 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 ## Current execution priority — operator direction 2026-11-01
 
+**CONDITIONAL MERGE (2026-11-02):** Operator authorizes PR #40 merge **when safe**. All three CI suites PASS at `188ad60e`. Merge publishes the Admin root via Pages, not Supabase or APK. Pre-merge UI/control audit and rollback remain. No merge yet.
+
 **CURRENT VERIFIED DELIVERY — 2026-11-02:** The ONE controlled disposable FWH TEST package `f42e05df-de7a-4d20-8dee-f55e09511d1f` (`FPP-000003`) reached **DELIVERED**. Fresh read-only SQL on Team TEST `vyocaujuwrivoqynvitm` confirmed package **DELIVERED**, outbox **DELIVERED**, **one durable final receipt** confirmed at `2026-11-02 17:13:48.821909 UTC`, PHOTO/MANIFEST/FOLDER file plans all **VERIFIED** with remote evidence, **zero unfinished** package steps, attempts **1** and lease generation **1**, and worker/lease cleared. The eight-step ledger contains five `VERIFIED_PROVIDER_STEP`, one `VERIFIED_METADATA_STEP`, one historical `RECONCILED_FAILED_FINAL_NO_RECEIPT`, and one later `VERIFIED_FINAL_RECEIPT`. The operator's final-delivery evidence also reported verified Google objects; this record's new independent recheck was **database read-only**, not a new Google provider call. Do not replay the successful delivery.
 
 **FAILED STEP PRESERVED — distinct historical incident, not retroactive success:** Before the successful final step, the original final call failed HTTP 503 (`Frozen package delivery owner mismatch`; audited code `FROZEN_PACKAGE_DELIVERY_OWNER_MISMATCH`). The exact `private.service_reconcile_exact_failed_final_step` correction for step `15667658-2ded-46cd-93ea-7399a5ec4a21` recorded `reconciled=true, delivered=false, outcome=RECONCILED_FAILED_FINAL_NO_RECEIPT` at that earlier boundary. Live SQL still confirms **one immutable failed-step reconciliation audit**. That outcome and its zero-receipt historical snapshot were true *then*, and remain preserved; they do **not** describe current package state. No audit/attempt was deleted, rewritten or relabeled as successful. The separate later terminal transition created the single final receipt.
@@ -56,7 +58,7 @@ The existing read-only `ci/phase5d_team_migration_preflight.sh` still required *
 ### Ownership and verified source
 
 - **Active scope:** Draft/open/unmerged [PR #40](https://github.com/timbone72-CC/field-work-hub/pull/40), branch `feat/phase-5-6-dashboard-workflow`. PR #49 is a separate Android navigation design plan, not a replacement Phase 5/6 runtime owner.
-- **Approved authority:** Complete parent Phase 5 and Phase 6 plans, plus the approved shared-access amendment. Prior roadmap/Phase 0–4 accepted evidence remains valid within its witnessed boundary. **Explicit Level-3 approval before merging PR #40 is PENDING.**
+- **Approved authority:** Complete parent Phase 5 and Phase 6 plans, plus the approved shared-access amendment. Prior roadmap/Phase 0–4 accepted evidence remains valid within its witnessed boundary. **Conditional operator merge authorization received; verify safety first.**
 - **Source rollback baseline:** main `62244e2c4c11831d4e8104821f851f19124b2616`. **Pre-archive documentation HEAD:** `b64ccf8b61ca5810f4ca0acc87d04f79a7f80aa4`; this archival change may be reverted as documentation without reverting runtime code or accepted tests.
 - **Current HEAD rule:** Recheck PR, branch, final runtime revision and relevant CI during every takeover; never assume this dated SHA remains current.
 
