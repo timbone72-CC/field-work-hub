@@ -472,3 +472,48 @@ grant execute on function
  private.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text),
  public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)
  to service_role;
+
+
+-- Exact TEST package owner read for separately authorized future wakeups.
+-- A caller may name ONLY the trusted server-configured package/destination/root.
+-- No lease renewal, legacy singleton read/acquire, takeover or provider write.
+create function private.service_read_pinned_package_dispatch(
+ p_package uuid,p_destination uuid,p_root text
+) returns jsonb language plpgsql security definer set search_path='' as $pinned$
+declare
+ cfg private.client_delivery_package_dispatch_config%rowtype;
+ held private.client_delivery_package_dispatch_permits%rowtype;
+ proof jsonb;
+begin
+ if p_package is null or p_destination is null or p_root is null
+   or p_root !~ '^[A-Za-z0-9_-]{10,160}$'
+ then raise exception 'Exact server pinned package scope required' using errcode='22023';end if;
+ select * into cfg from private.client_delivery_package_dispatch_config where singleton;
+ if cfg.singleton is null or not cfg.enabled or not cfg.legacy_worker_off_verified
+ then return '{"present":false,"active":false}'::jsonb;end if;
+ select * into held from private.client_delivery_package_dispatch_permits
+  where package_id=p_package;
+ if held.package_id is null then return '{"present":false,"active":false}'::jsonb;end if;
+ if held.destination_id is distinct from p_destination
+ then return '{"present":true,"active":false}'::jsonb;end if;
+ proof:=private.service_read_package_dispatch_owner(
+  p_package,held.worker_id,held.request_id,held.generation);
+ if proof->>'active'<>'true'
+   or proof->'manifest'->>'destination_root' is distinct from p_root
+ then return '{"present":true,"active":false}'::jsonb;end if;
+ return proof||jsonb_build_object('present',true,'claimed',true,'acquired',true);
+end;
+$pinned$;
+create function public.service_read_pinned_package_dispatch(
+ p_package uuid,p_destination uuid,p_root text
+) returns jsonb language sql security invoker set search_path='' as $wrap$
+ select private.service_read_pinned_package_dispatch(p_package,p_destination,p_root)
+$wrap$;
+revoke all on function
+ private.service_read_pinned_package_dispatch(uuid,uuid,text),
+ public.service_read_pinned_package_dispatch(uuid,uuid,text)
+ from public,anon,authenticated,service_role;
+grant execute on function
+ private.service_read_pinned_package_dispatch(uuid,uuid,text),
+ public.service_read_pinned_package_dispatch(uuid,uuid,text)
+ to service_role;

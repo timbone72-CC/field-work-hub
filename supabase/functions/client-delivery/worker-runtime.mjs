@@ -870,12 +870,12 @@ export async function prepareTrustedDelivery({
  */
 export async function advanceTrustedDeliveryOneStep({
   ledger,tokenProvider,makeWorkerId,expectedEmail,expectedDriveId,
-  projectUrl,serviceRoleJwt,makeVault,fetcher=fetch
+  projectUrl,serviceRoleJwt,makeVault,fetcher=fetch,packageClaim=null
 }={}){
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const HASH=/^[a-f0-9]{64}$/;
-  if(typeof ledger?.readActiveLease!=='function'
-    ||typeof ledger?.claim!=='function'
+  if((packageClaim===null&&typeof ledger?.readActiveLease!=='function')
+    ||(packageClaim===null&&typeof ledger?.claim!=='function')
     ||typeof ledger?.heartbeat!=='function'
     ||typeof makeWorkerId!=='function'
     ||typeof tokenProvider!=='function'
@@ -883,30 +883,47 @@ export async function advanceTrustedDeliveryOneStep({
     ||typeof expectedDriveId!=='string'||!expectedDriveId
     ||typeof fetcher!=='function')
     throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
-  // A read is not an ownership transfer. Every subsequent reserved write is
-  // checked against the current lease by the existing service-only RPC owner.
-  const old=await ledger.readActiveLease();
-  if(!old||!['ACTIVE','NONE','BLOCKED_UNCERTAIN'].includes(old.state))
-    throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
-  if(old.state==='BLOCKED_UNCERTAIN')
-    throw new DriveUncertain('EXPIRED_DELIVERY_REQUIRES_RECONCILIATION');
+  // Legacy mode is unchanged. The NEW mode must not even READ the held
+  // legacy lease: SQL supplies exactly one immutable package permit owner.
   let workerId,originalClaim=null;
-  if(old.state==='ACTIVE'){
-    if(!UUID.test(old.package_id??'')||!UUID.test(old.worker_id??'')
-      ||!Number.isSafeInteger(old.generation)||old.generation<1
-      ||!UUID.test(old.destination_id??'')
-      ||!HASH.test(old.approved_sha256??'')
-      ||old.manifest?.package_id!==old.package_id
-      ||old.manifest?.destination_id!==old.destination_id)
-      throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
-    workerId=old.worker_id;
-    originalClaim={claimed:true,package_id:old.package_id,
-      generation:old.generation,destination_id:old.destination_id,
-      approved_sha256:old.approved_sha256,manifest:old.manifest};
+  if(packageClaim!==null){
+    if(packageClaim.claimed!==true||packageClaim.acquired!==true
+      ||!UUID.test(packageClaim.package_id??'')
+      ||!UUID.test(packageClaim.worker_id??'')
+      ||!UUID.test(packageClaim.request_id??'')
+      ||!UUID.test(packageClaim.destination_id??'')
+      ||!Number.isSafeInteger(packageClaim.generation)||packageClaim.generation<1
+      ||!HASH.test(packageClaim.approved_sha256??'')
+      ||packageClaim.manifest?.package_id!==packageClaim.package_id
+      ||packageClaim.manifest?.destination_id!==packageClaim.destination_id)
+      throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+    workerId=packageClaim.worker_id;
+    originalClaim=packageClaim;
   }else{
-    workerId=makeWorkerId();
-    if(!UUID.test(workerId??''))
-      throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+    // A read is not an ownership transfer. Every subsequent reserved write is
+    // checked against the current lease by the existing service-only RPC owner.
+    const old=await ledger.readActiveLease();
+    if(!old||!['ACTIVE','NONE','BLOCKED_UNCERTAIN'].includes(old.state))
+      throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
+    if(old.state==='BLOCKED_UNCERTAIN')
+      throw new DriveUncertain('EXPIRED_DELIVERY_REQUIRES_RECONCILIATION');
+    if(old.state==='ACTIVE'){
+      if(!UUID.test(old.package_id??'')||!UUID.test(old.worker_id??'')
+        ||!Number.isSafeInteger(old.generation)||old.generation<1
+        ||!UUID.test(old.destination_id??'')
+        ||!HASH.test(old.approved_sha256??'')
+        ||old.manifest?.package_id!==old.package_id
+        ||old.manifest?.destination_id!==old.destination_id)
+        throw new DriveUncertain('ORIGINAL_LEASE_READ_UNCERTAIN');
+      workerId=old.worker_id;
+      originalClaim={claimed:true,package_id:old.package_id,
+        generation:old.generation,destination_id:old.destination_id,
+        approved_sha256:old.approved_sha256,manifest:old.manifest};
+    }else{
+      workerId=makeWorkerId();
+      if(!UUID.test(workerId??''))
+        throw new DriveUncertain('TRUSTED_WORKER_NOT_CONFIGURED');
+    }
   }
   // Once immutable file reservations exist, bypass preallocation entirely.
   // The original server lease alone selects the next plan; never generate a
@@ -1057,6 +1074,8 @@ export async function advanceTrustedDeliveryOneStep({
       });
       if(result?.state==='FILE_VERIFIED')
         return Object.freeze({state:'FILE_STEP_VERIFIED'});
+      if(packageClaim!==null&&result?.state==='PROGRESS')
+        return Object.freeze({state:'FILE_STEP_PROGRESS_VERIFIED'});
       if(['PROGRESS','NEEDS_INDEPENDENT_GET'].includes(result?.state))
         return Object.freeze({state:'FILE_STEP_PENDING'});
       throw new DriveUncertain('FROZEN_DELIVERY_ITEM_UNVERIFIED');
@@ -1551,7 +1570,7 @@ export async function runFencedPackageDeliveryStep({
   const result=await runExistingStep(owner);
   const metadata=result?.state==='PACKAGE_IDENTITIES_PREALLOCATED';
   const verified=['PARENT_STEP_VERIFIED','PACKAGE_FOLDER_STEP_VERIFIED',
-    'FILE_STEP_VERIFIED'].includes(result?.state);
+    'FILE_STEP_VERIFIED','FILE_STEP_PROGRESS_VERIFIED'].includes(result?.state);
   const final=result?.state==='PACKAGE_DELIVERED';
   // FILE_STEP_PENDING can mean an independent Google GET is still required.
   // PACKAGE_DELIVERED is fenced by the exact SQL final receipt.
@@ -1564,4 +1583,67 @@ export async function runFencedPackageDeliveryStep({
   if(committed?.completed!==true||committed.step_id!==stepId)
     throw new DriveUncertain('PACKAGE_STEP_COMPLETION_UNVERIFIED');
   return Object.freeze({state:result.state});
+}
+
+
+// One source-only, package-pinned TEST wakeup through the SAME existing worker.
+// No public package/plan selection and absolutely no legacy permit fallback.
+export async function advancePinnedTestPackageOneStep({
+ ledger,packageId,destinationId,rootId,makeWorkerId,
+ tokenProvider,expectedEmail,expectedDriveId,projectUrl,serviceRoleJwt,
+ makeVault,fetcher=fetch,advanceStep=advanceTrustedDeliveryOneStep
+}={}){
+ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ const HASH=/^[a-f0-9]{64}$/;
+ if(!UUID.test(packageId??'')||!UUID.test(destinationId??'')
+   ||!/^[A-Za-z0-9_-]{10,160}$/.test(rootId??'')
+   ||!['readPinnedPackageDispatch','claimPackageAndAcquireDispatch',
+       'releasePackageDispatch','readPackageDispatchOwner','beginPackageStep',
+       'completePackageStep'].every(k=>typeof ledger?.[k]==='function')
+   ||typeof makeWorkerId!=='function'
+   ||typeof advanceStep!=='function')
+   throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
+ const current=await ledger.readPinnedPackageDispatch(packageId,destinationId,rootId);
+ let claim;
+ if(current?.present===true){
+   if(current.active!==true)throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+   claim=current;
+ }else if(current?.present===false&&current.active===false){
+   const worker=makeWorkerId(),request=makeWorkerId();
+   if(!UUID.test(worker??'')||!UUID.test(request??'')||worker===request)
+     throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
+   claim=await ledger.claimPackageAndAcquireDispatch(
+     packageId,destinationId,rootId,worker,request);
+   if(claim?.claimed===false&&claim.acquired===false)
+     return Object.freeze({state:'PACKAGE_STEP_BUSY'});
+ }else throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ const m=claim?.manifest;
+ if(claim?.claimed!==true||claim.acquired!==true
+   ||claim.package_id!==packageId||claim.destination_id!==destinationId
+   ||!UUID.test(claim.worker_id??'')||!UUID.test(claim.request_id??'')
+   ||!Number.isSafeInteger(claim.generation)||claim.generation<1
+   ||!HASH.test(claim.approved_sha256??'')
+   ||m?.package_id!==packageId||m?.destination_id!==destinationId
+   ||m?.destination_root!==rootId
+   ||!Array.isArray(m.selected_photos)||m.selected_photos.length!==1
+   ||!UUID.test(m.selected_photos[0]?.photo_id??''))
+   throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ const stepId=makeWorkerId();
+ if(!UUID.test(stepId??'')||[claim.worker_id,claim.request_id].includes(stepId))
+   throw new DriveUncertain('PACKAGE_STEP_SCOPE_INVALID');
+ const result=await runFencedPackageDeliveryStep({
+   ledger,packageId,workerId:claim.worker_id,requestId:claim.request_id,
+   generation:claim.generation,destinationId,rootId,stepId,
+   runExistingStep:()=>advanceStep({
+     ledger,packageClaim:claim,tokenProvider,makeWorkerId,
+     expectedEmail,expectedDriveId,projectUrl,serviceRoleJwt,makeVault,fetcher
+   })
+ });
+ if(result.state==='PACKAGE_DELIVERED'){
+   const receipt=await ledger.releasePackageDispatch(
+     packageId,claim.worker_id,claim.request_id,claim.generation);
+   if(receipt?.released!==true)
+     throw new DriveUncertain('PACKAGE_DISPATCH_RELEASE_UNVERIFIED');
+ }
+ return result;
 }

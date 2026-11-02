@@ -4,7 +4,7 @@ import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_claim_package_and_acquire_dispatch','service_release_package_dispatch',
- 'service_read_package_dispatch_owner',
+ 'service_read_package_dispatch_owner','service_read_pinned_package_dispatch',
  'service_begin_package_dispatch_step','service_complete_package_dispatch_step',
  'service_read_active_delivery_lease','service_read_expired_test_delivery_reservation',
  'service_resume_and_acquire_exact_test_dispatch',
@@ -150,6 +150,17 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       return rpc('service_release_package_dispatch',{
         p_package:pkg,p_worker:worker,p_request:request,
         p_generation:generation
+      });
+    },
+    // Only backend-configured package/destination/root can be read; service only.
+    // Existing holder is never silently taken over after an expired lease.
+    readPinnedPackageDispatch:(pkg,dest,root)=>{
+      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+      if(![pkg,dest].every(x=>typeof x==='string'&&uuid.test(x))
+        ||typeof root!=='string'||!/^[A-Za-z0-9_-]{10,160}$/.test(root))
+        throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
+      return rpc('service_read_pinned_package_dispatch',{
+        p_package:pkg,p_destination:dest,p_root:root
       });
     },
     // Package-specific owner proof. Never falls back to a legacy lease.
