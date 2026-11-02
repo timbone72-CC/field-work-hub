@@ -47,6 +47,14 @@ function fakeDatabase(){
    const claim=permits.get(packageId);
    return claim?claim:{present:false,active:false};
   },
+  async recordPinnedPackageProviderCheck(packageId,destinationId,rootId,proof,observed,request){
+   assert.equal(destinationId,dest);assert.equal(rootId,root);
+   assert.equal(proof.account,config.expectedAccount);
+   assert.equal(proof.drive_id,config.expectedDriveId);
+   assert.equal(typeof proof.permission_id,'string');
+   assert.ok(Number.isFinite(Date.parse(observed)));
+   return {verified:true,package_id:packageId,request_id:request};
+  },
   async claimPackageAndAcquireDispatch(packageId,destinationId,rootId,worker,request){
    claimAttempts++;
    assert.equal(destinationId,dest);assert.equal(rootId,root);
@@ -92,7 +100,11 @@ const execute=(ledger,packageId,makeWorkerId,advanceStep)=>
  advancePinnedTestPackageOneStep({ledger,packageId,destinationId:dest,rootId:root,
   makeWorkerId,tokenProvider:async()=>({}),expectedEmail:config.expectedAccount,
   expectedDriveId:config.expectedDriveId,
-  advanceStep,fetcher:async()=>{throw Error('REAL_IO_FORBIDDEN')}});
+  advanceStep,fetcher:async()=>{throw Error('REAL_IO_FORBIDDEN')},
+  verifyReadOnlyProvider:async()=>({
+   account:config.expectedAccount,drive_id:config.expectedDriveId,
+   permission_id:'synthetic-read-only-proof-id-001'
+  })});
 test('new operation OFF by default and rejects worker-secret bypass',async()=>{
  let called=0;
  const settings={...config,runPinnedTestStep:async()=>{called++;return {state:'PACKAGE_IDENTITIES_PREALLOCATED'}}};
