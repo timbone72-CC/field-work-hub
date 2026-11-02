@@ -1,7 +1,7 @@
 // Trusted Supabase service-JWT RPC adapter. Never instantiate in browser or
 // on Contractor Android. Only the enumerated service-role RPCs are accessible.
 import {DriveUncertain} from './drive-client.mjs';
-const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_claim_package_and_acquire_dispatch','service_release_package_dispatch',
  'service_read_package_dispatch_owner','service_read_pinned_package_dispatch',
@@ -144,8 +144,7 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     // Existing trusted worker, service-only package preflight. Never renews
     // global worker readiness or touches the original singleton.
     recordPinnedPackageProviderCheck:(pkg,dest,root,proof,observed,request)=>{
-      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-      if(![pkg,dest,request].every(x=>uuid.test(x??''))
+      if(![pkg,dest,request].every(x=>typeof x==='string'&&UUID.test(x))
         ||!/^[A-Za-z0-9_-]{10,160}$/.test(root??'')
         ||!/^[A-Za-z0-9_-]{10,160}$/.test(proof?.drive_id??'')
         ||typeof proof?.account!=='string'
@@ -173,8 +172,7 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
     // Only backend-configured package/destination/root can be read; service only.
     // Existing holder is never silently taken over after an expired lease.
     readPinnedPackageDispatch:(pkg,dest,root)=>{
-      const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-      if(![pkg,dest].every(x=>typeof x==='string'&&uuid.test(x))
+      if(![pkg,dest].every(x=>typeof x==='string'&&UUID.test(x))
         ||typeof root!=='string'||!/^[A-Za-z0-9_-]{10,160}$/.test(root))
         throw new DriveUncertain('PACKAGE_DISPATCH_SCOPE_INVALID');
       return rpc('service_read_pinned_package_dispatch',{

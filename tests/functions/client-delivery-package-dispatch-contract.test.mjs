@@ -79,6 +79,52 @@ test('missing package RPC fails closed without any fallback to broad claim or gl
 });
 
 
+test('pinned read validates standard five-group UUID before its service-only RPC',async()=>{
+ const calls=[];
+ const ledger=makeLedger(async(url,init)=>{
+  calls.push([new URL(url).pathname,JSON.parse(init.body)]);
+  return Response.json({present:false,active:false});
+ });
+ assert.deepEqual(await ledger.readPinnedPackageDispatch(
+  ids.package,ids.destination,ids.root),{present:false,active:false});
+ assert.deepEqual(calls,[['/rest/v1/rpc/service_read_pinned_package_dispatch',
+  {p_package:ids.package,p_destination:ids.destination,p_root:ids.root}]]);
+ for(const args of [
+  ['11111111-1111-4111-111111111111',ids.destination,ids.root],
+  ['bad',ids.destination,ids.root],
+  [ids.package,'wrong',ids.root],[ids.package,ids.destination,'other/root']
+ ])assert.throws(()=>ledger.readPinnedPackageDispatch(...args),
+  e=>e.code==='PACKAGE_DISPATCH_SCOPE_INVALID');
+ assert.equal(calls.length,1,'invalid IDs must not send privileged RPCs');
+});
+
+test('fresh provider-proof RPC preserves normal UUIDs and requires exact scope',async()=>{
+ const calls=[],observed='2026-11-02T05:18:38.315Z';
+ const proof={account:'fixture@example.invalid',drive_id:'test_shared_drive_12345',
+  permission_id:'test_permission_123456'};
+ const ledger=makeLedger(async(url,init)=>{
+  calls.push([new URL(url).pathname,JSON.parse(init.body)]);
+  return Response.json({verified:true,package_id:ids.package,request_id:ids.request});
+ });
+ assert.deepEqual(await ledger.recordPinnedPackageProviderCheck(
+  ids.package,ids.destination,ids.root,proof,observed,ids.request),
+  {verified:true,package_id:ids.package,request_id:ids.request});
+ assert.deepEqual(calls,[['/rest/v1/rpc/service_record_pinned_package_provider_check',{
+  p_package:ids.package,p_destination:ids.destination,p_root:ids.root,
+  p_account:proof.account,p_drive:proof.drive_id,p_permission:proof.permission_id,
+  p_observed_at:observed,p_request:ids.request
+ }]]);
+ for(const args of [
+  ['bad',ids.destination,ids.root,proof,observed,ids.request],
+  [ids.package,'bad',ids.root,proof,observed,ids.request],
+  [ids.package,ids.destination,ids.root,proof,observed,'bad'],
+  [ids.package,ids.destination,'bad/root',proof,observed,ids.request],
+  [ids.package,ids.destination,ids.root,{...proof,permission_id:null},observed,ids.request]
+ ])assert.throws(()=>ledger.recordPinnedPackageProviderCheck(...args),
+  e=>e.code==='PACKAGE_PROVIDER_PROOF_INVALID');
+ assert.equal(calls.length,1,'malformed provider evidence must not write a proof');
+});
+
 test('exact package owner RPC is read-only and validates every input before network',async()=>{
  const calls=[];
  const ledger=makeLedger(async(url,init)=>{
