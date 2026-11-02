@@ -117,7 +117,7 @@ test('wrong Google identity, drive, write permission and uncertain provider tran
   assert.equal(transport.calls.some(c=>c.url.hostname.endsWith('supabase.co')),false);
  }
 });
-test('Deno entry defaults preflight disabled and names all exact TEST configuration inputs',async()=>{
+test('Deno entry enforces safe delivery OFF while naming TEST preflight inputs',async()=>{
  // This check only audits static host env mapping; it never reads host secrets.
  const {readFile}=await import('node:fs/promises');
  const source=await readFile(new URL('../../supabase/functions/client-delivery/index.ts',import.meta.url),'utf8');
@@ -125,5 +125,5 @@ test('Deno entry defaults preflight disabled and names all exact TEST configurat
   'FWH_CLIENT_TEST_ROOT_FOLDER_ID','FWH_INTERNAL_SHARED_DRIVE_ID','FWH_TEST_WORKSPACE_DOMAIN']){
    assert.ok(source.includes(name),name);
  }
- assert.ok(source.includes("Deno.env.get('FWH_CLIENT_DELIVERY_ACTIVE')==='true'"));
+ assert.match(source,/^\s*enabled:false,/m);
 });
