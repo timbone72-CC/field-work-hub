@@ -10,9 +10,9 @@ Deno.serve(createDeliveryHandler({
  enabled:false,
  // Dedicated OFF-by-default new-package runner. No caller package IDs.
  pinnedTestEnabled:false,
- pinnedTestPackageId:Deno.env.get('FWH_CLIENT_NEW_TEST_PACKAGE_ID')??'',
- pinnedTestDestinationId:Deno.env.get('FWH_CLIENT_NEW_TEST_DESTINATION_ID')??'',
- pinnedTestRootFolderId:Deno.env.get('FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID')??'',
+ pinnedTestPackageId:'f42e05df-de7a-4d20-8dee-f55e09511d1f',
+ pinnedTestDestinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',
+ pinnedTestRootFolderId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK',
  // Independent TEST-only identity/root GET gate; this cannot enable Send.
  testPreflightEnabled:Deno.env.get('FWH_CLIENT_TEST_PREFLIGHT_ENABLED')==='true',
  // Separate, explicitly enabled original-ID disposable TEST recovery only.

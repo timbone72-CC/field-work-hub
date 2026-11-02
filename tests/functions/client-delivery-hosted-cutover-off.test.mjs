@@ -15,6 +15,19 @@ test('hosted cutover explicitly overrides all provider mutation environment flag
  assert.match(source,/testPreflightEnabled:Deno\.env\.get\('FWH_CLIENT_TEST_PREFLIGHT_ENABLED'\)/);
 });
 
+test('one approved TEST package is pinned in source while every provider mutation stays OFF',()=>{
+ const mustHave=[
+  "pinnedTestPackageId:'f42e05df-de7a-4d20-8dee-f55e09511d1f',",
+  "pinnedTestDestinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',",
+  "pinnedTestRootFolderId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK',",
+  'enabled:false,','testRecoveryEnabled:false,','pinnedTestEnabled:false,'
+ ];
+ for(const expected of mustHave)assert.ok(source.includes(expected),'Missing server-pin '+expected);
+ for(const name of ['FWH_CLIENT_NEW_TEST_PACKAGE_ID','FWH_CLIENT_NEW_TEST_DESTINATION_ID','FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID']){
+  assert.ok(!source.includes(name),'Environment-selected TEST identity bypass: '+name);
+ }
+});
+
 test('disabled trusted handler refuses even authenticated delivery/recovery operations',async()=>{
  let providerCalls=0;
  const handler=createDeliveryHandler({
