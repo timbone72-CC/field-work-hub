@@ -229,3 +229,19 @@ test('new-mode coordinator refuses legacy lease read even when one is held',asyn
  }),e=>e.code==='FROZEN_DELIVERY_ITEM_UNVERIFIED');
  assert.equal(oldReads,0);assert.equal(anyProvider,0);
 });
+
+test('failed read-only provider identity probe never claims new package or calls old worker',async()=>{
+ const ledger=fakeDatabase(),newId=ids();
+ let invoked=0;
+ await assert.rejects(advancePinnedTestPackageOneStep({
+  ledger,packageId:pkg,destinationId:dest,rootId:root,
+  makeWorkerId:newId,tokenProvider:async()=>{throw Error('NO_OAUTH_ATTEMPT')},
+  expectedEmail:config.expectedAccount,expectedDriveId:config.expectedDriveId,
+  verifyReadOnlyProvider:async()=>{invoked++;throw Error('READ_ONLY_GOOGLE_UNCERTAIN')},
+  advanceStep:async()=>{throw Error('PROVIDER_WRITE_FORBIDDEN')}
+ }),/READ_ONLY_GOOGLE_UNCERTAIN/);
+ assert.equal(invoked,1);
+ assert.equal(ledger.claimAttempts,0);
+ assert.equal(ledger.permits.size,0);
+ assert.equal(ledger.legacyCalls,0);
+});

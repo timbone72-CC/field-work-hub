@@ -64,7 +64,7 @@ def setup():
                   " values(%s,%s,%s,%s)", (dest, proof_action, proof_id, DRIVE))
         c.execute("insert into private.client_delivery_runtime("
                   "organization_id,worker_ready,last_verified_at,worker_identity)"
-                  " values(%s,true,now(),'DISPOSABLE_CI')", (org,))
+                  " values(%s,true,now()-interval '72 hours','DISPOSABLE_CI')", (org,))
         for n in (1, 2):
             wo, pkg, action = [new_id() for _ in range(3)]
             c.execute("insert into public.work_orders("
