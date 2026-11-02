@@ -271,10 +271,26 @@ begin
     raise exception 'Unavailable worker incorrectly queued delivery';end if;
   update private.client_delivery_runtime set worker_ready=true,worker_identity='synthetic-ci-only',
     last_verified_at=now() where organization_id=org;
+  -- A stale worker_ready=true must NEVER override general dispatch OFF.
+  execute 'set local role authenticated';
+  pkg_state:=public.admin_package_state(wo);
+  if pkg_state->'package'->>'can_send' is distinct from 'false'
+    or pkg_state->'package'->>'send_blocked_reason' is null then
+    raise exception 'Disabled dispatch incorrectly exposed client Send';end if;
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.admin_queue_package(%L,%L,%L,%L,%L)',
+    send_action,wo,pkg_id,pkg_approval->>'revision',pkg_preview->>'manifest_sha256'));
+  execute 'reset role';
+  if exists(select 1 from private.client_delivery_outbox where package_id=pkg_id) then
+    raise exception 'Disabled dispatch created an outbox row';end if;
+  -- Synthetic source-only dispatch-on branch for existing queue/idempotency
+  -- tests. All changes roll back. No worker is started or Google contacted.
+  update private.client_delivery_package_dispatch_config
+    set enabled=true,legacy_worker_off_verified=true where singleton;
   execute 'set local role authenticated';
   pkg_state:=public.admin_package_state(wo);
   if pkg_state->'package'->>'can_send'<>'true' then
-    raise exception 'Verified synthetic worker readiness not reflected';end if;
+    raise exception 'Verified synthetic dispatch and worker readiness not reflected';end if;
   pkg_send:=public.admin_queue_package(send_action,wo,pkg_id,
     (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256');
   if pkg_send->>'status'<>'QUEUED' then raise exception 'Explicit Send did not queue';end if;
