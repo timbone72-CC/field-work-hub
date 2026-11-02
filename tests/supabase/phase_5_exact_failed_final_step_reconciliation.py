@@ -142,6 +142,55 @@ def main():
         else:
             raise AssertionError("Existing final receipt permitted recovery")
         c.execute("release savepoint receipt_denial")
+        # CI-only visibility into every major guard boundary. All values are
+        # booleans/fixture counts, never credentials or actual provider data.
+        check = c.execute("""
+          select
+            cfg.enabled=false as gate_off,
+            cfg.legacy_worker_off_verified as legacy_off,
+            cfg.max_in_flight=2 as cap_two,
+            k.status='DELIVERING' as package_delivering,
+            o.state='DELIVERING' as outbox_delivering,
+            o.attempts=1 as attempt_one,
+            o.lease_generation=1 as generation_one,
+            o.lease_until<clock_timestamp() as expired,
+            o.worker_id=h.worker_id as worker_match,
+            o.destination_id=h.destination_id as dest_match,
+            k.destination_id=d.id as package_dest_match,
+            k.organization_id=h.organization_id as org_match,
+            k.organization_id=d.organization_id as dest_org_match,
+            k.company_id=d.company_id as company_match,
+            d.active and d.verified as dest_ready,
+            d.root_folder_id='1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK' as exact_root,
+            k.approved_manifest->>'package_id'=k.id::text as manifest_package,
+            k.approved_manifest->>'destination_id'=d.id::text as manifest_dest,
+            k.approved_manifest->>'destination_root'=d.root_folder_id as manifest_root,
+            k.approved_manifest->>'destination_revision'=d.revision::text as manifest_rev,
+            k.approved_manifest->>'folder_layout'='ADDRESS_WORK_ORDER' as layout,
+            jsonb_array_length(k.approved_manifest->'selected_photos')=1 as one_photo,
+            o.approved_sha256=k.approved_sha256 as outbox_hash,
+            k.approved_sha256=encode(sha256(convert_to(k.approved_manifest::text,'UTF8')),'hex') as frozen_hash,
+            s.worker_id=h.worker_id and s.request_id=h.request_id and s.generation=h.generation as step_owner,
+            s.verified_at is null and s.verified_outcome is null as still_pending,
+            s.started_at between '2026-11-02 15:12+00'::timestamptz and '2026-11-02 15:15+00'::timestamptz as failure_window,
+            (select count(*) from private.client_delivery_dispatch_permit)=1 as original_one,
+            (select count(*) from private.client_delivery_package_dispatch_permits)=1 as scoped_one,
+            (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id and verified_at is null)=1 as one_pending,
+            (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id and verified_outcome='VERIFIED_PROVIDER_STEP')=5 as provider_five,
+            (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id and verified_outcome='VERIFIED_METADATA_STEP')=1 as metadata_one,
+            (select count(*) from private.client_delivery_package_step_attempts where package_id=k.id)=7 as seven_total,
+            (select count(*) from private.client_delivery_final_receipts where package_id=k.id)=0 as no_final
+          from private.client_packages k
+          join private.client_delivery_outbox o on o.package_id=k.id
+          join private.client_delivery_package_dispatch_permits h on h.package_id=k.id
+          join private.client_delivery_destinations d on d.id=k.destination_id
+          join private.client_delivery_package_step_attempts s on s.package_id=k.id and s.step_id=%s
+          cross join private.client_delivery_package_dispatch_config cfg
+          where k.id=%s
+        """, (step, package))
+        checks = check.fetchone()
+        statuses = dict(zip([desc.name for desc in check.description], checks))
+        assert all(value is True for value in statuses.values()), statuses
         response = c.execute(
             "select private.service_reconcile_exact_failed_final_step(%s,%s)",
             (package, step),
