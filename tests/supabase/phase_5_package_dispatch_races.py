@@ -81,19 +81,41 @@ def setup(pinned_test_package=None):
                         "destination_root": ROOT, "destination_revision": str(rev),
                         "folder_layout": "ADDRESS_WORK_ORDER",
                         "selected_photos": [{"photo_id": str(new_id())}]}
+            # The fixed-ID failed-final-step fixture must also have frozen
+            # byte-accurate photo and manifest identities. Ordinary race
+            # fixtures keep their original lean synthetic shape.
+            approved_hash = HASH
+            if n == 1 and pinned_test_package is not None:
+                manifest["selected_photos"][0].update({
+                    "observed_sha256": "b" * 64, "observed_size": 279184
+                })
+                manifest["fixture_padding"] = ""
+                current_size = c.execute(
+                    "select octet_length(%s::jsonb::text)", (Jsonb(manifest),)
+                ).fetchone()[0]
+                assert current_size < 1382
+                manifest["fixture_padding"] = "x" * (1382 - current_size)
+                assert c.execute(
+                    "select octet_length(%s::jsonb::text)", (Jsonb(manifest),)
+                ).fetchone()[0] == 1382
+                approved_hash = c.execute(
+                    "select encode(extensions.digest("
+                    "convert_to(%s::jsonb::text,'UTF8'),'sha256'),'hex')",
+                    (Jsonb(manifest),)
+                ).fetchone()[0]
             c.execute("insert into private.client_packages("
                       "id,organization_id,work_order_id,run_id,company_id,notes,"
                       "status,approved_manifest,approved_sha256,approved_by,"
                       "approved_at,destination_id)"
                       " values(%s,%s,%s,%s,%s,'CI ROLLBACK PROBE','QUEUED',%s,%s,%s,now(),%s)",
-                      (pkg, org, wo, run_row[0], company, Jsonb(manifest), HASH, admin, dest))
+                      (pkg, org, wo, run_row[0], company, Jsonb(manifest), approved_hash, admin, dest))
             c.execute("insert into private.client_package_actions("
                       "action_id,package_id,actor_user_id,action_kind,request_fingerprint,result)"
                       " values(%s,%s,%s,'SEND',%s,'{}'::jsonb)",
                       (action, pkg, admin, "b" * 64))
             c.execute("insert into private.client_delivery_outbox("
                       "package_id,action_id,approved_sha256,destination_id)"
-                      " values(%s,%s,%s,%s)", (pkg, action, HASH, dest))
+                      " values(%s,%s,%s,%s)", (pkg, action, approved_hash, dest))
             packages.append(pkg)
         c.execute("update private.client_delivery_package_dispatch_config set "
                   "enabled=true,legacy_worker_off_verified=true where singleton")
