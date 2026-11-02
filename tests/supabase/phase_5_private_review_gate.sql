@@ -306,6 +306,9 @@ begin
     or (select count(*) from private.client_package_actions where package_id=pkg_id
         and action_kind='SEND')<>1 then
     raise exception 'Send created duplicates or alleged delivered receipt';end if;
+  -- Reset cutover before old provider state-machine fixtures.
+  update private.client_delivery_package_dispatch_config
+    set enabled=false,legacy_worker_off_verified=false where singleton;
   select id into test_destination from private.client_delivery_destinations
    where company_id=company and organization_id=org;
   -- New exact disposable TEST claim remains service-only and rejects
@@ -1151,11 +1154,17 @@ begin
    (next_pkg->>'id')::uuid,(next_pkg->>'revision')::uuid,page->>'manifest_sha256');
  if result->>'status'<>'APPROVED' then
    raise exception 'Two-photo disposable package approval failed: %',result;end if;
+ execute 'reset role';
+ update private.client_delivery_package_dispatch_config
+   set enabled=true,legacy_worker_off_verified=true where singleton;
+ execute 'set local role authenticated';
  result:=public.admin_queue_package(gen_random_uuid(),wo,
    (next_pkg->>'id')::uuid,(result->>'revision')::uuid,page->>'manifest_sha256');
  if result->>'status'<>'QUEUED' then
    raise exception 'Two-photo disposable package queue failed: %',result;end if;
  execute 'reset role';
+ update private.client_delivery_package_dispatch_config
+   set enabled=false,legacy_worker_off_verified=false where singleton;
  if (select count(*) from private.client_package_photos
        where package_id=(next_pkg->>'id')::uuid)<>2 then
    raise exception 'New exact TEST claim fixture requires two real member identities';end if;
