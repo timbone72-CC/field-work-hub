@@ -1619,7 +1619,7 @@ export async function advancePinnedTestPackageOneStep({
  const HASH=/^[a-f0-9]{64}$/;
  if(!UUID.test(packageId??'')||!UUID.test(destinationId??'')
    ||!/^[A-Za-z0-9_-]{10,160}$/.test(rootId??'')
-   ||!['readPinnedPackageDispatch','claimPackageAndAcquireDispatch',
+   ||!['readPinnedPackageDispatch','resumePinnedPackageDispatch','claimPackageAndAcquireDispatch',
        'releasePackageDispatch','readPackageDispatchOwner','beginPackageStep',
        'completePackageStep','recordPinnedPackageProviderCheck'].every(k=>typeof ledger?.[k]==='function')
    ||typeof makeWorkerId!=='function'
@@ -1628,8 +1628,31 @@ export async function advancePinnedTestPackageOneStep({
  const current=await ledger.readPinnedPackageDispatch(packageId,destinationId,rootId);
  let claim;
  if(current?.present===true){
-   if(current.active!==true)throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
-   claim=current;
+   if(current.active===true){
+     claim=current;
+   }else if(current.active===false&&current.resumable===true){
+     // Expired descriptor is read-only. Fresh provider GET precedes the
+     // locked SAME-worker/request/generation renewal; never claim another slot.
+     if(!UUID.test(current.worker_id??'')
+       ||!UUID.test(current.request_id??'')
+       ||!Number.isSafeInteger(current.generation)||current.generation<1
+       ||current.package_id!==packageId||current.destination_id!==destinationId)
+       throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+     const proof=await verifyReadOnlyProvider({
+       tokenProvider,rootId,expectedEmail,expectedDriveId,fetcher});
+     if(proof?.account?.toLowerCase()!==expectedEmail?.toLowerCase()
+       ||proof?.drive_id!==expectedDriveId
+       ||typeof proof?.permission_id!=='string'||!proof.permission_id)
+       throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+     const proofRequest=makeWorkerId();
+     if(!UUID.test(proofRequest??''))
+       throw new DriveUncertain('PACKAGE_PROVIDER_PROOF_INVALID');
+     claim=await ledger.resumePinnedPackageDispatch(
+       packageId,destinationId,rootId,current.worker_id,current.request_id,
+       current.generation,proof,new Date().toISOString(),proofRequest);
+     if(claim?.resumed!==true||claim.active!==true)
+       throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+   }else throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
  }else if(current?.present===false&&current.active===false){
    const proof=await verifyReadOnlyProvider({
      tokenProvider,rootId,expectedEmail,expectedDriveId,fetcher});
