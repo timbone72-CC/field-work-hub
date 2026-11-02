@@ -37,8 +37,8 @@ def setup():
                   " values(%s,%s,'DISPOSABLE CLIENT')", (company, org))
         c.execute("insert into private.client_delivery_destinations("
                   "id,organization_id,company_id,provider,provider_identity,"
-                  "root_folder_id,verified,verified_at,active)"
-                  " values(%s,%s,%s,'GOOGLE_DRIVE','disposable@example.invalid',%s,true,now(),true)",
+                  "root_folder_id,verified,verified_at,verification_receipt,active)"
+                  " values(%s,%s,%s,'GOOGLE_DRIVE','disposable@example.invalid',%s,true,now(),'{}'::jsonb,true)",
                   (dest, org, company, ROOT))
         rev = c.execute("select revision from private.client_delivery_destinations "
                         "where id=%s", (dest,)).fetchone()[0]
