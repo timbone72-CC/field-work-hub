@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Read-only Phase 5D canonical Team migration parity preflight.
-# The new Send guard is staged as migration 129. Verify that the linked
+# The Send guard is installed as migration 129. Verify that the linked
 # Team TEST database has ZERO pending migrations before provider testing.
 # Never apply from this helper.
 # It does not install
@@ -11,7 +11,7 @@ repo="timbone72-CC/field-work-hub"
 branch="feat/phase-5-6-dashboard-workflow"
 project="vyocaujuwrivoqynvitm"
 expected_count=129
-last_installed="20261102214000_phase_5_admin_send_dispatch_readiness.sql"
+last_installed="20261102215955_phase_5_admin_send_dispatch_readiness.sql"
 
 stop(){ printf 'STOP: %s\n' "$1" >&2; exit 1; }
 for program in git gh supabase; do
