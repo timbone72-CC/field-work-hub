@@ -24,7 +24,7 @@ def query(sql, args=()):
         return c.execute(sql, args).fetchone()[0]
 
 
-def setup():
+def setup(pinned_test_package=None):
     org, company, admin, dest = [new_id() for _ in range(4)]
     packages = []
     with psycopg.connect(DSN) as c:
@@ -67,6 +67,8 @@ def setup():
                   " values(%s,true,now()-interval '72 hours','DISPOSABLE_CI')", (org,))
         for n in (1, 2):
             wo, pkg, action = [new_id() for _ in range(3)]
+            if n == 1 and pinned_test_package is not None:
+                pkg = pinned_test_package
             c.execute("insert into public.work_orders("
                       "id,organization_id,wo_number,property_address,work_type,"
                       "due_date,client_company_id) values("
