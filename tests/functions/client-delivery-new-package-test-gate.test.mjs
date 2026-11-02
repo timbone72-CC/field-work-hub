@@ -47,6 +47,21 @@ function fakeDatabase(){
    const claim=permits.get(packageId);
    return claim?claim:{present:false,active:false};
   },
+  async resumePinnedPackageDispatch(packageId,destinationId,rootId,worker,request,generation,proof,observed,proofRequest){
+   assert.equal(destinationId,dest);assert.equal(rootId,root);
+   assert.equal(proof.account,config.expectedAccount);
+   assert.equal(proof.drive_id,config.expectedDriveId);
+   assert.ok(Number.isFinite(Date.parse(observed)));
+   assert.ok(proofRequest);
+   const claim=permits.get(packageId);
+   if(!claim||claim.worker_id!==worker||claim.request_id!==request
+     ||claim.generation!==generation||claim.active!==false
+     ||!claim.resumable||activeSteps.has(packageId)
+     ||!steps.some(s=>s[0]===packageId&&s[1]==='COMPLETE'))
+     throw Error('EXPIRED_RESUME_DENIED');
+   claim.active=true;delete claim.resumable;
+   return {...claim,resumed:true};
+  },
   async recordPinnedPackageProviderCheck(packageId,destinationId,rootId,proof,observed,request){
    assert.equal(destinationId,dest);assert.equal(rootId,root);
    assert.equal(proof.account,config.expectedAccount);
@@ -210,6 +225,51 @@ test('only verified final delivery can close a package slot',async()=>{
  assert.equal(ledger.permits.size,0);
 });
 
+
+test('verified expired lease resumes SAME permit after independent Google GET',async()=>{
+ const ledger=fakeDatabase(),newId=ids(),seen=[];
+ assert.deepEqual(await execute(ledger,pkg,newId,
+  async()=>({state:'PARENT_STEP_VERIFIED'})),{state:'PARENT_STEP_VERIFIED'});
+ const before=ledger.permits.get(pkg),worker=before.worker_id,request=before.request_id;
+ before.active=false;before.resumable=true;
+ assert.deepEqual(await execute(ledger,pkg,newId,async args=>{
+  seen.push(args.packageClaim);
+  return {state:'PACKAGE_FOLDER_STEP_VERIFIED'};
+ }),{state:'PACKAGE_FOLDER_STEP_VERIFIED'});
+ assert.equal(ledger.claimAttempts,1);
+ assert.equal(ledger.permits.get(pkg).worker_id,worker);
+ assert.equal(ledger.permits.get(pkg).request_id,request);
+ assert.equal(ledger.permits.get(pkg).generation,1);
+ assert.equal(seen.length,1);
+ assert.equal(ledger.legacyCalls,0);
+});
+test('uncertain expired step cannot resume or call provider; nonresumable stays held',async()=>{
+ const ledger=fakeDatabase(),newId=ids();
+ await assert.rejects(execute(ledger,pkg,newId,async()=>{throw Error('LOST_GOOGLE_REPLY')}),
+  /LOST_GOOGLE_REPLY/);
+ const claim=ledger.permits.get(pkg);claim.active=false;claim.resumable=true;
+ let provider=0;
+ await assert.rejects(execute(ledger,pkg,newId,async()=>{provider++}),
+  /EXPIRED_RESUME_DENIED/);
+ assert.equal(provider,0);
+ claim.resumable=false;
+ await assert.rejects(execute(ledger,pkg,newId,async()=>{provider++}),
+  e=>e.code==='PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ assert.equal(provider,0);assert.equal(ledger.legacyCalls,0);
+});
+test('malformed expired descriptor rejected before Google lookup',async()=>{
+ const ledger=fakeDatabase(),newId=ids();
+ await execute(ledger,pkg,newId,async()=>({state:'PARENT_STEP_VERIFIED'}));
+ const claim=ledger.permits.get(pkg);
+ claim.active=false;claim.resumable=true;claim.worker_id='bad';
+ let reads=0;
+ await assert.rejects(advancePinnedTestPackageOneStep({
+  ledger,packageId:pkg,destinationId:dest,rootId:root,makeWorkerId:newId,
+  verifyReadOnlyProvider:async()=>{reads++;throw Error('READ_NOT_ALLOWED')},
+  advanceStep:async()=>{throw Error('WRITE_NOT_ALLOWED')}
+ }),e=>e.code==='PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ assert.equal(reads,0);
+});
 
 test('new-mode coordinator refuses legacy lease read even when one is held',async()=>{
  const {advanceTrustedDeliveryOneStep}=await import(
