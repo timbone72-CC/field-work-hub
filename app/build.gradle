@@ -13,8 +13,8 @@ android {
         applicationId 'com.inandout.fieldphotoprep.team.internal'
         minSdk 26
         targetSdk 36
-        versionCode (project.hasProperty("fwhRecovery") ? 39 : 38)
-        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-merged-v39-recovery-internal' : '0.5-phase5-merged-v38-internal')
+        versionCode (project.hasProperty("fwhRecovery") ? 41 : 40)
+        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-merged-v41-recovery-internal' : '0.5-phase5-merged-v40-internal')
         buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', project.hasProperty('fwhRecovery') ? 'false' : 'true'
         // Phase 5E executor exists but runs ONLY after a separate governed activation.
         buildConfigField 'boolean', 'AUTOMATIC_CLEANUP_ENABLED', 'false'
