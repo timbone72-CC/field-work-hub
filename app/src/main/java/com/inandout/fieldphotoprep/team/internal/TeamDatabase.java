@@ -7,8 +7,8 @@ import androidx.room.Room;
 import androidx.room.RoomDatabase;
 
 @Database(
-        entities = {CachedWorkOrder.class, FieldAction.class, ProtectedPhoto.class, PhotoTransfer.class},
-        version = 5,
+        entities = {CachedWorkOrder.class, FieldAction.class, ProtectedPhoto.class, PhotoTransfer.class, PhotoCleanupJournal.class},
+        version = 6,
         exportSchema = true)
 abstract class TeamDatabase extends RoomDatabase {
     static final androidx.room.migration.Migration MIGRATION_1_2 =
@@ -69,10 +69,30 @@ abstract class TeamDatabase extends RoomDatabase {
                     db.execSQL("ALTER TABLE cached_work_orders ADD COLUMN reopen_reason TEXT NOT NULL DEFAULT ''");
                 }
             };
+    static final androidx.room.migration.Migration MIGRATION_5_6 =
+            new androidx.room.migration.Migration(5, 6) {
+                @Override public void migrate(androidx.sqlite.db.SupportSQLiteDatabase db) {
+                    db.execSQL("CREATE TABLE IF NOT EXISTS photo_cleanup_journal ("
+                        + "photoId TEXT NOT NULL PRIMARY KEY,"
+                        + "ownerId TEXT NOT NULL,organizationId TEXT NOT NULL,"
+                        + "workOrderId TEXT NOT NULL,runId TEXT NOT NULL,"
+                        + "finishSetId TEXT NOT NULL,finishDigest TEXT NOT NULL,"
+                        + "transferVersion TEXT NOT NULL,privateReceiptId TEXT NOT NULL,"
+                        + "packageId TEXT NOT NULL,serverProofJson TEXT NOT NULL,"
+                        + "state TEXT NOT NULL,recordedAt INTEGER NOT NULL,"
+                        + "FOREIGN KEY(photoId) REFERENCES protected_photos(id)"
+                        + " ON UPDATE NO ACTION ON DELETE NO ACTION)");
+                    db.execSQL("CREATE INDEX IF NOT EXISTS "
+                        + "index_photo_cleanup_journal_ownerId_organizationId_workOrderId_runId"
+                        + " ON photo_cleanup_journal(ownerId,organizationId,workOrderId,runId)");
+                    // No backfill: delivery evidence is never fabricated on upgrade.
+                }
+            };
     private static volatile TeamDatabase instance;
 
     abstract CachedWorkOrderDao cachedWorkOrderDao();
     abstract PhotoTransferDao photoTransferDao();
+    abstract PhotoCleanupDao photoCleanupDao();
 
     static TeamDatabase getInstance(Context context) {
         TeamDatabase current = instance;
@@ -87,7 +107,7 @@ abstract class TeamDatabase extends RoomDatabase {
                                         context.getApplicationContext(),
                                         TeamDatabase.class,
                                         "field-photo-prep-team.db")
-                                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                                 .build();
                 instance = current;
             }
