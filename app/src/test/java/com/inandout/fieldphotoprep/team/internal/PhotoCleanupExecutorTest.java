@@ -268,6 +268,17 @@ public class PhotoCleanupExecutorTest {
         assertEquals("HELD",journal.find(p.id).state);
     }
 
+    @Test public void forgedOrIncompleteRemoteReceiptCannotArmDeletion() throws Exception {
+        ProtectedPhoto p=verified("wo-forged","run-forged");journal(p);
+        db.getOpenHelper().getWritableDatabase().execSQL(
+            "UPDATE photo_cleanup_journal SET serverProofJson=? WHERE photoId=?",
+            new Object[]{"{\"eligible\":true,\"server_readiness_only\":true}",p.id});
+        assertThrows(IllegalStateException.class,
+            ()->owner.cleanupVerified(actor,sessions.generation(),p.id));
+        assertEquals("HELD",journal.find(p.id).state);
+        assertTrue(new File(p.originalPath).exists());
+    }
+
     @Test public void disabledProductionModeNeverMovesHeldOrDeletesFiles() throws Exception {
         ProtectedPhoto p=verified("wo-off","run-off");journal(p);
         PhotoOwner gated=new PhotoOwner(context,fields,journal,sessions,false);
