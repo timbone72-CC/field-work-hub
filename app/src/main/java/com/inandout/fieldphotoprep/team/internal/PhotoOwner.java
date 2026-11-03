@@ -143,18 +143,18 @@ final class PhotoOwner {
     private void verifyCleanupPaths(ProtectedPhoto p,boolean resuming) throws IOException {
         if(p==null||!java.util.UUID.fromString(p.id).toString().equals(p.id))
             throw new IOException("Unrecognized immutable photo identity");
-        Path root=directory.toPath().toAbsolutePath().normalize();
+        java.nio.file.Path root=directory.toPath().toAbsolutePath().normalize();
         if(!Files.isDirectory(root,LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(root))
             throw new IOException("Protected photo root not available");
-        Path original=root.resolve(p.id+"-original.jpg");
-        Path prepared=root.resolve(p.id+"-prepared.jpg");
-        Path temporary=root.resolve(p.id+"-prepared.jpg.tmp");
+        java.nio.file.Path original=root.resolve(p.id+"-original.jpg");
+        java.nio.file.Path prepared=root.resolve(p.id+"-prepared.jpg");
+        java.nio.file.Path temporary=root.resolve(p.id+"-prepared.jpg.tmp");
         if(!new File(p.originalPath).toPath().toAbsolutePath().normalize().equals(original)
             ||!new File(p.preparedPath).toPath().toAbsolutePath().normalize().equals(prepared)
             ||original.equals(prepared)||Files.isSymbolicLink(original)
             ||Files.isSymbolicLink(prepared)||Files.isSymbolicLink(temporary))
             throw new IOException("Protected photo path identity changed");
-        for(Path path:new Path[]{original,prepared,temporary})
+        for(java.nio.file.Path path:new java.nio.file.Path[]{original,prepared,temporary})
             if(Files.exists(path,LinkOption.NOFOLLOW_LINKS)
                &&!Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS))
                 throw new IOException("Unexpected protected photo file type");
@@ -180,7 +180,7 @@ final class PhotoOwner {
         }
     }
 
-    private static String hashPrepared(Path path) throws IOException {
+    private static String hashPrepared(java.nio.file.Path path) throws IOException {
         try {
             java.security.MessageDigest hash=java.security.MessageDigest.getInstance("SHA-256");
             try(InputStream in=Files.newInputStream(path)) {
@@ -199,8 +199,8 @@ final class PhotoOwner {
     }
 
     private void removeExactPhotoFiles(ProtectedPhoto p) throws IOException {
-        Path root=directory.toPath().toAbsolutePath().normalize();
-        for(Path path:new Path[]{root.resolve(p.id+"-original.jpg"),
+        java.nio.file.Path root=directory.toPath().toAbsolutePath().normalize();
+        for(java.nio.file.Path path:new java.nio.file.Path[]{root.resolve(p.id+"-original.jpg"),
                 root.resolve(p.id+"-prepared.jpg"),root.resolve(p.id+"-prepared.jpg.tmp")}) {
             if(Thread.currentThread().isInterrupted()) throw new InterruptedIOException();
             if(Files.isSymbolicLink(path)) throw new IOException("Symlink appeared during cleanup");
