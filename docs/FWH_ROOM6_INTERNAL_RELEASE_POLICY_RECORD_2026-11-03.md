@@ -1,8 +1,8 @@
 # FWH Room6 internal TEST release policy — November 3, 2026
 
-**Scope key:** `fwh-room6-internal-release-policy`  
-**Classification:** Level 3 — trusted APK publisher policy and CI artifact identity.  
-**Baseline / rollback:** main `ded6b7a771208c3865780ed3cc8c0a98a16be22f`.  
+**Scope key:** `fwh-room6-internal-release-policy`
+**Classification:** Level 3 — trusted APK publisher policy and CI artifact identity.
+**Baseline / rollback:** main `ded6b7a771208c3865780ed3cc8c0a98a16be22f`.
 **Authoritative branch:** `feat/room6-internal-release-policy`. This prerequisite owns publisher checks only; the subsequent version-only release uses `release/fwh-internal-v40-room6-test`.
 
 ## Authorization and protected scope
