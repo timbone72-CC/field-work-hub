@@ -279,6 +279,68 @@ public class PhotoCleanupExecutorTest {
         assertTrue(new File(p.originalPath).exists());
     }
 
+    @Test public void aDifferentAcceptedRunMustHaveIndependentFinalClosure() throws Exception {
+        ProtectedPhoto alreadyDelivered=verified("wo-revisit","run-original");
+        journal(alreadyDelivered);
+        ProtectedPhoto laterPrivatelyReceived=verified("wo-revisit","run-correction");
+        assertThrows(IllegalStateException.class,
+                ()->owner.cleanupVerified(actor,sessions.generation(),alreadyDelivered.id));
+        assertEquals("HELD",journal.find(alreadyDelivered.id).state);
+        assertTrue(new File(alreadyDelivered.originalPath).exists());
+        assertTrue(new File(laterPrivatelyReceived.originalPath).exists());
+    }
+
+    @Test public void interruptedCleanupAcceptsFreshExactServerProofWithoutResettingState()
+            throws Exception {
+        ProtectedPhoto p=verified("wo-refresh","run-refresh");
+        journal(p);
+        journal.arm(actor.userId,actor.organizationId,p.id);
+        journal.beginOrResume(actor.userId,actor.organizationId,p.id);
+        PhotoCleanupJournal j=journal.find(p.id);
+        assertEquals("CLEANING",j.state);
+        Files.delete(new File(p.originalPath).toPath());
+        // The real network bridge must recheck the server after restart, but
+        // cannot roll an existing CLEANING intent backward to WAITING.
+        journal.recordVerifiedReadiness(actor.userId,actor.organizationId,
+                p.id,j.serverProofJson);
+        assertEquals("CLEANING",journal.find(p.id).state);
+        assertTrue(owner.cleanupVerified(actor,sessions.generation(),p.id));
+        assertEquals("CLEANED",journal.find(p.id).state);
+        assertFalse(new File(p.preparedPath).exists());
+    }
+
+    @Test public void offlineOrDeniedFreshReadCannotIssueNewCleanupDecision() throws Exception {
+        ProtectedPhoto p=verified("wo-offline","run-offline");
+        journal(p);
+        PhotoCleanupCoordinator offline=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{throw new java.io.IOException("Provider unavailable");});
+        assertThrows(java.io.IOException.class,
+                ()->offline.recordServerReadiness(actor.userId,actor.organizationId,p.id));
+        assertEquals("HELD",journal.find(p.id).state);
+        assertTrue(new File(p.originalPath).exists());
+        PhotoCleanupCoordinator denied=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->"{\"eligible\":false,\"reason\":\"OPEN_CORRECTION_PENDING\"}");
+        assertFalse(denied.recordServerReadiness(
+                actor.userId,actor.organizationId,p.id));
+        assertEquals("HELD",journal.find(p.id).state);
+        assertTrue(new File(p.originalPath).exists());
+    }
+
+    @Test public void partialDeletionCannotBeMarkedCleanedByMissingServerRecheck() throws Exception {
+        ProtectedPhoto p=verified("wo-recheck","run-recheck");
+        journal(p);
+        journal.arm(actor.userId,actor.organizationId,p.id);
+        journal.beginOrResume(actor.userId,actor.organizationId,p.id);
+        Files.delete(new File(p.originalPath).toPath());
+        PhotoCleanupCoordinator denied=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->"{\"eligible\":false,\"reason\":\"NEWER_PACKAGE_PENDING\"}");
+        assertFalse(denied.recordServerReadiness(
+                actor.userId,actor.organizationId,p.id));
+        assertEquals("CLEANING",journal.find(p.id).state);
+        assertTrue(new File(p.preparedPath).exists());
+        assertEquals("CLEANING",fields.photo(p.id).state);
+    }
+
     @Test public void disabledProductionModeNeverMovesHeldOrDeletesFiles() throws Exception {
         ProtectedPhoto p=verified("wo-off","run-off");journal(p);
         PhotoOwner gated=new PhotoOwner(context,fields,journal,sessions,false);
