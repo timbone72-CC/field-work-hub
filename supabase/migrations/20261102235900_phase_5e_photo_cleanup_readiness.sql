@@ -120,6 +120,16 @@ begin
        and exists(select 1 from jsonb_array_elements(fs.photos) image
                   where image->>'id'=p_photo::text))
   then return jsonb_build_object('eligible',false,'reason','FINISH_NOT_ACCEPTED');end if;
+  -- A later unresolved correction is a real server protection conflict.
+  -- Do not let an older delivered receipt erase originals needed for it.
+  if exists (
+      select 1 from private.correction_obligations obligation
+      where obligation.organization_id=t.organization_id
+        and obligation.work_order_id=t.work_order_id
+        and obligation.status='OPEN'
+  ) then
+    return jsonb_build_object('eligible',false,'reason','OPEN_CORRECTION_PENDING');
+  end if;
   select c.* into proof from private.client_package_runs c
     join private.client_packages k on k.id=c.package_id
     join private.client_delivery_final_receipts f on f.package_id=k.id
