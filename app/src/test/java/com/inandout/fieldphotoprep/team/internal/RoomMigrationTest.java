@@ -100,7 +100,7 @@ public class RoomMigrationTest {
             }
             JSONArray setup=schema.getJSONArray("setupQueries");for(int n=0;n<setup.length();n++)old.execSQL(setup.getString(n));old.setVersion(2);
         }
-        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name).addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5).allowMainThreadQueries().build();
+        TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name).addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5, TeamDatabase.MIGRATION_5_6).allowMainThreadQueries().build();
         FieldAction accepted=upgraded.cachedWorkOrderDao().action("accepted-v2");assertEquals("ACCEPTED",accepted.state);assertEquals("2026-10-03T12:00:00Z",accepted.eventTime);
         assertEquals("",accepted.requirementRevision);assertEquals("",accepted.finishSetId);assertEquals("",accepted.finishDigest);assertTrue(upgraded.cachedWorkOrderDao().allPhotos().isEmpty());
         upgraded.close();context.deleteDatabase(name);
@@ -160,7 +160,7 @@ public class RoomMigrationTest {
         }
         for (int opening = 0; opening < 2; opening++) {
             TeamDatabase upgraded = Room.databaseBuilder(context, TeamDatabase.class, name)
-                    .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5).allowMainThreadQueries().build();
+                    .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5, TeamDatabase.MIGRATION_5_6).allowMainThreadQueries().build();
             CachedWorkOrderDao dao = upgraded.cachedWorkOrderDao(); assertEquals(manifest, dao.action("action-a").finishPhotosJson);
             assertEquals(PhotoOwner.digest(manifest), dao.action("action-a").finishDigest); assertEquals("ACCEPTED", dao.action("action-a").state);
             assertEquals("PENDING", dao.action("action-b").state); assertEquals(123456, dao.action("action-b").retryNotBefore); assertEquals(6, dao.nextSequence());
@@ -230,7 +230,7 @@ public class RoomMigrationTest {
         }
         TeamDatabase upgraded =
                 Room.databaseBuilder(context, TeamDatabase.class, name)
-                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5)
+                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5, TeamDatabase.MIGRATION_5_6)
                         .allowMainThreadQueries()
                         .build();
         assertEquals(1, upgraded.cachedWorkOrderDao().listForOwner("a", "org").size());
@@ -263,7 +263,7 @@ public class RoomMigrationTest {
         upgraded.close();
         TeamDatabase reopened =
                 Room.databaseBuilder(context, TeamDatabase.class, name)
-                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5)
+                        .addMigrations(TeamDatabase.MIGRATION_1_2, TeamDatabase.MIGRATION_2_3, TeamDatabase.MIGRATION_3_4, TeamDatabase.MIGRATION_4_5, TeamDatabase.MIGRATION_5_6)
                         .allowMainThreadQueries()
                         .build();
         assertEquals("", reopened.cachedWorkOrderDao().find("a", "org", "1", "run-1").conflictReason);
