@@ -39,6 +39,9 @@ begin
     or position('private.photo_transfer_receipts' in f)=0
     or position('private.correction_obligations' in f)=0
     or position('OPEN_CORRECTION_PENDING' in f)=0
+    or position('CURRENT_RUN_DELIVERY_PENDING' in f)=0
+    or position('NEWER_PACKAGE_PENDING' in f)=0
+    or position('public.work_orders' in f)=0
     or position('auth.uid()' in f)=0
     or position('server_readiness_only' in f)=0
  then raise exception 'Eligibility/retention/immutability guard absent';end if;
