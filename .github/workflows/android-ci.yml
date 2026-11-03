@@ -69,6 +69,12 @@ jobs:
           print('ROOM4_EXPORT_BEGIN')
           print(schema.read_text())
           print('ROOM4_EXPORT_END')
+          # Source-only first build emits compiler-exact Room v6 schema once;
+          # this will be committed and the logging removed before review.
+          schema6 = pathlib.Path('app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase/6.json')
+          print('ROOM6_EXPORT_BEGIN')
+          print(schema6.read_text())
+          print('ROOM6_EXPORT_END')
           PY
       - name: Verify Team client identity and network permission
         shell: bash
