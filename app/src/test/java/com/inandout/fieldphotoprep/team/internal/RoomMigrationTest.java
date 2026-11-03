@@ -117,7 +117,7 @@ public class RoomMigrationTest {
         }
         TeamDatabase upgraded=Room.databaseBuilder(context,TeamDatabase.class,name)
             .addMigrations(TeamDatabase.MIGRATION_1_2,TeamDatabase.MIGRATION_2_3,
-                TeamDatabase.MIGRATION_3_4,TeamDatabase.MIGRATION_4_5)
+                TeamDatabase.MIGRATION_3_4,TeamDatabase.MIGRATION_4_5, TeamDatabase.MIGRATION_5_6)
             .allowMainThreadQueries().build();
         CachedWorkOrder row=upgraded.cachedWorkOrderDao().find("a","org","wo","run");
         assertNotNull(row);
