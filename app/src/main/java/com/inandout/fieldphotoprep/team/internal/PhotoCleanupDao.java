@@ -88,10 +88,32 @@ abstract class PhotoCleanupDao {
         // HELD is retained until an explicit enabled owner decision passes
         // the complete same-WO local safety gate. No file is touched here.
     }
+    /** Re-evaluate the exact immutable server attestation before each local transition. */
+    private static void requireServerSnapshot(PhotoCleanupJournal j) {
+        try {
+            JSONObject proof=new JSONObject(j.serverProofJson);
+            if(!proof.optBoolean("eligible",false)
+                ||!proof.optBoolean("server_readiness_only",false)
+                ||!proof.optBoolean("private_receipt_verified",false)
+                ||!proof.optBoolean("retained_privately",false)
+                ||!proof.has("included_in_client_package")
+                ||!j.photoId.equals(proof.optString("photo_id"))
+                ||!j.runId.equals(proof.optString("run_id"))
+                ||!j.finishSetId.equals(proof.optString("finish_set_id"))
+                ||!j.finishDigest.equals(proof.optString("finish_digest"))
+                ||!j.transferVersion.equals(proof.optString("transfer_version"))
+                ||!j.packageId.equals(proof.optString("package_id")))
+                throw new IllegalStateException("Exact server delivery/retention attestation missing");
+        } catch(org.json.JSONException malformed) {
+            throw new IllegalStateException("Server cleanup snapshot unreadable",malformed);
+        }
+    }
+
     /** Fail closed if ANY work on the same WO may still need stored originals. */
     private void safeWholeWorkOrder(PhotoCleanupJournal j,ProtectedPhoto target,
             boolean resuming) {
         String owner=j.ownerId,org=j.organizationId,wo=j.workOrderId;
+        requireServerSnapshot(j);
         if(!owner.equals(target.ownerId)||!org.equals(target.organizationId)
                 ||!wo.equals(target.workOrderId)||!j.runId.equals(target.runId)
                 ||!j.finishSetId.equals(target.finishSetId)||j.finishDigest.isEmpty()
