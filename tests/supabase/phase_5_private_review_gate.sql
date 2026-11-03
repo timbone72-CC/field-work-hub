@@ -661,6 +661,12 @@ begin
   perform pg_temp.expect_photo_review_error('42501',format(
     'select public.field_photo_cleanup_readiness(%L)',photo));
   execute 'reset role';
+  -- Restore the review fixture's original Admin identity before its later
+  -- unrelated review/correction assertions. The foreign-user probe must
+  -- not poison the accepted caller's session state.
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub',admin_id,'session_id',admin_id,
+      'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_finish_delivery(%L,%L,%s)',pkg_id,delivery_worker,delivery_gen));
   execute 'reset role';
