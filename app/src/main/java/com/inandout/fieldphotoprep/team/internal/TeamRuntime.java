@@ -21,7 +21,8 @@ final class TeamRuntime {
         dao = TeamDatabase.getInstance(context).cachedWorkOrderDao();
         sessions = new SessionCoordinator(new SecureSessionStore(context), api);
         assignments = new AssignmentRepository(api, new RoomAssignmentStore(dao));
-        photos = new PhotoOwner(context, dao, sessions);
+        photos = new PhotoOwner(context, dao,
+                TeamDatabase.getInstance(context).photoCleanupDao(), sessions);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
         PhotoTransferDao transferDao = TeamDatabase.getInstance(context).photoTransferDao();
         transfers = new PhotoTransferCoordinator(dao, transferDao, photos, sessions, api,
@@ -136,6 +137,45 @@ final class TeamRuntime {
                         || !sessions.matches(gen, expected.userId, expected.organizationId))
                     throw new SessionCoordinator.SessionChanged();
                 api.respondTeamHandoffConsent(s.accessToken, requestId, accept);
+            }
+        }
+    }
+
+    /**
+     * Future explicit cleanup dispatch owner. The existing action/transfer
+     * locks serialize the exact local evidence check with future offline work.
+     * Returns false in every currently distributed/test APK (switch OFF).
+     */
+    boolean cleanupVerified(SupabaseApi.AuthSession expected,long generation,String photoId)
+            throws Exception {
+        if(!BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return false;
+        synchronized(sync.drainLock) {
+            synchronized(actionCreationLock) {
+                java.util.concurrent.Future<Boolean> result=photos.io.submit(
+                    ()->photos.cleanupVerified(expected,generation,photoId));
+                try { return result.get(); }
+                catch(java.util.concurrent.ExecutionException failure) {
+                    Throwable cause=failure.getCause();
+                    if(cause instanceof Exception) throw (Exception)cause;
+                    throw new IllegalStateException("Cleanup owner failed",cause);
+                }
+            }
+        }
+    }
+
+    int resumeInterruptedCleanup(SupabaseApi.AuthSession expected,long generation)
+            throws Exception {
+        if(!BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return 0;
+        synchronized(sync.drainLock) {
+            synchronized(actionCreationLock) {
+                java.util.concurrent.Future<Integer> result=photos.io.submit(
+                    ()->photos.resumeInterruptedCleanup(expected,generation));
+                try { return result.get(); }
+                catch(java.util.concurrent.ExecutionException failure) {
+                    Throwable cause=failure.getCause();
+                    if(cause instanceof Exception) throw (Exception)cause;
+                    throw new IllegalStateException("Cleanup recovery failed",cause);
+                }
             }
         }
     }
