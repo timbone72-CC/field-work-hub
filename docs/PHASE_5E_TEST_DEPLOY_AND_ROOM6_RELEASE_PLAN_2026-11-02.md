@@ -1,10 +1,10 @@
 # FWH Phase 5E — Controlled TEST deployment and Room6 APK release handoff
 
 **Date:** November 2, 2026 (America/Chicago)  
-**Scope:** `phase5e-owner-cleanup-readiness` / draft [PR #55](https://github.com/timbone72-CC/field-work-hub/pull/55).  
+**Scope:** `phase5e-owner-cleanup-readiness` / merged [PR #55](https://github.com/timbone72-CC/field-work-hub/pull/55).  
 **Risk:** Level 3 — original-photo deletion, owner-scoped authorization, SQL terminal delivery and Android Room migration.  
-**Baseline:** `main` at `f7ec3695b68e8970f1a3df1ced3ca2c7c9bfbe34` and published v38 TEST Android (Room5).  
-**Source owner:** `feat/phase5e-cleanup-closure-readiness`. This handoff refines the already-approved complete Phase 5 parent plan; it is NOT new permission to merge, deploy, publish or delete.
+**Baseline:** pre-merge `main` at `f7ec3695b68e8970f1a3df1ced3ca2c7c9bfbe34`; source merged to `main` `d8a949f935e66d14fc2f0ffa3d1cc97c89accae2`; published v38 TEST Android remains Room5.  
+**Source owner:** merged PR #55 (historical branch `feat/phase5e-cleanup-closure-readiness`). Level-3 source merge approval is recorded and fulfilled; it does NOT authorize TEST SQL deployment, APK publication, cleanup activation or deletion.
 
 ## Implemented in PR #55 (not activated)
 
@@ -36,4 +36,4 @@
 
 The **Room6 v40 TEST APK stays cleanup-OFF**. Releasing/installing it verifies safe migration, not phone deletion. Actual cleanup activation needs its own explicit guarded TEST fixture and operator release decision after FWH TEST owner/receipt/closure parity, a fresh server read at each attempt and a disposable real-phone crash/retry demonstration. Use a newly authorized isolated synthetic fixture, **not** `TEST-P5D-SECOND-001`, the previously DELIVERED `FPP-000003`, old HELD provider identities, or any real customer originals. No general worker Send or remote concurrency activation follows from local cleanup.
 
-**Next checkpoint:** Resolve concrete exact-head CI failures in PR #55 and update authoritative implementation record (keep under 24 KiB). Seek separately required Level-3 PR merge/deployment and later v40 publication decisions only at their real boundaries. Do not request another review/test of previously accepted Google or field work.
+**Next checkpoint (2026-11-02 verified):** Exact-main post-merge Android, Database and Admin CI PASS. Read-only FWH TEST preflight: 129/129, dispatch OFF, legacy-worker fence verified, original held permit and one immutable delivery receipt preserved; migrations 130/131 not installed. Await **separate explicit Level-3 authorization for applying only SQL 130 then 131**; verify 131/131, least-privilege RPC/trigger, lack of historical backfill, advisors and unchanged protected state. v40 APK policy/release and cleanup activation remain different, later decisions. Do not repeat Google/phone evidence.
