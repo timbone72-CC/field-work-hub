@@ -19,6 +19,51 @@ import java.nio.charset.StandardCharsets;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 34)
 public class RoomMigrationTest {
+
+    @Test
+    public void v38Room5UpgradesToPassiveCleanupRoom6WithoutErasingOriginals() throws Exception {
+        Context context=RuntimeEnvironment.getApplication();
+        String name="migration-v5-cleanup-journal.db";
+        context.deleteDatabase(name);
+        java.io.InputStream resource=getClass().getResourceAsStream(
+            "/com.inandout.fieldphotoprep.team.internal.TeamDatabase/5.json");
+        assertNotNull("Original v38 Room v5 schema is required",resource);
+        JSONObject schema=new JSONObject(new String(resource.readAllBytes(),StandardCharsets.UTF_8))
+            .getJSONObject("database");
+        try(SQLiteDatabase old=context.openOrCreateDatabase(name,Context.MODE_PRIVATE,null)) {
+            JSONArray entities=schema.getJSONArray("entities");
+            for(int n=0;n<entities.length();n++) {
+                JSONObject e=entities.getJSONObject(n);
+                String table=e.getString("tableName");
+                old.execSQL(e.getString("createSql").replace("${TABLE_NAME}",table));
+                JSONArray indices=e.getJSONArray("indices");
+                for(int j=0;j<indices.length();j++)
+                    old.execSQL(indices.getJSONObject(j).getString("createSql")
+                        .replace("${TABLE_NAME}",table));
+            }
+            JSONArray setup=schema.getJSONArray("setupQueries");
+            for(int n=0;n<setup.length();n++)old.execSQL(setup.getString(n));
+            old.execSQL("INSERT INTO protected_photos "
+                +"(id,ownerId,organizationId,workOrderId,runId,assignmentInstanceId,"
+                +"requirementRevision,itemId,capturedAt,originalPath,preparedPath,"
+                +"state,problem,finishSetId,originalBytes,prepared) "
+                +"VALUES('photo-preserved','owner','org','wo','run','instance','rev',"
+                +"'item','2026-11-02','/protected/original.jpg','/protected/prepared.jpg',"
+                +"'WAITING','','finish',123456,0)");
+            old.setVersion(5);
+        }
+        TeamDatabase db=Room.databaseBuilder(context,TeamDatabase.class,name)
+            .addMigrations(TeamDatabase.MIGRATION_5_6)
+            .allowMainThreadQueries().build();
+        assertNotNull("Saved original identity must survive the new journal",
+            db.cachedWorkOrderDao().photo("photo-preserved"));
+        assertEquals(123456,
+            db.cachedWorkOrderDao().photo("photo-preserved").originalBytes);
+        assertNull("No historical package inferred eligible",
+            db.photoCleanupDao().find("photo-preserved"));
+        db.close();context.deleteDatabase(name);
+    }
+
     @Test
     public void realV1SchemaUpgradesPreservingTwoOwnersAndRestartedQueue() throws Exception {
         verifyUpgrade("ASSIGNED", "START");
