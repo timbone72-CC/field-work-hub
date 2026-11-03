@@ -49,11 +49,18 @@ abstract class PhotoCleanupDao {
             throw new IllegalArgumentException("Malformed server readiness proof",e);
         }
         ProtectedPhoto p=photo(id);
+        PhotoCleanupJournal previous=find(id);
+        // An interrupted CLEANING photo no longer has state WAITING.
+        // Only a previously durable matching CLEANING intent may refresh its
+        // server authorization; never manufacture a cleanup state from scratch.
+        boolean interrupted=previous!=null && "CLEANING".equals(previous.state);
         PhotoTransfer t=transfer(id);
         FieldAction a=t==null?null:action(t.finishActionId);
         if(p==null||t==null||a==null
             ||!owner.equals(p.ownerId)||!org.equals(p.organizationId)
-            ||!t.matches(p,a)||!"WAITING".equals(p.state)
+            ||!t.matches(p,a)
+            ||!(("WAITING".equals(p.state)&&!interrupted)
+                ||("CLEANING".equals(p.state)&&interrupted))
             ||!"RECEIVED".equals(t.state)||t.receiptId.isEmpty()
             ||t.receiptSavedAt<=0||!"COMPLETE".equals(a.kind)
             ||!"ACCEPTED".equals(a.state)
@@ -74,11 +81,14 @@ abstract class PhotoCleanupDao {
         catch(IllegalArgumentException ex) {
             throw new IllegalStateException("Invalid package identity",ex);
         }
-        PhotoCleanupJournal old=find(id);
+        PhotoCleanupJournal old=previous;
         if(old!=null) {
             if(!old.ownerId.equals(owner)||!old.organizationId.equals(org)
               ||!old.packageId.equals(packageId)||!old.transferVersion.equals(t.transferVersion)
-              ||!old.finishDigest.equals(a.finishDigest)||!old.serverProofJson.equals(response))
+              ||!old.finishDigest.equals(a.finishDigest)
+              ||!(("CLEANING".equals(old.state)&&"CLEANING".equals(p.state))
+                 ||(!"CLEANING".equals(old.state)&&"WAITING".equals(p.state)))
+              ||!old.serverProofJson.equals(response))
                 throw new IllegalStateException("Immutable cleanup evidence changed");
             return;
         }
@@ -170,6 +180,16 @@ abstract class PhotoCleanupDao {
             FieldAction accepted=transfer==null?null:action(transfer.finishActionId);
             if(!verifiedReceipt(p,transfer,accepted))
                 throw new IllegalStateException("Other photo private retention is not verified");
+            if(!j.runId.equals(p.runId)) {
+                // A separately accepted correction/other run cannot borrow
+                // this run's client-delivery proof. All its originals remain
+                // protected until that distinct run is also closed.
+                PhotoCleanupJournal other=find(p.id);
+                if(other==null||!owner.equals(other.ownerId)||!org.equals(other.organizationId)
+                    ||!p.runId.equals(other.runId)||!p.finishSetId.equals(other.finishSetId))
+                    throw new IllegalStateException("Different run has no final delivery closure");
+                requireServerSnapshot(other);
+            }
         }
     }
 
