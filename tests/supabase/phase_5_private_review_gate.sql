@@ -52,7 +52,7 @@ declare
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
-  pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid; test_destination uuid;
+  pkg_id uuid; synthetic_new_run uuid; send_action uuid:=gen_random_uuid(); company uuid; test_destination uuid;
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb; atomic_receipt jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
@@ -658,9 +658,20 @@ begin
   -- old package remains DELIVERED. Roll back ONLY this synthetic draft
   -- inside a PostgreSQL exception subtransaction; no real package touched.
   begin
+    -- One package per run is a protected invariant. Create a separate
+    -- disposable corrective run, never a duplicate package for the same run.
+    insert into public.work_order_runs(
+      work_order_id,organization_id,run_sequence,current_assignee_user_id,
+      field_status,requirement_snapshot)
+    select r.work_order_id,r.organization_id,r.run_sequence+1000,
+      r.current_assignee_user_id,r.field_status,r.requirement_snapshot
+    from public.work_order_runs r
+    join private.client_packages p on p.run_id=r.id where p.id=pkg_id
+    returning id into synthetic_new_run;
+    if synthetic_new_run is null then raise exception 'Missing synthetic next run';end if;
     insert into private.client_packages(
       organization_id,work_order_id,run_id,company_id,status,created_at)
-    select organization_id,work_order_id,run_id,company_id,'DRAFT',
+    select organization_id,work_order_id,synthetic_new_run,company_id,'DRAFT',
            created_at+interval '5 minutes'
     from private.client_packages where id=pkg_id;
     perform set_config('request.jwt.claims',
