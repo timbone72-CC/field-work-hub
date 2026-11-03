@@ -27,11 +27,14 @@ abstract class PhotoCleanupDao {
 
     /** Preserve the exact final-delivery snapshot; does not enable cleanup. */
     @Transaction
-    void recordVerifiedReadiness(String owner,String org,String id,String response)
-            throws Exception {
+    void recordVerifiedReadiness(String owner,String org,String id,String response) {
         if(owner==null||org==null||id==null||response==null)
             throw new IllegalArgumentException("Exact photo identity required");
-        JSONObject proof=new JSONObject(response);
+        JSONObject proof;
+        try { proof=new JSONObject(response); }
+        catch(org.json.JSONException e) {
+            throw new IllegalArgumentException("Malformed server readiness proof",e);
+        }
         ProtectedPhoto p=photo(id);
         PhotoTransfer t=transfer(id);
         FieldAction a=t==null?null:action(t.finishActionId);
