@@ -36,3 +36,13 @@ General dispatch and cleanup remain OFF. Original held identities/permit, delive
 **Prerequisite PASS:** PR #59 final head `50079f35` passed Android `41685895280`, Database `41685895268`, Admin `41685895394`, policy `41685895232` and governance before ordinary merge `145889ce`.
 
 **Next:** pass exact-head checks, merge and verify the automatic public v40 asset; hand the operator the existing Account & Updates path and direct release link. Record actual source/artifact/CI results in the authoritative Phase 5/6 handoff after publication; do not advance main while its exact-head publisher is still running.
+
+## Publication closeout — November 3, 2026
+
+- PR #60 final head `7f787583` passed Android `41686512394`, Database `41686512379`, Admin `41686512455` and governance `41686512459`; the local reviewed tree matched GitHub and the exact three-file scope.
+- Ordinary protected merge: `4351aa6b5e140301a49145a416a28e0e3fe5f6a1`. Exact-main Android `41686850053`, Database `41686850139` and Admin `41686850094` passed.
+- Trusted automatic publisher `41687157746` / job `126095815438` rechecked policy, approvals, immutable source, complete schema lineage and artifact identity, then reported **PUBLISHED and verified**. No alternate publisher, permission bypass or manual release command.
+- [fwh-internal-v40](https://github.com/timbone72-CC/field-work-hub/releases/tag/fwh-internal-v40) published `2026-11-03T17:45:01Z` (11:45:01 a.m. America/Chicago), targets the exact merge and contains only `Field-Work-Hub-Internal.apk`, 8,580,691 bytes. GitHub asset SHA-256 `7a9e43ec0c4d2bf7b9a3e75089469d9ee47bbfa63d4313d1538097a132d4a9c7` equals the frozen passing main Android candidate and PR candidate. Existing v38 remains immutable.
+- Paired v41 recovery SHA-256 `349d7d53617848ea28ffbaa2cd25bb493cb105af49f13290b44dd290a17b9bba` remains CI artifact-only, with sync/private-photo networking OFF. Both verified builds use Room6, all six source schema blobs and cleanup OFF.
+
+**Next / actual physical boundary:** open Account & Updates → Check for Update → Update App; confirm Android's in-place update. Report whether existing saved work/photos remain accessible. Installation and retention are PENDING until observed; accepted work-order/camera/Google tests do not need repetition. This closeout fulfills the preceding publication Next instructions; no additional approval is pending for this published TEST APK.
