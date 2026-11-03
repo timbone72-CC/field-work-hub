@@ -624,11 +624,40 @@ begin
     or target->'files'->2->>'id'<>manifest_file_id
     or target->'files'->2->>'sha256'<>(pkg_preview->>'manifest_sha256')
   then raise exception 'Final provider snapshot omitted frozen chain or receipt';end if;
+  if exists(select 1 from private.client_package_runs where package_id=pkg_id) then
+    raise exception 'Private transfer and approved Send fabricated final-run cleanup closure';end if;
   delivery_done:=public.service_finish_delivery(pkg_id,delivery_worker,delivery_gen);
   if delivery_done->>'status'<>'DELIVERED'
     or (select count(*) from private.client_delivery_final_receipts where package_id=pkg_id)<>1
     or (select count(*) from private.client_delivery_file_plans where package_id=pkg_id and state='VERIFIED')<>3 then
     raise exception 'Synthetic delivery evidence did not finalize exactly once';end if;
+  -- The final provider receipt is the only authorized closure transition.
+  -- The worker's exact primary run, Finish hash and all privately held bytes
+  -- are required. Rejected/unfinished or other runs cannot be inferred.
+  if (select count(*) from private.client_package_runs where package_id=pkg_id)<>1
+    or not exists (
+      select 1 from private.client_package_runs c
+        join private.photo_transfers transfer on transfer.finish_set_id=c.finish_set_id
+      where c.package_id=pkg_id and transfer.photo_id=photo
+        and c.run_id=transfer.run_id and c.finish_digest=transfer.finish_digest)
+  then raise exception 'Exact delivered Finish run closure was not recorded';end if;
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub',contractor,'session_id',contractor,
+      'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+  execute 'set local role authenticated';
+  response:=public.field_photo_cleanup_readiness(photo);
+  if response->>'eligible'<>'true'
+     or response->>'server_readiness_only'<>'true'
+     or response->>'package_id'<>pkg_id::text
+  then raise exception 'Same owner final-delivery-readiness proof failed: %',response;end if;
+  execute 'reset role';
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub',other_admin,'session_id',other_admin,
+      'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
+  execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.field_photo_cleanup_readiness(%L)',photo));
+  execute 'reset role';
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_finish_delivery(%L,%L,%s)',pkg_id,delivery_worker,delivery_gen));
   execute 'reset role';
