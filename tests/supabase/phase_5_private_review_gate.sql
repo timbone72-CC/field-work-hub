@@ -624,13 +624,16 @@ begin
     or target->'files'->2->>'id'<>manifest_file_id
     or target->'files'->2->>'sha256'<>(pkg_preview->>'manifest_sha256')
   then raise exception 'Final provider snapshot omitted frozen chain or receipt';end if;
+  execute 'reset role'; -- CI fixture asserts private audit state as operator, never service user.
   if exists(select 1 from private.client_package_runs where package_id=pkg_id) then
     raise exception 'Private transfer and approved Send fabricated final-run cleanup closure';end if;
+  execute 'set local role service_role';
   delivery_done:=public.service_finish_delivery(pkg_id,delivery_worker,delivery_gen);
   if delivery_done->>'status'<>'DELIVERED'
     or (select count(*) from private.client_delivery_final_receipts where package_id=pkg_id)<>1
     or (select count(*) from private.client_delivery_file_plans where package_id=pkg_id and state='VERIFIED')<>3 then
     raise exception 'Synthetic delivery evidence did not finalize exactly once';end if;
+  execute 'reset role'; -- Preserve no direct service_role SELECT on closure table.
   -- The final provider receipt is the only authorized closure transition.
   -- The worker's exact primary run, Finish hash and all privately held bytes
   -- are required. Rejected/unfinished or other runs cannot be inferred.
