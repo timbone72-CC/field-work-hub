@@ -32,6 +32,9 @@ begin
   if fs.id is null or k.id is null
     or fs.run_id is distinct from new.run_id
     or k.work_order_id is distinct from fs.work_order_id
+    -- First stage only covers the package's explicit main run.
+    -- Never infer closure for other runs absent manifest membership proof.
+    or k.run_id is distinct from new.run_id
     or k.organization_id is distinct from fs.organization_id
     or k.status<>'DELIVERED'
     or fs.digest is distinct from new.finish_digest
