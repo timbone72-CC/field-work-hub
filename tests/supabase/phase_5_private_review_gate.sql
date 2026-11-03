@@ -654,6 +654,29 @@ begin
      or cleanup_readiness->>'package_id'<>pkg_id::text
   then raise exception 'Same owner final-delivery-readiness proof failed: %',cleanup_readiness;end if;
   execute 'reset role';
+  -- A newer DRAFT package must revoke stale readiness, even though the
+  -- old package remains DELIVERED. Roll back ONLY this synthetic draft
+  -- inside a PostgreSQL exception subtransaction; no real package touched.
+  begin
+    insert into private.client_packages(
+      organization_id,work_order_id,run_id,company_id,status,created_at)
+    select organization_id,work_order_id,run_id,company_id,'DRAFT',
+           created_at+interval '5 minutes'
+    from private.client_packages where id=pkg_id;
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub',contractor,'session_id',contractor,
+        'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+    execute 'set local role authenticated';
+    cleanup_readiness:=public.field_photo_cleanup_readiness(photo);
+    execute 'reset role';
+    if cleanup_readiness->>'eligible' is distinct from 'false'
+       or cleanup_readiness->>'reason'<>'NEWER_PACKAGE_PENDING' then
+      raise exception 'NEWER_DRAFT_DENIAL_FAILED %',cleanup_readiness;
+    end if;
+    raise exception 'ROLLBACK_SYNTHETIC_NEWER_DRAFT';
+  exception when raise_exception then
+    if sqlerrm<>'ROLLBACK_SYNTHETIC_NEWER_DRAFT' then raise;end if;
+  end;
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',other_admin,'session_id',other_admin,
       'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
