@@ -16,12 +16,12 @@ MERGE = "a" * 40
 PARENT = "b" * 40
 HEAD = "c" * 40
 OLD = "d" * 40
-BRANCH = "release/fwh-internal-v38-merged-field-test"
+BRANCH = "release/fwh-internal-v40-merged-field-test"
 PR_BODY = """
 - Change level: Level 3
 - Level 3 merge approval: APPROVED
 - Internal TEST APK publication: APPROVED
-- Internal TEST APK version: 38
+- Internal TEST APK version: 40
 """
 
 
@@ -41,6 +41,9 @@ def fake_api(path, **_):
         return {"parents": [{"sha": PARENT}, {"sha": HEAD}]}
     if path == "commits/" + MERGE + "/pulls":
         return [merged_pr()]
+    if path.startswith("contents/app/schemas/") and path.endswith("?ref=" + MERGE):
+        version = int(path.split("/")[-1].split(".")[0])
+        return {"type": "file", "sha": f"{version:040x}"}
     raise AssertionError("Unexpected network call: " + path)
 
 
@@ -54,13 +57,13 @@ def ci_run(name, status="completed", conclusion="success", event="push",
 class MergedInternalReleaseTests(unittest.TestCase):
     def test_merged_release_requires_explicit_operator_and_publish_approval(self):
         with patch.object(pub, "api", fake_api):
-            self.assertEqual((PARENT, BRANCH, 38), pub.release_pr_for_merged_head(MERGE))
+            self.assertEqual((PARENT, BRANCH, 40), pub.release_pr_for_merged_head(MERGE))
         bad_bodies = [
             PR_BODY.replace("APPROVED", "PENDING", 1),
             PR_BODY.replace("Internal TEST APK publication: APPROVED",
                             "Internal TEST APK publication: PENDING"),
-            PR_BODY.replace("Internal TEST APK version: 38",
-                            "Internal TEST APK version: 40"),
+            PR_BODY.replace("Internal TEST APK version: 40",
+                            "Internal TEST APK version: 42"),
             PR_BODY + "- Internal TEST APK publication: APPROVED\n",
             PR_BODY.replace("Change level: Level 3", "Change level: Level 2"),
         ]
@@ -102,7 +105,7 @@ class MergedInternalReleaseTests(unittest.TestCase):
                 pub.validate_ci([ci_run(v, conclusion="failure" if v == n else "success")
                                  for v in pub.CI_NAMES], MERGE)
         for kw in [{"event": "pull_request"}, {"sha": PARENT},
-                   {"branch": "release/fwh-internal-v38-merged-field-test"}]:
+                   {"branch": "release/fwh-internal-v40-merged-field-test"}]:
             with self.assertRaises(pub.NotEligible):
                 pub.validate_ci([ci_run(n, **kw) for n in pub.CI_NAMES], MERGE)
         newer = ci_run("Android Team Client CI", status="in_progress",
@@ -113,29 +116,29 @@ class MergedInternalReleaseTests(unittest.TestCase):
     def test_diff_is_release_only_and_never_provider_or_protected_photos(self):
         files = [{"filename": "app/build.gradle", "status": "modified"},
                  {"filename": "ci/write_phase5_artifact_identity.py", "status": "modified"},
-                 {"filename": "docs/FWH_INTERNAL_V38_POSTMERGE_RELEASE_RECORD_2026-11-02.md",
+                 {"filename": "docs/FWH_INTERNAL_V40_POSTMERGE_RELEASE_RECORD_2026-11-02.md",
                   "status": "added"}]
         def comparison(extra=None, status="ahead", behind=0):
             return {"status": status, "ahead_by": 1, "behind_by": behind,
                     "files": files + (extra or [])}
         with patch.object(pub, "api", return_value=comparison()):
-            self.assertEqual(3, len(pub.check_release_only_diff(PARENT, MERGE, 38)))
+            self.assertEqual(3, len(pub.check_release_only_diff(PARENT, MERGE, 40)))
         for bad in ["supabase/migrations/123.sql",
                     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/PhotoOwner.java",
                     "app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java",
                     ".github/workflows/android-ci.yml",
                     "app/src/main/AndroidManifest.xml", "dashboard/index.html",
                     "ci/auto_publish_merged_internal_release.py",
-                    "docs/FWH_INTERNAL_V40_POSTMERGE_RELEASE_RECORD_2026-11-02.md"]:
+                    "docs/FWH_INTERNAL_V42_POSTMERGE_RELEASE_RECORD_2026-11-02.md"]:
             with self.subTest(path=bad), patch.object(
                     pub, "api", return_value=comparison([{"filename": bad, "status": "added"}])):
                 with self.assertRaises(pub.NotEligible):
-                    pub.check_release_only_diff(PARENT, MERGE, 38)
+                    pub.check_release_only_diff(PARENT, MERGE, 40)
         for faulty in [comparison(status="diverged"), comparison(behind=1),
                        {"status": "ahead", "ahead_by": 1, "behind_by": 0,
                         "files": files[:1]}]:
             with patch.object(pub, "api", return_value=faulty), self.assertRaises(pub.NotEligible):
-                pub.check_release_only_diff(PARENT, MERGE, 38)
+                pub.check_release_only_diff(PARENT, MERGE, 40)
 
     def test_prior_release_monotonic_immutable_and_ancestor(self):
         latest = {"tag_name": "fwh-internal-v36", "draft": False,
@@ -143,35 +146,59 @@ class MergedInternalReleaseTests(unittest.TestCase):
         def gate(path, **_):
             if path == "releases/latest":
                 return latest
-            if path == "releases/tags/fwh-internal-v38":
+            if path == "releases/tags/fwh-internal-v40":
                 return None
             if path == "compare/" + OLD + "..." + PARENT:
                 return {"status": "ahead", "behind_by": 0}
             raise AssertionError(path)
         with patch.object(pub, "api", gate):
-            self.assertEqual("fwh-internal-v38",
-                             pub.check_previous_release(38, PARENT, MERGE))
+            self.assertEqual("fwh-internal-v40",
+                             pub.check_previous_release(40, PARENT, MERGE))
             with self.assertRaises(pub.NotEligible):
                 pub.check_previous_release(36, PARENT, MERGE)
         with patch.object(pub, "api", lambda p, **kw: (
                 {"status": "diverged", "behind_by": 1}
                 if p.startswith("compare/") else gate(p, **kw))):
             with self.assertRaises(pub.NotEligible):
-                pub.check_previous_release(38, PARENT, MERGE)
+                pub.check_previous_release(40, PARENT, MERGE)
 
-    def test_frozen_apk_identity_and_hash_protected(self):
+    @patch.object(pub, "api", side_effect=fake_api)
+    def test_frozen_apk_identity_and_hash_protected(self, _api):
         with tempfile.TemporaryDirectory() as d:
             apk = Path(d) / pub.APK_NAME
             apk.write_bytes(b"APK" * 40_000)
             meta = {"source_commit": MERGE, "package": pub.PACKAGE,
-                    "version_code": 38, "room_version": 5, "signer_sha256": pub.SIGNER,
-                    "sha256": hashlib.sha256(apk.read_bytes()).hexdigest()}
-            self.assertEqual(meta["sha256"], pub.verify_artifact(meta, apk, MERGE, 38))
+                    "version_code": 40, "room_version": 6, "signer_sha256": pub.SIGNER,
+                    "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+                    "automatic_cleanup_enabled": False, "field_sync_enabled": True,
+                    "room_schema_blobs": {str(v): f"{v:040x}" for v in range(1, 7)}}
+            self.assertEqual(meta["sha256"], pub.verify_artifact(meta, apk, MERGE, 40))
             for k, value in [("source_commit", OLD), ("package", "fake.pkg"),
-                             ("version_code", 36), ("room_version", 6),
-                             ("signer_sha256", "fake"), ("sha256", "fake")]:
+                             ("version_code", 38), ("room_version", 5),
+                             ("signer_sha256", "fake"), ("sha256", "fake"),
+                             ("automatic_cleanup_enabled", True), ("field_sync_enabled", False),
+                             ("room_version", 7), ("room_schema_blobs", {"6": "6" * 40})]:
                 with self.subTest(k=k), self.assertRaises(pub.NotEligible):
-                    pub.verify_artifact({**meta, k: value}, apk, MERGE, 38)
+                    pub.verify_artifact({**meta, k: value}, apk, MERGE, 40)
+
+    def test_room_lineage_requires_exact_source_and_explicit_cleanup_off(self):
+        with tempfile.TemporaryDirectory() as d:
+            apk = Path(d) / pub.APK_NAME
+            apk.write_bytes(b"APK" * 40_000)
+            meta = {"source_commit": MERGE, "package": pub.PACKAGE,
+                    "version_code": 40, "room_version": 6, "signer_sha256": pub.SIGNER,
+                    "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+                    "automatic_cleanup_enabled": False, "field_sync_enabled": True,
+                    "room_schema_blobs": {str(v): f"{v:040x}" for v in range(1, 7)}}
+            for field in ("automatic_cleanup_enabled", "field_sync_enabled", "room_schema_blobs"):
+                missing = {k: v for k, v in meta.items() if k != field}
+                with self.subTest(missing=field), patch.object(pub, "api", fake_api):
+                    with self.assertRaises(pub.NotEligible):
+                        pub.verify_artifact(missing, apk, MERGE, 40)
+            for source in ({"type": "file", "sha": "f" * 40}, {"type": "dir"}):
+                with patch.object(pub, "api", return_value=source):
+                    with self.assertRaises(pub.NotEligible):
+                        pub.verify_artifact(meta, apk, MERGE, 40)
 
     def test_privileged_workflow_only_runs_on_main_push_and_main_checkout(self):
         workflow = (Path(__file__).resolve().parents[2]
