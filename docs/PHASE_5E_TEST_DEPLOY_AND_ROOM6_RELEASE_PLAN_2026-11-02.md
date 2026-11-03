@@ -6,6 +6,12 @@
 **Baseline:** pre-merge `main` at `f7ec3695b68e8970f1a3df1ced3ca2c7c9bfbe34`; source merged to `main` `d8a949f935e66d14fc2f0ffa3d1cc97c89accae2`; published v38 TEST Android remains Room5.  
 **Source owner:** merged PR #55 (historical branch `feat/phase5e-cleanup-closure-readiness`). Level-3 source merge approval is recorded and fulfilled; it does NOT authorize TEST SQL deployment, APK publication, cleanup activation or deletion.
 
+## November 3 release closeout — PUBLISHED; phone acceptance pending
+
+The operator explicitly confirmed preparing/publishing v40 with cleanup OFF. Required publisher policy PR #59 merged `145889ce`; version-only PR #60 merged `4351aa6b5e140301a49145a416a28e0e3fe5f6a1`. Exact-main Android `41686850053`, Database `41686850139`, Admin `41686850094` and trusted publisher `41687157746` passed. [Public fwh-internal-v40](https://github.com/timbone72-CC/field-work-hub/releases/tag/fwh-internal-v40) targets this exact merge; its sole APK (8,580,691 bytes) has SHA-256 `7a9e43ec0c4d2bf7b9a3e75089469d9ee47bbfa63d4313d1538097a132d4a9c7`, equal to the passing main CI artifact. Cleanup stays OFF. Same package/signer, Room6 and retained schemas 1–6 were verified; paired v41 recovery is artifact-only, not a public update. Source merge/publication are complete; the original pending release instructions below describe their pre-release baseline and are fulfilled by this evidence. SQL remains the already verified 131-migration deployment; no new push/provider operation or phone deletion occurred.
+
+**Next physical gate:** one user-confirmed in-place update through Account & Updates and confirmation existing saved work/photos remain accessible. No uninstall/data clearing, downgrade, accepted field/Google retest, or cleanup activation. [Exact release and recovery record](FWH_INTERNAL_V40_POSTMERGE_RELEASE_RECORD_2026-11-03.md).
+
 ## Implemented in PR #55 (not activated)
 
 1. **Server**: `20261102235900_phase_5e_photo_cleanup_readiness.sql` creates an immutable, RLS-isolated `client_package_runs` closure and owner-only read-only `field_photo_cleanup_readiness(uuid)`; receipt, accepted Finish, exact org/WO/run/photo and confirmed final package plus no open correction obligation, no newer unresolved package, and a separately confirmed delivery for any newer current run are required. `20261102235930_phase_5e_exact_delivery_run_closure_writer.sql` writes primary-run membership only on the existing true terminal `DELIVERING → DELIVERED` service transition, never from Send, private receipt or historical backfill. Never infer a corrected/cross-run package closure.
@@ -47,7 +53,7 @@ The delivered package retains attempts=1, lease generation=1, cleared worker/lea
 
 Cleanup remains OFF. No Google, Send, original-photo deletion, APK release/install, worker enablement or held-evidence mutation occurred. This documentation update is Level 1; documentation rollback is main `133ea109` with no database reversal. Existing Level-3 TEST authorization was exercised once, not requested again.
 
-## Separate Android Room6 in-place TEST APK release — PENDING
+## Separate Android Room6 in-place TEST APK release — PUBLISHED; original release plan below
 
 **First prerequisite:** PR #55 merged, controlled TEST migration parity verified, and the signed Room6 recovery/migration gate accepted in CI. The existing public `fwh-internal-v38` remains untouched until an explicit new release.
 
