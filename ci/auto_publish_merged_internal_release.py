@@ -98,7 +98,7 @@ def release_pr_for_merged_head(sha):
     version_text = unique_pr_field(body, "Internal TEST APK version")
     require(version_text.isdecimal(), "Release version must be decimal")
     version = int(version_text)
-    require(version >= 38 and version % 2 == 0 and version == int(match.group(1)),
+    require(version >= 40 and version % 2 == 0 and version == int(match.group(1)),
             "Release version is not the approved even branch version")
     return parents[0]["sha"], branch, version
 
@@ -171,7 +171,21 @@ def verify_artifact(meta, apk, sha, version):
     require(meta.get("source_commit") == sha, "Frozen APK source SHA mismatch")
     require(meta.get("package") == PACKAGE, "Wrong Android package")
     require(meta.get("version_code") == version, "Wrong APK version")
-    require(meta.get("room_version") == 5, "Room schema unexpectedly changed")
+    require(meta.get("room_version") == 6, "Room schema unexpectedly changed")
+    require(meta.get("automatic_cleanup_enabled") is False,
+            "Automatic cleanup must remain disabled")
+    require(meta.get("field_sync_enabled") is True,
+            "Recovery or sync-disabled APK cannot be published")
+    schemas = meta.get("room_schema_blobs")
+    require(isinstance(schemas, dict) and set(schemas) == {str(v) for v in range(1, 7)},
+            "Complete Room1 through Room6 schema lineage required")
+    for version, blob in schemas.items():
+        require(isinstance(blob, str) and SHA.fullmatch(blob), "Invalid Room schema blob")
+        path = ("app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase/"
+                + version + ".json")
+        source = api("contents/" + path + "?ref=" + sha)
+        require(source.get("type") == "file" and source.get("sha") == blob,
+                "Room schema lineage differs from exact merged source")
     require(meta.get("signer_sha256") == SIGNER, "Wrong stable internal signer")
     require(apk.name == APK_NAME and apk.is_file(), "Expected one internal APK")
     require(100_000 <= apk.stat().st_size <= 64 * 1024 * 1024,
