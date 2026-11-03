@@ -59,7 +59,7 @@ declare
   address_map uuid; wo_map uuid; address_name text; wo_name text; address_proof jsonb; wo_proof jsonb;
   folder_plan uuid; folder_proof jsonb; folder_plan_projection jsonb;
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
-  trusted_plan jsonb;
+  trusted_plan jsonb; cleanup_readiness jsonb;
   t private.photo_transfers%rowtype; denied boolean;
   pending_oldrun uuid; pending_oldrev timestamptz; pending_capture jsonb;
   issue_draft jsonb; issue_preview jsonb; issue_payload jsonb; issue_capture jsonb;
@@ -648,11 +648,11 @@ begin
     jsonb_build_object('sub',contractor,'session_id',contractor,
       'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
   execute 'set local role authenticated';
-  response:=public.field_photo_cleanup_readiness(photo);
-  if response->>'eligible'<>'true'
-     or response->>'server_readiness_only'<>'true'
-     or response->>'package_id'<>pkg_id::text
-  then raise exception 'Same owner final-delivery-readiness proof failed: %',response;end if;
+  cleanup_readiness:=public.field_photo_cleanup_readiness(photo);
+  if cleanup_readiness->>'eligible'<>'true'
+     or cleanup_readiness->>'server_readiness_only'<>'true'
+     or cleanup_readiness->>'package_id'<>pkg_id::text
+  then raise exception 'Same owner final-delivery-readiness proof failed: %',cleanup_readiness;end if;
   execute 'reset role';
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub',other_admin,'session_id',other_admin,
