@@ -33,6 +33,7 @@ public class PhotoCleanupExecutorTest {
     String database;
     String finishSet;
     FieldAction finish;
+    final Set<Path> ownedFiles=new HashSet<>();
 
     @Before public void setup() throws Exception {
         context=RuntimeEnvironment.getApplication();
@@ -61,12 +62,10 @@ public class PhotoCleanupExecutorTest {
         if(owner!=null) owner.io.shutdownNow();
         if(db!=null) db.close();
         if(database!=null) context.deleteDatabase(database);
-        if(root!=null&&root.isDirectory()) {
-            try(java.util.stream.Stream<Path> stream=Files.walk(root.toPath())) {
-                for(Path p:stream.sorted(Comparator.reverseOrder()).toList())
-                    Files.deleteIfExists(p);
-            }
-        }
+        // Never delete other tests' or users' files from the shared app root.
+        for(Path owned:ownedFiles) Files.deleteIfExists(owned);
+        if(root!=null&&root.isDirectory()&&Objects.requireNonNull(root.list()).length==0)
+            Files.deleteIfExists(root.toPath());
     }
 
     static String digest(byte[] bytes) throws Exception {
@@ -84,6 +83,7 @@ public class PhotoCleanupExecutorTest {
         File source=new File(root,id+"-original.jpg"), derivative=new File(root,id+"-prepared.jpg");
         Files.write(source.toPath(),original);
         Files.write(derivative.toPath(),prepared);
+        ownedFiles.add(source.toPath());ownedFiles.add(derivative.toPath());
         ProtectedPhoto p=new ProtectedPhoto(id,actor.userId,actor.organizationId,wo,run,
                 "assignment","revision","","2026-11-02T00:00:00Z",
                 source.getAbsolutePath(),derivative.getAbsolutePath());
@@ -131,7 +131,7 @@ public class PhotoCleanupExecutorTest {
         return p;
     }
 
-    void acceptedExtra(String wo,String run,ProtectedPhoto p) {
+    void acceptedExtra(String wo,String run,ProtectedPhoto p) throws Exception {
         // Keep one accepted Finish tied to every photo in the frozen set.
         // Additional originals use the existing Finish action and its JSON
         // updated atomically for this isolated fixture only.
@@ -225,6 +225,7 @@ public class PhotoCleanupExecutorTest {
         ProtectedPhoto p=verified("wo-path","run-path");journal(p);
         File different=new File(root,"unrelated-evidence.jpg");
         Files.write(different.toPath(),new byte[]{1,2,3});
+        ownedFiles.add(different.toPath());
         ProtectedPhoto mutated=fields.photo(p.id);
         mutated.originalPath=different.getAbsolutePath();
         // Test DAO update via narrow SQL (no runtime mutation method required).
