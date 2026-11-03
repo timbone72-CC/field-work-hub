@@ -13,6 +13,8 @@ final class TeamRuntime {
     final AssignmentRepository assignments;
     final ActionSyncCoordinator sync;
     final PhotoOwner photos;
+    final PhotoCleanupCoordinator cleanupReadiness;
+    final PhotoCleanupDao cleanupDao;
     final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
     private final Object actionCreationLock = new Object();
@@ -21,7 +23,10 @@ final class TeamRuntime {
         dao = TeamDatabase.getInstance(context).cachedWorkOrderDao();
         sessions = new SessionCoordinator(new SecureSessionStore(context), api);
         assignments = new AssignmentRepository(api, new RoomAssignmentStore(dao));
-        photos = new PhotoOwner(context, dao, sessions);
+        cleanupDao = TeamDatabase.getInstance(context).photoCleanupDao();
+        photos = new PhotoOwner(context, dao, cleanupDao, sessions);
+        cleanupReadiness = new PhotoCleanupCoordinator(
+                cleanupDao, sessions, api::fieldPhotoCleanupReadiness);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
         PhotoTransferDao transferDao = TeamDatabase.getInstance(context).photoTransferDao();
         transfers = new PhotoTransferCoordinator(dao, transferDao, photos, sessions, api,
@@ -138,6 +143,57 @@ final class TeamRuntime {
                 api.respondTeamHandoffConsent(s.accessToken, requestId, accept);
             }
         }
+    }
+
+    /**
+     * Future explicit cleanup dispatch owner. The existing action/transfer
+     * locks serialize the exact local evidence check with future offline work.
+     * Returns false in every currently distributed/test APK (switch OFF).
+     */
+    boolean cleanupVerified(SupabaseApi.AuthSession expected,long generation,String photoId)
+            throws Exception {
+        if(!BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return false;
+        synchronized(sync.drainLock) {
+            synchronized(actionCreationLock) {
+                if(!sessions.matches(generation,expected.userId,expected.organizationId))
+                    throw new SessionCoordinator.SessionChanged();
+                // Always recheck the owner-scoped server closure NOW. A cached
+                // proof can predate a correction, new package or changed grant.
+                // Network/auth failure => no new deletion, even during restart.
+                if(!cleanupReadiness.recordServerReadiness(
+                        expected.userId,expected.organizationId,photoId))
+                    return false;
+                java.util.concurrent.Future<Boolean> result=photos.io.submit(
+                    ()->photos.cleanupVerified(expected,generation,photoId));
+                try { return result.get(); }
+                catch(java.util.concurrent.ExecutionException failure) {
+                    Throwable cause=failure.getCause();
+                    if(cause instanceof Exception) throw (Exception)cause;
+                    throw new IllegalStateException("Cleanup owner failed",cause);
+                }
+            }
+        }
+    }
+
+    int resumeInterruptedCleanup(SupabaseApi.AuthSession expected,long generation)
+            throws Exception {
+        if(!BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return 0;
+        // Each interrupted photo independently obtains a fresh server read.
+        // A single offline/conflicted job never deletes anything nor blocks
+        // unrelated fully verified jobs from being checked.
+        int done=0;Exception failure=null;
+        java.util.List<PhotoCleanupJournal> pending=sessions.local(generation,expected,
+                ()->cleanupDao.pending(expected.userId,expected.organizationId));
+        for(PhotoCleanupJournal j:pending) {
+            try { if(cleanupVerified(expected,generation,j.photoId)) done++; }
+            catch(SessionCoordinator.SessionChanged changed) { throw changed; }
+            catch(Exception blocked) {
+                if(failure==null) failure=blocked;
+                else failure.addSuppressed(blocked);
+            }
+        }
+        if(failure!=null) throw failure;
+        return done;
     }
 
     void signOut() {

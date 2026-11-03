@@ -370,6 +370,20 @@ final class SupabaseApi
                 "RECEIVED".equals(state) ? body : "");
     }
 
+    /** Original owner only; this is readiness information, never DELETE authority. */
+    String fieldPhotoCleanupReadiness(String accessToken,String photoId) throws Exception {
+        if(photoId==null||!photoId.matches(
+                "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
+            throw new IllegalArgumentException("Exact original photo required");
+        JSONObject request=new JSONObject();
+        request.put("p_photo",photoId);
+        String response=postRpc(accessToken,"field_photo_cleanup_readiness",request);
+        JSONObject snapshot=new JSONObject(response);
+        if(!snapshot.has("eligible"))
+            throw new IllegalStateException("Missing authoritative cleanup readiness");
+        return response;
+    }
+
     @Override
     public String createSession(String accessToken, PhotoTransfer row) throws Exception {
         if (!"fwh-review-private".equals(row.bucket) || row.objectKey.isEmpty()

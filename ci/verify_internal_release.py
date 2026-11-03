@@ -13,7 +13,7 @@ assert apk.name == "Field-Work-Hub-Internal.apk"
 assert identity["variant"] == "candidate"
 assert identity["package"] == "com.inandout.fieldphotoprep.team.internal"
 assert identity["version_code"] >= 22 and identity["version_code"] % 2 == 0
-assert identity["room_version"] == 5
+assert identity["room_version"] == 6
 assert identity["field_sync_enabled"] is True
 assert identity["automatic_cleanup_enabled"] is False
 assert identity["signer_sha256"] == "1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe"

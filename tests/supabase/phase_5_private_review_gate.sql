@@ -52,14 +52,14 @@ declare
   actor uuid; photo uuid; wo uuid; object_id uuid:=gen_random_uuid();
   register jsonb; gallery jsonb; response jsonb; replay jsonb; target jsonb; expected_revision uuid; action uuid:=gen_random_uuid();
   pkg_draft jsonb; pkg_preview jsonb; pkg_approval jsonb; pkg_send jsonb; pkg_state jsonb;
-  pkg_id uuid; send_action uuid:=gen_random_uuid(); company uuid; test_destination uuid;
+  pkg_id uuid; synthetic_new_run uuid; send_action uuid:=gen_random_uuid(); company uuid; test_destination uuid;
   delivery_worker uuid:=gen_random_uuid(); delivery_claim jsonb; delivery_done jsonb; atomic_receipt jsonb;
   delivery_gen bigint; folder_id text; photo_file_id text; manifest_file_id text; frozen_size bigint;
   address_folder_id text; wo_folder_id text; address_row jsonb; wo_row jsonb; frozen_address text;
   address_map uuid; wo_map uuid; address_name text; wo_name text; address_proof jsonb; wo_proof jsonb;
   folder_plan uuid; folder_proof jsonb; folder_plan_projection jsonb;
   upload_plan uuid; encrypted_session jsonb:=jsonb_build_object('version',1,'nonce',repeat('A',16),'payload',repeat('B',160));
-  trusted_plan jsonb;
+  trusted_plan jsonb; cleanup_readiness jsonb;
   t private.photo_transfers%rowtype; denied boolean;
   pending_oldrun uuid; pending_oldrev timestamptz; pending_capture jsonb;
   issue_draft jsonb; issue_preview jsonb; issue_payload jsonb; issue_capture jsonb;
@@ -624,11 +624,83 @@ begin
     or target->'files'->2->>'id'<>manifest_file_id
     or target->'files'->2->>'sha256'<>(pkg_preview->>'manifest_sha256')
   then raise exception 'Final provider snapshot omitted frozen chain or receipt';end if;
+  execute 'reset role'; -- CI fixture asserts private audit state as operator, never service user.
+  if exists(select 1 from private.client_package_runs where package_id=pkg_id) then
+    raise exception 'Private transfer and approved Send fabricated final-run cleanup closure';end if;
+  execute 'set local role service_role';
   delivery_done:=public.service_finish_delivery(pkg_id,delivery_worker,delivery_gen);
   if delivery_done->>'status'<>'DELIVERED'
     or (select count(*) from private.client_delivery_final_receipts where package_id=pkg_id)<>1
     or (select count(*) from private.client_delivery_file_plans where package_id=pkg_id and state='VERIFIED')<>3 then
     raise exception 'Synthetic delivery evidence did not finalize exactly once';end if;
+  execute 'reset role'; -- Preserve no direct service_role SELECT on closure table.
+  -- The final provider receipt is the only authorized closure transition.
+  -- The worker's exact primary run, Finish hash and all privately held bytes
+  -- are required. Rejected/unfinished or other runs cannot be inferred.
+  if (select count(*) from private.client_package_runs where package_id=pkg_id)<>1
+    or not exists (
+      select 1 from private.client_package_runs c
+        join private.photo_transfers transfer on transfer.finish_set_id=c.finish_set_id
+      where c.package_id=pkg_id and transfer.photo_id=photo
+        and c.run_id=transfer.run_id and c.finish_digest=transfer.finish_digest)
+  then raise exception 'Exact delivered Finish run closure was not recorded';end if;
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub',contractor,'session_id',contractor,
+      'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+  execute 'set local role authenticated';
+  cleanup_readiness:=public.field_photo_cleanup_readiness(photo);
+  if cleanup_readiness->>'eligible'<>'true'
+     or cleanup_readiness->>'server_readiness_only'<>'true'
+     or cleanup_readiness->>'package_id'<>pkg_id::text
+  then raise exception 'Same owner final-delivery-readiness proof failed: %',cleanup_readiness;end if;
+  execute 'reset role';
+  -- A newer DRAFT package must revoke stale readiness, even though the
+  -- old package remains DELIVERED. Roll back ONLY this synthetic draft
+  -- inside a PostgreSQL exception subtransaction; no real package touched.
+  begin
+    -- One package per run is a protected invariant. Create a separate
+    -- disposable corrective run, never a duplicate package for the same run.
+    insert into public.work_order_runs(
+      work_order_id,organization_id,run_sequence,current_assignee_user_id,
+      field_status,requirement_snapshot)
+    select r.work_order_id,r.organization_id,r.run_sequence+1000,
+      r.current_assignee_user_id,r.field_status,r.requirement_snapshot
+    from public.work_order_runs r
+    join private.client_packages p on p.run_id=r.id where p.id=pkg_id
+    returning id into synthetic_new_run;
+    if synthetic_new_run is null then raise exception 'Missing synthetic next run';end if;
+    insert into private.client_packages(
+      organization_id,work_order_id,run_id,company_id,status,created_at)
+    select organization_id,work_order_id,synthetic_new_run,company_id,'DRAFT',
+           created_at+interval '5 minutes'
+    from private.client_packages where id=pkg_id;
+    perform set_config('request.jwt.claims',
+      jsonb_build_object('sub',contractor,'session_id',contractor,
+        'app_metadata',jsonb_build_object('role','CONTRACTOR','organization_id',org))::text,true);
+    execute 'set local role authenticated';
+    cleanup_readiness:=public.field_photo_cleanup_readiness(photo);
+    execute 'reset role';
+    if cleanup_readiness->>'eligible' is distinct from 'false'
+       or cleanup_readiness->>'reason'<>'NEWER_PACKAGE_PENDING' then
+      raise exception 'NEWER_DRAFT_DENIAL_FAILED %',cleanup_readiness;
+    end if;
+    raise exception 'ROLLBACK_SYNTHETIC_NEWER_DRAFT';
+  exception when raise_exception then
+    if sqlerrm<>'ROLLBACK_SYNTHETIC_NEWER_DRAFT' then raise;end if;
+  end;
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub',other_admin,'session_id',other_admin,
+      'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
+  execute 'set local role authenticated';
+  perform pg_temp.expect_photo_review_error('42501',format(
+    'select public.field_photo_cleanup_readiness(%L)',photo));
+  execute 'reset role';
+  -- Restore the review fixture's original Admin identity before its later
+  -- unrelated review/correction assertions. The foreign-user probe must
+  -- not poison the accepted caller's session state.
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub',admin_id,'session_id',admin_id,
+      'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
   perform pg_temp.expect_photo_review_error('40001',format(
     'select public.service_finish_delivery(%L,%L,%s)',pkg_id,delivery_worker,delivery_gen));
   execute 'reset role';

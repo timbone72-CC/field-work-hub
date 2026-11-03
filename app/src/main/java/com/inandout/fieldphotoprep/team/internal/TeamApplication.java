@@ -14,7 +14,20 @@ public final class TeamApplication extends Application {
                     TeamRuntime runtime = TeamRuntime.get(this);
                     if (BuildConfig.FIELD_SYNC_ENABLED) runtime.photos.io.execute(runtime.photos::recover);
                     SupabaseApi.AuthSession s = runtime.sessions.load();
-                    if (s != null) runtime.scheduler.ensure(s);
+                    if (s != null) {
+                        // Only a separately activated build may resume a
+                        // previously committed READY/CLEANING cleanup journal.
+                        // This performs NO new server delivery or TUS operation.
+                        if (BuildConfig.AUTOMATIC_CLEANUP_ENABLED) {
+                            try {
+                                runtime.resumeInterruptedCleanup(
+                                    s,runtime.sessions.generation());
+                            } catch (Exception held) {
+                                android.util.Log.w("FWH","Protected cleanup held for recovery");
+                            }
+                        }
+                        runtime.scheduler.ensure(s);
+                    }
                 });
         startup.shutdown();
     }

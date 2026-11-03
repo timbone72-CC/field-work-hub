@@ -8,15 +8,31 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** One application-scoped capture/file/preparation owner. No original upload or automatic cleanup. */
+/** One application-scoped original/file owner; cleanup is independently release-gated OFF. */
 final class PhotoOwner {
     final ExecutorService io=Executors.newSingleThreadExecutor();
     private final File directory;
     private final CachedWorkOrderDao dao;
     private final SessionCoordinator sessions;
+    private final PhotoCleanupDao cleanupDao;
+    private final boolean cleanupEnabled;
     private boolean recovered;
+
     PhotoOwner(Context context,CachedWorkOrderDao dao,SessionCoordinator sessions) {
-        directory=new File(context.getFilesDir(),"protected-photos"); this.dao=dao; this.sessions=sessions;
+        this(context,dao,null,sessions,false);
+    }
+
+    PhotoOwner(Context context,CachedWorkOrderDao dao,PhotoCleanupDao cleanupDao,
+               SessionCoordinator sessions) {
+        this(context,dao,cleanupDao,sessions,BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
+    }
+
+    // Test seam. Production always uses the BuildConfig switch above.
+    PhotoOwner(Context context,CachedWorkOrderDao dao,PhotoCleanupDao cleanupDao,
+               SessionCoordinator sessions,boolean cleanupEnabled) {
+        directory=new File(context.getFilesDir(),"protected-photos");
+        this.dao=dao; this.cleanupDao=cleanupDao; this.sessions=sessions;
+        this.cleanupEnabled=cleanupEnabled;
     }
     ProtectedPhoto reserve(SupabaseApi.AuthSession session,long generation,String wo,String run,String item) throws Exception {
         if(!BuildConfig.FIELD_SYNC_ENABLED) throw new IllegalStateException("Recovery mode preserves photos; capture is paused.");
@@ -60,6 +76,140 @@ final class PhotoOwner {
         boolean removed=(!original.exists()||original.delete())&&(!prepared.exists()||prepared.delete())&&(!temp.exists()||temp.delete());
         if(removed) dao.completeDiscard(p.id);
     }
+    /**
+     * Sole local original/derivative deletion owner. Invoke only on PhotoOwner.io
+     * and under TeamRuntime's action/drain locks. The entire I/O attempt holds
+     * the current signed-in owner's session generation so sign-out cannot
+     * rebind a cleanup in progress to another account.
+     *
+     * HELD → READY → CLEANING are durably committed BEFORE file deletion.
+     * An interrupted CLEANING resumes those exact deletions without any
+     * preparation, transfer, client delivery or new server request.
+     */
+    boolean cleanupVerified(SupabaseApi.AuthSession session,long generation,String id)
+            throws Exception {
+        if(!cleanupEnabled || !BuildConfig.FIELD_SYNC_ENABLED) return false;
+        if(cleanupDao==null) throw new IllegalStateException("Cleanup journal unavailable");
+        return sessions.local(generation,session,()->{
+            PhotoCleanupJournal j=cleanupDao.find(id);
+            ProtectedPhoto p=cleanupDao.photo(id);
+            if(j==null||p==null||!session.userId.equals(j.ownerId)
+                ||!session.organizationId.equals(j.organizationId)
+                ||!p.id.equals(j.photoId))
+                throw new IOException("Exact original-owner cleanup proof unavailable");
+            if("CLEANED".equals(j.state)) {
+                if(!"CLEANED".equals(p.state))
+                    throw new IOException("Local cleanup history needs reconciliation");
+                return true;
+            }
+            if(!"HELD".equals(j.state)&&!"READY".equals(j.state)
+                &&!"CLEANING".equals(j.state))
+                throw new IOException("Unknown local cleanup state; originals held");
+            verifyCleanupPaths(p,"CLEANING".equals(j.state));
+            if("HELD".equals(j.state)) cleanupDao.arm(session.userId,session.organizationId,id);
+            // No network call: exact immutable receipt+owner+Finish must already
+            // be in Room and the whole WO must be locally settled.
+            p=cleanupDao.beginOrResume(session.userId,session.organizationId,id);
+            verifyCleanupPaths(p,true);
+            removeExactPhotoFiles(p);
+            cleanupDao.markCleaned(session.userId,session.organizationId,id);
+            return true;
+        });
+    }
+
+    /** Restart recovery: only the signed-in original owner and in-flight rows. */
+    int resumeInterruptedCleanup(SupabaseApi.AuthSession session,long generation)
+            throws Exception {
+        if(!cleanupEnabled || !BuildConfig.FIELD_SYNC_ENABLED) return 0;
+        if(cleanupDao==null) throw new IllegalStateException("Cleanup journal unavailable");
+        List<PhotoCleanupJournal> jobs=sessions.local(generation,session,
+                ()->cleanupDao.pending(session.userId,session.organizationId));
+        int completed=0; Exception failure=null;
+        for(PhotoCleanupJournal j:jobs) {
+            try { if(cleanupVerified(session,generation,j.photoId)) completed++; }
+            catch(SessionCoordinator.SessionChanged changed) { throw changed; }
+            catch(Exception problem) {
+                // This photo remains READY/CLEANING; unrelated safe photos
+                // may still proceed. Report the error instead of false success.
+                if(failure==null) failure=problem;
+                else failure.addSuppressed(problem);
+            }
+        }
+        if(failure!=null) throw failure;
+        return completed;
+    }
+
+    /** Refuse symlinks, outside-root paths or changed filenames before touching bytes. */
+    private void verifyCleanupPaths(ProtectedPhoto p,boolean resuming) throws IOException {
+        if(p==null||!java.util.UUID.fromString(p.id).toString().equals(p.id))
+            throw new IOException("Unrecognized immutable photo identity");
+        java.nio.file.Path root=directory.toPath().toAbsolutePath().normalize();
+        if(!Files.isDirectory(root,LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(root))
+            throw new IOException("Protected photo root not available");
+        java.nio.file.Path original=root.resolve(p.id+"-original.jpg");
+        java.nio.file.Path prepared=root.resolve(p.id+"-prepared.jpg");
+        java.nio.file.Path temporary=root.resolve(p.id+"-prepared.jpg.tmp");
+        if(!new File(p.originalPath).toPath().toAbsolutePath().normalize().equals(original)
+            ||!new File(p.preparedPath).toPath().toAbsolutePath().normalize().equals(prepared)
+            ||original.equals(prepared)||Files.isSymbolicLink(original)
+            ||Files.isSymbolicLink(prepared)||Files.isSymbolicLink(temporary))
+            throw new IOException("Protected photo path identity changed");
+        for(java.nio.file.Path path:new java.nio.file.Path[]{original,prepared,temporary})
+            if(Files.exists(path,LinkOption.NOFOLLOW_LINKS)
+               &&!Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Unexpected protected photo file type");
+        if(!resuming) {
+            PhotoTransfer t=cleanupDao.transfer(p.id);
+            if(!"WAITING".equals(p.state)||!p.readable()||t==null
+                ||t.preparedSize<=0||!Files.isRegularFile(prepared,LinkOption.NOFOLLOW_LINKS)
+                ||Files.size(prepared)!=t.preparedSize
+                ||!hashPrepared(prepared).equals(t.preparedSha256)
+                ||Files.exists(temporary,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Protected original/derivative needs recovery before cleanup");
+        } else {
+            // An interrupted deletion is allowed to have ONE or BOTH files
+            // missing, but any remaining bytes must retain their identity.
+            if(Files.exists(original,LinkOption.NOFOLLOW_LINKS)
+                &&Files.size(original)!=p.originalBytes)
+                throw new IOException("Surviving original changed during interrupted cleanup");
+            PhotoTransfer t=cleanupDao.transfer(p.id);
+            if(t==null|| (Files.exists(prepared,LinkOption.NOFOLLOW_LINKS)
+                &&(Files.size(prepared)!=t.preparedSize
+                   ||!hashPrepared(prepared).equals(t.preparedSha256))))
+                throw new IOException("Surviving prepared bytes changed during cleanup");
+        }
+    }
+
+    private static String hashPrepared(java.nio.file.Path path) throws IOException {
+        try {
+            java.security.MessageDigest hash=java.security.MessageDigest.getInstance("SHA-256");
+            try(InputStream in=Files.newInputStream(path)) {
+                byte[] bytes=new byte[32768];int count;
+                while((count=in.read(bytes))>=0) {
+                    if(Thread.currentThread().isInterrupted()) throw new InterruptedIOException();
+                    if(count>0) hash.update(bytes,0,count);
+                }
+            }
+            StringBuilder out=new StringBuilder();
+            for(byte b:hash.digest()) out.append(String.format(Locale.ROOT,"%02x",b&255));
+            return out.toString();
+        } catch(java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
+    private void removeExactPhotoFiles(ProtectedPhoto p) throws IOException {
+        java.nio.file.Path root=directory.toPath().toAbsolutePath().normalize();
+        for(java.nio.file.Path path:new java.nio.file.Path[]{root.resolve(p.id+"-original.jpg"),
+                root.resolve(p.id+"-prepared.jpg"),root.resolve(p.id+"-prepared.jpg.tmp")}) {
+            if(Thread.currentThread().isInterrupted()) throw new InterruptedIOException();
+            if(Files.isSymbolicLink(path)) throw new IOException("Symlink appeared during cleanup");
+            Files.deleteIfExists(path);
+            if(Files.exists(path,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Protected photo removal did not complete");
+        }
+    }
+
     static String digest(String value) {
         try {
             byte[] hash=java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
