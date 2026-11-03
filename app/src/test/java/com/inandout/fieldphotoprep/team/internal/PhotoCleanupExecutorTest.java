@@ -144,13 +144,23 @@ public class PhotoCleanupExecutorTest {
         fields.updateAction(f);
     }
 
-    void journal(ProtectedPhoto p) {
+    void journal(ProtectedPhoto p) throws Exception {
         PhotoTransfer t=transfers.find(p.id);
         FieldAction a=fields.action(t.finishActionId);
+        String packageId=UUID.randomUUID().toString();
+        String exactServerSnapshot=new JSONObject()
+            .put("eligible",true)
+            .put("server_readiness_only",true)
+            .put("private_receipt_verified",true)
+            .put("retained_privately",true)
+            .put("included_in_client_package",false)
+            .put("photo_id",p.id).put("run_id",p.runId)
+            .put("finish_set_id",p.finishSetId).put("finish_digest",a.finishDigest)
+            .put("transfer_version",t.transferVersion)
+            .put("package_id",packageId).toString();
         PhotoCleanupJournal record=new PhotoCleanupJournal(p.id,p.ownerId,p.organizationId,
                 p.workOrderId,p.runId,p.finishSetId,a.finishDigest,t.transferVersion,
-                t.receiptId,UUID.randomUUID().toString(),
-                "{\"eligible\":true,\"server_readiness_only\":true}",1);
+                t.receiptId,packageId,exactServerSnapshot,System.currentTimeMillis());
         journal.insert(record);
     }
 
