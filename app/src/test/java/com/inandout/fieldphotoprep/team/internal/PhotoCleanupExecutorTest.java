@@ -188,10 +188,10 @@ public class PhotoCleanupExecutorTest {
 
     @Test public void anotherUnreceivedOrProblemPhotoBlocksWholeWO() throws Exception {
         ProtectedPhoto ready=verified("wo-private","run-1");
-        journal(ready);
         FieldAction accepted=fields.action(transfers.find(ready.id).finishActionId);
         ProtectedPhoto extra=addPhoto("wo-private","run-1",accepted);
         acceptedExtra("wo-private","run-1",extra);
+        journal(ready); // valid target proof; only the other photo is unresolved
         PhotoTransfer missing=transfers.find(extra.id);
         missing.state="UNCERTAIN";
         transfers.update(missing);
