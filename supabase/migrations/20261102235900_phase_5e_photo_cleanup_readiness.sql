@@ -130,6 +130,29 @@ begin
   ) then
     return jsonb_build_object('eligible',false,'reason','OPEN_CORRECTION_PENDING');
   end if;
+  -- A historical delivered run does not close a newer/current corrective
+  -- run. A fresh original-owner read must withhold deletion until that new
+  -- run itself has a separately immutable confirmed final client delivery.
+  if exists (
+      select 1 from public.work_orders w
+      where w.id=t.work_order_id and w.organization_id=t.organization_id
+        and w.current_run_id is distinct from t.run_id
+        and not exists (
+           select 1 from private.client_package_runs c2
+           join private.client_packages k2 on k2.id=c2.package_id
+           join private.client_delivery_final_receipts r2 on r2.package_id=k2.id
+           join private.client_delivery_outbox o2 on o2.package_id=k2.id
+           where k2.organization_id=w.organization_id
+             and k2.work_order_id=w.id
+             and k2.run_id=w.current_run_id
+             and c2.run_id=w.current_run_id
+             and k2.status='DELIVERED' and o2.state='DELIVERED'
+             and r2.approved_sha256=k2.approved_sha256
+             and o2.approved_sha256=k2.approved_sha256
+             and r2.destination_id=k2.destination_id)
+  ) then
+    return jsonb_build_object('eligible',false,'reason','CURRENT_RUN_DELIVERY_PENDING');
+  end if;
   select c.* into proof from private.client_package_runs c
     join private.client_packages k on k.id=c.package_id
     join private.client_delivery_final_receipts f on f.package_id=k.id
@@ -144,6 +167,20 @@ begin
   order by c.recorded_at desc limit 1;
   if proof.package_id is null then
     return jsonb_build_object('eligible',false,'reason','FINAL_RUN_CLOSURE_PENDING');
+  end if;
+  -- A newly prepared review/correction package can still need the old
+  -- original. Even when the earlier run is delivered, an unresolved later
+  -- package for this WO invalidates old cleanup readiness.
+  if exists (
+     select 1 from private.client_packages newer
+     join private.client_packages delivered on delivered.id=proof.package_id
+     where newer.organization_id=t.organization_id
+       and newer.work_order_id=t.work_order_id
+       and newer.id<>delivered.id
+       and newer.created_at>delivered.created_at
+       and newer.status not in ('DELIVERED','SUPERSEDED')
+  ) then
+    return jsonb_build_object('eligible',false,'reason','NEWER_PACKAGE_PENDING');
   end if;
   pkg:=proof.package_id;
   included:=exists(select 1 from private.client_package_photos p
