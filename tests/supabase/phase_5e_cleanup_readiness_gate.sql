@@ -6,6 +6,7 @@ declare
  denied boolean:=false;
  closure_trigger text;
  f text;
+ writer text;
  before_count bigint;
 begin
  if to_regclass('private.client_package_runs') is null
@@ -39,6 +40,17 @@ begin
     or position('auth.uid()' in f)=0
     or position('server_readiness_only' in f)=0
  then raise exception 'Eligibility/retention/immutability guard absent';end if;
+ select pg_get_functiondef(
+   'private.record_verified_terminal_run_closure()'::regprocedure) into writer;
+ if position('old.status' in lower(writer))=0
+   or position('private.client_delivery_final_receipts' in writer)=0
+   or position('private.photo_transfer_receipts' in writer)=0
+   or position('private.client_package_runs' in writer)=0
+   or not exists(
+     select 1 from pg_trigger
+     where tgrelid='private.client_packages'::regclass
+       and tgname='client_package_terminal_run_closure' and not tgisinternal)
+ then raise exception 'Trusted terminal transition closure writer missing';end if;
  select count(*) into before_count from private.client_package_runs;
  execute 'set local role authenticated';
  begin
