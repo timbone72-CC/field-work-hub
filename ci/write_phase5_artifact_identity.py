@@ -22,6 +22,7 @@ assert "name='com.inandout.fieldphotoprep.team.internal'" in badging
 assert ("versionCode='39'" if recovery else "versionCode='38'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
+assert 'AUTOMATIC_CLEANUP_ENABLED = false' in build_config, 'Photo cleanup cannot silently activate in a source-only build'
 room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
 room_version=6
 assert 'version = 6,' in room_source, 'Unexpected TeamDatabase schema; review the release gate'
