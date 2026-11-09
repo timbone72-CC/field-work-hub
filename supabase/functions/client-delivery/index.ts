@@ -12,6 +12,12 @@ Deno.serve(createDeliveryHandler({
  pinnedTestPackageId:'f42e05df-de7a-4d20-8dee-f55e09511d1f',
  pinnedTestDestinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',
  pinnedTestRootFolderId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK',
+ // Prepared ONLY: no second TEST fixture is authorized/pinned at source,
+ // so even a hosted deployment cannot serve either new slot. A later
+ // explicit TEST provider gate must pin TWO separately approved package IDs
+ // in source and disable the one-package mode before any slot can run.
+ twoPackageTestEnabled:false,
+ twoPackageTestPins:[],
  // Independent TEST-only identity/root GET gate; this cannot enable Send.
  testPreflightEnabled:Deno.env.get('FWH_CLIENT_TEST_PREFLIGHT_ENABLED')==='true',
  // Separate, explicitly enabled original-ID disposable TEST recovery only.
