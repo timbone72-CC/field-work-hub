@@ -13,6 +13,22 @@ import org.json.JSONArray;
 /** Durable local cleanup decisions. Never deletes bytes; PhotoOwner is the sole file owner. */
 @Dao
 abstract class PhotoCleanupDao {
+    /**
+     * Stable keyset scan for an original owner's privately received photos.
+     * Exclude every existing cleanup journal: periodic discovery must never
+     * refresh an immutable HELD proof or act on READY/CLEANING evidence.
+     */
+    @Query("SELECT p.id FROM protected_photos p " +
+           "JOIN photo_transfers t ON t.photoId=p.id " +
+           "LEFT JOIN photo_cleanup_journal j ON j.photoId=p.id " +
+           "WHERE p.ownerId=:owner AND p.organizationId=:org " +
+           "AND t.ownerId=:owner AND t.organizationId=:org " +
+           "AND p.state='WAITING' AND t.state='RECEIVED' " +
+           "AND t.receiptId<>'' AND t.receiptSavedAt>0 " +
+           "AND j.photoId IS NULL AND p.id>:after " +
+           "ORDER BY p.id LIMIT :limit")
+    abstract List<String> readinessCandidates(String owner, String org, String after, int limit);
+
     @Query("SELECT * FROM photo_cleanup_journal WHERE photoId=:id")
     abstract PhotoCleanupJournal find(String id);
     @Query("SELECT * FROM protected_photos WHERE id=:id")
