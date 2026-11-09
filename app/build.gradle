@@ -16,7 +16,9 @@ android {
         versionCode (project.hasProperty("fwhRecovery") ? 41 : 40)
         versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-merged-v41-recovery-internal' : '0.5-phase5-merged-v40-internal')
         buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', project.hasProperty('fwhRecovery') ? 'false' : 'true'
-        // Phase 5E executor exists but runs ONLY after a separate governed activation.
+        // Independent readiness polling and destructive cleanup need separate approvals.
+        // Both remain OFF in every internal / recovery artifact.
+        buildConfigField 'boolean', 'CLEANUP_READINESS_POLLING_ENABLED', 'false'
         buildConfigField 'boolean', 'AUTOMATIC_CLEANUP_ENABLED', 'false'
 
         javaCompileOptions {
