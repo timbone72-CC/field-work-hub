@@ -41,7 +41,8 @@ final class ActionScheduler {
 
     /** Independent, strictly read-only schedule. Never wakes delivery or file cleanup. */
     private void ensureReadiness(SupabaseApi.AuthSession session) {
-        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) return;
+        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
+                || !"CONTRACTOR".equals(session.role)) return;
         try {
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                     readinessWorkName(session.userId, session.organizationId),
