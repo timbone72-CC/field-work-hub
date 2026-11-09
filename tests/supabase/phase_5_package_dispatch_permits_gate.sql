@@ -16,6 +16,10 @@ declare
   step_begin text:='public.service_begin_package_dispatch_step(uuid,uuid,uuid,bigint,uuid)';
   pinned_read text:='public.service_read_pinned_package_dispatch(uuid,uuid,text)';
   step_end text:='public.service_complete_package_dispatch_step(uuid,uuid,uuid,bigint,uuid,text)';
+  photo_scope text:='private.service_bounded_frozen_photo_ids(jsonb)';
+  bounded_source text;
+  provider_source text;
+  resume_source text;
   claim_source text;
   release_source text;
   central_guard text;
@@ -73,6 +77,42 @@ begin
     or has_function_privilege('anon',release_function,'EXECUTE')
     or has_function_privilege('authenticated',release_function,'EXECUTE')
   then raise exception 'New private RPCs must be service-only and legacy intact';end if;
+  if to_regprocedure(photo_scope) is null
+    or has_function_privilege('anon',photo_scope,'EXECUTE')
+    or has_function_privilege('authenticated',photo_scope,'EXECUTE')
+    or has_function_privilege('service_role',photo_scope,'EXECUTE')
+  then raise exception 'Frozen photo helper must exist and stay private';end if;
+  if not private.service_bounded_frozen_photo_ids(
+      '[{"photo_id":"11111111-1111-4111-8111-111111111111"},
+        {"photo_id":"22222222-2222-4222-8222-222222222222"}]'::jsonb)
+    or not private.service_bounded_frozen_photo_ids(
+      (select jsonb_agg(jsonb_build_object('photo_id',gen_random_uuid()))
+         from generate_series(1,200)))
+    or private.service_bounded_frozen_photo_ids('[]'::jsonb)
+    or private.service_bounded_frozen_photo_ids('null'::jsonb)
+    or private.service_bounded_frozen_photo_ids('{}'::jsonb)
+    or private.service_bounded_frozen_photo_ids('[{"photo_id":"bad"}]'::jsonb)
+    or private.service_bounded_frozen_photo_ids(
+      '[{"photo_id":"11111111-1111-4111-8111-111111111111"},
+        {"photo_id":"11111111-1111-4111-8111-111111111111"}]'::jsonb)
+    or private.service_bounded_frozen_photo_ids(
+      '[{"photo_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"},
+        {"photo_id":"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"}]'::jsonb)
+    or private.service_bounded_frozen_photo_ids(
+      (select jsonb_agg(jsonb_build_object('photo_id',gen_random_uuid()))
+         from generate_series(1,201)))
+  then raise exception 'Frozen 1-200 photo ID proof accepted malformed/duplicate bounds';end if;
+  provider_source:=pg_get_functiondef(
+    'private.service_record_pinned_package_provider_check(uuid,uuid,text,text,text,text,timestamptz,uuid)'::regprocedure);
+  resume_source:=pg_get_functiondef(
+    'private.service_resume_pinned_package_dispatch(uuid,uuid,text,uuid,uuid,bigint,text,text,text,timestamptz,uuid)'::regprocedure);
+  if position('private.service_bounded_frozen_photo_ids' in provider_source)=0
+    or position('private.service_bounded_frozen_photo_ids' in resume_source)=0
+    or not has_function_privilege('service_role',
+       'public.service_resume_pinned_package_dispatch(uuid,uuid,text,uuid,uuid,bigint,text,text,text,timestamptz,uuid)','EXECUTE')
+    or has_function_privilege('authenticated',
+       'public.service_resume_pinned_package_dispatch(uuid,uuid,text,uuid,uuid,bigint,text,text,text,timestamptz,uuid)','EXECUTE')
+  then raise exception 'Package provider/renewal bounded scope or service gate missing';end if;
   claim_source:=pg_get_functiondef('private.service_claim_package_and_acquire_dispatch(uuid,uuid,text,uuid,uuid)'::regprocedure);
   release_source:=pg_get_functiondef('private.service_release_package_dispatch(uuid,uuid,uuid,bigint)'::regprocedure);
   if position('service_claim_delivery(' in claim_source)>0
