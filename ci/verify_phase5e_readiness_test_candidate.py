@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Freeze a PRIVATE CI artifact for explicitly opted-in FWH TEST polling.
+"""Freeze an unpublished CI artifact for explicitly opted-in FWH TEST polling.
 
 This does not use the public APK publisher, release tag, or Android installer.
 """
