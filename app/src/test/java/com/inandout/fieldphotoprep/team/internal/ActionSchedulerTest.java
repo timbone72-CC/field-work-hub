@@ -31,6 +31,33 @@ public class ActionSchedulerTest {
     }
 
     @Test
+    public void readinessRequestHasBoundedPeriodicNetworkOnlyIdentity() {
+        PeriodicWorkRequest request = ActionScheduler.readinessRequest("owner", "org");
+        assertEquals(NetworkType.CONNECTED,
+                request.getWorkSpec().constraints.getRequiredNetworkType());
+        assertEquals(TimeUnit.HOURS.toMillis(24), request.getWorkSpec().intervalDuration);
+        assertEquals(3, request.getWorkSpec().input.getKeyValueMap().size());
+        assertEquals("owner", request.getWorkSpec().input.getString("owner"));
+        assertEquals("org", request.getWorkSpec().input.getString("org"));
+        assertTrue(request.getWorkSpec().input.getBoolean("readiness_only", false));
+        assertNotEquals(ActionScheduler.readinessWorkName("owner","org"),
+                ActionScheduler.workName("owner","org"));
+    }
+
+    @Test
+    public void testReadinessBuildNeverEnablesDestructiveCleanupOrWrongBackend() {
+        assertFalse(BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
+        if (BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) {
+            assertTrue(BuildConfig.FIELD_SYNC_ENABLED);
+            assertEquals(42, BuildConfig.VERSION_CODE);
+            assertEquals("https://vyocaujuwrivoqynvitm.supabase.co",
+                    SupabaseConfig.PROJECT_URL);
+        } else if (!BuildConfig.FIELD_SYNC_ENABLED) {
+            assertTrue(BuildConfig.VERSION_CODE == 41 || BuildConfig.VERSION_CODE == 43);
+        }
+    }
+
+    @Test
     public void successorArrivingDuringDrainCannotBeStrandedByKeepPolicy() throws Exception {
         Context context = RuntimeEnvironment.getApplication();
         WorkManagerTestInitHelper.initializeTestWorkManager(
