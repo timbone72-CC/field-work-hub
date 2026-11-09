@@ -5,6 +5,22 @@ plugins {
 def stableTestKeystore = rootProject.file('ci/field-photo-prep-team-test.jks')
 def roomSchemaDir = file("$projectDir/schemas")
 
+// Deliberate, locally opt-in TEST variant; never selected by ordinary CI,
+// trusted public publisher or the updater's standard release path.
+def readinessProperty = project.findProperty('fwhReadinessTest')
+if (readinessProperty != null && readinessProperty.toString() != 'true') {
+    throw new GradleException('fwhReadinessTest requires an explicit value of true')
+}
+def readinessTest = readinessProperty != null
+def recoveryBuild = project.hasProperty('fwhRecovery')
+if (readinessTest) {
+    // Fail closed if the same package is ever pointed at a different backend.
+    def config = file('src/main/java/com/inandout/fieldphotoprep/team/internal/SupabaseConfig.java').getText('UTF-8')
+    if (!config.contains('static final String PROJECT_URL = "https://vyocaujuwrivoqynvitm.supabase.co";')) {
+        throw new GradleException('Read-only TEST polling requires the exact authorized FWH TEST project')
+    }
+}
+
 android {
     namespace 'com.inandout.fieldphotoprep.team.internal'
     compileSdk 36
@@ -13,12 +29,21 @@ android {
         applicationId 'com.inandout.fieldphotoprep.team.internal'
         minSdk 26
         targetSdk 36
-        versionCode (project.hasProperty("fwhRecovery") ? 41 : 40)
-        versionName (project.hasProperty('fwhRecovery') ? '0.5-phase5-merged-v41-recovery-internal' : '0.5-phase5-merged-v40-internal')
-        buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', project.hasProperty('fwhRecovery') ? 'false' : 'true'
-        // Independent readiness polling and destructive cleanup need separate approvals.
-        // Both remain OFF in every internal / recovery artifact.
-        buildConfigField 'boolean', 'CLEANUP_READINESS_POLLING_ENABLED', 'false'
+        // Standard builds keep the already verified v40/v41 identity.
+        // The opt-in candidate is a safe in-place v42 TEST update; its paired
+        // v43 recovery understands Room6 and shuts off every network drain.
+        versionCode (readinessTest ? (recoveryBuild ? 43 : 42) : (recoveryBuild ? 41 : 40))
+        versionName (readinessTest
+            ? (recoveryBuild ? '0.5-phase5-readiness-v43-recovery-internal'
+                             : '0.5-phase5-readiness-v42-test-internal')
+            : (recoveryBuild ? '0.5-phase5-merged-v41-recovery-internal'
+                             : '0.5-phase5-merged-v40-internal'))
+        buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', recoveryBuild ? 'false' : 'true'
+        // Read-only TEST polling is independent of destructive cleanup.
+        // Default/recovery builds OFF; -PfwhReadinessTest=true is required
+        // only for the unpublished, TEST-pinned v42 candidate.
+        buildConfigField 'boolean', 'CLEANUP_READINESS_POLLING_ENABLED',
+            (readinessTest && !recoveryBuild) ? 'true' : 'false'
         buildConfigField 'boolean', 'AUTOMATIC_CLEANUP_ENABLED', 'false'
 
         javaCompileOptions {
