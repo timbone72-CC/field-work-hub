@@ -84,7 +84,7 @@ def verify(variant):
     (out / "identity.json").write_text(json.dumps(report, indent=2) + "\n",
                                        encoding="utf-8")
     print(json.dumps(report, indent=2))
-    print("PRIVATE CI ARTIFACT ONLY — NOT PUBLISHED OR INSTALLED")
+    print("CI ARTIFACT ONLY — NOT AN UPDATE RELEASE OR INSTALLED APK")
 
 
 if __name__ == "__main__":
