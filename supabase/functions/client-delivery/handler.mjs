@@ -106,9 +106,10 @@ export function createDeliveryHandler({
     }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
     if(!body||Array.isArray(body)||Object.keys(body).length!==1)
       return reply(400,'EXACT_REQUEST_REQUIRED');
+    const twoSlots={new_test_package_slot_1_step_once:0,
+      new_test_package_slot_2_step_once:1};
     const slot=twoPackageTestEnabled===true
-      ? {'new_test_package_slot_1_step_once':0,
-         'new_test_package_slot_2_step_once':1}[body.operation]
+      ? Object.hasOwn(twoSlots,body.operation)?twoSlots[body.operation]:undefined
       : body.operation==='new_test_package_step_once'?0:undefined;
     if(slot===undefined)return reply(400,'EXACT_REQUEST_REQUIRED');
     const pins=twoPackageTestEnabled===true?twoPackageTestPins:[{
@@ -125,11 +126,12 @@ export function createDeliveryHandler({
          ||!uuid.test(p.packageId??'')||!uuid.test(p.destinationId??'')
          ||!driveId.test(p.rootId??''))
       ||!uuid.test(testReleasePackageId??'')
-      ||pins.some(p=>p.packageId===testReleasePackageId
+      ||pins.some(p=>p.packageId.toLowerCase()===testReleasePackageId.toLowerCase()
         ||p.rootId===expectedDriveId||p.rootId===internalDriveId)
       ||(twoPackageTestEnabled===true&&(
         pins[0].packageId.toLowerCase()===pins[1].packageId.toLowerCase()
-        ||pins.some(p=>p.packageId===pinnedTestPackageId)
+        ||pins.some(p=>p.packageId.toLowerCase()===
+          (pinnedTestPackageId??'').toLowerCase())
         ||pins[0].destinationId!==pins[1].destinationId
         ||pins[0].rootId!==pins[1].rootId))
       ||!driveId.test(expectedDriveId??'')
