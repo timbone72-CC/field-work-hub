@@ -29,6 +29,11 @@ abstract class PhotoCleanupDao {
            "ORDER BY p.id LIMIT :limit")
     abstract List<String> readinessCandidates(String owner, String org, String after, int limit);
 
+    /** TEST read-only status count: never exposes evidence from another owner. */
+    @Query("SELECT count(*) FROM photo_cleanup_journal " +
+            "WHERE ownerId=:owner AND organizationId=:org AND state='HELD'")
+    abstract int heldReadinessCount(String owner, String org);
+
     @Query("SELECT * FROM photo_cleanup_journal WHERE photoId=:id")
     abstract PhotoCleanupJournal find(String id);
     @Query("SELECT * FROM protected_photos WHERE id=:id")
