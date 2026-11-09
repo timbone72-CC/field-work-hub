@@ -351,3 +351,91 @@ test('failed read-only provider identity probe never claims new package or calls
  assert.equal(ledger.permits.size,0);
  assert.equal(ledger.legacyCalls,0);
 });
+
+
+test('prepared two-slot worker accepts ONLY two server-pinned operations with no HTTP identities',async()=>{
+ const first=uuid(80),second=uuid(81),pins=[
+  {packageId:first,destinationId:dest,rootId:root},
+  {packageId:second,destinationId:dest,rootId:root}
+ ];
+ const seen=[];
+ const handler=createDeliveryHandler({
+  ...config,pinnedTestEnabled:false,twoPackageTestEnabled:true,
+  twoPackageTestPins:pins,
+  runPinnedTestStep:async ({packageId,destinationId,rootId})=>{
+   seen.push(packageId);
+   assert.equal(destinationId,dest);
+   assert.equal(rootId,root);
+   return {state:'PARENT_STEP_VERIFIED'};
+  }
+ });
+ const call=(body,key=WORKER_KEY)=>json(await handler(req(body,key)));
+ assert.deepEqual(await call({operation:'new_test_package_slot_1_step_once'}),
+  {http:200,status:'PARENT_STEP_VERIFIED'});
+ assert.deepEqual(await call({operation:'new_test_package_slot_2_step_once'}),
+  {http:200,status:'PARENT_STEP_VERIFIED'});
+ assert.deepEqual(seen,[first,second]);
+ for(const command of [
+  {operation:'new_test_package_step_once'},
+  {operation:'advance_once'},
+  {operation:'new_test_package_slot_1_step_once',packageId:second},
+  {operation:'new_test_package_slot_2_step_once',slot:1},
+  {operation:'toString'},
+  {operation:'__proto__'}
+ ]){
+  assert.deepEqual(await call(command),
+   {http:400,status:'EXACT_REQUEST_REQUIRED'});
+ }
+ assert.deepEqual(await call({operation:'new_test_package_slot_1_step_once'},'bad'),
+  {http:401,status:'WORKER_UNAUTHORIZED'});
+ assert.deepEqual(seen,[first,second]);
+});
+
+test('prepared two-slot route fails closed on duplicate, old, excessive or drifting pins',async()=>{
+ const makePin=(packageId,destinationId=dest,rootId=root)=>({
+  packageId,destinationId,rootId
+ });
+ const first=uuid(80),second=uuid(81);
+ const invalid=[
+  [],
+  [makePin(first)],
+  [makePin(first),makePin(second),makePin(uuid(82))],
+  [makePin(first),makePin(first)],
+  [makePin(first),makePin(first.toUpperCase())],
+  [makePin(pkg),makePin(second)], // already-delivered legacy TEST pin
+  [makePin(old),makePin(second)], // original protected legacy pin
+  [makePin(first),makePin(second,uuid(88))], // destination drift
+  [makePin(first),makePin(second,dest,'another_root_1234567890')],
+  [makePin(first),{...makePin(second),unexpected:true}],
+  [makePin('invalid'),makePin(second)],
+  [makePin(first),makePin(second,undefined,'wrong')], // malformed third field
+  [{packageId:first,destinationId:dest,rootId:config.expectedDriveId},
+   makePin(second)]
+ ];
+ let called=0;
+ const invoke=async(pins,settings={})=>json(await createDeliveryHandler({
+  ...config,pinnedTestEnabled:false,twoPackageTestEnabled:true,
+  twoPackageTestPins:pins,...settings,
+  runPinnedTestStep:async()=>{called++;throw Error('NO_PROVIDER');}
+ })(req({operation:'new_test_package_slot_1_step_once'})));
+ for(const pins of invalid)assert.deepEqual(await invoke(pins),
+  {http:503,status:'NEW_TEST_SCOPE_NOT_CONFIGURED'});
+ assert.deepEqual(await invoke([makePin(first),makePin(second)],
+  {pinnedTestEnabled:true}),{http:503,status:'CONFLICTING_WORKER_MODES'});
+ assert.deepEqual(await invoke([makePin(first),makePin(second)],
+  {enabled:true}),{http:503,status:'CONFLICTING_WORKER_MODES'});
+ assert.equal(called,0);
+});
+
+test('existing one-package TEST path never exposes two-slot commands',async()=>{
+ let called=0;
+ const handler=createDeliveryHandler({
+  ...config,runPinnedTestStep:async()=>{called++;throw Error('NOT_CALLED')}
+ });
+ for(const operation of ['new_test_package_slot_1_step_once',
+  'new_test_package_slot_2_step_once']){
+  assert.deepEqual(await json(handler(req({operation}))),
+   {http:400,status:'EXACT_REQUEST_REQUIRED'});
+ }
+ assert.equal(called,0);
+});
