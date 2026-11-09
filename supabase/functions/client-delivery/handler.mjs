@@ -64,6 +64,9 @@ export function createDeliveryHandler({
   enabled=false,workerSecret,expectedAccount,expectedDriveId,
   pinnedTestEnabled=false,pinnedTestPackageId,pinnedTestDestinationId,
   pinnedTestRootFolderId,
+  // Separate PREPARED two-slot path. Hosted index compiles this OFF; the
+  // only permitted selections are exact server-owned pins, never request IDs.
+  twoPackageTestEnabled=false,twoPackageTestPins=[],
   runPinnedTestStep=advancePinnedTestPackageOneStep,
   testPreflightEnabled=false,testRecoveryEnabled=false,
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
@@ -89,8 +92,9 @@ export function createDeliveryHandler({
   // Separate sealed TEST-only operation. It accepts no client-selected IDs,
   // cannot execute legacy delivery, and requires a verified new-package cutover
   // in the service-only database before any provider operation can run.
-  if(pinnedTestEnabled===true){
-    if(enabled===true||testRecoveryEnabled===true)
+  if(pinnedTestEnabled===true||twoPackageTestEnabled===true){
+    if(enabled===true||testRecoveryEnabled===true
+      ||(pinnedTestEnabled===true&&twoPackageTestEnabled===true))
       return reply(503,'CONFLICTING_WORKER_MODES');
     let body;
     try{
@@ -100,22 +104,38 @@ export function createDeliveryHandler({
       if(raw.length>512)return reply(413,'REQUEST_TOO_LARGE');
       body=JSON.parse(raw);
     }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
-    if(!body||Array.isArray(body)
-      ||Object.keys(body).length!==1
-      ||body.operation!=='new_test_package_step_once')
+    if(!body||Array.isArray(body)||Object.keys(body).length!==1)
       return reply(400,'EXACT_REQUEST_REQUIRED');
+    const twoSlots={new_test_package_slot_1_step_once:0,
+      new_test_package_slot_2_step_once:1};
+    const slot=twoPackageTestEnabled===true
+      ? Object.hasOwn(twoSlots,body.operation)?twoSlots[body.operation]:undefined
+      : body.operation==='new_test_package_step_once'?0:undefined;
+    if(slot===undefined)return reply(400,'EXACT_REQUEST_REQUIRED');
+    const pins=twoPackageTestEnabled===true?twoPackageTestPins:[{
+      packageId:pinnedTestPackageId,destinationId:pinnedTestDestinationId,
+      rootId:pinnedTestRootFolderId
+    }];
     const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
     const driveId=/^[A-Za-z0-9_-]{10,160}$/;
     if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
-      ||!uuid.test(pinnedTestPackageId??'')
-      ||!uuid.test(pinnedTestDestinationId??'')
+      ||!Array.isArray(pins)
+      ||pins.length!==(twoPackageTestEnabled===true?2:1)
+      ||pins.some(p=>!p||Array.isArray(p)
+         ||Object.keys(p).length!==3
+         ||!uuid.test(p.packageId??'')||!uuid.test(p.destinationId??'')
+         ||!driveId.test(p.rootId??''))
       ||!uuid.test(testReleasePackageId??'')
-      ||pinnedTestPackageId===testReleasePackageId
-      ||!driveId.test(pinnedTestRootFolderId??'')
+      ||pins.some(p=>p.packageId.toLowerCase()===testReleasePackageId.toLowerCase()
+        ||p.rootId===expectedDriveId||p.rootId===internalDriveId)
+      ||(twoPackageTestEnabled===true&&(
+        pins[0].packageId.toLowerCase()===pins[1].packageId.toLowerCase()
+        ||pins.some(p=>p.packageId.toLowerCase()===
+          (pinnedTestPackageId??'').toLowerCase())
+        ||pins[0].destinationId!==pins[1].destinationId
+        ||pins[0].rootId!==pins[1].rootId))
       ||!driveId.test(expectedDriveId??'')
       ||!driveId.test(internalDriveId??'')
-      ||pinnedTestRootFolderId===expectedDriveId
-      ||pinnedTestRootFolderId===internalDriveId
       ||expectedDriveId===internalDriveId
       ||typeof expectedAccount!=='string'
       ||!testWorkspaceDomain
@@ -134,8 +154,8 @@ export function createDeliveryHandler({
     }catch{return reply(503,'NEW_TEST_BACKEND_NOT_CONFIGURED');}
     try{
       const result=await runPinnedTestStep({
-        ledger,packageId:pinnedTestPackageId,
-        destinationId:pinnedTestDestinationId,rootId:pinnedTestRootFolderId,
+        ledger,packageId:pins[slot].packageId,
+        destinationId:pins[slot].destinationId,rootId:pins[slot].rootId,
         tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
         projectUrl:supabaseUrl,serviceRoleJwt,
         makeVault:async()=>vault,makeWorkerId,fetcher
