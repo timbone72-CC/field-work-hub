@@ -23,16 +23,8 @@ public final class FieldActionWorker extends Worker {
             if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED || isStopped())
                 return Result.success();
             TeamRuntime runtime = TeamRuntime.get(getApplicationContext());
-            android.content.SharedPreferences cursors =
-                    getApplicationContext().getSharedPreferences(
-                            "fwh_cleanup_readiness_cursor", Context.MODE_PRIVATE);
-            String key = owner + "/" + org;
             try {
-                runtime.cleanupPoller.poll(owner, org, cursors.getString(key, ""),
-                        this::isStopped, id -> {
-                            if (!cursors.edit().putString(key, id).commit())
-                                throw new IllegalStateException("Readiness cursor not saved");
-                        });
+                runtime.pollReadiness(owner, org, this::isStopped);
             } catch (SessionCoordinator.SessionChanged signedOut) {
                 // Account changed; WorkManager cancellation is best effort.
             } catch (Exception unavailable) {

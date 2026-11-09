@@ -62,6 +62,8 @@ public final class MainActivity extends Activity {
     private Button updateCheckButton;
     private Button updateAppButton;
     private TextView updateStatus;
+    private Button readinessTestButton;
+    private TextView readinessTestStatus;
     private UpdateReleasePolicy.Candidate availableUpdate;
     private File pendingInstallerApk;
     private Button refreshAssignmentsButton;
@@ -283,6 +285,19 @@ public final class MainActivity extends Activity {
         updateStatus.setVisibility(View.GONE);
         FwhVisualStyle.body(updateStatus);
         accountPane.addView(updateStatus);
+
+        if (BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) {
+            readinessTestButton = new Button(this);
+            readinessTestButton.setText("Check photo readiness (TEST — read-only)");
+            readinessTestButton.setContentDescription("Check up to eight privately received photos; never delete originals");
+            readinessTestButton.setOnClickListener(v -> checkReadinessNow());
+            FwhVisualStyle.button(readinessTestButton, false);
+            accountPane.addView(readinessTestButton, matchWrap());
+            readinessTestStatus = text(
+                    "TEST only: checks delivery readiness and keeps originals. Cleanup is disabled.", 13, false);
+            FwhVisualStyle.body(readinessTestStatus);
+            accountPane.addView(readinessTestStatus);
+        }
 
         // Work Orders has one scroll owner: search/refresh/navigation stay above the list.
         workOrdersPane = new LinearLayout(this);
@@ -525,6 +540,18 @@ public final class MainActivity extends Activity {
         }
 
         identityText.setText("Account: " + session.email + "\nRole: " + session.role);
+        if (readinessTestButton != null) {
+            readinessTestButton.setVisibility("CONTRACTOR".equals(session.role)
+                    ? View.VISIBLE : View.GONE);
+            readinessTestButton.setEnabled(true);
+        }
+        if (readinessTestStatus != null) {
+            // Never carry a former owner's HELD count into a new account.
+            readinessTestStatus.setText(
+                    "TEST only: checks delivery readiness and keeps originals. Cleanup is disabled.");
+            readinessTestStatus.setVisibility("CONTRACTOR".equals(session.role)
+                    ? View.VISIBLE : View.GONE);
+        }
         if (serverVerified) {
             updateRlsProof(session, workOrders);
         } else {
@@ -1189,6 +1216,41 @@ public final class MainActivity extends Activity {
                 });
     }
 
+
+    /** Explicit TEST-only observation of the same owner-scoped bounded read path. */
+    private void checkReadinessNow() {
+        SupabaseApi.AuthSession expected = currentSession;
+        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
+                || expected == null || !"CONTRACTOR".equals(expected.role)
+                || readinessTestButton == null) return;
+        long generation = runtime.sessions.generation();
+        long operation = sessionOperations.capture();
+        readinessTestButton.setEnabled(false);
+        readinessTestStatus.setText("TEST: checking up to eight photos for readiness only…");
+        executor.execute(() -> {
+            try {
+                int attempted = runtime.pollReadiness(expected.userId,
+                        expected.organizationId, Thread.currentThread()::isInterrupted);
+                int held = runtime.sessions.local(generation, expected,
+                        () -> runtime.cleanupDao.heldReadinessCount(
+                                expected.userId, expected.organizationId));
+                postIfCurrent(operation, generation, () -> {
+                    readinessTestButton.setEnabled(true);
+                    readinessTestStatus.setText("TEST read-only: checked " + attempted
+                            + " photo candidate(s); " + held + " previously saved HELD"
+                            + " readiness snapshot(s) for this account."
+                            + " Ineligible/offline results do not count as delivery."
+                            + " No originals were deleted.");
+                });
+            } catch (Exception blocked) {
+                postIfCurrent(operation, generation, () -> {
+                    readinessTestButton.setEnabled(true);
+                    readinessTestStatus.setText("TEST readiness check unavailable."
+                            + " Saved photo evidence remains protected. No deletion.");
+                });
+            }
+        });
+    }
 
     private void checkForUpdates(boolean manual) {
         long now = System.currentTimeMillis();
