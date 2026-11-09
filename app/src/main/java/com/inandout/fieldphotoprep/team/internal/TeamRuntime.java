@@ -7,6 +7,8 @@ import java.util.List;
 /** Application-scoped owners. UI callbacks cannot own or rotate worker credentials. */
 final class TeamRuntime {
     private static volatile TeamRuntime instance;
+    private final Context applicationContext;
+    private final Object readinessPollLock = new Object();
     final SupabaseApi api = new SupabaseApi();
     final SessionCoordinator sessions;
     final CachedWorkOrderDao dao;
@@ -21,6 +23,7 @@ final class TeamRuntime {
     private final Object actionCreationLock = new Object();
 
     private TeamRuntime(Context context) {
+        applicationContext = context.getApplicationContext();
         dao = TeamDatabase.getInstance(context).cachedWorkOrderDao();
         sessions = new SessionCoordinator(new SecureSessionStore(context), api);
         assignments = new AssignmentRepository(api, new RoomAssignmentStore(dao));
@@ -144,6 +147,26 @@ final class TeamRuntime {
                     throw new SessionCoordinator.SessionChanged();
                 api.respondTeamHandoffConsent(s.accessToken, requestId, accept);
             }
+        }
+    }
+
+    /**
+     * Single owner for periodic and explicit TEST-only readiness scans. The
+     * cursor cannot be lost to overlapping Worker/UI scans. No deletion or
+     * final-delivery mutation is reachable through this entry point.
+     */
+    int pollReadiness(String owner, String org, java.util.function.BooleanSupplier stopped)
+            throws Exception {
+        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) return 0;
+        synchronized (readinessPollLock) {
+            android.content.SharedPreferences cursors =
+                    applicationContext.getSharedPreferences(
+                            "fwh_cleanup_readiness_cursor", Context.MODE_PRIVATE);
+            String key = owner + "/" + org;
+            return cleanupPoller.poll(owner, org, cursors.getString(key, ""), stopped, id -> {
+                if (!cursors.edit().putString(key, id).commit())
+                    throw new IllegalStateException("Readiness cursor not saved");
+            });
         }
     }
 
