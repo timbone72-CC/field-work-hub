@@ -1684,8 +1684,11 @@ export async function advancePinnedTestPackageOneStep({
    ||!HASH.test(claim.approved_sha256??'')
    ||m?.package_id!==packageId||m?.destination_id!==destinationId
    ||m?.destination_root!==rootId
-   ||!Array.isArray(m.selected_photos)||m.selected_photos.length!==1
-   ||!UUID.test(m.selected_photos[0]?.photo_id??''))
+   ||!Array.isArray(m.selected_photos)
+   ||m.selected_photos.length<1||m.selected_photos.length>200
+   ||m.selected_photos.some(p=>!UUID.test(p?.photo_id??''))
+   ||new Set(m.selected_photos.map(p=>p.photo_id.toLowerCase())).size
+     !==m.selected_photos.length)
    throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
  const stepId=makeWorkerId();
  if(!UUID.test(stepId??'')||[claim.worker_id,claim.request_id].includes(stepId))
