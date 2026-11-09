@@ -144,11 +144,10 @@ public class PhotoCleanupExecutorTest {
         fields.updateAction(f);
     }
 
-    void journal(ProtectedPhoto p) throws Exception {
+    String eligibleSnapshot(ProtectedPhoto p) throws Exception {
         PhotoTransfer t=transfers.find(p.id);
         FieldAction a=fields.action(t.finishActionId);
-        String packageId=UUID.randomUUID().toString();
-        String exactServerSnapshot=new JSONObject()
+        return new JSONObject()
             .put("eligible",true)
             .put("server_readiness_only",true)
             .put("private_receipt_verified",true)
@@ -157,11 +156,75 @@ public class PhotoCleanupExecutorTest {
             .put("photo_id",p.id).put("run_id",p.runId)
             .put("finish_set_id",p.finishSetId).put("finish_digest",a.finishDigest)
             .put("transfer_version",t.transferVersion)
-            .put("package_id",packageId).toString();
+            .put("package_id",UUID.randomUUID().toString()).toString();
+    }
+
+    void journal(ProtectedPhoto p) throws Exception {
+        PhotoTransfer t=transfers.find(p.id);
+        FieldAction a=fields.action(t.finishActionId);
+        String exactServerSnapshot=eligibleSnapshot(p);
         PhotoCleanupJournal record=new PhotoCleanupJournal(p.id,p.ownerId,p.organizationId,
                 p.workOrderId,p.runId,p.finishSetId,a.finishDigest,t.transferVersion,
-                t.receiptId,packageId,exactServerSnapshot,System.currentTimeMillis());
+                t.receiptId,new JSONObject(exactServerSnapshot).getString("package_id"),
+                exactServerSnapshot,System.currentTimeMillis());
         journal.insert(record);
+    }
+
+    @Test public void exactReadinessBridgePersistsOnlyHeldSnapshot() throws Exception {
+        ProtectedPhoto p=verified("wo-ready","run-ready");
+        String response=eligibleSnapshot(p);
+        int[] called={0};
+        PhotoCleanupCoordinator bridge=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    called[0]++;
+                    assertEquals(actor.accessToken,token);
+                    assertEquals(p.id,id);
+                    return response;
+                });
+        assertTrue(bridge.recordServerReadiness(actor.userId,actor.organizationId,p.id));
+        assertEquals(1,called[0]);
+        PhotoCleanupJournal result=journal.find(p.id);
+        assertNotNull(result);
+        assertEquals("HELD",result.state);
+        assertEquals(response,result.serverProofJson);
+        assertEquals("WAITING",fields.photo(p.id).state);
+        assertTrue(new File(p.originalPath).exists());
+        assertTrue(new File(p.preparedPath).exists());
+        // A matching read-only replay never arms deletion.
+        assertTrue(bridge.recordServerReadiness(actor.userId,actor.organizationId,p.id));
+        assertEquals(2,called[0]);
+        assertEquals("HELD",journal.find(p.id).state);
+    }
+
+    @Test public void missingOrUnreceivedLocalPhotoNeverCallsRemoteRead() throws Exception {
+        ProtectedPhoto p=verified("wo-unreceived","run-unreceived");
+        int[] called={0};
+        PhotoCleanupCoordinator bridge=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    called[0]++;
+                    throw new AssertionError("Unqualified local photo made a remote request");
+                });
+        assertFalse(bridge.recordServerReadiness(
+                actor.userId,actor.organizationId,UUID.randomUUID().toString()));
+        PhotoTransfer uncertain=transfers.find(p.id);
+        uncertain.state="UNCERTAIN";
+        transfers.update(uncertain);
+        assertFalse(bridge.recordServerReadiness(
+                actor.userId,actor.organizationId,p.id));
+        assertEquals(0,called[0]);
+        assertNull(journal.find(p.id));
+        assertTrue(new File(p.originalPath).exists());
+    }
+
+    @Test public void locallyCompletedPhotoNeverRecontactsReadinessServer() throws Exception {
+        ProtectedPhoto p=verified("wo-cleaned","run-cleaned");
+        journal(p);
+        assertTrue(owner.cleanupVerified(actor,sessions.generation(),p.id));
+        PhotoCleanupCoordinator bridge=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{throw new AssertionError("CLEANED photo requested again");});
+        assertFalse(bridge.recordServerReadiness(
+                actor.userId,actor.organizationId,p.id));
+        assertEquals("CLEANED",journal.find(p.id).state);
     }
 
     @Test public void approvedExactClosureDeletesOnlyOnePhotoAndKeepsReceipts() throws Exception {
