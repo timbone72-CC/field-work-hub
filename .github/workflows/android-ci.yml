@@ -153,6 +153,31 @@ jobs:
           name: field-work-hub-phase5-recovery-apk
           path: phase5-artifacts/recovery/
           if-no-files-found: error
+      # Opt-in TEST preparation: these APKs are only CI artifacts. They are not
+      # uploaded to the updater's public GitHub Release and cannot silently install.
+      - name: Test opt-in read-only v42 against isolated Room fixtures
+        run: gradle :app:testDebugUnitTest -PfwhReadinessTest=true --tests '*ActionSchedulerTest' --tests '*PhotoCleanupExecutorTest'
+      - name: Freeze unpublished TEST v42 candidate and disabled-cleanup proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleDebug -PfwhReadinessTest=true
+          python3 ci/verify_phase5e_readiness_test_candidate.py candidate
+      - name: Freeze paired evidence-preserving TEST v43 recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleDebug -PfwhReadinessTest=true -PfwhRecovery
+          python3 ci/verify_phase5e_readiness_test_candidate.py recovery
+      - name: Upload unpublished read-only TEST candidate and recovery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: field-work-hub-phase5e-readiness-test-staged-not-released
+          path: |
+            phase5-artifacts/readiness-test-candidate/
+            phase5-artifacts/readiness-test-recovery/
+          retention-days: 7
+          if-no-files-found: error
       - name: Upload versioned Room schemas
         uses: actions/upload-artifact@v4
         with:
