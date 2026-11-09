@@ -540,12 +540,18 @@ public final class MainActivity extends Activity {
         }
 
         identityText.setText("Account: " + session.email + "\nRole: " + session.role);
-        if (readinessTestButton != null)
+        if (readinessTestButton != null) {
             readinessTestButton.setVisibility("CONTRACTOR".equals(session.role)
                     ? View.VISIBLE : View.GONE);
-        if (readinessTestStatus != null)
+            readinessTestButton.setEnabled(true);
+        }
+        if (readinessTestStatus != null) {
+            // Never carry a former owner's HELD count into a new account.
+            readinessTestStatus.setText(
+                    "TEST only: checks delivery readiness and keeps originals. Cleanup is disabled.");
             readinessTestStatus.setVisibility("CONTRACTOR".equals(session.role)
                     ? View.VISIBLE : View.GONE);
+        }
         if (serverVerified) {
             updateRlsProof(session, workOrders);
         } else {
