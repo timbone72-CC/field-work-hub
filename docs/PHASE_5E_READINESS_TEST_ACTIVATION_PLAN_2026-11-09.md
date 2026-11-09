@@ -1,0 +1,40 @@
+# Phase 5E — TEST-only read-only readiness activation candidate and rollback
+
+**Status:** Source/CI preparation only, NO runtime activation or release authorized.  
+**Scope key:** `phase5e-readiness-test-candidate-v42-20261109`. Classification: Level 3 (Android signed TEST variant, original-owner protected evidence and existing privileged CI workflow).  
+**Authoritative branch:** `feat/phase5e-readiness-test-candidate-v42-20261109`. Baseline/rollback main: `557473eb1e452b3cfdabd8fba0e53d0921bfc68c` (merged PR #63).  
+**Governing sources:** AGENTS.md; GOVERNANCE.md; PROJECT_PROFILE.md; RULE_INDEX.md; CHANGE_CONTROL_CONTRACT.md; TESTING_CONTRACT.md; INTEGRATION_CONTRACT.md; docs/PHASE_STAGING_DOCTRINE.md; approved Phase 5 implementation plan section 5E; PRs #55, #62, #63; existing Room6 v40/v41 release/rollback policy.  
+**Protected boundaries:** The original FPP app, original FWH photos and offline work, exact owner/org/WO/run/Finish and private receipt, client provider files, package permits, the previously delivered TEST package and old HOLD state must remain untouched. No backend migration or Google operation is part of this activation preparation.
+
+## Exact activation switch and tested artifact identities
+
+Default debug/normal internal source builds remain the installed **v40** with `CLEANUP_READINESS_POLLING_ENABLED=false` and `AUTOMATIC_CLEANUP_ENABLED=false`; default recovery remains **v41** with sync, polling and cleanup OFF. Neither default nor recovery can accidentally enable polling.
+
+An **explicit** Gradle option `-PfwhReadinessTest=true`, rejected if its value is ambiguous, prepares a separately identifiable **v42 TEST-only candidate** with normal field sync ON, read-only readiness polling ON, and automatic cleanup OFF. The build script fails if the app's Supabase project URL is not exactly `https://vyocaujuwrivoqynvitm.supabase.co`. It retains the same internal Android package, signer and Room6 database so installation can be in-place. The paired `-PfwhReadinessTest=true -PfwhRecovery` **v43 recovery** has field sync, readiness polling and cleanup ALL OFF and retains Room6 and protected user data. v43 is a forward-version recovery from v42; **never downgrade** installed v42 to older v40/v41 or uninstall/clear app data. After any v43 recovery installation, resuming fieldwork requires a separately approved safe **v44-or-newer** release.
+
+The source CI verifies both opted-in builds with Android `aapt`, signer digest, generated BuildConfig booleans, immutable TEST project URL and Room schemas 1–6; it freezes SHA-256 and exact source SHA in CI-artifact metadata. It also preserves ordinary candidate/recovery identity verification and the existing trusted release publisher. These two opted-in APKs are GitHub Actions **artifacts only**, not a public GitHub Release, automatic updater option, Play Store submission, installed APK or an implicit publication authorization. The existing strict publisher rejects this feature branch as a designated release branch; no workaround or special provider credentials.
+
+## Read-only operational boundary
+
+- Only the current signed-in original Contractor owner with current session authority can check own local WAITING originals with a verified RECEIVED private receipt and accepted Finish. Backend function `public.field_photo_cleanup_readiness(uuid)` is read-only, the server performs final package/retention/correction checks, and any eligible response may create only a durable local **HELD** journal record.
+- One periodic WorkManager job at a best-effort 24-hour cadence uses CONNECTED constraints, per-owner unique work and a keyset cursor; up to **8** candidates/run. Sign-out cancels the work. The activity's TEST-only `Check photo readiness (TEST — read-only)` button in Account & Updates calls the SAME serialized cursor/read-only path and shows attempted candidate count and owner-scoped HELD snapshot count. A denial/negative/offline result is not evidence of delivery or successful receipt.
+- `PhotoOwner.cleanupVerified`, transitions to READY/CLEANING/CLEANED, remote provider Send and automatic general dispatch are **not** invoked. `AUTOMATIC_CLEANUP_ENABLED=false` is mandatory in every built artifact, including v42. The manual control is TEST-only and is absent in v40 and v43.
+- An owner/session mismatch, offline API, changed evidence, wrong project, incorrect signer/version, missing Room schema, unverified CI, or uncertain source blocks only this release or read. Protected local files and prior historical receipts remain intact.
+
+## Verified TEST backend preflight — read-only, November 9
+
+Project ref `vyocaujuwrivoqynvitm` resolves to active `Field Photo Prep Team` (historic name). The separate `Field Photo Prep` project is ref `vtyiktvqhbgabawotkrj` and MUST NOT be used. Read-only catalog queries confirmed **131 installed migration versions**, newest `20261102235930`, with both cleanup-readiness and final-run closure-writer versions present. Existing `public.field_photo_cleanup_readiness` remains SECURITY INVOKER and executable by authenticated, not anon. The internal `private.field_photo_cleanup_readiness` is SECURITY DEFINER; its intended original-owner protections are implemented in source. These catalog checks do **not** substitute for real signed-in owner/foreign-owner RLS probes, a new change to TEST SQL, or observed WorkManager execution. No TEST database data or flag was mutated during preparation.
+
+## Required order before any phone TEST activation
+
+1. Finish exact-head Android (default+opt-in candidate/recovery) / Database / Admin / governance CI, verify two APK hashes/signers/Room6/flags, and review PR diff. Obtain separate explicit Level-3 source merge approval; merge under the governed SHA lock; confirm main CI and publish **nothing** yet.
+2. Reconcile TEST project permissions, runtime general dispatch OFF, held/legacy permits and package-delivery history with read-only checks. Do not replay earlier successful Drive delivery or resend photos. Preserve prior accepted v40 installation/retention and offline field evidence; do not repeat those tests.
+3. Obtain **separate explicit operator authority for a single controlled TEST v42 distribution and installation** on the designated TEST phone, with v43 protected recovery artifact ready; do not use the public v40 updater or install on a second phone automatically. Install in place; do not uninstall/clear storage.
+4. Under an original test Contractor account with already protected/received disposable evidence, open Account & Updates and use the TEST read-only button once. Verify truthful attempted and HELD counts, unchanged on-phone originals and unchanged final package/Drive state. A 0-eligible response remains valid and MUST NOT be overridden. An authentic signed-out/other-owner attempt must show no foreign photo information.
+5. Observe a single ordinary periodic wake only when the OS schedules it; it is not a guaranteed exact clock timer. Never force an unnecessary old camera/capture/Google-delivery retest to prove the scheduler. If device behavior contradicts the source assumption, hold activation for that boundary only. Preserve evidence/logs and record the exact result.
+
+**Abort / restore:** Stop the read-only polling by signing out or installing the separately verified, greater-version **v43 recovery** (field networking and cleanup OFF; retained Room6). Do not try an older v40/v41 downgrade. Do not delete protected originals, change server data or reset migration history. A subsequent ordinary app release must use version >=44 after v43 recovery.
+
+## Current handoff
+
+Source-only preparation and opted-in CI candidate artifact generation in progress. **NOT APPROVED:** source merge, direct v42 APK distribution/installation, enabling destructive cleanup, any provider/Drive Send, SQL change, or broad dispatch. Next: exact-source CI, guarded PR review, and explicit source-merge approval. Future phone evidence and rollback only after the separate operator v42 rollout authorization.
