@@ -14,6 +14,7 @@ final class TeamRuntime {
     final ActionSyncCoordinator sync;
     final PhotoOwner photos;
     final PhotoCleanupCoordinator cleanupReadiness;
+    final PhotoCleanupReadinessPoller cleanupPoller;
     final PhotoCleanupDao cleanupDao;
     final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
