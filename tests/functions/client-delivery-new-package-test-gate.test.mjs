@@ -369,7 +369,7 @@ test('prepared two-slot worker accepts ONLY two server-pinned operations with no
    return {state:'PARENT_STEP_VERIFIED'};
   }
  });
- const call=(body,key=WORKER_KEY)=>json(await handler(req(body,key)));
+ const call=async(body,key=WORKER_KEY)=>json(await handler(req(body,key)));
  assert.deepEqual(await call({operation:'new_test_package_slot_1_step_once'}),
   {http:200,status:'PARENT_STEP_VERIFIED'});
  assert.deepEqual(await call({operation:'new_test_package_slot_2_step_once'}),
