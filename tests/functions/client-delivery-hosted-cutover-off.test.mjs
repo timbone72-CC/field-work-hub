@@ -14,6 +14,9 @@ test('general and legacy worker modes remain compiled OFF; one TEST pin ON',()=>
  }
  assert.match(source,/testPreflightEnabled:Deno\.env\.get\('FWH_CLIENT_TEST_PREFLIGHT_ENABLED'\)/);
  assert.match(source,/^\s*pinnedTestEnabled:true,/m);
+ // The prepared second mode cannot run even if this file is deployed.
+ assert.match(source,/^\s*twoPackageTestEnabled:false,/m);
+ assert.match(source,/^\s*twoPackageTestPins:\[\],/m);
 });
 
 test('one approved TEST package is pinned and env cannot substitute identities',()=>{
