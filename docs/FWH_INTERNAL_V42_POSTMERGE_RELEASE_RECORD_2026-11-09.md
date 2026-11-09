@@ -33,4 +33,10 @@ Publication exposes a **TEST APK** to all FWH installations that use this standa
 
 Once the immutable release is independently verified, ask the operator on the primary Android phone to open **Account & Updates → Check for Update → Update App**, confirm Android's in-place install, then check that saved jobs/photos remain and use the read-only TEST check once. Keep v43 protected recovery on the laptop. Do not repeat prior accepted camera/offline/provider/Google Send tests. Installation remains PENDING until actual operator evidence.
 
-**Current status:** release-only branch preparation; no public v42 release or phone installation claimed. Record exact PR/head/check IDs, release target/digest and operator observations only after they happen.
+## Publication closeout — November 9, 2026
+
+- Release-only [PR #65](https://github.com/timbone72-CC/field-work-hub/pull/65), head `38f0de3a74045d0d9074bfc8f57d6db2aee3e209`, exact-PR-head Android `42704016615`, Database `42704016613`, Admin `42704016628`, latest governance `42704191491`: all PASS. Reviewed three-file release-only diff, no backend/Room/field photo/protected provider change.
+- Ordinary protected merge `ac75cd068176ce4752dd53bcc98154bccadfca11`. Postmerge exact-main Android `42704432897`, Database `42704433105`, Admin `42704432912`: all PASS.
+- Trusted release publisher `42704803214` logged `PUBLISHED and verified fwh-internal-v42`. GitHub latest release `fwh-internal-v42`, published 2026-11-09T21:41:17Z, target `ac75cd06`, contains exactly one uploaded `Field-Work-Hub-Internal.apk` (8,597,083 bytes), verified SHA-256 `b7cfc2b7884c48ab466e824122987c7e2152f5c7fd42d1fb17469ca1d8d2311f`. The binary reproducibly matches the previously verified v42 opt-in candidate. Existing v40 remains immutable, and recovery v43 was not released as an update.
+- No direct photo/provider, SQL, dispatch, cleanup or Android installation action occurred. **PENDING:** primary-phone in-app Check for Update → Update App → Android installation confirmation, protected jobs/photos retained and one original-owner read-only readiness check. Do not claim device PASS before observation.
+
