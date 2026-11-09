@@ -227,6 +227,122 @@ public class PhotoCleanupExecutorTest {
         assertEquals("CLEANED",journal.find(p.id).state);
     }
 
+
+    @Test public void readinessPollingIsBoundedAndFairAcrossUnreadyPhotos() throws Exception {
+        java.util.Map<String,ProtectedPhoto> fixtures=new java.util.HashMap<>();
+        for(int n=0;n<11;n++) {
+            ProtectedPhoto p=verified("wo-poll-"+n,"run-poll-"+n);
+            fixtures.put(p.id,p);
+        }
+        List<String> eligible=journal.readinessCandidates(
+                actor.userId,actor.organizationId,"",20);
+        assertEquals(11,eligible.size());
+        String readyId=eligible.get(4);
+        int[] calls={0};
+        PhotoCleanupCoordinator read=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    calls[0]++;
+                    assertEquals(actor.accessToken,token);
+                    return readyId.equals(id)
+                            ?eligibleSnapshot(fixtures.get(id))
+                            :"{\"eligible\":false,\"reason\":\"FINAL_RUN_CLOSURE_PENDING\"}";
+                });
+        PhotoCleanupReadinessPoller poller=new PhotoCleanupReadinessPoller(
+                journal,read,sessions,true);
+        java.util.concurrent.atomic.AtomicReference<String> cursor=
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        assertEquals(8,poller.poll(actor.userId,actor.organizationId,cursor.get(),
+                ()->false,cursor::set));
+        assertEquals(8,calls[0]);
+        assertEquals(eligible.get(7),cursor.get());
+        PhotoCleanupJournal snapshot=journal.find(readyId);
+        assertNotNull(snapshot);
+        assertEquals("HELD",snapshot.state);
+        assertEquals("WAITING",fields.photo(readyId).state);
+        assertEquals(3,poller.poll(actor.userId,actor.organizationId,cursor.get(),
+                ()->false,cursor::set));
+        assertEquals(11,calls[0]);
+        assertEquals(eligible.get(10),cursor.get());
+        // The next invocation wraps; the previously journaled photo is not
+        // polled again and all other ineligible photos remain eligible to check.
+        assertEquals(8,poller.poll(actor.userId,actor.organizationId,cursor.get(),
+                ()->false,cursor::set));
+        assertEquals(19,calls[0]);
+        assertEquals("HELD",journal.find(readyId).state);
+        for(ProtectedPhoto p:fixtures.values())
+            assertTrue(new File(p.originalPath).exists());
+    }
+
+    @Test public void unavailablePhotoDoesNotBlockAnotherReadinessCandidate() throws Exception {
+        ProtectedPhoto first=verified("wo-read-error-a","run-read-error-a");
+        ProtectedPhoto second=verified("wo-read-error-b","run-read-error-b");
+        List<String> eligible=journal.readinessCandidates(
+                actor.userId,actor.organizationId,"",8);
+        assertEquals(2,eligible.size());
+        String broken=eligible.get(0), supported=eligible.get(1);
+        int[] calls={0};
+        PhotoCleanupCoordinator read=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    calls[0]++;
+                    if(broken.equals(id)) throw new java.io.IOException("TEST offline read");
+                    return eligibleSnapshot(fields.photo(id));
+                });
+        PhotoCleanupReadinessPoller poller=new PhotoCleanupReadinessPoller(
+                journal,read,sessions,true);
+        java.util.concurrent.atomic.AtomicReference<String> cursor=
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        assertEquals(2,poller.poll(actor.userId,actor.organizationId,cursor.get(),
+                ()->false,cursor::set));
+        assertEquals(2,calls[0]);
+        assertNull(journal.find(broken));
+        assertEquals("HELD",journal.find(supported).state);
+        assertTrue(new File(first.originalPath).exists());
+        assertTrue(new File(second.originalPath).exists());
+    }
+
+    @Test public void signOutDuringReadStopsWithoutSavingProofOrCursor() throws Exception {
+        ProtectedPhoto p=verified("wo-signout-poll","run-signout-poll");
+        java.util.concurrent.atomic.AtomicReference<String> cursor=
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        PhotoCleanupCoordinator read=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    sessions.signOut();
+                    return eligibleSnapshot(p);
+                });
+        PhotoCleanupReadinessPoller poller=new PhotoCleanupReadinessPoller(
+                journal,read,sessions,true);
+        assertThrows(SessionCoordinator.SessionChanged.class,
+                ()->poller.poll(actor.userId,actor.organizationId,cursor.get(),
+                        ()->false,cursor::set));
+        assertEquals("",cursor.get());
+        assertNull(journal.find(p.id));
+        assertTrue(new File(p.originalPath).exists());
+    }
+
+    @Test public void pollingGateOffAndExistingJournalNeverProbeRemote() throws Exception {
+        ProtectedPhoto p=verified("wo-disabled-poll","run-disabled-poll");
+        int[] calls={0};
+        PhotoCleanupCoordinator remote=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    calls[0]++;
+                    throw new AssertionError("Readiness must not be called");
+                });
+        PhotoCleanupReadinessPoller disabled=new PhotoCleanupReadinessPoller(
+                journal,remote,sessions,false);
+        assertEquals(0,disabled.poll(actor.userId,actor.organizationId,"",
+                ()->false,id->{}));
+        assertEquals(0,calls[0]);
+        journal(p); // durable HELD was created by a separate accepted proof
+        assertTrue(journal.readinessCandidates(
+                actor.userId,actor.organizationId,"",8).isEmpty());
+        PhotoCleanupReadinessPoller enabled=new PhotoCleanupReadinessPoller(
+                journal,remote,sessions,true);
+        assertEquals(0,enabled.poll(actor.userId,actor.organizationId,"",
+                ()->false,id->{}));
+        assertEquals("HELD",journal.find(p.id).state);
+        assertTrue(new File(p.originalPath).exists());
+    }
+
     @Test public void approvedExactClosureDeletesOnlyOnePhotoAndKeepsReceipts() throws Exception {
         ProtectedPhoto a=verified("wo-a","run-a");
         journal(a);

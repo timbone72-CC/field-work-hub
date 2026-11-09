@@ -14,6 +14,7 @@ final class TeamRuntime {
     final ActionSyncCoordinator sync;
     final PhotoOwner photos;
     final PhotoCleanupCoordinator cleanupReadiness;
+    final PhotoCleanupReadinessPoller cleanupPoller;
     final PhotoCleanupDao cleanupDao;
     final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
@@ -27,6 +28,7 @@ final class TeamRuntime {
         photos = new PhotoOwner(context, dao, cleanupDao, sessions);
         cleanupReadiness = new PhotoCleanupCoordinator(
                 cleanupDao, sessions, api::fieldPhotoCleanupReadiness);
+        cleanupPoller = new PhotoCleanupReadinessPoller(cleanupDao, cleanupReadiness, sessions);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
         PhotoTransferDao transferDao = TeamDatabase.getInstance(context).photoTransferDao();
         transfers = new PhotoTransferCoordinator(dao, transferDao, photos, sessions, api,

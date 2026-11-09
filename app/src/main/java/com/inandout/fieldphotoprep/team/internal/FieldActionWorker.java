@@ -17,6 +17,29 @@ public final class FieldActionWorker extends Worker {
         if (!BuildConfig.FIELD_SYNC_ENABLED) return Result.success();
         String owner = getInputData().getString("owner"), org = getInputData().getString("org");
         if (owner == null || org == null) return Result.failure();
+        // Separate bounded discovery mode: no field action, transfer, client
+        // package, cleanup transition or provider write is run by this Worker.
+        if (getInputData().getBoolean("readiness_only", false)) {
+            if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED || isStopped())
+                return Result.success();
+            TeamRuntime runtime = TeamRuntime.get(getApplicationContext());
+            android.content.SharedPreferences cursors =
+                    getApplicationContext().getSharedPreferences(
+                            "fwh_cleanup_readiness_cursor", Context.MODE_PRIVATE);
+            String key = owner + "/" + org;
+            try {
+                runtime.cleanupPoller.poll(owner, org, cursors.getString(key, ""),
+                        this::isStopped, id -> {
+                            if (!cursors.edit().putString(key, id).commit())
+                                throw new IllegalStateException("Readiness cursor not saved");
+                        });
+            } catch (SessionCoordinator.SessionChanged signedOut) {
+                // Account changed; WorkManager cancellation is best effort.
+            } catch (Exception unavailable) {
+                android.util.Log.w("FWH", "Cleanup readiness held; originals protected");
+            }
+            return Result.success();
+        }
         TeamRuntime runtime = TeamRuntime.get(getApplicationContext());
         ActionSyncCoordinator.Outcome outcome = runtime.sync.drain(owner, org, this::isStopped);
         PhotoTransferCoordinator.Outcome transfer =
