@@ -434,7 +434,7 @@ test('existing one-package TEST path never exposes two-slot commands',async()=>{
  });
  for(const operation of ['new_test_package_slot_1_step_once',
   'new_test_package_slot_2_step_once']){
-  assert.deepEqual(await json(handler(req({operation}))),
+  assert.deepEqual(await json(await handler(req({operation}))),
    {http:400,status:'EXACT_REQUEST_REQUIRED'});
  }
  assert.equal(called,0);
