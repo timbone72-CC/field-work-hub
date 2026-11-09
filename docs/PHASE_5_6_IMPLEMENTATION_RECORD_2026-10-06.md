@@ -3,13 +3,11 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## 2026-11-09 — v40 phone evidence and next Phase 5E source work
+## 2026-11-09 — v40 PASS, PR #62 merged, Phase 5E continuation
 
-**Phone PASS (operator):** Android App info reported `0.5-phase5-merged-40-internal`; existing saved jobs/photos remained accessible. This closes the in-place build-40 data-preservation check; no prior camera/Drive tests are repeated. The reported literal name lacks the `v` in the release record's `0.5-phase5-merged-v40-internal`; on-device digest/name equivalence was not independently checked. No photo deletion occurred.
+**Accepted, no repeat:** Operator confirmed Android build 40 with jobs/photos preserved. PR #62 read-only owner preflight merged with explicit approval at `a5ab15a3`; exact-main Android `42680804260`, Database `42680804112`, Admin `42680804140` PASS; publisher safely skipped an APK. Superseded pending note is [preserved verbatim](archive/phase-5-6/2026-11-09/PHASE_5_6_HISTORY_PART_49.md).
 
-**Current Level 3 source-only continuation:** `phase5e-cleanup-readiness-local-preflight-20261109`, branch `feat/phase5e-cleanup-readiness-owner-preflight-20261109`, baseline/rollback `47d425788df19a5218d766db3e2f8c1d684dbeb1`. The pre-existing original-owner RPC→Room bridge is not scheduled. Strengthen `PhotoCleanupCoordinator` to reject locally missing, wrong-owner, unreceived or CLEANED evidence before a network readiness request; add focused HELD-only/read-denial regression tests. Scope is Android Java/test + this record; no migrations, server authority, Drive, Send, background scheduler, BuildConfig activation, APK install or deletion. Failures isolate the photo and preserve original evidence. General dispatch and automatic cleanup remain OFF.
-
-**Next gate:** Exact-head Android/Database/Admin/Governance CI, PR diff review and explicit Level-3 operator premerge approval PENDING. Only afterward consider the approved bounded readiness scheduling and controlled TEST activation; preserve original HELD remote evidence and prior accepted tests.
+**Next authoritative Level 3 source-only line:** `feat/phase5e-bounded-readiness-poll-20261109`, baseline `a5ab15a3`, approved Phase 5E bounds. Implement an independently OFF-gated, network-only 24h owner-scoped WorkManager poll of at most eight privately received photos; per-photo ineligible/error isolation, durable cursor and read-only HELD receipts only. Automatic cleanup and general dispatch OFF, no original bytes deleted, no TEST/Google ops, no new APK. [Scope/rollback/verification and exact next gates](PHASE_5E_BOUNDED_READINESS_SCHEDULING_RECORD_2026-11-09.md). Exact-head CI/Level-3 premerge approval PENDING. No phone/provider retest.
 
 ## Current execution priority — operator direction 2026-11-01
 
