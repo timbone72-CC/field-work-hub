@@ -1,6 +1,6 @@
 # Phase 5D — Bounded immutable multi-photo claim validation
 
-**Status:** SOURCE-ONLY in progress; no SQL migration, hosted worker deployment, delivery activation or phone APK.  
+**Status:** SOURCE-ONLY MERGED via PR #68 at `21f546b055531ac7021f19dc9da12ba6df794813`; no SQL migration, hosted worker deployment, delivery activation or phone APK.  
 **Scope key:** `phase5d-frozen-multi-photo-claim-20261109`.  
 **Classification:** Level 3 — trusted client-delivery provider-step eligibility, although the exact trusted permit/RPC, owner and TEST-only pin remain unchanged.  
 **Authoritative branch:** `feat/phase5d-frozen-multi-photo-claim-20261109`. Baseline/rollback: governed main `2158eac3908a3d5c6cdaae4ff4eb89c3f83f5980` (PR #67).  
@@ -23,6 +23,6 @@ Add isolated Node tests for (1) a two-photo frozen claim reaching one existing f
 
 ## Verification and approval gate
 
-Require focused `node --test tests/functions/client-delivery-new-package-test-gate.test.mjs` and complete applicable Node/Database/Admin/Android CI on the exact source PR head. Inspect every changed block. Document actual passed/failed checks, test evidence classes and operator Level-3 pre-merge decision. **Level-3 merge approval PENDING** until explicitly received; no implicit publication, SQL push, provider Send, cleanup or APK release.
+**Approved November 9:** Operator explicitly authorized merging PR #68 as the verified, source-only change. Exact PR head `f8728cd2c61debb78c81a0ce8fc57b7fef493c9e`, Governance `42709857865` PASS, Admin/Node (including added isolated tests) `42708924175` PASS, Database `42708924051` PASS, Android `42708924211` PASS. Complete six-file PR diff reviewed. PR marked ready and merged by protected SHA-locked two-parent merge at `21f546b055531ac7021f19dc9da12ba6df794813`. Post-merge exact-main checks: Database `42709917353`, Admin `42709917835`, Android `42709917334`. No implicit publication, SQL push, provider Send, cleanup or APK release.
 
-**Next:** reconcile exact-head CI and review; stop this source scope at the required Level-3 pre-merge gate. After accepted merge, the separately scoped multi-photo SQL/queue/provider work remains, not a repeat of the already accepted one-photo delivery.
+**Next:** Reconcile exact-main CI statuses and keep this limited source work closed. The separately scoped multi-photo SQL/queue/provider implementation and real two-package acceptance remain PENDING. Do not repeat the already accepted single-package delivery or v42 phone checks.
