@@ -405,10 +405,10 @@ test('prepared two-slot route fails closed on duplicate, old, excessive or drift
   [makePin(pkg),makePin(second)], // already-delivered legacy TEST pin
   [makePin(old),makePin(second)], // original protected legacy pin
   [makePin(first),makePin(second,uuid(88))], // destination drift
-  [makePin(first),makePin(second,dest,'another_root_1234567890')],
+  [makePin(first),makePin(second,dest,'wrong_root_1234567890')],
   [makePin(first),{...makePin(second),unexpected:true}],
   [makePin('invalid'),makePin(second)],
-  [makePin(first),makePin(second,undefined,'wrong')], // malformed third field
+  [makePin(first),{packageId:second,destinationId:dest,rootId:''}], // bad root
   [{packageId:first,destinationId:dest,rootId:config.expectedDriveId},
    makePin(second)]
  ];
