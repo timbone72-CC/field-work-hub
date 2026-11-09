@@ -87,6 +87,10 @@ def setup(pinned_test_package=None):
                         "destination_root": root, "destination_revision": str(rev),
                         "folder_layout": "ADDRESS_WORK_ORDER",
                         "selected_photos": [{"photo_id": str(new_id())}]}
+            if n == 1 and pinned_test_package is None:
+                # The same-owner lease renewal now proves a real two-photo
+                # frozen manifest on disposable PostgreSQL, without Google.
+                manifest["selected_photos"].append({"photo_id": str(new_id())})
             # The fixed-ID failed-final-step fixture must also have frozen
             # byte-accurate photo and manifest identities. Ordinary race
             # fixtures keep their original lean synthetic shape.
@@ -149,6 +153,8 @@ def run():
         a, b = list(pool.map(claim, [
             (pkg_a, worker_a, request_a), (pkg_b, worker_b, request_b)]))
     assert a["claimed"] is True and b["claimed"] is True, (a, b)
+    assert len(a["manifest"]["selected_photos"]) == 2
+    assert len(b["manifest"]["selected_photos"]) == 1
     assert a["generation"] == 1 and b["generation"] == 1
     # Same package, two genuinely simultaneous database clients.
     def begin(step):
@@ -224,6 +230,7 @@ def run():
     assert renewed["worker_id"]==str(worker_a)
     assert renewed["request_id"]==str(request_a)
     assert renewed["generation"]==1
+    assert len(renewed["manifest"]["selected_photos"]) == 2
     assert query("select public.service_read_package_dispatch_owner(%s,%s,%s,1)",
                  (pkg_a,worker_a,request_a))["active"]
     with psycopg.connect(DSN) as c:
