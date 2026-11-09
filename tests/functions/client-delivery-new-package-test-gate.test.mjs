@@ -120,6 +120,52 @@ const execute=(ledger,packageId,makeWorkerId,advanceStep)=>
    account:config.expectedAccount,drive_id:config.expectedDriveId,
    permission_id:'synthetic-read-only-proof-id-001'
   })});
+test('two distinct frozen photo IDs advance one fenced package step with no alternate worker',async()=>{
+ const ledger=fakeDatabase(),makeId=ids();
+ const claim=fixtureClaim(pkg,uuid(501),uuid(502));
+ claim.manifest.selected_photos=[{photo_id:uuid(40)},{photo_id:uuid(42)}];
+ ledger.permits.set(pkg,claim);
+ let runs=0;
+ assert.deepEqual(await execute(ledger,pkg,makeId,async({packageClaim})=>{
+  runs++;
+  assert.equal(packageClaim,claim);
+  assert.deepEqual(packageClaim.manifest.selected_photos,claim.manifest.selected_photos);
+  return {state:'PACKAGE_IDENTITIES_PREALLOCATED'};
+ }),{state:'PACKAGE_IDENTITIES_PREALLOCATED'});
+ assert.equal(runs,1);
+ assert.equal(ledger.steps.length,2);
+ assert.equal(ledger.steps[1][2],'VERIFIED_METADATA_STEP');
+ assert.equal(ledger.legacyCalls,0);
+ assert.equal(ledger.releases,0);
+});
+
+test('empty, malformed, duplicate and excessive frozen selections fail closed; unrelated package can proceed',async()=>{
+ const duplicate=uuid(40);
+ const invalidSelections=[
+  null,[],[{photo_id:'bad'}],
+  [{photo_id:duplicate},{photo_id:duplicate}],
+  [{photo_id:duplicate},{photo_id:duplicate.toUpperCase()}],
+  Array.from({length:201},(_,i)=>({photo_id:uuid(i+1000)}))
+ ];
+ for(const photos of invalidSelections){
+  const ledger=fakeDatabase(),makeId=ids();
+  const held=fixtureClaim(pkg,uuid(501),uuid(502));
+  held.manifest.selected_photos=photos;
+  ledger.permits.set(pkg,held);
+  let provider=0;
+  await assert.rejects(execute(ledger,pkg,makeId,async()=>{
+   provider++;throw Error('WRONG_MANIFEST_ENTERED_PROVIDER');
+  }),e=>e.code==='PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+  assert.equal(provider,0);
+  assert.equal(ledger.activeSteps.has(pkg),false);
+  assert.equal(ledger.steps.length,0);
+  assert.equal(ledger.permits.get(pkg),held);
+  assert.deepEqual(await execute(ledger,pkg2,makeId,async()=>
+   ({state:'PARENT_STEP_VERIFIED'})),{state:'PARENT_STEP_VERIFIED'});
+  assert.equal(ledger.legacyCalls,0);
+ }
+});
+
 test('new operation OFF by default and rejects worker-secret bypass',async()=>{
  let called=0;
  const settings={...config,runPinnedTestStep:async()=>{called++;return {state:'PACKAGE_IDENTITIES_PREALLOCATED'}}};
