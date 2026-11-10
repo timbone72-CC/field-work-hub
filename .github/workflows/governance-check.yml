@@ -164,20 +164,107 @@ jobs:
                   break
               page += 1
 
-          # Finite finish-line acceptance gate. This is PR metadata validation:
-          # it cannot establish physical/provider truth or authorize deployment.
-          # Runtime/CI changes must advance an existing numbered acceptance gate.
+          # FWH v1: feature delivery, activation, acceptance and release.
+          # Metadata validation only: evidence truth and operator consent remain external.
           controlled_paths = ("app/", "dashboard/", "supabase/", "ci/")
-          touches_runtime = any(path.startswith(controlled_paths) for path in changed_files)
+          runtime_workflow_change = any(
+              path.startswith(".github/workflows/")
+              and path != ".github/workflows/governance-check.yml"
+              for path in changed_files
+          )
+          touches_runtime = (
+              any(path.startswith(controlled_paths) for path in changed_files)
+              or runtime_workflow_change
+          )
           gate = field_value("Acceptance gate")
+          feature = field_value("Feature ID")
+          lane = field_value("Work lane")
+          before_state = field_value("Feature state before")
+          after_state = field_value("Feature state after")
+          outcome = field_value("Work outcome")
+          activation = field_value("Activation/rollback boundary")
+          evidence_ref = field_value("Acceptance evidence reference")
           physical = field_value("New physical/provider evidence")
           permitted_gates = {f"FWH-AC{i}" for i in range(1, 6)}
+          permitted_features = {f"FWH-F{i:02}" for i in range(1, 9)}
+          permitted_states = {
+              "WORKING", "BUILT_INACTIVE", "PARTIAL", "NOT_BUILT", "DEFERRED"
+          }
+          feature_by_gate = {
+              "FWH-AC1": {"FWH-F03", "FWH-F04"},
+              "FWH-AC2": {"FWH-F03", "FWH-F05"},
+              "FWH-AC3": {
+                  "FWH-F01", "FWH-F02", "FWH-F03",
+                  "FWH-F06", "FWH-F07", "FWH-F08",
+              },
+              "FWH-AC4": permitted_features,
+              "FWH-AC5": permitted_features,
+          }
           if touches_runtime:
               if gate not in permitted_gates | {"FWH-SAFETY"}:
                   errors.append(
-                      "Runtime/CI PR must declare an existing Acceptance gate: "
-                      "FWH-AC1..FWH-AC5 (or linked FWH-SAFETY). "
-                      "See docs/FWH_FINISH_LINE_ACCEPTANCE_PLAN_2026-11-10.md."
+                      "Runtime/CI PR needs an existing Acceptance gate FWH-AC1..AC5 "
+                      "or FWH-SAFETY linked to a real issue."
+                  )
+              if feature not in permitted_features | {"FWH-PLATFORM"}:
+                  errors.append(
+                      "Runtime/CI PR must name Feature ID FWH-F01..F08 "
+                      "or FWH-PLATFORM (shared operations only)."
+                  )
+              if gate in feature_by_gate and feature != "FWH-PLATFORM" and (
+                  feature not in feature_by_gate[gate]
+              ):
+                  errors.append(
+                      f"Feature ID {feature} is not assigned to {gate}; "
+                      "use its owning gate or reconcile the governed plan."
+                  )
+              if lane not in {"FINISH", "ACTIVATE", "ACCEPT", "RELEASE", "SAFETY"}:
+                  errors.append(
+                      "Runtime/CI PR needs Work lane FINISH/ACTIVATE/ACCEPT/RELEASE "
+                      "(SAFETY only for FWH-SAFETY incident)."
+                  )
+              if (gate == "FWH-SAFETY") != (lane == "SAFETY"):
+                  errors.append("SAFETY work lane and FWH-SAFETY gate must be paired.")
+              if lane == "RELEASE" and gate not in {"FWH-AC4", "FWH-AC5"}:
+                  errors.append("RELEASE lane belongs to internal or configured-company pilot.")
+              for key, state in (
+                  ("Feature state before", before_state),
+                  ("Feature state after", after_state),
+              ):
+                  if state not in permitted_states:
+                      errors.append(
+                          f"{key} must be WORKING, BUILT_INACTIVE, PARTIAL, "
+                          "NOT_BUILT or DEFERRED."
+                      )
+              if not outcome or outcome.casefold() in {"none", "n/a", "tbd"} or (
+                  len(outcome) < 12
+              ):
+                  errors.append(
+                      "Work outcome must identify concrete feature behavior advanced, "
+                      "not a new test round or vague summary."
+                  )
+              if feature == "FWH-PLATFORM" and not (
+                  outcome and re.search(r"\bFWH-F0[1-8]\b", outcome)
+              ):
+                  errors.append(
+                      "FWH-PLATFORM requires impacted FWH-F## feature IDs "
+                      "in Work outcome; it is not a generic scope bypass."
+                  )
+              if lane == "ACTIVATE" and (
+                  not activation or activation.casefold() in {"n/a", "none", "tbd"}
+              ):
+                  errors.append(
+                      "ACTIVATE requires exact environment/configuration and "
+                      "rollback boundary, not implicit release authority."
+                  )
+              if (lane in {"ACCEPT", "RELEASE"} or (
+                  after_state == "WORKING" and before_state != "WORKING"
+              )) and (
+                  not evidence_ref or evidence_ref.casefold() in {"none", "n/a", "tbd"}
+              ):
+                  errors.append(
+                      "ACCEPT/RELEASE or a newly WORKING feature requires "
+                      "an exact acceptance evidence reference."
                   )
               if gate == "FWH-SAFETY":
                   incident = field_value("Safety incident URL")
@@ -186,7 +273,7 @@ jobs:
                       incident,
                   ):
                       errors.append(
-                          "FWH-SAFETY requires a real linked GitHub issue in Safety incident URL."
+                          "FWH-SAFETY requires a real linked GitHub issue."
                       )
               if physical is None:
                   errors.append(
@@ -194,15 +281,18 @@ jobs:
                       "NONE or FWH-AC#: <specific unaccepted reality boundary>."
                   )
               elif physical != "NONE":
-                  if gate not in permitted_gates | {"FWH-SAFETY"} or not physical.startswith(
-                      str(gate) + ": "
-                  ) or not physical[len(str(gate)) + 2:].strip():
+                  if (
+                      gate not in permitted_gates | {"FWH-SAFETY"}
+                      or not physical.startswith(str(gate) + ": ")
+                      or not physical[len(str(gate)) + 2:].strip()
+                  ):
                       errors.append(
                           "New physical/provider evidence must be NONE or start with "
-                          "the exact declared gate plus ': ' and a specific unaccepted boundary."
+                          "the exact declared gate and a specific previously "
+                          "unaccepted device/provider reality boundary."
                       )
           elif gate and gate not in permitted_gates | {"FWH-SAFETY", "N/A"}:
-              errors.append("Unrecognized Acceptance gate; use N/A for documentation-only work.")
+              errors.append("Unrecognized Acceptance gate; use N/A for governance-only work.")
 
           if level == "Level 1" and any(
               path.startswith(".github/workflows/") for path in changed_files
