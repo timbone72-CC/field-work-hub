@@ -14,15 +14,27 @@ concurrency:
 
 jobs:
   wake:
-    if: ${{ vars.FWH_TEST_DELIVERY_SCHEDULER_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     environment: fwh-test-delivery
     env:
+      FWH_TEST_DELIVERY_SCHEDULER_ENABLED: ${{ vars.FWH_TEST_DELIVERY_SCHEDULER_ENABLED }}
       FWH_TEST_EDGE_URL: ${{ vars.FWH_TEST_DELIVERY_EDGE_URL }}
       FWH_TEST_WORKER_SECRET: ${{ secrets.FWH_TEST_DELIVERY_WORKER_SECRET }}
     steps:
+      - name: Require protected environment activation
+        id: activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${FWH_TEST_DELIVERY_SCHEDULER_ENABLED:-}" != 'true' ]]; then
+            echo 'TEST scheduler OFF; no delivery request sent'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'enabled=true' >> "$GITHUB_OUTPUT"
       - name: Validate exact TEST endpoint and credential without printing them
+        if: steps.activation.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -36,9 +48,13 @@ jobs:
             exit 1
           fi
       - name: Wake one server-selected step
+        if: steps.activation.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
+          # A later cron wake is not an HTTP retry: the SQL selector must
+          # reject unresolved provider steps and expired unverified leases.
+          # Never replay an uncertain provider write or clear its evidence.
           # Secret remains in the isolated Actions runner environment, not
           # pg_net, SQL, cron metadata, GitHub source, or the job output.
           status="$(curl --silent --show-error --max-time 40 --retry 0 \
