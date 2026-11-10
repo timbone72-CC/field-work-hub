@@ -16,4 +16,12 @@ The Drive connector uses the verified Workspace account, but it **does not authe
 
 **Next:** inspect the existing secret-protected `client-delivery/test-preflight-only.mjs` / `verify_test_connection` path. Only a separately authorized and reachable **worker-side read-only** call could finish the exact credential-bound provider gate. Do not enable two-package slots, invoke Send, use a different worker/account, create Drive objects, upload photos, or clean originals. If the authorized worker invoker or secret is unavailable, record the narrower credential-bound gate BLOCKED rather than bypassing it. Previously accepted camera/manual provider evidence stands.
 
-**External changes:** None; Google Drive, FWH TEST Supabase and GitHub repository were only read during the verification. This PR adds Markdown evidence only.
+## Source/SQL continuation — read-only verification, November 10
+
+The original hosted `client-delivery` OAuth/root preflight returned actual `TEST_PROVIDER_VERIFIED_READ_ONLY` on October 15 (accepted in `supabase/functions/client-delivery/README.md`); this is historical PASS, **not** proof the currently hosted v62 token refreshes now. The prior successful TEST `FPP-000003` delivery is also retained. No need to repeat that accepted manual/automatic transfer.
+
+Exact v62 source `advancePinnedTestPackageOneStep` calls `verifyPinnedPackageProviderReadOnly` with its **own** OAuth token to GET account and exact root, then records a scoped provider check **before** any package claim. Failed proof stops that package and does not permit a Google write. This integrated fresh gate, rather than another standalone provider test, will apply at the separately authorized first pinned step.
+
+Live read-only SQL: `private.service_claim_package_and_acquire_dispatch` requires **both package and outbox `QUEUED`**, with zero attempts and matching approved SHA/destination. Both exact TEST packages are still `APPROVED`, no outbox, no permits; dispatch stays OFF. Thus **next genuine operator action is explicit Admin Send to enqueue each approved disposable TEST package**, separately authorized from any worker activation. Queuing does not itself prove provider delivery, and no Send has yet occurred.
+
+**External changes in this review:** GitHub Markdown only; source and TEST SQL were inspected read-only. No protected Edge invocation, settings change, Google operation, Send or cleanup.
