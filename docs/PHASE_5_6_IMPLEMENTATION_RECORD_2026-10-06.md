@@ -3,9 +3,13 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 9 — Phase 5D two-package TEST candidates READ-ONLY
+
+**A:** `TEST-P5D-SECOND-001`, unattempted DRAFT, 1 approved/private photo. **B:** `TEST-P4-REVISION-1005-D`, 4 private receipts; review/approve pending Front image if valid and bind existing TEST client company. Then normal Admin Draft/Preview/Approve, **no Send**. No repeat camera work, SQL writes or provider calls. [Candidate evidence/next gate](PHASE_5D_TWO_PACKAGE_FIXTURE_READONLY_PLAN_2026-11-09.md).
+
 ## November 9 — Phase 5D migration 132 + all-OFF hosted v61 DEPLOYED
 
-**TEST-only authorized deployment PASS:** PR #74 merged `d9a8bb7a`. Exact migration `20261109221500` installed (132 total); Supabase-generated history version `20261110021022` was corrected on that one row to match GitHub, with no orphan. Hosted `client-delivery` **v61 ACTIVE**, **14/14 exact source parity** to `d9a8bb7a`. Old one-package and new two-slot modes both OFF/unpinned; general dispatch/recovery/automatic cleanup OFF. Original legacy HELD permit 1, verified final receipt 1, new permits 0; service-only grants and cutover guards retained. No provider calls/Send, phone/APK, photos or original FPP altered. **Next:** two NEW disposable fixture identities and separately approved literal TEST pins/provider steps; no repeat of accepted one-package Google or v42 tests. [Deployment/rollback record](PHASE_5D_TEST_M132_V61_OFF_DEPLOYMENT_2026-11-09.md).
+**TEST-only deployment PASS:** PR #74 merged `d9a8bb7a`; migration 132 installed as `20261109221500` (generated history version reconciled, no orphan). Hosted `client-delivery` **v61 ACTIVE**, **14/14 exact parity**. Old/new pinned modes, dispatch/recovery/cleanup OFF; original HELD permit 1, DELIVERED receipt 1, new permits 0. No provider/phone/photos/FPP changes. [Deployment/rollback](PHASE_5D_TEST_M132_V61_OFF_DEPLOYMENT_2026-11-09.md).
 
 ## November 9 — Phase 5D live TEST read-only cutover preflight COMPLETE; activation PENDING
 
