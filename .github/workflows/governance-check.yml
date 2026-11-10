@@ -166,7 +166,8 @@ jobs:
 
           # FWH v1: feature delivery, activation, acceptance and release.
           # Metadata validation only: evidence truth and operator consent remain external.
-          controlled_paths = ("app/", "dashboard/", "supabase/", "ci/")
+          controlled_paths = ("app/", "dashboard/", "supabase/", "ci/", "tests/")
+          root_build_files = {"build.gradle", "settings.gradle", "gradle.properties"}
           runtime_workflow_change = any(
               path.startswith(".github/workflows/")
               and path != ".github/workflows/governance-check.yml"
@@ -174,6 +175,7 @@ jobs:
           )
           touches_runtime = (
               any(path.startswith(controlled_paths) for path in changed_files)
+              or any(path in root_build_files for path in changed_files)
               or runtime_workflow_change
           )
           gate = field_value("Acceptance gate")
