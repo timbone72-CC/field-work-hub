@@ -15,7 +15,7 @@ test('hosted staging hard-disables all mutating modes, without a package pin',()
  assert.match(source,/testPreflightEnabled:Deno\.env\.get\('FWH_CLIENT_TEST_PREFLIGHT_ENABLED'\)/);
  assert.match(source,/^\s*twoPackageTestPins:\[\],/m);
  for(const key of ['pinnedTestPackageId','pinnedTestDestinationId','pinnedTestRootFolderId']){
-  assert.match(source,new RegExp('^\\s*'+key+':\\'\\',','m'));
+  assert.ok(source.split('\n').some(line=>line.trim()===key+":'',"),key+' must have an empty pin');
  }
 });
 
