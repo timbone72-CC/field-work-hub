@@ -4,6 +4,10 @@ Planning status: **APPROVED / CURRENT — PHASE 5–6 BASELINE + SHARED-ACCESS A
 
 Original roadmap approval: **2026-09-14**. Phase 5/6 whole-phase amendment and documentation merge approved: **2026-10-05 at 16:32:14 America/Chicago (21:32:14 UTC)**.
 
+## Finish-line acceptance control — proposed November 10, 2026
+
+The proposed [finite FWH v1 acceptance plan](FWH_FINISH_LINE_ACCEPTANCE_PLAN_2026-11-10.md) organizes current Phase 5–8 evidence into five numbered outcome gates, reuses earlier accepted device/provider checks and defines a straight-line PR handoff. **It is not a new phase, a new product approval, or a deployment authorization.** Existing approved Phase 5/6 plans, roadmap completion conditions and explicit Level 3 runtime approvals still govern. The plan's starting gate is FWH-AC1, controlled TEST delivery; do not start a new physical acceptance campaign from superseded status below. Its status is PROPOSED until accepted.
+
 ## Current execution status — November 2, 2026 (authoritative pointer)
 
 **Current source of truth:** [the one Phase 5/6 implementation record](PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md) on draft/unmerged [PR #40](https://github.com/timbone72-CC/field-work-hub/pull/40), not the older dated gate instructions below. The approved Phase 5/6 plan remains in effect; this status update does not amend business behavior or authorize deployment.
