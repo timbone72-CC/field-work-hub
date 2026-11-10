@@ -3,9 +3,9 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 9 — Phase 5D two-package TEST candidates READ-ONLY
+## November 10 — Phase 5D two TEST packages APPROVED; two-slot source pins OFF
 
-**A:** `TEST-P5D-SECOND-001`, unattempted DRAFT, 1 approved/private photo. **B:** `TEST-P4-REVISION-1005-D`, 4 private receipts; review/approve pending Front image if valid and bind existing TEST client company. Then normal Admin Draft/Preview/Approve, **no Send**. No repeat camera work, SQL writes or provider calls. [Candidate evidence/next gate](PHASE_5D_TWO_PACKAGE_FIXTURE_READONLY_PLAN_2026-11-09.md).
+Authenticated Admin finished both exact previews and approvals: `TEST-P5D-SECOND-001` (package `e18463b2`) and `TEST-P4-REVISION-1005-D` (package `e690b8c4`), one privately received APPROVED photo each. Live read-only SQL verified distinct packages, frozen SHA, shared verified destination/root, zero outbox/permits, dispatch OFF; hosted v61 all-OFF unchanged. Source-only Level-3 two-literal-pin PR staged with `twoPackageTestEnabled:false`; **no Send, worker deployment, provider call or cleanup**. [Exact source scope and next gate](PHASE_5D_TWO_PIN_DISABLED_SOURCE_2026-11-10.md).
 
 ## November 9 — Phase 5D migration 132 + all-OFF hosted v61 DEPLOYED
 
