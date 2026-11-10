@@ -36,6 +36,22 @@ Before merging a runtime change:
 
 A successful CI run on the exact final runtime head satisfies the complete-suite requirement. Do not duplicate it locally without a concrete reason.
 
+## Accepted evidence and retest decision
+
+**A passed physical/device/provider observation remains accepted.** A new PR, commit, CI run, app version, work session, phase heading, changed checklist, or desire for reassurance **does not invalidate it**. Reuse the evidence in the existing authoritative implementation record. Before asking the operator to repeat any real phone, browser, Google Drive, email or backend/provider action, name the exact feature and compare its affected authority, data identity, configuration, OS/device behavior and provider side effect with the accepted evidence.
+
+Use one decision per proposed reality check:
+
+- **COVERED:** The required behavior and protected boundary are already evidenced and unchanged. Credit the previous result and do not rerun it; report the next implementation/activation task.
+- **NEW:** A required business behavior or real environment boundary has never been observed. State precisely what software/CI cannot prove, combine compatible observations into the smallest operator-facing scenario, and accept the resulting evidence once.
+- **INVALIDATED:** A specific code/configuration/identity change or actual contradiction undermines a previously accepted assertion. Record **what changed and why that exact proof no longer applies**; repeat *only* the affected observation, not the whole old test or unrelated phases.
+- **BLOCKED:** Required credentials, permission, provider access or a safety fact are unavailable. Stop the dependent action without faking PASS or provoking retries. Continue other independent approved work; do not create substitute test work orders or a new review gate.
+
+This classification is a **decision rule inside existing Phase 5–8 acceptance**, not a new approval, document, PR, checklist or physical test. The operator may report a result once; preserve it without requesting a second screenshot. If a newly affected security/data-preservation/remote-identity boundary genuinely needs verification, fail closed until that narrow evidence exists. Existing Level 3 operator approval, exact-head final CI and documented deployment/rollback authority are unchanged.
+
+**Phase 7 pilot interpretation:** The roadmap's scenario catalog describes coverage for realistic repeated *operation*, not a command to rerun every historical camera, offline, receipt or Google Drive test. Review credited evidence first, observe normal integrated field use for *unproven interactions or newly activated behavior*, and record only missing/invalidated boundaries. This does not waive the actual integrated pilot or Phase 8 production-specific reality gates.
+
+
 ## Required behavior boundaries
 
 As Team grows, automated coverage should be organized around state/identity boundaries rather than UI snapshots alone.
@@ -123,7 +139,7 @@ Prove roster transfer does not move active WO authority/history, explicit handof
 
 Prove accepted original-owner transfers/receipts continue narrowly after ordinary work disablement, unaccepted offline evidence stays protected/exportable without false acceptance, and same-device read-only export/cancellation/storage failure cannot delete sources. Test additive migrations/account isolation and unchanged cleanup/retention guards. Recovery email tests cover existing verified recipient, no implicit signup, generic requests, rate limits, fixed callback, expiry/replay/token scrub and exact authorization on every request.
 
-Add the amendment's disable/reconnect/transfer/old-photo recovery sequence to the existing combined Phase 5 gate, and its tier/owner/team/shared-edit/recovery-email/scoped-push sequence to the combined Phase 6 gate. Actual permitted TEST mailbox delivery/link exchange and protected device export are genuine evidence boundaries. Missing sender/verified identity is BLOCKED; no mocks claim physical PASS. Phase 7 repeats these scenarios; Phase 8 proves production sender/domain/callback/retention and second-device cloud recovery. Preserve accepted Phase 4 camera observations. No letter-level plan approval is introduced.
+Add the amendment's disable/reconnect/transfer/old-photo recovery sequence to the existing combined Phase 5 gate, and its tier/owner/team/shared-edit/recovery-email/scoped-push sequence to the combined Phase 6 gate. Actual permitted TEST mailbox delivery/link exchange and protected device export are genuine evidence boundaries. Missing sender/verified identity is BLOCKED; no mocks claim physical PASS. Phase 7 observes these behaviors as part of integrated pilot operation, crediting accepted evidence rather than rerunning every prior scenario; Phase 8 proves production sender/domain/callback/retention and second-device cloud recovery. Preserve accepted Phase 4 camera observations. No letter-level plan approval is introduced.
 
 ## Realistic integration tests
 
