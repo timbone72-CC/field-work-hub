@@ -34,7 +34,7 @@ test('shipped source keeps old mutating modes hard OFF and TEST queue gated',()=
  for(const mode of ['enabled','pinnedTestEnabled','twoPackageTestEnabled','testRecoveryEnabled']){
   assert.match(src,new RegExp('^ '+mode+':false,$','m'));
  }
- assert.match(src,/queueWorkerEnabled:isFwhTestQueueWorkerEnabled\\(\\{/);
+ assert.match(src,/queueWorkerEnabled:isFwhTestQueueWorkerEnabled\(\{/);
  for(const item of ["'FWH_CLIENT_TEST_QUEUE_WORKER_ENABLED'","'SUPABASE_URL'",
   "'FWH_TEST_EVIDENCE_CLASS'"]){
   assert.ok(src.includes(item),'Missing exact TEST queue activation input: '+item);
