@@ -3,9 +3,9 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 10 — Phase 5D TEST worker v62 DEPLOYED OFF
+## November 10 — Phase 5D v62 OFF; Drive account/root READ PASS
 
-**PR #77 MERGED** `960d07ac`; main CI PASS. Operator-authorized FWH TEST `client-delivery` **v62 ACTIVE**, **14/14 exact-source files**, both TEST pins present, all mutation modes OFF. Migration 132 and dispatch OFF unchanged; two 1-photo packages APPROVED; new permits/queued outbox 0; original HELD and DELIVERED receipts preserved. No Google/Send/cleanup/APK. [Deployment and rollback](PHASE_5D_V62_ALL_OFF_DEPLOYMENT_RECORD_2026-11-10.md). **Next:** separate read-only provider/root verification gate; no slot activation/Send authorization.
+Hosted v62 14/14 source parity, all delivery modes OFF; two pinned one-photo APPROVED packages, zero new permits/queued deliveries. Workspace Drive account/root/drive ID and previously recorded proof folder MATCH live FWH TEST destination, under `tim@inandoutinspectionsllc.com`; root listing PASS and shared-drive `canAddChildren=true`. **Worker OAuth NOT tested**: separate Google connector credential; no Send/provider writes/cleanup. [Read-only evidence and exact next worker gate](PHASE_5D_DRIVE_READONLY_CONNECTOR_PROOF_2026-11-10.md).
 
 ## November 9 — Phase 5D migration 132 + all-OFF hosted v61 DEPLOYED
 
