@@ -3,9 +3,9 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 10 — Phase 5D v62 OFF; Drive account/root READ PASS
+## November 10 — Phase 5D v62 OFF; activation prerequisite found
 
-Hosted v62 14/14 source parity, all delivery modes OFF; two pinned one-photo APPROVED packages, zero new permits/queued deliveries. Workspace Drive account/root/drive ID and previously recorded proof folder MATCH live FWH TEST destination, under `tim@inandoutinspectionsllc.com`; root listing PASS and shared-drive `canAddChildren=true`. **Worker OAuth NOT tested**: separate Google connector credential; no Send/provider writes/cleanup. [Read-only evidence and exact next worker gate](PHASE_5D_DRIVE_READONLY_CONNECTOR_PROOF_2026-11-10.md).
+Hosted v62 14/14 source parity; dispatch OFF; two APPROVED packages, no outbox/permits. Connected Drive root PASS; accepted worker OAuth/root PASS Oct 15. Pinned worker does fresh OAuth/root GET before permit claim. **Live SQL blocks Admin Send unless dispatch is enabled**, and claim needs both package and outbox QUEUED. No current v62 OAuth success claimed. [Readiness and blocked queue](PHASE_5D_DRIVE_READONLY_CONNECTOR_PROOF_2026-11-10.md). **Next:** plan controlled TEST dispatch/slot activation; no Send, Google writes or cleanup authorized.
 
 ## November 9 — Phase 5D migration 132 + all-OFF hosted v61 DEPLOYED
 
