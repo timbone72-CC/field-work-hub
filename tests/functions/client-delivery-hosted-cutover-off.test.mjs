@@ -1,5 +1,5 @@
-// FWH TEST hosted one-package activation contract: legacy and generic delivery
-// stay OFF; only one frozen package may enter the guarded worker operation.
+// FWH TEST hosted cutover staging: legacy, general, prior one-package and
+// new two-package mutations all stay compiled OFF; provider reads are separate.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -7,33 +7,30 @@ import {createDeliveryHandler} from '../../supabase/functions/client-delivery/ha
 
 const source=readFileSync(new URL('../../supabase/functions/client-delivery/index.ts',import.meta.url),'utf8');
 
-test('general and legacy worker modes remain compiled OFF; one TEST pin ON',()=>{
- for(const key of ['enabled','testRecoveryEnabled']){
+test('hosted staging hard-disables all mutating modes, without a package pin',()=>{
+ for(const key of ['enabled','testRecoveryEnabled','pinnedTestEnabled','twoPackageTestEnabled']){
   const line=source.split('\n').find(x=>new RegExp('^\\s*'+key+':').test(x));
   assert.equal(line?.trim(),key+':false,',key+' must be hard OFF');
  }
  assert.match(source,/testPreflightEnabled:Deno\.env\.get\('FWH_CLIENT_TEST_PREFLIGHT_ENABLED'\)/);
- assert.match(source,/^\s*pinnedTestEnabled:true,/m);
- // The prepared second mode cannot run even if this file is deployed.
- assert.match(source,/^\s*twoPackageTestEnabled:false,/m);
  assert.match(source,/^\s*twoPackageTestPins:\[\],/m);
-});
-
-test('one approved TEST package is pinned and env cannot substitute identities',()=>{
- const mustHave=[
-  "pinnedTestPackageId:'f42e05df-de7a-4d20-8dee-f55e09511d1f',",
-  "pinnedTestDestinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',",
-  "pinnedTestRootFolderId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK',",
-  'enabled:false,','testRecoveryEnabled:false,','pinnedTestEnabled:true,'
- ];
- for(const expected of mustHave)assert.ok(source.includes(expected),'Missing server-pin '+expected);
- for(const name of ['FWH_CLIENT_NEW_TEST_PACKAGE_ID','FWH_CLIENT_NEW_TEST_DESTINATION_ID','FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID']){
-  assert.ok(!source.includes(name),'Environment-selected TEST identity bypass: '+name);
+ for(const key of ['pinnedTestPackageId','pinnedTestDestinationId','pinnedTestRootFolderId']){
+  assert.match(source,new RegExp('^\\s*'+key+':\\'\\',','m'));
  }
 });
 
+test('old frozen delivery identity is absent from current hosted entry, not erased from ledger',()=>{
+ for(const previous of [
+  'f42e05df-de7a-4d20-8dee-f55e09511d1f',
+  '06f157eb-230c-44b5-b3d4-a7508110bfd7',
+  '1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'
+ ])assert.equal(source.includes(previous),false,'old TEST pin retained in staging');
+ for(const name of ['FWH_CLIENT_NEW_TEST_PACKAGE_ID','FWH_CLIENT_NEW_TEST_DESTINATION_ID','FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID']){
+  assert.equal(source.includes(name),false,'Environment-selected TEST identity bypass: '+name);
+ }
+});
 
-test('active candidate accepts only the frozen command and cannot execute legacy routes',async()=>{
+test('historical one-package synthetic handler only accepts its frozen envelope',async()=>{
  const secret='synthetic-test-worker-secret-12345678901234567890';
  const packageId='f42e05df-de7a-4d20-8dee-f55e09511d1f';
  const destinationId='06f157eb-230c-44b5-b3d4-a7508110bfd7';
@@ -83,10 +80,12 @@ test('disabled trusted handler refuses even authenticated delivery/recovery oper
  let providerCalls=0;
  const handler=createDeliveryHandler({
   enabled:false,testRecoveryEnabled:false,pinnedTestEnabled:false,
+  twoPackageTestEnabled:false,twoPackageTestPins:[],
   workerSecret:'synthetic-worker-secret-1234567890123456789012',
   runPinnedTestStep:async()=>{providerCalls++;throw Error('NO_PROVIDER');}
  });
- for(const operation of ['advance_once','preallocate','continue_original_saved_first_photo_once','new_test_package_step_once']){
+ for(const operation of ['advance_once','preallocate','continue_original_saved_first_photo_once',
+  'new_test_package_step_once','new_test_package_slot_1_step_once','new_test_package_slot_2_step_once']){
   const response=await handler(new Request('https://fixture.invalid',{method:'POST',
    headers:{'content-type':'application/json',
     'x-fwh-delivery-secret':'synthetic-worker-secret-1234567890123456789012'},
