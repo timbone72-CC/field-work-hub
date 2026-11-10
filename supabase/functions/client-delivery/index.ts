@@ -1,9 +1,10 @@
-// Phase 5D TEST cutover candidate: all mutating delivery modes hard OFF.
-// This is a source-only staging artifact pending explicit Level-3 merge
-// approval and a separately approved controlled TEST hosted deployment.
-// Do not enable Send, any package step, legacy recovery or a scheduler.
+// Phase 5D TEST cutover candidate: all delivery paths default OFF.
+// Only the exact FWH TEST project can opt into the server-selected queue
+// through a separate backend flag after an approved controlled deployment.
+// SQL dispatch, GitHub scheduling and cleanup remain independent OFF gates.
 import {createDeliveryHandler} from './handler.mjs';
 import {selectHostedServiceCredential} from './service-ledger.mjs';
+import {isFwhTestQueueWorkerEnabled} from './queue-wakeup.mjs';
 Deno.serve(createDeliveryHandler({
  // Phase 5D: general delivery and legacy recovery stay compiled OFF.
  // Neither the retired one-package TEST path nor the prepared two-slot path
@@ -21,8 +22,13 @@ Deno.serve(createDeliveryHandler({
  // NOTHING: the two-slot worker and all other mutating modes stay hard OFF.
  // No request body or environment variable can select a different package.
  twoPackageTestEnabled:false,
- // Server-owned normal TEST queue wake is PREPARED, not active.
- queueWorkerEnabled:false,
+ // TEST queue remains OFF without the dedicated backend flag and exact
+ // project/evidence pin. Neither GitHub cron nor SQL dispatch is set here.
+ queueWorkerEnabled:isFwhTestQueueWorkerEnabled({
+  flag:Deno.env.get('FWH_CLIENT_TEST_QUEUE_WORKER_ENABLED')??'',
+  projectUrl:Deno.env.get('SUPABASE_URL')??'',
+  evidenceClass:Deno.env.get('FWH_TEST_EVIDENCE_CLASS')??''
+ }),
  twoPackageTestPins:[
   {packageId:'e18463b2-9afe-41b8-9700-721738839b22',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'},
   {packageId:'e690b8c4-708f-44c2-b6f3-4da01dc07ac4',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'}

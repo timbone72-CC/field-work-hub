@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {advanceQueuedPackageOnce} from '../../supabase/functions/client-delivery/queue-wakeup.mjs';
+import {advanceQueuedPackageOnce,isFwhTestQueueWorkerEnabled} from '../../supabase/functions/client-delivery/queue-wakeup.mjs';
 import {createDeliveryHandler} from '../../supabase/functions/client-delivery/handler.mjs';
 import {createServiceLedger} from '../../supabase/functions/client-delivery/service-ledger.mjs';
 
@@ -29,11 +29,30 @@ function request(body={operation:'advance_queued_package_once'},secret=SECRET){
   body:JSON.stringify(body)});
 }
 const status=async res=>({http:res.status,...await res.json()});
-test('shipped source keeps new queue worker, pinned workers and legacy OFF',()=>{
+test('shipped source keeps old mutating modes hard OFF and TEST queue gated',()=>{
  const src=readFileSync(new URL('../../supabase/functions/client-delivery/index.ts',import.meta.url),'utf8');
- for(const mode of ['enabled','queueWorkerEnabled','pinnedTestEnabled','twoPackageTestEnabled']){
+ for(const mode of ['enabled','pinnedTestEnabled','twoPackageTestEnabled','testRecoveryEnabled']){
   assert.match(src,new RegExp('^ '+mode+':false,$','m'));
  }
+ assert.match(src,/queueWorkerEnabled:isFwhTestQueueWorkerEnabled\(\{/);
+ for(const item of ["'FWH_CLIENT_TEST_QUEUE_WORKER_ENABLED'","'SUPABASE_URL'",
+  "'FWH_TEST_EVIDENCE_CLASS'"]){
+  assert.ok(src.includes(item),'Missing exact TEST queue activation input: '+item);
+ }
+});
+test('queue activation fails closed without flag, exact TEST URL and evidence',()=>{
+ const valid={flag:'true',projectUrl:'https://vyocaujuwrivoqynvitm.supabase.co',
+  evidenceClass:'DISPOSABLE_FWH_TEST_ONLY'};
+ assert.equal(isFwhTestQueueWorkerEnabled(valid),true);
+ for(const changed of [{flag:''},{flag:'false'},{flag:'TRUE'},
+  {projectUrl:'https://different.supabase.co'},
+  {projectUrl:'https://vyocaujuwrivoqynvitm.supabase.co/'},
+  {projectUrl:'https://vyocaujuwrivoqynvitm.supabase.co.evil.test'},
+  {evidenceClass:''},{evidenceClass:'PRODUCTION'}]){
+  assert.equal(isFwhTestQueueWorkerEnabled({...valid,...changed}),false,
+   JSON.stringify(changed));
+ }
+ assert.equal(isFwhTestQueueWorkerEnabled(),false);
 });
 test('server-selected queue is no-op when SQL dispatch gate is OFF',async()=>{
  let steps=0;
