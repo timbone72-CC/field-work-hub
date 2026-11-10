@@ -1,7 +1,8 @@
 // PRIVATE backend-only, default OFF. No browser CORS or client-triggered Send.
 // When explicitly activated with the dedicated worker secret and a live fenced
 // server lease, source-only continuation can make ONE guarded provider step.
-// The hosted TEST function remains read-only; no scheduler or cleanup here.
+// Hosted TEST delivery remains OFF until independently approved backend,
+// SQL-dispatch and scheduler activation; cleanup has a separate owner.
 import {createWorkspaceTokenProvider} from './workspace-oauth.mjs';
 import {createDriveClient,DriveUncertain} from './drive-client.mjs';
 import {createServiceLedger} from './service-ledger.mjs';
