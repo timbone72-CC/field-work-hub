@@ -2,7 +2,7 @@
 // on Contractor Android. Only the enumerated service-role RPCs are accessible.
 import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
+const METHODS=new Set(['service_select_next_delivery_package','service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_claim_package_and_acquire_dispatch','service_release_package_dispatch',
  'service_read_package_dispatch_owner','service_read_pinned_package_dispatch',
  'service_resume_pinned_package_dispatch',
