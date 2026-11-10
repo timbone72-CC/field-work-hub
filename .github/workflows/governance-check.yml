@@ -164,6 +164,46 @@ jobs:
                   break
               page += 1
 
+          # Finite finish-line acceptance gate. This is PR metadata validation:
+          # it cannot establish physical/provider truth or authorize deployment.
+          # Runtime/CI changes must advance an existing numbered acceptance gate.
+          controlled_paths = ("app/", "dashboard/", "supabase/", "ci/")
+          touches_runtime = any(path.startswith(controlled_paths) for path in changed_files)
+          gate = field_value("Acceptance gate")
+          physical = field_value("New physical/provider evidence")
+          permitted_gates = {f"FWH-AC{i}" for i in range(1, 6)}
+          if touches_runtime:
+              if gate not in permitted_gates | {"FWH-SAFETY"}:
+                  errors.append(
+                      "Runtime/CI PR must declare an existing Acceptance gate: "
+                      "FWH-AC1..FWH-AC5 (or linked FWH-SAFETY). "
+                      "See docs/FWH_FINISH_LINE_ACCEPTANCE_PLAN_2026-11-10.md."
+                  )
+              if gate == "FWH-SAFETY":
+                  incident = field_value("Safety incident URL")
+                  if not incident or not re.match(
+                      r"^https://github\.com/[^/]+/[^/]+/issues/[0-9]+(?:\b|/|$)",
+                      incident,
+                  ):
+                      errors.append(
+                          "FWH-SAFETY requires a real linked GitHub issue in Safety incident URL."
+                      )
+              if physical is None:
+                  errors.append(
+                      "Runtime/CI PR must declare New physical/provider evidence: "
+                      "NONE or FWH-AC#: <specific unaccepted reality boundary>."
+                  )
+              elif physical != "NONE":
+                  if gate not in permitted_gates | {"FWH-SAFETY"} or not physical.startswith(
+                      str(gate) + ": "
+                  ) or not physical[len(str(gate)) + 2:].strip():
+                      errors.append(
+                          "New physical/provider evidence must be NONE or start with "
+                          "the exact declared gate plus ': ' and a specific unaccepted boundary."
+                      )
+          elif gate and gate not in permitted_gates | {"FWH-SAFETY", "N/A"}:
+              errors.append("Unrecognized Acceptance gate; use N/A for documentation-only work.")
+
           if level == "Level 1" and any(
               path.startswith(".github/workflows/") for path in changed_files
           ):
