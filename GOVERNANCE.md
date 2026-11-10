@@ -15,6 +15,10 @@ This is the universal work-control layer for the separate Field Work Hub (FWH) p
 7. **Handoff:** maintain a durable resume point with exact next checkpoint and unresolved gates.
 8. **Close:** evidence, external state, cleanup decisions, roadmap, approval, and merge/deployment state must tell the same story.
 
+## Operator interaction and autonomous execution
+
+The **one-step rule applies only to instructions for the human operator**: give one actionable instruction at a time and await its result. It does not limit the agent to one tool call, commit, fix, check, or development action per response. Within approved scope, complete the largest safe coherent batch without repeatedly requesting “Next” or treating a chat reply as an approval gate. Stop only for genuine blockers, missing required decisions/approvals, changed scope, or necessary human/device/provider evidence. Preserve explicit Level-3 pre-merge approval and independently required activation/remote-write authorization. Report the actual completed work and remaining gate.
+
 ## One authoritative implementation line
 
 Only one branch/PR may be authoritative for materially overlapping scope. Before creating a new line, inspect all open PRs, relevant branches and the last durable build-state record.
