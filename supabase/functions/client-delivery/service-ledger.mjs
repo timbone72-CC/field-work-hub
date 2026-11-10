@@ -2,7 +2,7 @@
 // on Contractor Android. Only the enumerated service-role RPCs are accessible.
 import {DriveUncertain} from './drive-client.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const METHODS=new Set(['service_acquire_delivery_dispatch','service_release_delivery_dispatch',
+const METHODS=new Set(['service_select_next_delivery_package','service_acquire_delivery_dispatch','service_release_delivery_dispatch',
  'service_claim_package_and_acquire_dispatch','service_release_package_dispatch',
  'service_read_package_dispatch_owner','service_read_pinned_package_dispatch',
  'service_resume_pinned_package_dispatch',
@@ -127,6 +127,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       {p_request:request}),
     releaseDispatch:request=>rpc('service_release_delivery_dispatch',
       {p_request:request}),
+    // Strict service-only read. Never selects an ID from a caller request.
+    selectNextDeliveryPackage:()=>rpc('service_select_next_delivery_package',{}),
     // New package-scoped concurrency interface: SOURCE ONLY. There is no
     // live RPC, Edge route, scheduler, provider activity or legacy fallback.
     // SQL must later claim the exact eligible package AND acquire its permit

@@ -1,0 +1,31 @@
+-- FWH-F04 / AC1: REVIEW-ONLY TEMPLATE; NOT A MIGRATION OR DEPLOYMENT.
+-- Never execute without an explicit TEST activation authorization, confirmed
+-- hosted exact-source match, trusted worker-secret handling and rollback.
+-- The actual FWH TEST project presently has no installed pg_cron/pg_net.
+--
+-- Supabase documents pg_cron + pg_net for scheduled Edge invocations.
+-- pg_net temporarily stores the decrypted worker key in its request queue;
+-- review who can inspect net.http_request_queue before adopting this.
+-- The trusted x-fwh-delivery-secret must be owner-private and match Edge.
+-- Vault names must point to the EXACT permitted TEST endpoint/account only.
+-- No ordinary user can submit a package ID, destination or arbitrary payload.
+--
+-- After a separately authorized extension/Vault setup, the reviewed job is:
+--
+-- select cron.schedule('fwh-test-client-delivery', '* * * * *', $job$
+--   select net.http_post(
+--     url:=(select decrypted_secret from vault.decrypted_secrets
+--       where name='fwh_test_delivery_endpoint'),
+--     headers:=jsonb_build_object(
+--       'Content-Type','application/json',
+--       'x-fwh-delivery-secret',(select decrypted_secret
+--         from vault.decrypted_secrets
+--         where name='fwh_test_delivery_worker_secret')),
+--     body:='{"operation":"advance_queued_package_once"}'::jsonb
+--   );
+-- $job$);
+--
+-- Separate authorized rollback: cron.unschedule('fwh-test-client-delivery')
+-- and disable ONLY new dispatch. Preserve existing package permits, journal,
+-- receipts, original HELD incident and all immutable Google IDs.
+-- No automatic cleanup, legacy dispatch, retry-all or reset.

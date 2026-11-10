@@ -95,6 +95,10 @@ The earlier separate manual TEST JPEG transfer remains a distinct accepted proof
 
 The authoritative record has a **24 KiB (24,576 UTF-8 bytes) hard CI limit**. Per operator approval October 31, start archiving at **21 KiB (21,504 bytes)** and target **17–18 KiB** afterward. Preserve every superseded dated note verbatim in the numbered immutable archive, linked below; do not repeat accepted evidence or add approval gates just for archiving. Follow the original record integrity, rule, and exact-head verification requirements. The former detailed discipline note is archived verbatim in part 32.
 
+### November 10 — FWH-F04 source branch (OFF)
+
+`feat/fwh-f04-queue-worker-20261110`: trusted next-queued-package selection, one fenced step/wake, scheduler template only. Source/CI pending; SQL, worker, cron, Google, cleanup, FPP unchanged live. Level 3 premerge and TEST activation remain separate. Reuse accepted evidence; don't replay HELD.
+
 ## Frozen, losslessly preserved implementation history
 
 [Numbered immutable history index (parts 01–48)](archive/phase-5-6/HISTORY_INDEX.md). Historical notes there are evidence archives, not the current status or a second implementation record.

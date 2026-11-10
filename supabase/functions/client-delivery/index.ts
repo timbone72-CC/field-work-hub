@@ -21,6 +21,8 @@ Deno.serve(createDeliveryHandler({
  // NOTHING: the two-slot worker and all other mutating modes stay hard OFF.
  // No request body or environment variable can select a different package.
  twoPackageTestEnabled:false,
+ // Server-owned normal TEST queue wake is PREPARED, not active.
+ queueWorkerEnabled:false,
  twoPackageTestPins:[
   {packageId:'e18463b2-9afe-41b8-9700-721738839b22',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'},
   {packageId:'e690b8c4-708f-44c2-b6f3-4da01dc07ac4',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'}
