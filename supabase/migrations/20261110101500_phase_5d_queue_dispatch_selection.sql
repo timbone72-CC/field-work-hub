@@ -21,7 +21,18 @@ begin
  join private.client_delivery_destinations d on d.id=k.destination_id
  where o.state='DELIVERING' and k.status='DELIVERING'
    and o.worker_id=held.worker_id and o.lease_generation=held.generation
-   and o.lease_until>clock_timestamp()
+   and o.lease_until is not null
+   and (
+     o.lease_until>clock_timestamp()
+     or (o.lease_until<=clock_timestamp()
+       -- Only an already positively VERIFIED step can be renewed; the
+       -- existing worker performs fresh Google GET and same-owner CAS.
+       and exists(select 1 from private.client_delivery_package_step_attempts v
+         where v.package_id=k.id and v.worker_id=held.worker_id
+           and v.request_id=held.request_id and v.generation=held.generation
+           and v.verified_at is not null
+           and v.verified_outcome in ('VERIFIED_METADATA_STEP','VERIFIED_PROVIDER_STEP')))
+   )
    and held.organization_id=k.organization_id
    and held.destination_id=k.destination_id
    and o.destination_id=k.destination_id
