@@ -6,25 +6,35 @@ import {readFileSync} from 'node:fs';
 import {createDeliveryHandler} from '../../supabase/functions/client-delivery/handler.mjs';
 
 const source=readFileSync(new URL('../../supabase/functions/client-delivery/index.ts',import.meta.url),'utf8');
+const approvedPins=[
+ {packageId:'e18463b2-9afe-41b8-9700-721738839b22',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'},
+ {packageId:'e690b8c4-708f-44c2-b6f3-4da01dc07ac4',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'}
+];
 
-test('hosted staging hard-disables all mutating modes, without a package pin',()=>{
+test('hosted staging leaves all mutating modes OFF with exactly two inert TEST pins',()=>{
  for(const key of ['enabled','testRecoveryEnabled','pinnedTestEnabled','twoPackageTestEnabled']){
   const line=source.split('\n').find(x=>new RegExp('^\\s*'+key+':').test(x));
   assert.equal(line?.trim(),key+':false,',key+' must be hard OFF');
  }
  assert.match(source,/testPreflightEnabled:Deno\.env\.get\('FWH_CLIENT_TEST_PREFLIGHT_ENABLED'\)/);
- assert.match(source,/^\s*twoPackageTestPins:\[\],/m);
+ const block=source.match(/^\s*twoPackageTestPins:\[([\s\S]*?)^\s*\],/m);
+ assert.ok(block,'literal two-slot pin block is required');
+ const pinned=[...block[1].matchAll(/\{packageId:'([^']+)',destinationId:'([^']+)',rootId:'([^']+)'\}/g)]
+   .map(m=>({packageId:m[1],destinationId:m[2],rootId:m[3]}));
+ assert.deepEqual(pinned,approvedPins,'only the two verified approved TEST packages may be pinned');
+ assert.equal(block[1].replace(/\{packageId:'[^']+',destinationId:'[^']+',rootId:'[^']+'\},?/g,'').trim(),
+  '','no extra or unrecognized hosted pin fields');
  for(const key of ['pinnedTestPackageId','pinnedTestDestinationId','pinnedTestRootFolderId']){
-  assert.ok(source.split('\n').some(line=>line.trim()===key+":'',"),key+' must have an empty pin');
+  assert.ok(source.split('\n').some(line=>line.trim()===key+":'',"),key+' must have an empty retired pin');
  }
 });
 
-test('old frozen delivery identity is absent from current hosted entry, not erased from ledger',()=>{
- for(const previous of [
-  'f42e05df-de7a-4d20-8dee-f55e09511d1f',
-  '06f157eb-230c-44b5-b3d4-a7508110bfd7',
-  '1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'
- ])assert.equal(source.includes(previous),false,'old TEST pin retained in staging');
+test('retired one-package identity is absent; verified destination/root are intentionally shared',()=>{
+ assert.equal(source.includes('f42e05df-de7a-4d20-8dee-f55e09511d1f'),false,
+  'retired one-package ID must not return');
+ assert.equal(approvedPins[0].destinationId,approvedPins[1].destinationId);
+ assert.equal(approvedPins[0].rootId,approvedPins[1].rootId);
+ assert.notEqual(approvedPins[0].packageId,approvedPins[1].packageId);
  for(const name of ['FWH_CLIENT_NEW_TEST_PACKAGE_ID','FWH_CLIENT_NEW_TEST_DESTINATION_ID','FWH_CLIENT_NEW_TEST_ROOT_FOLDER_ID']){
   assert.equal(source.includes(name),false,'Environment-selected TEST identity bypass: '+name);
  }
@@ -80,7 +90,7 @@ test('disabled trusted handler refuses even authenticated delivery/recovery oper
  let providerCalls=0;
  const handler=createDeliveryHandler({
   enabled:false,testRecoveryEnabled:false,pinnedTestEnabled:false,
-  twoPackageTestEnabled:false,twoPackageTestPins:[],
+  twoPackageTestEnabled:false,twoPackageTestPins:approvedPins,
   workerSecret:'synthetic-worker-secret-1234567890123456789012',
   runPinnedTestStep:async()=>{providerCalls++;throw Error('NO_PROVIDER');}
  });
