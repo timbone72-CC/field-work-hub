@@ -3,9 +3,9 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 10 — Phase 5D pins merged; TEST worker all-OFF
+## November 10 — Phase 5D TEST worker v62 DEPLOYED OFF
 
-**PR #77 MERGED** `960d07ac`; exact-main Android/Database/Admin CI PASS. Both TEST packages APPROVED, one photo each; SQL 132 installed, dispatch OFF, zero new permits/outbox. Hosted **v61 ACTIVE, all-OFF**: 13/14 source files match merged main; only `index.ts` differs (hosted empty pins vs main two disabled literal pins). **No Send, provider call, cleanup or APK.** [Controlled hosted v62 preflight/rollback](PHASE_5D_V62_ALL_OFF_HOSTED_PREFLIGHT_2026-11-10.md). **Next:** separately authorize exact-main all-OFF TEST hosted deployment; verify 14/14 parity and unchanged DB. Provider activation is a later gate.
+**PR #77 MERGED** `960d07ac`; main CI PASS. Operator-authorized FWH TEST `client-delivery` **v62 ACTIVE**, **14/14 exact-source files**, both TEST pins present, all mutation modes OFF. Migration 132 and dispatch OFF unchanged; two 1-photo packages APPROVED; new permits/queued outbox 0; original HELD and DELIVERED receipts preserved. No Google/Send/cleanup/APK. [Deployment and rollback](PHASE_5D_V62_ALL_OFF_DEPLOYMENT_RECORD_2026-11-10.md). **Next:** separate read-only provider/root verification gate; no slot activation/Send authorization.
 
 ## November 9 — Phase 5D migration 132 + all-OFF hosted v61 DEPLOYED
 
