@@ -164,6 +164,96 @@ jobs:
                   break
               page += 1
 
+          # Compact FWH v1 business handoff. No new test/approval framework.
+          # Core scope, rollback, approval and verification fields above still apply.
+          controlled_paths = ("app/", "dashboard/", "supabase/", "ci/", "tests/")
+          root_build_files = {"build.gradle", "settings.gradle", "gradle.properties"}
+          runtime_workflow_change = any(
+              path.startswith(".github/workflows/")
+              and path != ".github/workflows/governance-check.yml"
+              for path in changed_files
+          )
+          touches_runtime = (
+              any(path.startswith(controlled_paths) for path in changed_files)
+              or any(path in root_build_files for path in changed_files)
+              or runtime_workflow_change
+          )
+          feature_milestone = field_value("Feature / milestone")
+          lane = field_value("Work lane")
+          outcome = field_value("Business outcome")
+          physical = field_value("New physical/provider evidence")
+          feature_match = re.fullmatch(
+              r"(FWH-F0[1-8]|FWH-PLATFORM)\s*/\s*(FWH-AC[1-5])",
+              feature_milestone or "",
+          )
+          is_safety = feature_milestone == "FWH-SAFETY"
+          feature_by_gate = {
+              "FWH-AC1": {"FWH-F03", "FWH-F04"},
+              "FWH-AC2": {"FWH-F03", "FWH-F05"},
+              "FWH-AC3": {
+                  "FWH-F01", "FWH-F02", "FWH-F03",
+                  "FWH-F06", "FWH-F07", "FWH-F08",
+              },
+              "FWH-AC4": {f"FWH-F{i:02}" for i in range(1, 9)},
+              "FWH-AC5": {f"FWH-F{i:02}" for i in range(1, 9)},
+          }
+          if touches_runtime:
+              if not feature_match and not is_safety:
+                  errors.append(
+                      "Runtime/CI PR needs Feature / milestone: FWH-F04 / FWH-AC1 "
+                      "(or FWH-PLATFORM / FWH-AC#, or FWH-SAFETY for an incident)."
+                  )
+              if lane not in {"FINISH", "ACTIVATE", "ACCEPT", "RELEASE", "SAFETY"}:
+                  errors.append(
+                      "Runtime/CI PR needs Work lane: FINISH, ACTIVATE, ACCEPT, RELEASE or SAFETY."
+                  )
+              if is_safety != (lane == "SAFETY"):
+                  errors.append("SAFETY lane requires FWH-SAFETY and vice versa.")
+              if not outcome or len(outcome) < 12 or outcome.casefold() in {
+                  "none", "n/a", "tbd",
+              }:
+                  errors.append(
+                      "Business outcome must state what usable behavior or fix this PR advances."
+                  )
+              if feature_match:
+                  feature, gate = feature_match.groups()
+                  if feature != "FWH-PLATFORM" and feature not in feature_by_gate[gate]:
+                      errors.append(
+                          f"Feature {feature} does not belong to milestone {gate}."
+                      )
+                  if feature == "FWH-PLATFORM" and not re.search(
+                      r"\bFWH-F0[1-8]\b", outcome or ""
+                  ):
+                      errors.append(
+                          "Shared PLATFORM work must name the affected FWH-F## in Business outcome."
+                      )
+                  if lane == "RELEASE" and gate not in {"FWH-AC4", "FWH-AC5"}:
+                      errors.append("RELEASE lane belongs to Phase 7/8 pilot milestone.")
+              else:
+                  gate = "FWH-SAFETY" if is_safety else None
+              if is_safety and not re.search(
+                  r"https://github\.com/[^/\s]+/[^/\s]+/issues/[0-9]+\b",
+                  outcome or "",
+              ):
+                  errors.append("SAFETY outcome must link the real incident issue.")
+              if physical is None:
+                  errors.append(
+                      "Declare New physical/provider evidence: NONE, or "
+                      "FWH-AC#: specific unproven reality boundary."
+                  )
+              elif physical != "NONE" and (
+                  not gate or not physical.startswith(gate + ": ")
+                  or not physical[len(gate) + 2:].strip()
+              ):
+                  errors.append(
+                      "New physical/provider evidence must be NONE or the exact "
+                      "milestone followed by a specific previously unproven boundary."
+                  )
+          # Documentation-only governance work has no new metadata requirement.
+          # ACTIVATE uses the existing External systems changed / Rollback point.
+          # ACCEPT/RELEASE cite evidence in the existing Evidence / Remaining Gates.
+          # This checker cannot declare provider/device evidence true.
+
           if level == "Level 1" and any(
               path.startswith(".github/workflows/") for path in changed_files
           ):

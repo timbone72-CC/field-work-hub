@@ -11,6 +11,10 @@
 - Rollback point: <!-- Exact known-good SHA -->
 - Verification boundary: <!-- Focused/full CI, doc review, relevant device/provider gate -->
 - Level 3 merge approval: <!-- N/A for L1/L2; PENDING or APPROVED for L3 only -->
+- Feature / milestone: <!-- Runtime only: FWH-F04 / FWH-AC1; shared: FWH-PLATFORM / FWH-AC#; incident: FWH-SAFETY; docs-only: N/A -->
+- Work lane: <!-- Runtime only: FINISH | ACTIVATE | ACCEPT | RELEASE | SAFETY; docs-only: GOVERNANCE -->
+- Business outcome: <!-- Runtime: concrete feature progress; ACTIVATE names switch in existing External systems changed/rollback; ACCEPT/RELEASE cite evidence in existing Evidence section; SAFETY includes linked issue. Docs: N/A -->
+- New physical/provider evidence: <!-- Runtime: NONE or FWH-AC#: specific previously unproven boundary; accepted evidence is not re-tested. Docs: NONE -->
 
 ## Summary
 
