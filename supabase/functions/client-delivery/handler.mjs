@@ -16,6 +16,7 @@ import {advanceTrustedDeliveryOneStep,prepareTrustedDelivery,continueTrustedDeli
  continueOriginalTestSavedFirstPhotoOnce,
  advancePinnedTestPackageOneStep} from './worker-runtime.mjs';
 import {createSessionVault} from './session-vault.mjs';
+import {advanceQueuedPackageOnce} from './queue-wakeup.mjs';
 import {inspectOriginalHeldFirstPhotoSession,
  inspectOriginalHeldFirstPhotoFile} from './held-session-probe.mjs';
 import {createReadOnlyTestHandler} from './test-preflight-only.mjs';
@@ -67,6 +68,7 @@ export function createDeliveryHandler({
   // Separate PREPARED two-slot path. Hosted index compiles this OFF; the
   // only permitted selections are exact server-owned pins, never request IDs.
   twoPackageTestEnabled=false,twoPackageTestPins=[],
+  queueWorkerEnabled=false,runQueueWorkerStep=advanceQueuedPackageOnce,
   runPinnedTestStep=advancePinnedTestPackageOneStep,
   testPreflightEnabled=false,testRecoveryEnabled=false,
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
@@ -89,6 +91,60 @@ export function createDeliveryHandler({
   if(!workerSecret||workerSecret.length<32
    ||!sameSecret(request.headers.get('x-fwh-delivery-secret'),workerSecret))
    return reply(401,'WORKER_UNAUTHORIZED');
+  // FWH-F04: server-selected queued delivery using ONE existing fenced step.
+  // No caller IDs, new queue, old singleton dispatch or implicit retry.
+  if(queueWorkerEnabled===true){
+    if(enabled===true||pinnedTestEnabled===true||twoPackageTestEnabled===true
+      ||testRecoveryEnabled===true||testPreflightEnabled===true)
+      return reply(503,'CONFLICTING_WORKER_MODES');
+    let payload;
+    try{
+      if(request.headers.get('content-type')!=='application/json')
+        return reply(400,'EXACT_REQUEST_REQUIRED');
+      const raw=await request.text();
+      if(raw.length>128)return reply(413,'REQUEST_TOO_LARGE');
+      payload=JSON.parse(raw);
+    }catch{return reply(400,'EXACT_REQUEST_REQUIRED');}
+    if(!payload||Array.isArray(payload)||Object.keys(payload).length!==1
+      ||payload.operation!=='advance_queued_package_once')
+      return reply(400,'EXACT_REQUEST_REQUIRED');
+    const root=/^[A-Za-z0-9_-]{10,160}$/;
+    if(testEvidenceClass!=='DISPOSABLE_FWH_TEST_ONLY'
+      ||!root.test(expectedDriveId??'')||!root.test(internalDriveId??'')
+      ||expectedDriveId===internalDriveId
+      ||typeof expectedAccount!=='string'||!testWorkspaceDomain
+      ||!expectedAccount.toLowerCase().endsWith('@'+testWorkspaceDomain))
+      return reply(503,'QUEUE_TEST_SCOPE_NOT_CONFIGURED');
+    if(!supabaseUrl||!serviceRoleJwt||!clientId||!clientSecret
+      ||!refreshToken||!oauthScope||!sessionVaultKey)
+      return reply(503,'BACKEND_NOT_CONFIGURED');
+    try{
+      const vault=await createSessionVault({base64Key:sessionVaultKey});
+      const tokenProvider=createWorkspaceTokenProvider({
+        clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
+      const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+      const result=await runQueueWorkerStep({
+        ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
+        internalDriveId,projectUrl:supabaseUrl,serviceRoleJwt,
+        makeVault:async()=>vault,makeWorkerId,fetcher
+      });
+      const statuses={
+        NO_ELIGIBLE_PACKAGES:'NO_ELIGIBLE_PACKAGES',
+        PACKAGE_STEP_BUSY:'PACKAGE_STEP_BUSY',
+        PACKAGE_IDENTITIES_PREALLOCATED:'PREALLOCATED_ONLY',
+        PARENT_STEP_VERIFIED:'PARENT_STEP_VERIFIED',
+        PACKAGE_FOLDER_STEP_VERIFIED:'FOLDER_STEP_VERIFIED',
+        FILE_STEP_VERIFIED:'FILE_STEP_VERIFIED',
+        FILE_STEP_PROGRESS_VERIFIED:'FILE_PROGRESS_VERIFIED',
+        PACKAGE_DELIVERED:'FINAL_DELIVERY_VERIFIED'
+      };
+      return Object.hasOwn(statuses,result?.state)
+        ?reply(200,statuses[result.state]):reply(503,'QUEUE_STEP_UNVERIFIED');
+    }catch(error){
+      noteTrustedDeliveryFailure('QUEUE_PACKAGE_STEP',error);
+      return reply(503,'QUEUE_STEP_UNVERIFIED');
+    }
+  }
   // Separate sealed TEST-only operation. It accepts no client-selected IDs,
   // cannot execute legacy delivery, and requires a verified new-package cutover
   // in the service-only database before any provider operation can run.
