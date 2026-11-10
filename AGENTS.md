@@ -35,6 +35,8 @@ Do not silently infer that FPP or later live FWH data are disposable; reclassify
 
 ## Verification and stop
 
+**Pacing boundary:** The one-step rule governs instructions given to the human operator (one actionable instruction, then wait), **not** the agent's authorized repository work. Continue autonomous inspection, implementation, fixes, automated verification and documentation in the largest safe coherent batch without requesting routine “Next” confirmations. Stop only at a genuine blocker, required decision/approval, changed scope, or unavoidable human/device/provider boundary; retain explicit Level-3 merge and separate activation/remote-write gates.
+
 Build the largest safe coherent batch inside approved scope; use focused verification during development, one final complete suite on the exact runtime head when required, and the smallest real-device/provider check that software cannot prove. A failed test, unverified authorization, external-state contradiction, unproven photo destination, unresolved ambiguity or unapproved expansion stops the affected path. Passing physical observations need not be repeated for reassurance.
 
 **Level 3 requires explicit operator approval before merge.** A PR label, automation status or earlier design approval is not proof of that decision. Keep a durable handoff record for active Level 2/3 scopes; report real pass/block/fail status and the exact next gate.
