@@ -1,5 +1,5 @@
 // FWH TEST hosted cutover staging: legacy, general, prior one-package and
-// new two-package mutations all stay compiled OFF; provider reads are separate.
+// new two-package mutations stay hard OFF; normal TEST queue has a separate gate.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -11,7 +11,7 @@ const approvedPins=[
  {packageId:'e690b8c4-708f-44c2-b6f3-4da01dc07ac4',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'}
 ];
 
-test('hosted staging leaves all mutating modes OFF with exactly two inert TEST pins',()=>{
+test('hosted staging leaves legacy and fixed-package modes hard OFF with inert pins',()=>{
  for(const key of ['enabled','testRecoveryEnabled','pinnedTestEnabled','twoPackageTestEnabled']){
   const line=source.split('\n').find(x=>new RegExp('^\\s*'+key+':').test(x));
   assert.equal(line?.trim(),key+':false,',key+' must be hard OFF');
