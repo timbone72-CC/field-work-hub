@@ -21,7 +21,7 @@ const BASE={
  oauthScope:'https://www.googleapis.com/auth/drive',
  supabaseUrl:'https://fwh-test.supabase.co',
  serviceRoleJwt:'header.payload.signature',
- sessionVaultKey:Buffer.alloc(32,7).toString('base64')
+ sessionVaultKey:Buffer.alloc(32,7).toString('base64').replace(/=+$/,'')
 };
 function request(body={operation:'advance_queued_package_once'},secret=SECRET){
  return new Request('https://fixture.invalid',{method:'POST',
