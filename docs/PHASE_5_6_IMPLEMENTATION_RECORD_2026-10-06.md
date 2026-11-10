@@ -3,9 +3,9 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 10 — Phase 5D v62 OFF; activation prerequisite found
+## November 10 — Phase 5D two-package activation PLAN READY (OFF)
 
-Hosted v62 14/14 source parity; dispatch OFF; two APPROVED packages, no outbox/permits. Connected Drive root PASS; accepted worker OAuth/root PASS Oct 15. Pinned worker does fresh OAuth/root GET before permit claim. **Live SQL blocks Admin Send unless dispatch is enabled**, and claim needs both package and outbox QUEUED. No current v62 OAuth success claimed. [Readiness and blocked queue](PHASE_5D_DRIVE_READONLY_CONNECTOR_PROOF_2026-11-10.md). **Next:** plan controlled TEST dispatch/slot activation; no Send, Google writes or cleanup authorized.
+Trusted TEST v62 (14/14 source) and dispatch OFF. Two approved, one-photo packages: zero outbox/permits; worker ready, legacy cutover true, cap 2; no cron worker. Live SQL Send requires `cfg.enabled`, worker ready, and current manifest. Pinned step checks OAuth/root fresh, then claims exact QUEUED package. [Controlled activation and rollback](PHASE_5D_TWO_PACKAGE_ACTIVATION_RUNBOOK_2026-11-10.md). **PLAN ONLY:** no Send, Edge/config activation, Drive write or cleanup; operator approval still needed for Level-3 source/TEST activation and provider steps.
 
 ## November 9 — Phase 5D migration 132 + all-OFF hosted v61 DEPLOYED
 
