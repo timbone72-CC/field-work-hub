@@ -3,6 +3,10 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 9 — Phase 5D next hosted OFF staging, source only
+
+**Level 3 source line:** `feat/phase5d-off-hosted-two-slot-staging-20261109` at baseline `744ecef6`. `client-delivery/index.ts` now compiles general delivery, legacy recovery, previous one-package TEST and two-package TEST **all OFF**; removes old package/destination/root pins, keeps two new slots unpinned `[]`. Focused regression updated to deny all three package commands, preserving synthetic old handler tests. No live hosted deployment, TEST SQL, provider call, photo cleanup, Android release or FPP action. CI and separate explicit Level-3 merge approval remain pending. **Next:** verify exact-head checks, obtain required merge approval, then separately authorize additive migration 132 and hosted **OFF-only** staging, not new package Send. [Detailed deployment gate/rollback](PHASE_5D_TWO_SLOT_OFF_STAGING_2026-11-09.md).
+
 ## November 9 — Phase 5D live TEST read-only cutover preflight COMPLETE; activation PENDING
 
 **Latest GitHub main:** Source PR #70 merged at `82669265`; Level-1 postmerge documentation PR #71 merged at `d392446d`. Exact-main `d392446d` Android `42718766093`, Database `42718766070`, Admin `42718766621` all PASS; PR #70 merge-main three checks also PASS. Latest published TEST Android release remains v42.

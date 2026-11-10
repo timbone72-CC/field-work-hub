@@ -1,21 +1,24 @@
-// FWH Team TEST, explicit operator-authorized isolated ONE-PACKAGE candidate.
-// Never enable generic client delivery, legacy TEST recovery or a scheduler.
-// Must remain SOURCE-ONLY until focused CI and hosted parity are confirmed.
+// Phase 5D TEST cutover candidate: all mutating delivery modes hard OFF.
+// This is a source-only staging artifact pending explicit Level-3 merge
+// approval and a separately approved controlled TEST hosted deployment.
+// Do not enable Send, any package step, legacy recovery or a scheduler.
 import {createDeliveryHandler} from './handler.mjs';
 import {selectHostedServiceCredential} from './service-ledger.mjs';
 Deno.serve(createDeliveryHandler({
  // Phase 5D: general delivery and legacy recovery stay compiled OFF.
- // The ONLY enabled mutation is the authenticated frozen one-package step.
+ // Neither the retired one-package TEST path nor the prepared two-slot path
+ // may run until a separate exact-identity TEST provider gate.
  enabled:false,
- // No caller-selected package or destination IDs; this one flag is explicit.
- pinnedTestEnabled:true,
- pinnedTestPackageId:'f42e05df-de7a-4d20-8dee-f55e09511d1f',
- pinnedTestDestinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',
- pinnedTestRootFolderId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK',
- // Prepared ONLY: no second TEST fixture is authorized/pinned at source,
- // so even a hosted deployment cannot serve either new slot. A later
- // explicit TEST provider gate must pin TWO separately approved package IDs
- // in source and disable the one-package mode before any slot can run.
+ // Retire only the old hosted TEST route. Historical package/remote IDs and
+ // receipts remain in durable DB/provider records, never in new active pins.
+ // No caller-selected IDs or environment-controlled package selection.
+ pinnedTestEnabled:false,
+ pinnedTestPackageId:'',
+ pinnedTestDestinationId:'',
+ pinnedTestRootFolderId:'',
+ // Prepared ONLY: no new TEST fixture is authorized/pinned in source. Both
+ // package slots remain OFF. A later explicit TEST gate must pin exactly TWO
+ // new independently verified package identities before any slot can run.
  twoPackageTestEnabled:false,
  twoPackageTestPins:[],
  // Independent TEST-only identity/root GET gate; this cannot enable Send.
