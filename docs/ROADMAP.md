@@ -1144,7 +1144,9 @@ The [shared-access amendment](SUPERVISOR_ACCESS_RECOVERY_AMENDMENT_2026-10-05.md
 
 ## Required scenarios
 
-Exercise repeatedly:
+**Coverage catalog for the integrated internal pilot, not a mandatory repeat-test campaign.** Previously accepted isolated CameraX/offline/assignment/review/Drive observations remain credited unless an affected boundary has materially changed or contradicting evidence exists. Observe realistic repeated everyday operation across normal field sessions; verify only unproven cross-feature interactions, enabled functionality and practical reliability. Do not restart every scenario below, manufacture new test work orders merely for reassurance, or demand repeat screenshots for accepted behavior. Classify remaining checks as COVERED / NEW / INVALIDATED / BLOCKED using [TESTING_CONTRACT.md](../TESTING_CONTRACT.md#accepted-evidence-and-retest-decision). Actual integrated pilot completion and original/photo/provider safety requirements still apply.
+
+Scenario coverage inventory:
 
 - same-address multiple WOs;
 - different work types at same address;
