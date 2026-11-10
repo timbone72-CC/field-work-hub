@@ -127,6 +127,8 @@ export function createServiceLedger({url,serviceRoleJwt,fetcher=fetch}={}){
       {p_request:request}),
     releaseDispatch:request=>rpc('service_release_delivery_dispatch',
       {p_request:request}),
+    // Strict service-only read. Never selects an ID from a caller request.
+    selectNextDeliveryPackage:()=>rpc('service_select_next_delivery_package',{}),
     // New package-scoped concurrency interface: SOURCE ONLY. There is no
     // live RPC, Edge route, scheduler, provider activity or legacy fallback.
     // SQL must later claim the exact eligible package AND acquire its permit
