@@ -1,0 +1,54 @@
+name: FWH TEST delivery wake (disabled by default)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fwh-test-delivery-wake
+  cancel-in-progress: false
+
+jobs:
+  wake:
+    if: ${{ vars.FWH_TEST_DELIVERY_SCHEDULER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    environment: fwh-test-delivery
+    env:
+      FWH_TEST_EDGE_URL: ${{ vars.FWH_TEST_DELIVERY_EDGE_URL }}
+      FWH_TEST_WORKER_SECRET: ${{ secrets.FWH_TEST_DELIVERY_WORKER_SECRET }}
+    steps:
+      - name: Validate exact TEST endpoint and credential without printing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='https://vyocaujuwrivoqynvitm.supabase.co/functions/v1/client-delivery'
+          if [[ "${FWH_TEST_EDGE_URL:-}" != "$expected" ]]; then
+            echo 'STOP: TEST endpoint does not match pinned project'
+            exit 1
+          fi
+          if [[ "${#FWH_TEST_WORKER_SECRET}" -lt 32 ]]; then
+            echo 'STOP: missing or invalid TEST worker credential'
+            exit 1
+          fi
+      - name: Wake one server-selected step
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Secret remains in the isolated Actions runner environment, not
+          # pg_net, SQL, cron metadata, GitHub source, or the job output.
+          status="$(curl --silent --show-error --max-time 40 --retry 0 \
+            --output /dev/null --write-out '%{http_code}' \
+            --request POST "$FWH_TEST_EDGE_URL" \
+            --header 'Content-Type: application/json' \
+            --header "x-fwh-delivery-secret: $FWH_TEST_WORKER_SECRET" \
+            --data '{"operation":"advance_queued_package_once"}')"
+          if [[ "$status" != 200 ]]; then
+            echo "STOP: delivery wake returned HTTP $status; no automatic retry"
+            exit 1
+          fi
+          echo 'TEST wake accepted; provider outcome must be verified in the durable ledger'
