@@ -1,6 +1,6 @@
 # Phase 5D — TEST migration 132 and hosted two-slot OFF staging
 
-**Status: SOURCE PREPARED; NOT MERGED OR DEPLOYED.** No TEST database, hosted Edge, Google provider, Android, original FPP or photo operation is authorized by this note.
+**Status: DRAFT PR #74 — SOURCE PREPARED; LEVEL-3 MERGE APPROVAL PENDING; NOT DEPLOYED.** No TEST database, hosted Edge, Google provider, Android, original FPP or photo operation is authorized by this note.
 
 ## Scope, ownership and rollback
 
