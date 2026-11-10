@@ -6,6 +6,16 @@ import {advancePinnedTestPackageOneStep} from './worker-runtime.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const ROOT=/^[A-Za-z0-9_-]{10,160}$/;
 
+const FWH_TEST_PROJECT_URL='https://vyocaujuwrivoqynvitm.supabase.co';
+
+// Source cannot activate normal delivery just because it was deployed.
+// Requires one explicit backend flag plus the exact disposable TEST project;
+// the independent SQL dispatch and scheduled-wake switches still apply.
+export function isFwhTestQueueWorkerEnabled({flag,projectUrl,evidenceClass}={}){
+ return flag==='true'&&projectUrl===FWH_TEST_PROJECT_URL
+   &&evidenceClass==='DISPOSABLE_FWH_TEST_ONLY';
+}
+
 export async function advanceQueuedPackageOnce({
  ledger,runExisting=advancePinnedTestPackageOneStep,
  tokenProvider,expectedEmail,expectedDriveId,internalDriveId,
