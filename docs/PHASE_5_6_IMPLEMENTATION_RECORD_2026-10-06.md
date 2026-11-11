@@ -3,6 +3,10 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 11 — FWH-F04 / 5D-T02 source-only, pending Level-3 merge
+
+Branch `feat/fwh-5d-t02-manifest-only-delivery` based on main `5051bcea`: existing fenced worker now accepts approved `selected_photos: []`; new additive SQL migration relaxes only private frozen-photo count to 0..200 and retains uniqueness, UUID, authority/permit checks. Focused Node/SQL tests included. **No Supabase migration, Edge deployment, Send, provider write, existing queued-package mutation or cleanup.** T02 stays ACTIVE, not COMPLETE: exact-head CI, separate Level-3 merge approval, controlled deployment and one real zero-photo final receipt still pending. T01's original HELD/DELIVERING evidence is unaffected.
+
 ## November 11 — FWH-F04 cron correction MERGED; real provider progress
 
 **FWH-F04 / AC1 ACTIVATE:** PR #88 merged to `main` at `2d6fbcf7` with exact-head governance, Android, Database and Admin PASS. GitHub TEST scheduler changed to offset `3-58/5 * * * *` while retaining main-only environment, single-wake, no-retry and exact-worker credential. This refreshes cron registration; **actual post-merge scheduled wake is NOT YET VERIFIED**. Original cron did run twice after Send: 2026-11-11 06:02 and 14:03 UTC, both authenticated HTTP 200.
