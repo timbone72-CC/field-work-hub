@@ -326,3 +326,51 @@ test('verified final receipt is the only terminal step allowed to finish',async(
  assert.equal(calls.length,1);
  assert.equal(calls[0][5],'VERIFIED_FINAL_RECEIPT');
 });
+
+test('manifest-only zero-photo queue uses same fenced permit and verifies one step',async()=>{
+ const {advancePinnedTestPackageOneStep}=await import(
+  '../../supabase/functions/client-delivery/worker-runtime.mjs');
+ const step='55555555-5555-4555-8555-555555555555';
+ const owner={present:true,active:true,claimed:true,acquired:true,
+  package_id:ids.package,destination_id:ids.destination,worker_id:ids.worker,
+  request_id:ids.request,generation:1,approved_sha256:'a'.repeat(64),
+  manifest:{package_id:ids.package,destination_id:ids.destination,
+   destination_root:ids.root,selected_photos:[]}};
+ let entered=0,completed=0,provider=0;
+ const forbidden=async()=>{throw Error('UNEXPECTED_OPERATION')};
+ const ledger={
+  readPinnedPackageDispatch:async()=>owner,
+  readPackageDispatchOwner:async()=>owner,
+  beginPackageStep:async(_p,_w,_r,_g,id)=>{
+   entered++;return {acquired:true,package_id:ids.package,generation:1,step_id:id};
+  },
+  completePackageStep:async(_p,_w,_r,_g,id,outcome)=>{
+   completed++;assert.equal(outcome,'VERIFIED_PROVIDER_STEP');
+   return {completed:true,step_id:id};
+  },
+  resumePinnedPackageDispatch:forbidden,
+  claimPackageAndAcquireDispatch:forbidden,
+  releasePackageDispatch:forbidden,
+  recordPinnedPackageProviderCheck:forbidden
+ };
+ const actual=await advancePinnedTestPackageOneStep({
+  ledger,packageId:ids.package,destinationId:ids.destination,rootId:ids.root,
+  makeWorkerId:()=>step,advanceStep:async({packageClaim})=>{
+   assert.deepEqual(packageClaim.manifest.selected_photos,[]);
+   return {state:'PARENT_STEP_VERIFIED'};
+  },
+  verifyReadOnlyProvider:async()=>{provider++;throw Error('NO_EXTRA_PROVIDER')}
+ });
+ assert.deepEqual(actual,{state:'PARENT_STEP_VERIFIED'});
+ assert.equal(entered,1);
+ assert.equal(completed,1);
+ assert.equal(provider,0);
+ for(const bad of [null,Array(201).fill({photo_id:ids.worker})]){
+  owner.manifest={...owner.manifest,selected_photos:bad};
+  await assert.rejects(advancePinnedTestPackageOneStep({
+   ledger,packageId:ids.package,destinationId:ids.destination,rootId:ids.root,
+   makeWorkerId:()=>step,advanceStep:forbidden
+  }),e=>e.code==='PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ }
+ assert.equal(entered,1,'malformed selections never begin another step');
+});

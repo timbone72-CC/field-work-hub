@@ -9,6 +9,7 @@ declare
   before_outbox bigint;
   before_receipts bigint;
   source text;
+  too_many jsonb;
   signature text:='public.service_select_next_delivery_package()';
 begin
   if to_regprocedure(signature) is null
@@ -33,6 +34,31 @@ begin
     if (select enabled from private.client_delivery_package_dispatch_config where singleton)
     then raise exception 'Queue selector CI must be OFF';end if;
   end if;
+
+  -- 5D-T02: exact empty-array acceptance, no malformed or duplicate IDs.
+  select jsonb_agg(jsonb_build_object('photo_id',
+    'abcdef01-0000-4000-8000-'||lpad(to_hex(n),12,'0')))
+    into too_many from generate_series(1,201) g(n);
+  if private.service_bounded_frozen_photo_ids('[]'::jsonb) is distinct from true
+    or private.service_bounded_frozen_photo_ids(
+      '[{"photo_id":"abcdef01-0000-4000-8000-000000000001"}]'::jsonb)
+      is distinct from true
+    or private.service_bounded_frozen_photo_ids('null'::jsonb) is distinct from false
+    or private.service_bounded_frozen_photo_ids('{}'::jsonb) is distinct from false
+    or private.service_bounded_frozen_photo_ids(
+      '[{"photo_id":"not-a-uuid"}]'::jsonb) is distinct from false
+    or private.service_bounded_frozen_photo_ids(
+      ('[{"photo_id":"abcdef01-0000-4000-8000-000000000001"},'
+      ||'{"photo_id":"ABCDEF01-0000-4000-8000-000000000001"}]')::jsonb
+    ) is distinct from false
+    or private.service_bounded_frozen_photo_ids(too_many) is distinct from false
+    or has_function_privilege('anon',
+      'private.service_bounded_frozen_photo_ids(jsonb)','EXECUTE')
+    or has_function_privilege('authenticated',
+      'private.service_bounded_frozen_photo_ids(jsonb)','EXECUTE')
+    or has_function_privilege('service_role',
+      'private.service_bounded_frozen_photo_ids(jsonb)','EXECUTE')
+  then raise exception 'Manifest-only frozen selection authorization/bounds changed';end if;
 
   result:=private.service_select_next_delivery_package();
   if result is distinct from '{"available":false}'::jsonb
