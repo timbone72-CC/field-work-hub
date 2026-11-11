@@ -153,3 +153,14 @@ test('enabled TEST queue route passes only backend-selected step to existing run
  assert.equal(seen[0].includes('packageId'),false);
  assert.equal(calls.length,0,'injected worker does not need provider calls');
 });
+
+test('GitHub TEST cron is offset every five minutes with single-wake safety intact',()=>{
+ const flow=readFileSync(new URL('../../.github/workflows/fwh-test-delivery-wake.yml',import.meta.url),'utf8');
+ assert.match(flow,/cron: "3-58\\/5 \\* \\* \\* \\*"/);
+ assert.match(flow,/^  workflow_dispatch:$/m);
+ assert.match(flow,/^  cancel-in-progress: false$/m);
+ assert.match(flow,/--retry 0/);
+ assert.match(flow,/--max-time 40/);
+ assert.match(flow,/--data '\\{"operation":"advance_queued_package_once"\\}'/);
+ assert.match(flow,/^    environment: fwh-test-delivery$/m);
+});
