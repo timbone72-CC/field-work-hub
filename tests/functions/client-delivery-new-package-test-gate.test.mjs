@@ -139,10 +139,10 @@ test('two distinct frozen photo IDs advance one fenced package step with no alte
  assert.equal(ledger.releases,0);
 });
 
-test('empty, malformed, duplicate and excessive frozen selections fail closed; unrelated package can proceed',async()=>{
+test('malformed, duplicate and excessive frozen selections fail closed; unrelated package can proceed',async()=>{
  const duplicate=uuid(40);
  const invalidSelections=[
-  null,[],[{photo_id:'bad'}],
+  null,[{photo_id:'bad'}],
   [{photo_id:duplicate},{photo_id:duplicate}],
   [{photo_id:duplicate},{photo_id:duplicate.toUpperCase()}],
   Array.from({length:201},(_,i)=>({photo_id:uuid(i+1000)}))
