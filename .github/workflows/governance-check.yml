@@ -274,7 +274,7 @@ jobs:
 
                       def task_marker(label):
                           matches = re.findall(
-                              rf"(?m)^- {re.escape(label)}: \\*\\*([A-Za-z0-9-]+)\\*\\*$",
+                              rf"(?m)^- {re.escape(label)}: \*\*([A-Za-z0-9-]+)\*\*$",
                               block,
                           )
                           if len(matches) != 1:
@@ -284,7 +284,7 @@ jobs:
                       primary = task_marker("Primary subphase")
                       selected = task_marker("Next construction task")
                       rows = re.findall(
-                          r"(?m)^\\|\\s*\\*\\*((?:[568][A-F]?|7)-T\\d{2})\\*\\*\\s*\\|\\s*([^|]+)\\|\\s*([^|]+)\\|",
+                          r"(?m)^\|\s*\*\*((?:[568][A-F]?|7)-T\d{2})\*\*\s*\|\s*([^|]+)\|\s*([^|]+)\|",
                           block,
                       )
                       tasks = {}
