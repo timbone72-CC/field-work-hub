@@ -2,7 +2,9 @@ name: FWH TEST delivery wake (disabled by default)
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Offset from minute 00: GitHub may drop scheduled events at hourly peaks.
+    # Changing this cron also refreshes GitHub schedule registration.
+    - cron: "3-58/5 * * * *"
   workflow_dispatch:
 
 permissions:
