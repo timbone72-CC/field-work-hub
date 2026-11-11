@@ -88,7 +88,7 @@ begin
     or not private.service_bounded_frozen_photo_ids(
       (select jsonb_agg(jsonb_build_object('photo_id',gen_random_uuid()))
          from generate_series(1,200)))
-    or private.service_bounded_frozen_photo_ids('[]'::jsonb)
+    or not private.service_bounded_frozen_photo_ids('[]'::jsonb)
     or private.service_bounded_frozen_photo_ids('null'::jsonb)
     or private.service_bounded_frozen_photo_ids('{}'::jsonb)
     or private.service_bounded_frozen_photo_ids('[{"photo_id":"bad"}]'::jsonb)
@@ -101,7 +101,7 @@ begin
     or private.service_bounded_frozen_photo_ids(
       (select jsonb_agg(jsonb_build_object('photo_id',gen_random_uuid()))
          from generate_series(1,201)))
-  then raise exception 'Frozen 1-200 photo ID proof accepted malformed/duplicate bounds';end if;
+  then raise exception 'Frozen 0-200 photo ID proof rejected approved empty or accepted malformed/duplicate bounds';end if;
   provider_source:=pg_get_functiondef(
     'private.service_record_pinned_package_provider_check(uuid,uuid,text,text,text,text,timestamptz,uuid)'::regprocedure);
   resume_source:=pg_get_functiondef(
