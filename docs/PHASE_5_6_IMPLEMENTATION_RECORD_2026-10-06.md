@@ -3,6 +3,12 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 10 — FWH-F04 queued; GitHub cron correction PENDING
+
+**FWH-F04 / AC1 ACTIVATE:** Admin Sent existing disposable `TEST-P5D-SECOND-001` at 2026-11-11 02:59 UTC. Live package/outbox still QUEUED; attempts 0, permits 0, receipt 0; exact SQL selector finds the package. Database dispatch ON and manual GitHub wake HTTP 200 verified. Only one GitHub scheduled event (00:06 UTC, before Send); no later cron wake. Second approved fixture untouched.
+
+**Corrective source branch:** `fix/fwh-f04-github-cron-wake-20261110` offsets `*/5` to `3-58/5` and tests no-retry/identity guards. GitHub documents possible dropped cron events and re-registration on cron edit. **Pending:** exact-head CI and Level-3 merge approval; no deployed behavior changed. **Next:** genuine automatic `schedule` event and ledger-backed final provider receipt for already-queued package, not another Send. Rollback: revert cron; if necessary turn off wake/dispatch while preserving all permits, attempts and HELD evidence. Cleanup remains OFF.
+
 ## November 10 — FWH-F04 TEST scheduler and database dispatch ENABLED
 
 **Operator authorization:** explicit “authorized” to enable FWH TEST package dispatch after GitHub scheduler activation. Operator saved `FWH_CLIENT_TEST_QUEUE_WORKER_ENABLED=true` and disabled conflicting read-only preflight. Failed GitHub wake run #3 HTTP 503 stopped without retry; its [second attempt](https://github.com/timbone72-CC/field-work-hub/actions/runs/42940345637) succeeded with HTTP 200 and `TEST wake accepted`. Manual acceptance is not proof of a subsequent cron delivery.
