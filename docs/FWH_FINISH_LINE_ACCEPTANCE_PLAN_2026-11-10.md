@@ -1,7 +1,7 @@
 # Field Work Hub — V1 Feature Completion, Activation, Acceptance and Release Plan
 
 **Proposed on:** 2026-11-10 (America/Chicago)  
-**Status:** PROPOSED revision 3 in PR #82 — operational workflow proposal, not new deployment/feature authorization  
+**Status:** ADOPTED through merged PR #82 (commit `faecfe9b`) — construction/acceptance direction only, not new deployment, activation or feature authorization  
 **Scope:** FWH repository, the existing FWH TEST project `vyocaujuwrivoqynvitm`, and subsequent approved Phase 7–8 pilot. The original FPP app and data remain untouchable.  
 **Authority:** `AGENTS.md`, `GOVERNANCE.md`, `CHANGE_CONTROL_CONTRACT.md`, `TESTING_CONTRACT.md`, `INTEGRATION_CONTRACT.md`, `docs/PHASE_STAGING_DOCTRINE.md`, the existing approved Phase 5/6 plans and shared-access amendment, then `docs/ROADMAP.md`. This plan **steers completion and activation of approved business functionality, acceptance, and release**; it does not replace approved product behavior, excuse mandatory security checks, or authorize a Level 3 merge, SQL change, hosted activation, Google write, real-customer action, cleanup or APK install.
 
