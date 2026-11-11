@@ -294,8 +294,11 @@ jobs:
                           tasks[name] = (owner.strip(), state.strip())
                       if not tasks or selected not in tasks:
                           raise ValueError("Selected construction task absent from register")
-                      if not selected.startswith(primary + "-") or tasks[selected][1] != "ACTIVE":
-                          raise ValueError("Primary subphase and selected ACTIVE task disagree")
+                      active_tasks = [name for name, (_, state) in tasks.items() if state == "ACTIVE"]
+                      if active_tasks != [selected]:
+                          raise ValueError("Exactly one selected ACTIVE construction task is required")
+                      if not selected.startswith(primary + "-"):
+                          raise ValueError("Primary subphase and selected task disagree")
                       if task_id != selected:
                           errors.append(
                               f"Construction task {task_id!r} is not the selected {selected!r} "
