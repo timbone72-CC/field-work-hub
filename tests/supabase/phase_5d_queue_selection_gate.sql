@@ -48,8 +48,9 @@ begin
     or private.service_bounded_frozen_photo_ids(
       '[{"photo_id":"not-a-uuid"}]'::jsonb) is distinct from false
     or private.service_bounded_frozen_photo_ids(
-      '[{"photo_id":"abcdef01-0000-4000-8000-000000000001"},'
-      ||'{"photo_id":"ABCDEF01-0000-4000-8000-000000000001"}]' ) is distinct from false
+      ('[{"photo_id":"abcdef01-0000-4000-8000-000000000001"},'
+      ||'{"photo_id":"ABCDEF01-0000-4000-8000-000000000001"}]')::jsonb
+    ) is distinct from false
     or private.service_bounded_frozen_photo_ids(too_many) is distinct from false
     or has_function_privilege('anon',
       'private.service_bounded_frozen_photo_ids(jsonb)','EXECUTE')
