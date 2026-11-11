@@ -19,6 +19,10 @@ This is the universal work-control layer for the separate Field Work Hub (FWH) p
 
 The **one-step rule applies only to instructions for the human operator**: give one actionable instruction at a time and await its result. It does not limit the agent to one tool call, commit, fix, check, or development action per response. Within approved scope, complete the largest safe coherent batch without repeatedly requesting “Next” or treating a chat reply as an approval gate. Stop only for genuine blockers, missing required decisions/approvals, changed scope, or necessary human/device/provider evidence. Preserve explicit Level-3 pre-merge approval and independently required activation/remote-write authorization. Report the actual completed work and remaining gate.
 
+## Completion-first construction direction
+
+**One primary subphase, one selected construction task.** The existing [ROADMAP construction register](docs/ROADMAP.md#completion-first-v1-construction-register--current-execution-direction-november-11-2026) identifies the active unfinished task and exact business Definition of Done. Work should close its implementation and applicable acceptance before starting the next feature. Do not interpret a merged PR, green CI, or a written status change as functional completion. When only a genuine external/device/provider boundary blocks that task, preserve accepted evidence, continue the next eligible build task **within the same subphase**, and return when the block clears. Work in a different subphase only if no safe task in the primary subphase can advance; record the blocker and return condition in the existing handoff. Existing incident/safety, scope approval and Level-3 merge protections remain unchanged. The existing governance check verifies a PR's task identity against the current trusted roadmap; it cannot verify provider or device truth. No new approval or retest stage is created.
+
 ## One authoritative implementation line
 
 Only one branch/PR may be authoritative for materially overlapping scope. Before creating a new line, inspect all open PRs, relevant branches and the last durable build-state record.

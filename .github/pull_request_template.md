@@ -11,6 +11,7 @@
 - Rollback point: <!-- Exact known-good SHA -->
 - Verification boundary: <!-- Focused/full CI, doc review, relevant device/provider gate -->
 - Level 3 merge approval: <!-- N/A for L1/L2; PENDING or APPROVED for L3 only -->
+- Construction task: <!-- Business-runtime work: exactly the current selected task ID from docs/ROADMAP.md, e.g. 5D-T02; non-business/docs-only: N/A -->
 - Feature / milestone: <!-- Runtime only: FWH-F04 / FWH-AC1; shared: FWH-PLATFORM / FWH-AC#; incident: FWH-SAFETY; docs-only: N/A -->
 - Work lane: <!-- Runtime only: FINISH | ACTIVATE | ACCEPT | RELEASE | SAFETY; docs-only: GOVERNANCE -->
 - Business outcome: <!-- Runtime: concrete feature progress; ACTIVATE names switch in existing External systems changed/rollback; ACCEPT/RELEASE cite evidence in existing Evidence section; SAFETY includes linked issue. Docs: N/A -->
