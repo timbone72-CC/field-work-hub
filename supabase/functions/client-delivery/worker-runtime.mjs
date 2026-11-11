@@ -1676,6 +1676,8 @@ export async function advancePinnedTestPackageOneStep({
    if(claim?.claimed===false&&claim.acquired===false)
      return Object.freeze({state:'PACKAGE_STEP_BUSY'});
  }else throw new DriveUncertain('PACKAGE_DISPATCH_OWNER_UNVERIFIED');
+ // An approved all-off package may contain zero photos; folder and
+ // submission.json still require the same fenced provider receipts.
  const m=claim?.manifest;
  if(claim?.claimed!==true||claim.acquired!==true
    ||claim.package_id!==packageId||claim.destination_id!==destinationId
@@ -1685,7 +1687,7 @@ export async function advancePinnedTestPackageOneStep({
    ||m?.package_id!==packageId||m?.destination_id!==destinationId
    ||m?.destination_root!==rootId
    ||!Array.isArray(m.selected_photos)
-   ||m.selected_photos.length<1||m.selected_photos.length>200
+   ||m.selected_photos.length>200
    ||m.selected_photos.some(p=>!UUID.test(p?.photo_id??''))
    ||new Set(m.selected_photos.map(p=>p.photo_id.toLowerCase())).size
      !==m.selected_photos.length)
