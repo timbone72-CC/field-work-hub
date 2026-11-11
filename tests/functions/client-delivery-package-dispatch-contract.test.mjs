@@ -345,7 +345,7 @@ test('manifest-only zero-photo queue uses same fenced permit and verifies one st
    entered++;return {acquired:true,package_id:ids.package,generation:1,step_id:id};
   },
   completePackageStep:async(_p,_w,_r,_g,id,outcome)=>{
-   completed++;assert.equal(outcome,'VERIFIED_METADATA_STEP');
+   completed++;assert.equal(outcome,'VERIFIED_PROVIDER_STEP');
    return {completed:true,step_id:id};
   },
   resumePinnedPackageDispatch:forbidden,
