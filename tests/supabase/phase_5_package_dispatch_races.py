@@ -144,6 +144,26 @@ def setup(pinned_test_package=None):
 
 def run():
     dest, (pkg_a, pkg_b) = setup()
+    # A speculative first claim is rolled back in this disposable CI database.
+    # It cannot consume a real slot or alter the concurrent-claim race below.
+    with psycopg.connect(DSN) as ci_tx:
+        ci_tx.execute("set local role service_role")
+        first = ci_tx.execute(
+            "select public.service_select_next_delivery_package()"
+        ).fetchone()[0]
+        assert first["available"] is True and first["package_id"] == str(pkg_a), first
+        speculative = ci_tx.execute(
+            "select public.service_claim_package_and_acquire_dispatch(%s,%s,%s,%s,%s)",
+            (pkg_a, dest, ROOT, new_id(), new_id())
+        ).fetchone()[0]
+        assert speculative["claimed"] is True, speculative
+        independent = ci_tx.execute(
+            "select public.service_select_next_delivery_package()"
+        ).fetchone()[0]
+        assert independent["available"] is True, independent
+        assert independent["package_id"] == str(pkg_b), (
+            "Free second slot must serve independent queued package", independent)
+        ci_tx.rollback()
     worker_a, worker_b, request_a, request_b = [new_id() for _ in range(4)]
     def claim(args):
         pkg, worker, request = args
@@ -170,6 +190,10 @@ def run():
     assert query("select public.service_complete_package_dispatch_step("
                  "%s,%s,%s,1,%s,'VERIFIED_PROVIDER_STEP')",
                  (pkg_a, worker_a, request_a, verified_step))["completed"]
+    # A newly verified step moves A behind the still-safe B: repeated
+    # wakes cannot keep selecting the oldest package forever.
+    next_safe = query("select public.service_select_next_delivery_package()")
+    assert next_safe["package_id"] == str(pkg_b), next_safe
     # An unrelated package is not held hostage by the unfinished step.
     step_b = new_id()
     assert query("select public.service_begin_package_dispatch_step(%s,%s,%s,1,%s)",
@@ -177,8 +201,15 @@ def run():
     assert query("select public.service_complete_package_dispatch_step("
                  "%s,%s,%s,1,%s,'VERIFIED_METADATA_STEP')",
                  (pkg_b, worker_b, request_b, step_b))["completed"]
+    # After both have verified progress, oldest verified step takes its
+    # turn (A). No new owner/permit or provider identity is invented.
+    next_safe = query("select public.service_select_next_delivery_package()")
+    assert next_safe["package_id"] == str(pkg_a), next_safe
     assert query("select public.service_begin_package_dispatch_step(%s,%s,%s,1,%s)",
                  (pkg_b, worker_b, request_b, new_id()))["acquired"]
+    # An unverified step freezes only B, not A.
+    next_safe = query("select public.service_select_next_delivery_package()")
+    assert next_safe["package_id"] == str(pkg_a), next_safe
     # Fixture-only 10-second expiry (not hosted); exact worker/generation
     # and previous verified provider step are unchanged.
     with psycopg.connect(DSN) as c:
