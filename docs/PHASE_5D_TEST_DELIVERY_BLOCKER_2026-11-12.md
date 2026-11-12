@@ -1,6 +1,16 @@
 # FWH-F04 — TEST delivery processing blocker (2026-11-12)
 
-Status: **BLOCKED — cause unconfirmed**. Scope: documentation-only Level 1 evidence/handoff for existing Phase 5D/FWH-F04 delivery activation; no runtime, provider, configuration, photo, or queue mutation. Authoritative TEST project: `vyocaujuwrivoqynvitm`.
+Status: **DIAGNOSED — sparse scheduler wakes; package now DELIVERING**. Latest evidence supersedes the earlier snapshot below. Scope: documentation-only Level 1 evidence/handoff for existing Phase 5D/FWH-F04 delivery activation; no runtime, provider, configuration, photo, or queue mutation. Authoritative TEST project: `vyocaujuwrivoqynvitm`.
+
+## Later November 12 read-only resolution of the investigation
+
+GitHub scheduled runs `43140022884`, `43195077612`, `43272820944`, `43323867829` were created at 02:14, 09:50, 17:45 and 22:52 UTC. All activation, credential-validation and wake steps succeeded; the latest log explicitly shows activation true and accepted HTTP 200. Supabase function logs match all four calls. These 5–8 hour gaps, combined with one delivery step per wake, explain the delay; GitHub's internal cause for missing schedule events remains unknown.
+
+At 22:52:30 UTC the exact package below was claimed, and at 22:52:33 its first provider step verified. Package/outbox now DELIVERING, attempts one, verified steps one, unresolved steps zero, final receipts zero. SQL dispatch enabled, cap two; migration 135 is installed and the live selector matches fairness source. Both new package permits are occupied; next safe selector candidate is the other active package with five verified steps. The legacy quarantined package is separate from these two slots. No repeat Send/manual wake was required. Earlier statements of no verified post-correction cron run and zero claims are historical observations, superseded by this later evidence.
+
+[Send-event implementation refinement and rollback](PHASE_5D_SEND_EVENT_WAKE_2026-11-12.md) records the operator-selected correction; it is source preparation, not live activation.
+
+## Historical snapshot before the 22:52 wake
 
 ## Direct TEST database evidence (read-only, November 12)
 - Work order `TEST-P4-REVISION-1005-D`, package `e690b8c4-708f-44c2-b6f3-4da01dc07ac4`: previously APPROVED, explicitly queued November 12 at `2026-11-12 21:24:32.729293+00`; `private.client_packages.status=QUEUED`, `private.client_delivery_outbox.state=QUEUED`, `attempts=0`, `worker_id=NULL`, `uncertain_reason=NULL`. **Not sent/delivered; no worker claim recorded.** The Admin confirmation “Package queued, explicit send is separate” is queue acknowledgement, not delivery proof.

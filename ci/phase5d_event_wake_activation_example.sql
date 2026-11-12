@@ -1,0 +1,26 @@
+-- REVIEW-ONLY TEST CUTOVER TEMPLATE. No secrets in source, SQL or pg_net.
+-- Execute only after explicit TEST deployment/activation authorization,
+-- extension/permissions/advisor checks and hosted exact-source verification.
+-- New event SQL and Edge flags remain OFF on source deployment.
+-- Provision pg_net and pg_cron separately using supported Supabase setup.
+-- Confirm net.http_request_queue/_http_response are not client-readable.
+-- Keep GitHub wake OFF during event cutover; retain it only as an explicitly
+-- controlled rollback mechanism, not as the production delivery clock.
+--
+-- Set backend FWH_CLIENT_TEST_EVENT_WAKE_ENABLED=true after worker deployment.
+-- Create one recovery job (the job contains no key, token or provider ID):
+-- select cron.schedule('fwh-test-delivery-recovery','* * * * *',
+--   'select private.request_client_delivery_wake();');
+-- update private.client_delivery_event_wake set enabled=true where singleton;
+-- Existing eligible already-Sent packages can advance on the next cron tick.
+-- A subsequent normal Admin Send generates its own post-commit wake; each
+-- durable verified step requests the next wake through the same producer.
+-- Verify actual events and final receipts with the dashboard closed.
+--
+-- Rollback: disable event transport, invalidate its pending ticket, and stop
+-- recovery cron; do not clear provider permits, open steps or queued work.
+-- update private.client_delivery_event_wake
+--   set enabled=false,expires_at=clock_timestamp() where singleton;
+-- select cron.unschedule('fwh-test-delivery-recovery');
+-- Set backend FWH_CLIENT_TEST_EVENT_WAKE_ENABLED=false.
+-- If unsafe provider evidence appears, pause SQL dispatch as well.

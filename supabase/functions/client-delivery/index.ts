@@ -29,6 +29,13 @@ Deno.serve(createDeliveryHandler({
   projectUrl:Deno.env.get('SUPABASE_URL')??'',
   evidenceClass:Deno.env.get('FWH_TEST_EVIDENCE_CLASS')??''
  }),
+ // Independent event transport remains OFF until separately activated in
+ // this exact disposable TEST project; SQL ticket consumption also gates it.
+ eventWakeEnabled:isFwhTestQueueWorkerEnabled({
+  flag:Deno.env.get('FWH_CLIENT_TEST_EVENT_WAKE_ENABLED')??'',
+  projectUrl:Deno.env.get('SUPABASE_URL')??'',
+  evidenceClass:Deno.env.get('FWH_TEST_EVIDENCE_CLASS')??''
+ }),
  twoPackageTestPins:[
   {packageId:'e18463b2-9afe-41b8-9700-721738839b22',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'},
   {packageId:'e690b8c4-708f-44c2-b6f3-4da01dc07ac4',destinationId:'06f157eb-230c-44b5-b3d4-a7508110bfd7',rootId:'1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'}

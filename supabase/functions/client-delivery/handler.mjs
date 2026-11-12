@@ -69,7 +69,7 @@ export function createDeliveryHandler({
   // Separate PREPARED two-slot path. Hosted index compiles this OFF; the
   // only permitted selections are exact server-owned pins, never request IDs.
   twoPackageTestEnabled=false,twoPackageTestPins=[],
-  queueWorkerEnabled=false,runQueueWorkerStep=advanceQueuedPackageOnce,
+  queueWorkerEnabled=false,eventWakeEnabled=false,runQueueWorkerStep=advanceQueuedPackageOnce,
   runPinnedTestStep=advancePinnedTestPackageOneStep,
   testPreflightEnabled=false,testRecoveryEnabled=false,
   recoverOriginalTestParent=recoverAndContinueOriginalTestParentOnce,
@@ -88,10 +88,20 @@ export function createDeliveryHandler({
 }={}){
  return async request=>{
   if(request.method!=='POST')return reply(405,'POST_ONLY');
-  // No credential-less status, probe or public health route.
-  if(!workerSecret||workerSecret.length<32
-   ||!sameSecret(request.headers.get('x-fwh-delivery-secret'),workerSecret))
-   return reply(401,'WORKER_UNAUTHORIZED');
+  // The existing reusable worker key never enters a database webhook.
+  // Event notifications instead present a database-issued, expiring one-use
+  // credential. Its service-only consume is checked below BEFORE provider work.
+  const workerAuthenticated=typeof workerSecret==='string'&&workerSecret.length>=32
+    &&sameSecret(request.headers.get('x-fwh-delivery-secret'),workerSecret);
+  const wakeId=request.headers.get('x-fwh-wake-id');
+  const wakeToken=request.headers.get('x-fwh-wake-token');
+  const eventCredential=!workerAuthenticated;
+  if(eventCredential&&!(eventWakeEnabled===true&&queueWorkerEnabled===true
+    &&supabaseUrl==='https://vyocaujuwrivoqynvitm.supabase.co'
+    &&testEvidenceClass==='DISPOSABLE_FWH_TEST_ONLY'
+    &&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(wakeId??'')
+    &&/^[a-f0-9]{64}$/.test(wakeToken??'')))
+    return reply(401,'WORKER_UNAUTHORIZED');
   // FWH-F04: server-selected queued delivery using ONE existing fenced step.
   // No caller IDs, new queue, old singleton dispatch or implicit retry.
   if(queueWorkerEnabled===true){
@@ -120,10 +130,15 @@ export function createDeliveryHandler({
       ||!refreshToken||!oauthScope||!sessionVaultKey)
       return reply(503,'BACKEND_NOT_CONFIGURED');
     try{
+      const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
+      if(eventCredential){
+        const admission=await ledger.consumeDeliveryWake(wakeId,wakeToken);
+        if(admission?.accepted!==true||Object.keys(admission).join(',')!=='accepted')
+          return reply(401,'WORKER_UNAUTHORIZED');
+      }
       const vault=await createSessionVault({base64Key:sessionVaultKey});
       const tokenProvider=createWorkspaceTokenProvider({
         clientId,clientSecret,refreshToken,requiredScope:oauthScope,fetcher});
-      const ledger=createServiceLedger({url:supabaseUrl,serviceRoleJwt,fetcher});
       const result=await runQueueWorkerStep({
         ledger,tokenProvider,expectedEmail:expectedAccount,expectedDriveId,
         internalDriveId,projectUrl:supabaseUrl,serviceRoleJwt,
