@@ -3,6 +3,10 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 12 — FWH-F04 delivery processing BLOCKED (read-only)
+
+TEST package `e690b8c4` / `TEST-P4-REVISION-1005-D` QUEUED at 21:24:32 UTC, zero attempts, no worker claim or delivery. Two older outboxes DELIVERING; dispatch ON, current scheduler execution **unverified**. No repeat Send. **Next: read-only GitHub wake activation/runs + worker/selector evidence; preserve ledgers.** [Exact SQL facts and resume gate](PHASE_5D_TEST_DELIVERY_BLOCKER_2026-11-12.md).
+
 ## November 11 — 5D-T02 merged; TEST v67 / migration 134 PASS
 
 PR #91 merged `3ce914be` (CI all PASS). FWH TEST `vyocaujuwrivoqynvitm`: `client-delivery` v67 ACTIVE, 15/15 exact-main files, JWT setting retained; bundle `342280715e55288473bb99bd2ec54e4f1547fb8710e2704d12fb59c706630d89`. Exact migration `20261111220500` installed; generated history `20261111231102` guarded-reconciled (134 canonical, zero orphans). Private helper allows 0..200 unique UUID photos, rejects invalid/duplicate/201; direct EXECUTE denied to client/service roles. Dispatch ON; no Send, wake, Google writes, cleanup, FPP or APK change. `TEST-P5D-SECOND-001` still DELIVERING (2 verified, 0 unverified, no final receipt). No approved zero-photo package exists. **5D-T02 acceptance PENDING:** authorized manifest-only provider receipt; no accepted tests repeated.
