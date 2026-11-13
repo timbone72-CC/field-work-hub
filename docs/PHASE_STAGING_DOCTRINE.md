@@ -19,13 +19,13 @@ If the next phase is not fully planned in `docs/ROADMAP.md`, **STOP. Planning is
 
 ## Purpose
 
-Team is developed in large, evidence-based stages rather than alternating constantly between tiny code changes and repeated phone checks.
+Team is developed in large, evidence-based stages through working operation. Safe staging prepares an approved feature for deployment and activation; it is an intermediate condition, not the completion target. The operational finish line and authorization boundaries in GOVERNANCE.md govern closeout.
 
 Default pattern:
 
-`plan the phase fully → build everything that can be honestly proven without the phone → stage at the next genuine physical-device boundary → run the smallest required reality gate → accept the evidence → adjust only where reality requires it → continue`
+`plan the full operational outcome → build and verify → stage safely → obtain any still-missing required authorization → deploy and activate in the authorized environment → verify only the affected unproven behavior → leave the accepted feature enabled`
 
-A phone gate is an evidence checkpoint, not an automatic reason to stop development after every small slice.
+Place necessary device/provider gates at their actual dependency boundary within that sequence. Reuse accepted evidence; a phone gate, deployment step or temporary OFF setting does not create another approval or retest stage. If the approved target is working operation, continue through activation and acceptance unless a specific blocker or operator decision prevents it.
 
 ## Numbered parent phase and one plan approval
 
@@ -116,8 +116,8 @@ Do not create a large audit ritual when the phase added little risk. Verificatio
 
 - record the result once;
 - do not rerun it merely for reassurance;
-- if PASS, use the evidence to continue as far as safely possible;
-- if BLOCKED, preserve the tested runtime and identify the missing external/device condition;
+- if PASS, continue the authorized rollout through activation and acceptance; leave the accepted feature enabled in its authorized environment;
+- if BLOCKED, preserve the tested runtime and record the specific failed check, dependency, missing authorization or operator decision, exact next action and resume condition;
 - if FAIL, fix the specific failed assumption/behavior before continuing the dependent path;
 - update the roadmap if the evidence changes the planned behavior or next boundary.
 
@@ -127,4 +127,4 @@ This doctrine intentionally carries forward the successful FPP development patte
 
 ## Governing principle
 
-**Plan before coding. Build to evidence, not fear. Stop where reality is required, not where another safety prompt could be invented.**
+**Plan before coding. Carry approved work through deployed, enabled and verified operation. Stop only the affected path at a real failure, unmet dependency, required authorization or necessary reality boundary.**
