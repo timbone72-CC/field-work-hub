@@ -3,6 +3,7 @@ Creates synthetic approved packages; no provider, actual client, hosted data or 
 """
 import concurrent.futures
 import os
+from pathlib import Path
 import uuid
 
 import psycopg
@@ -24,7 +25,7 @@ def query(sql, args=()):
         return c.execute(sql, args).fetchone()[0]
 
 
-def setup(pinned_test_package=None):
+def setup(pinned_test_package=None, event_notifications=False):
     root = ROOT if pinned_test_package is None else '1krqtqQ2geh59IDcyJ9-lCsZ6NnGQmVDK'
     actor_email = ('dispatch-race@example.invalid' if pinned_test_package is None
                    else 'dispatch-race-final@example.invalid')
@@ -122,6 +123,21 @@ def setup(pinned_test_package=None):
                       "action_id,package_id,actor_user_id,action_kind,request_fingerprint,result)"
                       " values(%s,%s,%s,'SEND',%s,'{}'::jsonb)",
                       (action, pkg, admin, "b" * 64))
+            if event_notifications and n == 1:
+                stub = Path(__file__).with_name("phase_5d_event_wake_gate.sql").read_text()
+                stub = stub.split("begin;", 1)[1].split("-- Isolate notification", 1)[0]
+                assert c.execute("select to_regnamespace('net')").fetchone()[0] is None
+                c.execute(stub)
+                c.execute("update private.client_delivery_event_wake set enabled=true")
+                c.execute("update private.client_delivery_package_dispatch_config set "
+                          "enabled=true,legacy_worker_off_verified=true")
+                c.execute("savepoint before_send")
+                c.execute("insert into private.client_delivery_outbox("
+                          "package_id,action_id,approved_sha256,destination_id)"
+                          " values(%s,%s,%s,%s)", (pkg, action, approved_hash, dest))
+                assert c.execute("select count(*) from net.fwh_ci_requests").fetchone()[0] == 1
+                c.execute("rollback to savepoint before_send")
+                assert c.execute("select count(*) from net.fwh_ci_requests").fetchone()[0] == 0
             c.execute("insert into private.client_delivery_outbox("
                       "package_id,action_id,approved_sha256,destination_id)"
                       " values(%s,%s,%s,%s)", (pkg, action, approved_hash, dest))
@@ -142,8 +158,46 @@ def setup(pinned_test_package=None):
     return dest, packages
 
 
+def verify_event_notifications(dest, pkg):
+    # Existing synthetic packages only. HTTP is recorded locally, never sent.
+    with psycopg.connect(DSN) as c:
+        assert c.execute("select count(*) from net.fwh_ci_requests").fetchone()[0] == 1
+        headers = c.execute("select headers from net.fwh_ci_requests").fetchone()[0]
+    def consume(_):
+        return query("select public.service_consume_client_delivery_wake(%s,%s)",
+                     (headers["x-fwh-wake-id"], headers["x-fwh-wake-token"]))["accepted"]
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            assert sorted(pool.map(consume, [1, 2])) == [False, True]
+        with psycopg.connect(DSN) as c:
+            worker, request, step = [new_id() for _ in range(3)]
+            assert c.execute("select public.service_claim_package_and_acquire_dispatch("
+                             "%s,%s,%s,%s,%s)", (pkg, dest, ROOT, worker, request)).fetchone()[0]["claimed"]
+            assert c.execute("select public.service_begin_package_dispatch_step("
+                             "%s,%s,%s,1,%s)", (pkg, worker, request, step)).fetchone()[0]["acquired"]
+            assert c.execute("select count(*) from net.fwh_ci_requests").fetchone()[0] == 1
+            assert c.execute("select public.service_complete_package_dispatch_step("
+                             "%s,%s,%s,1,%s,'VERIFIED_METADATA_STEP')",
+                             (pkg, worker, request, step)).fetchone()[0]["completed"]
+            assert c.execute("select count(*) from net.fwh_ci_requests").fetchone()[0] == 2
+            c.execute("update private.client_delivery_package_step_attempts set verified_at=verified_at "
+                      "where step_id=%s", (step,))
+            assert c.execute("select count(*) from net.fwh_ci_requests").fetchone()[0] == 2
+            # Restore package state: only the notification admission race above
+            # committed. No synthetic claim/step becomes delivery evidence.
+            c.rollback()
+    finally:
+        with psycopg.connect(DSN) as c:
+            c.execute("update private.client_delivery_event_wake set enabled=false,"
+                      "expires_at=clock_timestamp()")
+            c.execute("drop schema net cascade")
+    print("PASS actual outbox INSERT/rollback, concurrent one-use admission, "
+          "verified-step continuation and no unverified/repeated event (simulated HTTP)")
+
+
 def run():
-    dest, (pkg_a, pkg_b) = setup()
+    dest, (pkg_a, pkg_b) = setup(event_notifications=True)
+    verify_event_notifications(dest, pkg_a)
     # A speculative first claim is rolled back in this disposable CI database.
     # It cannot consume a real slot or alter the concurrent-claim race below.
     with psycopg.connect(DSN) as ci_tx:
