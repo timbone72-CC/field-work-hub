@@ -9,6 +9,7 @@ final class TeamRuntime {
     private static volatile TeamRuntime instance;
     private final Context applicationContext;
     private final Object readinessPollLock = new Object();
+    private final Object cleanupDispatchLock = new Object();
     final SupabaseApi api = new SupabaseApi();
     final SessionCoordinator sessions;
     final CachedWorkOrderDao dao;
@@ -17,6 +18,7 @@ final class TeamRuntime {
     final PhotoOwner photos;
     final PhotoCleanupCoordinator cleanupReadiness;
     final PhotoCleanupReadinessPoller cleanupPoller;
+    final PhotoCleanupDispatchRunner cleanupDispatch;
     final PhotoCleanupDao cleanupDao;
     final PhotoTransferCoordinator transfers;
     final ActionScheduler scheduler;
@@ -32,6 +34,8 @@ final class TeamRuntime {
         cleanupReadiness = new PhotoCleanupCoordinator(
                 cleanupDao, sessions, api::fieldPhotoCleanupReadiness);
         cleanupPoller = new PhotoCleanupReadinessPoller(cleanupDao, cleanupReadiness, sessions);
+        cleanupDispatch = new PhotoCleanupDispatchRunner(
+                cleanupDao,sessions,this::cleanupVerified);
         sync = new ActionSyncCoordinator(dao, sessions, (token, action) -> { photos.ensureFrozenReadable(action); return api.submit(token, action); });
         PhotoTransferDao transferDao = TeamDatabase.getInstance(context).photoTransferDao();
         transfers = new PhotoTransferCoordinator(dao, transferDao, photos, sessions, api,
@@ -157,7 +161,8 @@ final class TeamRuntime {
      */
     int pollReadiness(String owner, String org, java.util.function.BooleanSupplier stopped)
             throws Exception {
-        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) return 0;
+        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
+                && !BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return 0;
         synchronized (readinessPollLock) {
             android.content.SharedPreferences cursors =
                     applicationContext.getSharedPreferences(
@@ -167,6 +172,29 @@ final class TeamRuntime {
                 if (!cursors.edit().putString(key, id).commit())
                     throw new IllegalStateException("Readiness cursor not saved");
             });
+        }
+    }
+
+    /**
+     * Owner-scoped periodic cleanup after the independent read-only readiness
+     * poller has durably written HELD evidence. No provider writes or alternate
+     * file deletion path: each original enters the existing cleanupVerified
+     * route, which fetches fresh server authority and checks the entire WO.
+     * The cursor makes a single blocked original non-starving.
+     */
+    int dispatchCleanup(String owner,String org,
+            java.util.function.BooleanSupplier stopped) throws Exception {
+        if(!BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return 0;
+        synchronized(cleanupDispatchLock) {
+            android.content.SharedPreferences cursors =
+                    applicationContext.getSharedPreferences(
+                            "fwh_cleanup_dispatch_cursor", Context.MODE_PRIVATE);
+            String key=owner+"/"+org;
+            return cleanupDispatch.drain(owner,org,cursors.getString(key,""),stopped,
+                    id->{
+                        if(!cursors.edit().putString(key,id).commit())
+                            throw new IllegalStateException("Cleanup dispatch cursor not saved");
+                    });
         }
     }
 

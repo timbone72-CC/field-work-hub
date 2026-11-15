@@ -18,7 +18,9 @@ final class PhotoCleanupReadinessPoller {
 
     PhotoCleanupReadinessPoller(PhotoCleanupDao journal, PhotoCleanupCoordinator readiness,
             SessionCoordinator sessions) {
-        this(journal, readiness, sessions, BuildConfig.CLEANUP_READINESS_POLLING_ENABLED);
+        this(journal, readiness, sessions,
+                BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
+                || BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
     }
 
     /** Test-only enabled seam; shipping builds remain gated by BuildConfig. */

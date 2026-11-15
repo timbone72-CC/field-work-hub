@@ -5,7 +5,7 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 ## November 15 — 5E-T02 source scope
 
-5D-T01 receipts COVERED; T02/T03 await genuine Send; event wake/cron ON. **5E-T01**: PR #101 TEST deployed, PR #103 positive cross-run/excluded photo CI PASS; hosted proof BLOCKED. **5E-T02 ACTIVE source only**: bounded owner WorkManager calls existing server-read/Room-journal/PhotoOwner path; deletion OFF. Level 3 merge approval and APK/cleanup activation PENDING. 5E-T03 PLANNED. No new phone/provider/retention writes. Return to 5E-T01 on real multi-run delivery, to 5D-T03 on real Send.
+5D-T01 receipts COVERED; T02/T03 await genuine Send; event wake/cron ON. **5E-T01**: PR #101 TEST deployed, PR #103 cross-run CI PASS; hosted proof BLOCKED. **5E-T02 PR #104**: bounded owner WorkManager uses existing server/Room/PhotoOwner; deletion OFF. Android/database/dashboard/governance PASS at `a0b7d839`. Operator authorized merge November 15; merge pending. APK/cleanup activation awaits real multi-run receipt and separate authority. 5E-T03 PLANNED. No phone/provider writes. Next: merge verified source; return to 5E-T01 on real multi-run delivery or 5D-T03 on real Send.
 
 ## November 15 — 5D-T03 controlled TEST scheduler cutover (in progress)
 

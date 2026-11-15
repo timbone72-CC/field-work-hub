@@ -529,4 +529,105 @@ public class PhotoCleanupExecutorTest {
             assertTrue(new File(p.originalPath).exists());
         } finally {gated.io.shutdownNow();}
     }
+
+    @Test public void cleanupWorkerDispatchIsBoundedFairAndNeverDeletesWithoutOwnerExecutor()
+            throws Exception {
+        // Every synthetic original has a private receipt and durable HELD proof.
+        // This callback intentionally does NOT invoke PhotoOwner/file deletion.
+        List<ProtectedPhoto> photos=new ArrayList<>();
+        for(int n=0;n<11;n++) {
+            ProtectedPhoto p=verified("wo-dispatch-"+n,"run-dispatch-"+n);
+            journal(p);
+            photos.add(p);
+        }
+        List<String> candidates=journal.dispatchCandidates(
+                actor.userId,actor.organizationId,"",20);
+        assertEquals(11,candidates.size());
+        String blocked=candidates.get(1);
+        List<String> visited=new ArrayList<>();
+        PhotoCleanupDispatchRunner dispatcher=new PhotoCleanupDispatchRunner(
+                journal,sessions,(session,generation,id)->{
+                    assertEquals(actor.userId,session.userId);
+                    assertEquals(actor.organizationId,session.organizationId);
+                    visited.add(id);
+                    if(id.equals(blocked))
+                        throw new java.io.IOException("This original needs recovery");
+                    return false;
+                },true);
+
+        java.util.concurrent.atomic.AtomicReference<String> cursor=
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        assertEquals(8,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+        assertEquals(candidates.get(7),cursor.get());
+        assertEquals(3,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+        assertEquals(candidates.get(10),cursor.get());
+        assertEquals(8,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+        assertEquals(19,visited.size());
+        assertEquals(2,Collections.frequency(visited,blocked));
+        for(ProtectedPhoto p:photos) {
+            assertEquals("HELD",journal.find(p.id).state);
+            assertEquals("WAITING",fields.photo(p.id).state);
+            assertTrue(new File(p.originalPath).exists());
+            assertTrue(new File(p.preparedPath).exists());
+        }
+    }
+
+    @Test public void cleanupWorkerSkipsDisabledStoppedAndForeignSessions()
+            throws Exception {
+        ProtectedPhoto p=verified("wo-dispatch-off","run-dispatch-off");
+        journal(p);
+        int[] executions={0};
+        PhotoCleanupDispatchRunner disabled=new PhotoCleanupDispatchRunner(
+                journal,sessions,(session,generation,id)->{
+                    executions[0]++;return true;
+                },false);
+        assertEquals(0,disabled.drain(actor.userId,actor.organizationId,
+                "",()->false,id->{}));
+        PhotoCleanupDispatchRunner enabled=new PhotoCleanupDispatchRunner(
+                journal,sessions,(session,generation,id)->{
+                    executions[0]++;return true;
+                },true);
+        assertEquals(0,enabled.drain(actor.userId,actor.organizationId,
+                "",()->true,id->{}));
+        assertThrows(SessionCoordinator.SessionChanged.class,
+                ()->enabled.drain("different-owner",actor.organizationId,
+                        "",()->false,id->{}));
+        assertEquals(0,executions[0]);
+        assertEquals("HELD",journal.find(p.id).state);
+        assertTrue(new File(p.originalPath).exists());
+    }
+
+    @Test public void periodicDispatchUsesFreshProofThenExactPhotoOwnerAndDoesNotRepeat()
+            throws Exception {
+        ProtectedPhoto ready=verified("wo-dispatch-clean","run-dispatch-clean");
+        journal(ready);
+        String snapshot=journal.find(ready.id).serverProofJson;
+        PhotoCleanupCoordinator fresh=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    assertEquals(actor.accessToken,token);
+                    assertEquals(ready.id,id);
+                    return snapshot;
+                });
+        PhotoCleanupDispatchRunner dispatcher=new PhotoCleanupDispatchRunner(
+                journal,sessions,(session,generation,id)->{
+                    if(!fresh.recordServerReadiness(session.userId,session.organizationId,id))
+                        return false;
+                    return owner.cleanupVerified(session,generation,id);
+                },true);
+        java.util.concurrent.atomic.AtomicReference<String> cursor=
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        assertEquals(1,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+        assertEquals("CLEANED",journal.find(ready.id).state);
+        assertEquals("CLEANED",fields.photo(ready.id).state);
+        assertFalse(new File(ready.originalPath).exists());
+        assertFalse(new File(ready.preparedPath).exists());
+        assertEquals("RECEIVED",transfers.find(ready.id).state);
+        // CLEANED never re-enters the dispatch scan after worker restart.
+        assertEquals(0,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+    }
 }

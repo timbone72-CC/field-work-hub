@@ -17,10 +17,27 @@ public final class FieldActionWorker extends Worker {
         if (!BuildConfig.FIELD_SYNC_ENABLED) return Result.success();
         String owner = getInputData().getString("owner"), org = getInputData().getString("org");
         if (owner == null || org == null) return Result.failure();
+        // A DISTINCT, release-gated cleanup mode. Never piggyback file deletion
+        // on the read-only readiness poll or the normal field-transfer worker.
+        if(getInputData().getBoolean("cleanup_only",false)) {
+            if(!BuildConfig.AUTOMATIC_CLEANUP_ENABLED || isStopped())
+                return Result.success();
+            TeamRuntime runtime=TeamRuntime.get(getApplicationContext());
+            try {
+                runtime.dispatchCleanup(owner,org,this::isStopped);
+            } catch(SessionCoordinator.SessionChanged changed) {
+                // Account change cancels eligible work; leave every original held.
+            } catch(Exception interrupted) {
+                android.util.Log.w("FWH","Original cleanup dispatch held for recovery");
+                return Result.retry(); // No blind provider/file retry; owner rechecks.
+            }
+            return Result.success();
+        }
         // Separate bounded discovery mode: no field action, transfer, client
         // package, cleanup transition or provider write is run by this Worker.
         if (getInputData().getBoolean("readiness_only", false)) {
-            if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED || isStopped())
+            if ((!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
+                    && !BuildConfig.AUTOMATIC_CLEANUP_ENABLED) || isStopped())
                 return Result.success();
             TeamRuntime runtime = TeamRuntime.get(getApplicationContext());
             try {
