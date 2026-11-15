@@ -391,6 +391,8 @@ editForm.addEventListener('submit', async (event) => {
     }
 
     committed = true;
+    if (!stillSaveOwner()) return;
+    if (typeof JobDrafts !== 'undefined') await JobDrafts.applied();
     JobWorkspace.saved();
     afterSave = await JobWorkspace.reconcileSaved(savedId);
     await refreshWorkOrders();

@@ -88,3 +88,11 @@ test('409 HTTP error becomes explicit conflict; 503 remains uncertain',async()=>
  ctx.adminFetch=async()=>({ok:false,status:503});
  await assert.rejects(ctx.updateWorkOrder({}),e=>e.workOrderConflict===false);
 });
+
+test('late previous-account success cannot clear or mark another job draft saved',async()=>{
+ let resolve;const pending=new Promise(r=>{resolve=r;});const h=rig(()=>pending);
+ let draftClears=0;h.ctx.JobDrafts={applied:async()=>{draftClears++;}};
+ const work=h.run();h.ctx.currentUser={id:'admin-b',app_metadata:{organization_id:'org-b'}};
+ resolve([{work_order_id:'job-a',wo_number:'WO'}]);await work;
+ assert.equal(draftClears,0);assert.equal(h.calls.reloads,0);assert.equal(h.calls.refreshes,0);
+});

@@ -204,9 +204,9 @@
         </header>
         <div id="job-unsaved" class="unsaved-choice" hidden role="region" aria-label="Unsaved changes">
           <strong>You have unsaved changes.</strong>
-          <p>Save your changes, stay on this job, or discard them before continuing.</p>
+          <p>Save a draft without changing the work order, stay on this job, or discard unsaved changes before continuing.</p>
           <div class="workspace-navigation">
-            <button id="job-save-continue" type="button">Save and continue</button>
+            <button id="job-save-continue" type="button">Save draft and continue</button>
             <button id="job-stay" type="button" class="secondary">Stay here</button>
             <button id="job-discard" type="button" class="secondary">Discard changes</button>
           </div>
@@ -404,6 +404,16 @@
             <div id="job-history-corrections"></div>
             <div id="job-history-packages"></div>
           </section>
+          <section class="job-draft-actions" aria-label="Your saved job draft">
+            <p class="muted">Save draft keeps your edits on the server without changing the work order. Save Changes applies them.</p>
+            <div class="row gap">
+              <button id="job-draft-save" type="button" class="secondary" disabled>Save draft</button>
+              <button id="job-draft-check" type="button" class="secondary" disabled>Check saved draft</button>
+              <button id="job-draft-resume" type="button" class="secondary" hidden>Resume saved draft</button>
+              <button id="job-draft-discard" type="button" class="secondary" hidden>Discard saved draft</button>
+            </div>
+            <p id="job-draft-status" class="status" role="status" aria-live="polite"></p>
+          </section>
           <div class="row gap edit-actions">
             <button id="save-edit" type="submit">Save Changes</button>
             <button id="cancel-edit" class="secondary" type="button">Close Job</button>
@@ -461,8 +471,9 @@
   <script src="push-device.js?v=phase6e-20261011" defer></script>
   <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
-  <script src="job-workspace.js?v=6a-queues-phase6c-20261013-eligibility" defer></script>
-  <script src="app.js?v=6a-queues-phase56-20261013-request-stage" defer></script>
+  <script src="job-drafts.js?v=6a-drafts-20261115" defer></script>
+  <script src="job-workspace.js?v=6a-drafts-phase6c-20261115" defer></script>
+  <script src="app.js?v=6a-drafts-phase56-20261115" defer></script>
   <script src="recovery.js?v=phase5e-recovery-20261012" defer></script>
   <script src="session.js?v=phase56-20261013-request-stage" defer></script>
   <script src="contractors.js?v=job-workspace-20261007-1" defer></script>
