@@ -1,10 +1,9 @@
-name: FWH TEST delivery wake (disabled by default)
+name: FWH TEST delivery wake (manual fallback only)
 
+# 5D-T03 cutover: Supabase one-minute pg_cron owns automatic recovery.
+# This workflow is retained only for an explicitly authorized manual rollback.
+# No periodic GitHub schedule or additional automatic provider-write path.
 on:
-  schedule:
-    # Offset from minute 00: GitHub may drop scheduled events at hourly peaks.
-    # Changing this cron also refreshes GitHub schedule registration.
-    - cron: "3-58/5 * * * *"
   workflow_dispatch:
 
 permissions:
