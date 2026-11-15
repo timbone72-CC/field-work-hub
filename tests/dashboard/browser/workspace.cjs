@@ -9,7 +9,7 @@ const output = process.env.FWH_BROWSER_OUTPUT || '/tmp/fwh-browser-evidence';
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
 let queueMode=false,queueFailOnce=false;
-const ordinaryDrafts=new Map();let draftWrites=0,failDraftSave=false;
+const ordinaryDrafts=new Map(),draftCreationReceipts=new Map();let draftWrites=0,failDraftSave=false,createdFromDraft=0,loseDraftCreationAck=true;
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
@@ -856,6 +856,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           ordinaryDrafts.delete(key);draft=null;
         }
         return reply({work_order_id:p.p_wo,organization_id:organization,owner_user_id:admin,draft});
+      }
+      if(url.pathname.endsWith('/admin_create_work_order_from_draft')){
+        const p=req.postDataJSON(),key=admin+':null';
+        let result=draftCreationReceipts.get(p.p_revision);
+        if(!result){
+          const draft=ordinaryDrafts.get(key);
+          if(!draft||draft.revision!==p.p_revision)return reply({message:'Draft revision changed'},409);
+          result=[{work_order_id:uuid(9898),wo_number:'DRAFT-CREATED-ONCE'}];
+          draftCreationReceipts.set(p.p_revision,result);ordinaryDrafts.delete(key);createdFromDraft++;
+        }
+        if(loseDraftCreationAck){loseDraftCreationAck=false;return reply({message:'Controlled lost creation response'},503);}
+        return reply(result);
       }
       if (url.pathname.endsWith('/admin_update_work_order_v4')) {
         const payload = req.postDataJSON(); saves.push(payload);
@@ -2393,6 +2405,27 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.locator('#job-filters').evaluate(el=>el.scrollWidth<=el.clientWidth+2),true);
     await page.screenshot({path:path.join(output,'phase6a-queues-mobile.png'),fullPage:true});
+    // Actual app handler + shared draft adapter: explicit Create consumes the
+    // saved revision; a lost acknowledgement repeats that revision, once.
+    await page.setViewportSize({width:1280,height:900});
+    await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
+    await wait(page,()=>!document.querySelector('#create-draft-save').disabled);
+    await page.locator('#wo-number-mode-auto').check();
+    await page.locator('#property-address').fill('900 Synthetic Draft Creation');
+    await page.locator('#work-type').fill('INSPECTION');
+    await page.locator('#instructions').fill('Synthetic explicit creation');
+    await page.locator('#due-date').fill('2026-11-20');
+    await page.locator('#assignee').selectOption(contractor);
+    await page.locator('#create-wo').click();
+    await wait(page,()=>document.querySelector('#create-status').textContent.includes('Creation not confirmed'));
+    assert.equal(createdFromDraft,1);
+    assert.equal(await page.locator('#instructions').inputValue(),'Synthetic explicit creation');
+    await page.locator('#create-wo').click();
+    await wait(page,()=>document.querySelector('#create-status').textContent.includes('Created and assigned DRAFT-CREATED-ONCE'));
+    assert.equal(createdFromDraft,1,'Lost-response retry must return the original created job');
+    await wait(page,()=>document.querySelector('#create-draft-resume').hidden);
+    assert.equal(await page.locator('#property-address').inputValue(),'');
+
     await page.locator('#sign-out').click();
     assert.equal(await page.locator('#job-queue-summary').innerText(),'');
     assert.equal(errors.length,0,errors.join('\\n'));

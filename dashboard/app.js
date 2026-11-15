@@ -310,7 +310,7 @@ createForm.addEventListener('submit', async (event) => {
 
   const createEpoch=adminSessionEpoch,createActor=currentUser?.id,createOrg=currentUser?.app_metadata?.organization_id;
   const stillCreator=()=>!!accessToken&&adminSessionEpoch===createEpoch&&currentUser?.id===createActor
-    &&currentUser?.app_metadata?.organization_id===createOrg;
+    && currentUser?.app_metadata?.organization_id === createOrg;
   const mode = currentWoNumberMode();
   const rememberMode = rememberWoNumberMode.checked;
 
