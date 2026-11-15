@@ -3,6 +3,10 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 15 — 5D receipts and 5E-T01 handoff
+
+`TEST-P5D-SECOND-001` and `TEST-P4-REVISION-1005-D`: matching final receipts, 3 verified files and 7 verified steps each, none unresolved. **5D-T01 COMPLETE**; reuse evidence. PR #99 enabled one-minute Supabase wake, but new Send/HTTP/receipt PENDING until genuine approved unsent work. 5D-T02 awaits a zero-photo package; 5D-T04 is dependent. Never replay the October package or fabricate a test WO. Two accepted main runs have closure; cross-run closure remains missing. **5E-T01 ACTIVE**; no cleanup or hosted changes authorized. Return to 5D-T03 at next eligible Send.
+
 ## November 15 — 5D-T03 controlled TEST scheduler cutover (in progress)
 
 Operator explicitly authorized the controlled TEST scheduler cutover after viewing Data API → Settings: only `graphql_public` and `public` were exposed; `private` was excluded and `net` was absent. Live database verification again found `anon` and `authenticated` are NOLOGIN, `pg_net` 0.20.4 and `pg_cron` 1.6.4 installed, `private.client_delivery_event_wake.enabled=false`, no pending wake ticket, and `private.service_select_next_delivery_package()` returned `{"available":false}`. Existing historical `TEST-0003-DASHBOARD` remains DELIVERING with an expired Oct 26 lease; do not retry it blindly.
