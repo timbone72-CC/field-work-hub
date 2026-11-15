@@ -59,6 +59,7 @@ jobs:
         run: |
           node --check dashboard/photo-requirements.js
           node --check dashboard/job-workspace.js
+          node --check dashboard/job-drafts.js
           node --check dashboard/notifications.js
           node --check dashboard/push-device.js
           node --check dashboard/push-sw.js

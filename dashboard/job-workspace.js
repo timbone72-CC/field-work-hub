@@ -203,8 +203,9 @@ const JobWorkspace = (() => {
       'edit-due-date', 'edit-assignee'].map(id => el(id).value), editPhotos.value]);
   }
   function detailsDirty() { return baseline !== null && fingerprint() !== baseline; }
-  function dirty() { return detailsDirty() || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
+  function dirty() { return (detailsDirty() && !(typeof JobDrafts !== 'undefined' && JobDrafts.isSaved())) || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
   function reset() {
+    if (typeof JobDrafts !== 'undefined') JobDrafts.reset();
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     filterReadFailed = false;
@@ -299,7 +300,7 @@ const JobWorkspace = (() => {
     }
   }
   function guard(action) {
-    if (saveEditButton.disabled) return;
+    if (saveEditButton.disabled || (typeof JobDrafts !== 'undefined' && JobDrafts.busy())) return;
     if (!dirty()) { action(); return; }
     pending = action;
     // A stale server revision cannot safely accept Save and continue.
@@ -442,6 +443,7 @@ const JobWorkspace = (() => {
     tab('details');
     if (!editSection.open) editSection.showModal();
     navigation();
+    if (typeof JobDrafts !== 'undefined') JobDrafts.open(row);
   }
   function tab(name) {
     document.querySelectorAll('[data-job-panel]').forEach(panel => { panel.hidden = panel.dataset.jobPanel !== name; });
@@ -459,6 +461,7 @@ const JobWorkspace = (() => {
     });
   }
   function closed() {
+    if (typeof JobDrafts !== 'undefined') JobDrafts.reset();
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     selection++; baseline = null; selectedRow = null; pending = null; needsReload = false;
     resetRepeatRunChoices();
@@ -571,6 +574,7 @@ const JobWorkspace = (() => {
     });
   }
   function init() {
+    if (typeof JobDrafts !== 'undefined') JobDrafts.init();
     CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init(); ReleaseHistory.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
     el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));
@@ -614,6 +618,11 @@ const JobWorkspace = (() => {
         if (result && !dirty() && pending) {
           const action=pending;pending=null;el('job-unsaved').hidden=true;action();
         } else if (!result) setEditStatus('Package changes were not saved; remain on this job to resolve.',true);
+      } else if (typeof JobDrafts !== 'undefined') {
+        const saved = await JobDrafts.save();
+        if (saved && !dirty() && pending) {
+          const action=pending;pending=null;el('job-unsaved').hidden=true;action();
+        }
       } else editForm.requestSubmit();
     });
     el('job-reload').addEventListener('click', () => guard(() => load(editWorkOrderIdInput.value)));

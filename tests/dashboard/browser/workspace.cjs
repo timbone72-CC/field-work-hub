@@ -9,6 +9,7 @@ const output = process.env.FWH_BROWSER_OUTPUT || '/tmp/fwh-browser-evidence';
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
 let queueMode=false,queueFailOnce=false;
+const ordinaryDrafts=new Map();let draftWrites=0,failDraftSave=false;
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
@@ -837,6 +838,25 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       }
       if (url.pathname.endsWith('/admin_get_contractor_seat_summary')) return reply([{ available_seats: 0, used_seats: 2, seat_limit: 2, pending_invitations: 0 }]);
       if (url.pathname.endsWith('/admin_list_pending_contractor_invitations')) return reply([]);
+      if (/\/admin_(job_draft_state|save_job_draft|discard_job_draft)$/.test(url.pathname)) {
+        const p=req.postDataJSON(),key=admin+':'+p.p_wo;
+        let draft=ordinaryDrafts.get(key)||null;
+        if(url.pathname.endsWith('/admin_save_job_draft')){
+          draftWrites++;
+          if(failDraftSave)return reply({message:'Controlled draft save failure'},503);
+          if(draft?.write_id!==p.p_write_id){
+            if((draft?.revision||null)!==p.p_expected_revision)return reply({message:'Draft revision conflict'},409);
+            draft={id:uuid(9840),revision:require('node:crypto').randomUUID(),payload:p.p_payload,
+              base_updated_at:p.p_base_updated_at,write_id:p.p_write_id,stale:false};
+            ordinaryDrafts.set(key,draft);
+          }
+        }
+        if(url.pathname.endsWith('/admin_discard_job_draft')){
+          if(draft&&draft.revision!==p.p_expected_revision)return reply({message:'Draft revision conflict'},409);
+          ordinaryDrafts.delete(key);draft=null;
+        }
+        return reply({work_order_id:p.p_wo,organization_id:organization,owner_user_id:admin,draft});
+      }
       if (url.pathname.endsWith('/admin_update_work_order_v4')) {
         const payload = req.postDataJSON(); saves.push(payload);
         if (failSave) return reply({ message: 'Controlled save failure' }, 409);
@@ -1158,6 +1178,37 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       document.getElementById('results-card').removeAttribute('data-fwh-view');
       document.getElementById('edit-work-order-section').scrollTop = 0;
     });
+    // NEW 6A-T02 boundary: saved ordinary draft survives navigation and a
+    // complete page reload, without applying the active work-order mutation.
+    await wait(page,()=>!document.querySelector('#job-draft-save').disabled);
+    const originalSaves=saves.length;
+    await page.locator('#edit-instructions').fill('Server saved ordinary draft');
+    failDraftSave=true;
+    await page.locator('#job-next').click();await page.locator('#job-save-continue').click();
+    await wait(page,()=>document.querySelector('#job-draft-status').textContent.includes('not confirmed'));
+    assert.equal(await page.locator('#edit-work-order-id').inputValue(),uuid(1));
+    assert.equal(await page.locator('#edit-instructions').inputValue(),'Server saved ordinary draft');
+    failDraftSave=false;
+    await page.locator('#job-save-continue').click();
+    await wait(page,()=>document.querySelector('#edit-work-order-id').value=== '00000000-0000-4000-8000-000000000002');
+    assert.equal(saves.length,originalSaves,'Saving a draft never applies active work');
+    await page.locator('#job-previous').click();
+    await wait(page,()=>document.querySelector('#edit-instructions').value==='Server saved ordinary draft');
+    await page.reload();
+    await wait(page,()=>!document.querySelector('#results-card').classList.contains('hidden'));
+    await page.evaluate(()=>{stopAdminAutoRefresh();document.getElementById('results-card').removeAttribute('data-fwh-view');});
+    await page.locator('[data-job-open-id]').first().click();
+    await wait(page,()=>document.querySelector('#edit-instructions').value==='Server saved ordinary draft');
+    assert.equal(saves.length,originalSaves,'Page reload resumes server draft, not active mutation');
+    await page.screenshot({path:path.join(output,'6a-saved-job-draft-desktop.png'),fullPage:false});
+    page.once('dialog',dialog=>dialog.accept());await page.locator('#job-draft-discard').click();
+    await wait(page,()=>document.querySelector('#job-draft-status').textContent.includes('discarded'));
+    await page.evaluate(()=>JobWorkspace.guard(()=>JobWorkspace.choose(document.getElementById('edit-work-order-id').value)));
+    await page.locator('#job-discard').click();
+    // The existing guard owns reload; no second business mutation is involved.
+    await page.evaluate(async()=>{const id=document.getElementById('edit-work-order-id').value;openEditor(id,await fetchWorkOrder(id));});
+    await wait(page,()=>!document.querySelector('#job-draft-save').disabled);
+    assert.ok(draftWrites>=2);
     const first = await page.locator('#edit-work-order-id').inputValue();
     await page.locator('#edit-instructions').fill('Unsaved office instruction');
     await page.keyboard.press('Escape'); assert.equal(await page.locator('dialog').evaluate(el => el.open), true);
@@ -1166,7 +1217,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('#edit-work-order-id').value !== '00000000-0000-4000-8000-000000000001');
     const second = await page.locator('#edit-work-order-id').inputValue(); assert.notEqual(first, second);
     await page.locator('#edit-instructions').fill('Save then switch'); failSave = true;
-    await page.locator('#job-next').click(); await page.locator('#job-save-continue').click();
+    await page.locator('#job-next').click(); await page.locator('#save-edit').click();
     await wait(page, () => document.querySelector('#edit-status').textContent.includes('server rejected'));
     assert.equal(await page.locator('#edit-work-order-id').inputValue(), second);
     assert.equal(await page.locator('#edit-instructions').inputValue(), 'Save then switch');
