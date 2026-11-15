@@ -154,10 +154,11 @@ test('enabled TEST queue route passes only backend-selected step to existing run
  assert.equal(calls.length,0,'injected worker does not need provider calls');
 });
 
-test('GitHub TEST cron is offset every five minutes with single-wake safety intact',()=>{
+test('GitHub TEST wake is manual-only fallback with single-wake safety intact',()=>{
  const flow=readFileSync(new URL('../../.github/workflows/fwh-test-delivery-wake.yml',import.meta.url),'utf8');
+ assert.equal(/^\s+schedule:/m.test(flow),false,'Automatic GitHub schedule must stay retired');
+ assert.equal(/^\s+- cron:/m.test(flow),false,'No GitHub cron trigger may remain');
  for(const guard of [
-  'cron: "3-58/5 * * * *"',
   'workflow_dispatch:',
   'cancel-in-progress: false',
   'environment: fwh-test-delivery',
