@@ -1024,6 +1024,47 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.setViewportSize({width:1280,height:900});
     await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
     assert.equal(await page.locator('#create-wo-form').isVisible(), true);
+    // 6A-T02: unfinished new-work drafts survive navigation and full reload,
+    // while saving/resuming never calls the actual create/dispatch RPC.
+    await wait(page,()=>!document.querySelector('#create-draft-save').disabled);
+    await page.locator('#instructions').fill('UNFINISHED CREATE DRAFT');
+    await page.locator('#wo-number-mode-custom').check();
+    await page.locator('#wo-number').fill('DRAFT-ONLY-CUSTOM');
+    failDraftSave=true;
+    await page.locator('#fwh-primary-nav [data-fwh-go="work"]').click();
+    await wait(page,()=>!document.querySelector('#create-draft-unsaved').hidden);
+    await page.locator('#create-draft-save-continue').click();
+    await wait(page,()=>document.querySelector('#create-draft-status').textContent.includes('not confirmed'));
+    assert.equal(await page.locator('#results-card').getAttribute('data-fwh-view'),'create');
+    assert.equal(await page.locator('#instructions').inputValue(),'UNFINISHED CREATE DRAFT');
+    failDraftSave=false;await page.locator('#create-draft-save-continue').click();
+    await wait(page,()=>document.querySelector('#results-card').dataset.fwhView==='work');
+    assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    await page.reload();
+    await wait(page,()=>!document.querySelector('#results-card').classList.contains('hidden'));
+    await page.evaluate(()=>stopAdminAutoRefresh());
+    await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
+    await wait(page,()=>!document.querySelector('#create-draft-resume').hidden);
+    assert.equal(await page.locator('#instructions').inputValue(),'');
+    page.once('dialog',dialog=>dialog.accept());await page.locator('#create-draft-resume').click();
+    assert.equal(await page.locator('#instructions').inputValue(),'UNFINISHED CREATE DRAFT');
+    assert.equal(await page.locator('#wo-number').inputValue(),'DRAFT-ONLY-CUSTOM');
+    assert.equal(await page.locator('#wo-number-mode-custom').isChecked(),true);
+    assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    await page.screenshot({path:path.join(output,'6a-create-draft-desktop.png'),fullPage:false});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#create-wo-form').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+    await page.locator('#create-draft-save').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(output,'6a-create-draft-mobile.png'),fullPage:false});
+    await page.setViewportSize({width:1280,height:900});
+    page.once('dialog',dialog=>dialog.accept());await page.locator('#create-draft-discard').click();
+    await wait(page,()=>document.querySelector('#create-draft-status').textContent.includes('discarded'));
+    await page.locator('#fwh-primary-nav [data-fwh-go="work"]').click();
+    await page.locator('#create-draft-discard-local').click();
+    await wait(page,()=>document.querySelector('#results-card').dataset.fwhView==='work');
+    await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
+    assert.equal(await page.locator('#instructions').inputValue(),'');
+
     assert.equal(await page.locator('#job-filters').isVisible(), false);
     // Stage 4: capture the actual Create & Assign controls on both viewport sizes.
     for(const id of ['wo-number-mode-auto','wo-number-mode-custom','property-address',

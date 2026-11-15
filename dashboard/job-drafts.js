@@ -1,12 +1,11 @@
-/* Ordinary existing-job drafts. Work-order application remains Save Changes. */
-const JobDrafts=(()=>{
+/* Shared personal draft editor. Business creation/application stays in app.js. */
+const JobDraftEditor=config=>{
   let generation=0,row=null,identity=null,draft=null,loaded=false,busy=false,savedValue=null,attempt=null;
-  const el=id=>document.getElementById(id);
-  const fields={woNumber:'edit-wo-number',propertyAddress:'edit-property-address',workType:'edit-work-type',
-    instructions:'edit-instructions',dueDate:'edit-due-date',assignedUserId:'edit-assignee'};
+  const el=id=>document.getElementById(id.replace(/^job-draft-/,config.prefix));
+  const fields=config.fields, editor=config.editor;
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function payload(){return {...Object.fromEntries(Object.entries(fields).map(([key,id])=>[key,el(id).value])),
-    requirements:structuredClone(editPhotos.value),requirementsLegacy:!!editPhotos.legacy,expectedRevision:editPhotos.expectedRevision||null};}
+    requirements:structuredClone(editor().value),requirementsLegacy:config.isNew?false:!!editor().legacy,expectedRevision:config.isNew?null:editor().expectedRevision||null,...(config.extra?.()||{})};}
   function value(p=payload()) {
     const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'
       ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
@@ -14,7 +13,7 @@ const JobDrafts=(()=>{
   }
   function owner(){return {actor:currentUser?.id,org:currentUser?.app_metadata?.organization_id,epoch:adminSessionEpoch};}
   function current(g){const now=owner();return g===generation&&!!accessToken&&!!row&&identity?.actor===now.actor
-    &&identity.org===now.org&&identity.epoch===now.epoch&&editWorkOrderIdInput.value===row.id;}
+    &&identity.org===now.org&&identity.epoch===now.epoch&&config.matches(row);}
   function status(message,bad=false){const node=el('job-draft-status');if(node){node.textContent=message;node.classList.toggle('error',bad);}}
   function buttons(){if(!el('job-draft-save'))return;
     el('job-draft-save').disabled=busy||!loaded||!row;
@@ -32,7 +31,7 @@ const JobDrafts=(()=>{
       ||!uuid.test(result.draft.revision)||!result.draft.payload||typeof result.draft.stale!=='boolean')))
       throw Error('Unexpected saved draft response; edits retained.');
     return result.draft;}
-  function isSaved(){return !!row&&loaded&&savedValue!==null&&value()===savedValue;}
+  function isSaved(){return current(generation)&&loaded&&savedValue!==null&&value()===savedValue;}
   function resume(force=false){if(!draft||busy)return false;
     if(!force&&!window.confirm('Replace the editor contents with your saved draft?'))return false;
     const p=draft.payload;
@@ -43,11 +42,12 @@ const JobDrafts=(()=>{
     // Set the same raw requirements the editor saved; requirements remain a
     // draft and are validated by the existing active-work owner on application.
     for(const [key,id] of Object.entries(fields))el(id).value=p[key];
-    editPhotos.load(p.requirements,row.field_status!=='ASSIGNED');
-    editPhotos.expectedRevision=p.expectedRevision;editPhotos.legacy=p.requirementsLegacy;
+    editor().load(p.requirements,!config.isNew&&row.field_status!=='ASSIGNED');
+    editor().expectedRevision=p.expectedRevision;editor().legacy=p.requirementsLegacy;
+    config.restored?.(p);
     savedValue=value(p);
     if(draft.stale){JobWorkspace.saveUnverified();status('Saved draft restored. Job changed since this draft; reload the job before applying changes. Draft remains saved.',true);}
-    else status(isSaved()?'Saved draft restored. Save Changes applies it to the work order.':'Draft restored with unavailable values. Review and save the adjusted draft before leaving.',!isSaved());
+    else status(isSaved()?(config.isNew?'Saved draft restored. Review it before Create & Assign.':'Saved draft restored. Save Changes applies it to the work order.'):'Draft restored with unavailable values. Review and save the adjusted draft before leaving.',!isSaved());
     return true;
   }
   async function check(restore=false){if(!row||busy)return false;
@@ -55,14 +55,14 @@ const JobDrafts=(()=>{
     try{const result=await rpc('admin_job_draft_state',{p_wo:row.id});if(!current(g))return false;
       draft=verified(result);loaded=true;savedValue=null;
       if(draft&&value(draft.payload)===value()){savedValue=value();attempt=null;}
-      status(draft?'Saved draft available. Resume it, or keep editing.':'No saved draft. Changes here are unsaved until Save draft or Save Changes.');
+      status(draft?'Saved draft available. Resume it, or keep editing.':config.isNew?'No saved draft. Save draft keeps unfinished work without creating a job.':'No saved draft. Changes here are unsaved until Save draft or Save Changes.');
       if(restore&&draft&&value()===starting&&!draft.stale){busy=false;resume(true);}
       else if(draft?.stale)status('Saved draft uses an older job revision. Current job kept. Resume to inspect the draft, or discard the saved draft.',true);
       return true;
     }catch(error){if(current(g)){loaded=false;status(error.message,true);}return false;}
     finally{if(current(g)){busy=false;buttons();}}
   }
-  function open(source){reset();row=structuredClone(source);identity=owner();buttons();return check(true);}
+  function open(source){reset();row=structuredClone(source);identity=owner();buttons();return check(!config.isNew);}
   async function save(){if(!row||busy||!loaded)return false;
     const g=generation,p=payload(),fingerprint=value(p);
     try{PhotoRules.validate(p.requirements);}catch(error){status(error.message,true);return false;}
@@ -74,7 +74,7 @@ const JobDrafts=(()=>{
       const saved=verified(result);if(!saved||saved.write_id!==request.p_write_id
         ||value(saved.payload)!==fingerprint)throw Error('Draft save was not confirmed; edits retained.');
       draft=saved;savedValue=fingerprint;attempt=null;
-      status(value()===fingerprint?'Draft saved on server. Work order unchanged.':'Earlier draft saved. Newer edits are still unsaved.');
+      status(value()===fingerprint?(config.isNew?'Draft saved on server. No work order created.':'Draft saved on server. Work order unchanged.'):'Earlier draft saved. Newer edits are still unsaved.');
       return isSaved();
     }catch(error){if(current(g)){savedValue=null;status('Draft save not confirmed. Your edits are still here. Check saved draft or retry the unchanged draft. '+error.message,true);}return false;}
     finally{if(current(g)){busy=false;buttons();}}
@@ -93,8 +93,13 @@ const JobDrafts=(()=>{
     el('job-draft-check').addEventListener('click',()=>check());
     el('job-draft-resume').addEventListener('click',()=>resume());
     el('job-draft-discard').addEventListener('click',()=>discard());
-    for(const type of ['input','change'])editForm.addEventListener(type,()=>{
+    for(const type of ['input','change'])config.form().addEventListener(type,()=>{
       if(row&&!busy&&!isSaved())status('Unsaved draft changes. Save draft to keep them without applying the work order.');});
   }
-  return {init,open,reset,save,check,resume,discard,applied,isSaved,busy:()=>busy};
-})();
+  return {init,open,reset,save,check,resume,discard,applied,isSaved,busy:()=>busy,
+    revision:()=>isSaved()?draft?.revision||null:null,fingerprint:()=>value(),active:()=>current(generation),dirty:()=>current(generation)&&!!config.hasContent?.()&&!isSaved()};
+};
+const JobDrafts=JobDraftEditor({prefix:'job-draft-',editor:()=>editPhotos,form:()=>editForm,
+ fields:{woNumber:'edit-wo-number',propertyAddress:'edit-property-address',workType:'edit-work-type',
+  instructions:'edit-instructions',dueDate:'edit-due-date',assignedUserId:'edit-assignee'},
+ matches:row=>editWorkOrderIdInput.value===row.id});

@@ -332,7 +332,7 @@ test('Modern Premium Stage 2 routes existing work without replacing roles or act
     'notification-center', 'edit-work-order-section', 'sign-out']) {
     assert.match(html, new RegExp('id="' + id + '"'), id + ' missing');
   }
-  assert.match(html, /navigation\.js\?v=modern-premium-stage2b-20261017/);
+  assert.match(html, /navigation\.js\?v=6a-create-drafts-20261115/);
   assert.match(html, /styles\.css\?v=modern-premium-stage9-recovery-20261017/);
   assert.match(css, /#results-card\[data-fwh-view\]:not\(\[data-fwh-view="work"\]\) > #fwh-work-page/);
   assert.match(nav, /new MutationObserver\(syncTeam\)/);
