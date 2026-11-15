@@ -5,7 +5,7 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 ## November 15 — 5D receipts and 5E-T01 handoff
 
-`TEST-P5D-SECOND-001` and `TEST-P4-REVISION-1005-D`: matching final receipts, 3 verified files and 7 verified steps each, none unresolved. **5D-T01 COMPLETE**; reuse evidence. PR #99 enabled one-minute Supabase wake, but new Send/HTTP/receipt PENDING until genuine approved unsent work. 5D-T02 awaits a zero-photo package; 5D-T04 is dependent. Never replay the October package or fabricate a test WO. Two accepted main runs have closure; cross-run closure remains missing. **5E-T01 ACTIVE**; no cleanup or hosted changes authorized. Return to 5D-T03 at next eligible Send.
+`TEST-P5D-SECOND-001` and `TEST-P4-REVISION-1005-D`: matching final receipts, 3 verified files and 7 verified steps each, none unresolved. **5D-T01 COMPLETE**; reuse evidence. PR #99 enabled one-minute Supabase wake, but new Send/HTTP/receipt PENDING until genuine approved unsent work. 5D-T02 awaits a zero-photo package; 5D-T04 is dependent. Never replay the October package or fabricate a test WO. Two main runs closed; cross-run closure missing. **5E-T01 ACTIVE**: Level 3 source proposed; pre-merge approval and TEST deployment PENDING. Cleanup stays OFF. Return to 5D-T03 on eligible Send.
 
 ## November 15 — 5D-T03 controlled TEST scheduler cutover (in progress)
 
