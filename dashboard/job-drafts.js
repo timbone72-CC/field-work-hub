@@ -53,7 +53,7 @@ const JobDrafts=(()=>{
   async function check(restore=false){if(!row||busy)return false;
     const g=generation,starting=value();busy=true;buttons();status('Checking saved draft…');
     try{const result=await rpc('admin_job_draft_state',{p_wo:row.id});if(!current(g))return false;
-      draft=verified(result);loaded=true;
+      draft=verified(result);loaded=true;savedValue=null;
       if(draft&&value(draft.payload)===value()){savedValue=value();attempt=null;}
       status(draft?'Saved draft available. Resume it, or keep editing.':'No saved draft. Changes here are unsaved until Save draft or Save Changes.');
       if(restore&&draft&&value()===starting&&!draft.stale){busy=false;resume(true);}
@@ -76,7 +76,7 @@ const JobDrafts=(()=>{
       draft=saved;savedValue=fingerprint;attempt=null;
       status(value()===fingerprint?'Draft saved on server. Work order unchanged.':'Earlier draft saved. Newer edits are still unsaved.');
       return isSaved();
-    }catch(error){if(current(g))status('Draft save not confirmed. Your edits are still here. Check saved draft or retry the unchanged draft. '+error.message,true);return false;}
+    }catch(error){if(current(g)){savedValue=null;status('Draft save not confirmed. Your edits are still here. Check saved draft or retry the unchanged draft. '+error.message,true);}return false;}
     finally{if(current(g)){busy=false;buttons();}}
   }
   async function discard(confirm=true){if(!row||busy||!draft)return false;
@@ -85,7 +85,7 @@ const JobDrafts=(()=>{
     try{const result=await rpc('admin_discard_job_draft',{p_wo:row.id,p_expected_revision:draft.revision});
       if(!current(g))return false;if(verified(result)!==null)throw Error('Draft discard not confirmed.');
       draft=null;savedValue=null;attempt=null;status('Saved draft discarded. Current editor contents were kept.');return true;
-    }catch(error){if(current(g))status(error.message,true);return false;}
+    }catch(error){if(current(g)){savedValue=null;status(error.message,true);}return false;}
     finally{if(current(g)){busy=false;buttons();}}
   }
   async function applied(){if(draft&&isSaved())return discard(false);return true;}

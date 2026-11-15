@@ -100,3 +100,16 @@ test('applying unrelated editor contents preserves the unapplied saved draft',as
  assert.equal(h.data.payload.instructions,'Saved');
  h.node('edit-instructions').value='Saved';await h.drafts.applied();assert.equal(h.data,null);
 });
+
+test('fresh check invalidates Saved when another tab changed or removed the server draft',async()=>{
+ const h=rig();await h.drafts.open(h.row);h.node('edit-instructions').value='My draft';await h.drafts.save();
+ h.data={...h.data,payload:{...h.data.payload,instructions:'Other tab'}};
+ await h.drafts.check();assert.equal(h.drafts.isSaved(),false);assert.equal(h.node('edit-instructions').value,'My draft');
+ h.data=null;await h.drafts.check();assert.equal(h.drafts.isSaved(),false);
+});
+test('failed save or uncertain discard cannot keep claiming the input is saved',async()=>{
+ const h=rig();await h.drafts.open(h.row);await h.drafts.save();h.setFail('BEFORE');
+ assert.equal(await h.drafts.save(),false);assert.equal(h.drafts.isSaved(),false);
+ await h.drafts.check();assert.equal(h.drafts.isSaved(),true);h.setFail('AFTER');
+ assert.equal(await h.drafts.discard(),false);assert.equal(h.drafts.isSaved(),false);
+});
