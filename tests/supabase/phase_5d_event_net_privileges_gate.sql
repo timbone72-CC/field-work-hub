@@ -5,6 +5,11 @@ begin;
 create schema net;
 create table net.http_request_queue(id bigint primary key);
 create table net._http_response(id bigint primary key);
+-- Hosted pg_net tables belong to supabase_admin, not postgres. Reproduce
+-- distinct extension ownership so the trusted postgres grant is necessary.
+create role fwh_ci_net_extension_owner nologin;
+alter table net.http_request_queue owner to fwh_ci_net_extension_owner;
+alter table net._http_response owner to fwh_ci_net_extension_owner;
 grant usage on schema net to public;
 grant all privileges on table net.http_request_queue, net._http_response
   to public, anon, authenticated;
