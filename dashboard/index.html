@@ -428,6 +428,8 @@
       <form id="job-filters" class="job-filters" autocomplete="off">
         <label>Find by<select id="job-search-field"><option value="property_address">Address</option><option value="wo_number">WO number</option></select></label>
         <label>Search<input id="job-search" type="search" maxlength="160" placeholder="Address or WO number"></label>
+        <label>Queue<select id="job-queue"><option value="ALL">All jobs</option><option value="ACTIVE">Active jobs</option><option value="NEEDS_ASSIGNMENT">Needs assignment</option><option value="AWAITING_ACK">Awaiting acknowledgment</option><option value="IN_PROGRESS">In progress</option><option value="OVERDUE">Overdue</option><option value="PHOTOS_PENDING">Finished — photos pending</option><option value="AWAITING_REVIEW">Awaiting review</option><option value="FOLLOWUP_PENDING">Follow-up pending</option><option value="READY_FOR_APPROVAL">Ready for package approval</option><option value="READY_TO_SEND">Ready to send</option><option value="SENDING">Sending</option><option value="DELIVERY_PROBLEM">Delivery problem</option><option value="COMPLETED">Completed</option><option value="PROBLEMS">Problems</option><option value="CANCELLED">Cancelled</option></select></label>
+        <label>Company<input id="job-company" type="search" maxlength="100" list="job-company-choices" placeholder="Any company name"><datalist id="job-company-choices"></datalist></label>
         <label>Status<select id="job-status"><option value="">All statuses</option><option value="ASSIGNED">Assigned</option><option value="IN_PROGRESS">In progress</option><option value="FIELD_COMPLETE">Field complete</option><option value="CANCELLED">Cancelled</option></select></label>
         <label>Contractor<select id="job-contractor"><option value="">All contractors</option></select></label>
         <label>Due date<input id="job-due-date" type="date"></label>
@@ -441,6 +443,7 @@
         <button id="job-page-previous" type="button" class="secondary" disabled>Previous page</button>
         <button id="job-page-next" type="button" class="secondary" disabled>Next page</button>
       </div>
+      <p id="job-queue-summary" class="muted" role="status" aria-live="polite"></p>
       <p id="job-list-status" class="status" role="status" aria-live="polite"></p>
       <div id="work-orders" class="work-orders"></div>
       </section>
@@ -458,8 +461,8 @@
   <script src="push-device.js?v=phase6e-20261011" defer></script>
   <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
-  <script src="job-workspace.js?v=phase6c-20261013-eligibility" defer></script>
-  <script src="app.js?v=phase56-20261013-request-stage" defer></script>
+  <script src="job-workspace.js?v=6a-queues-phase6c-20261013-eligibility" defer></script>
+  <script src="app.js?v=6a-queues-phase56-20261013-request-stage" defer></script>
   <script src="recovery.js?v=phase5e-recovery-20261012" defer></script>
   <script src="session.js?v=phase56-20261013-request-stage" defer></script>
   <script src="contractors.js?v=job-workspace-20261007-1" defer></script>

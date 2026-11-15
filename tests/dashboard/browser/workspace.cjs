@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, '../../../dashboard');
 const output = process.env.FWH_BROWSER_OUTPUT || '/tmp/fwh-browser-evidence';
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const organization = uuid(9001), contractor = uuid(9002);
+let queueMode=false,queueFailOnce=false;
 let admin = uuid(9003), failSave = false, failDetail = false, delayPage = null, delayDetail = null;
 let syntheticOwner=false,ownerTier=2,ownerTierRevision=uuid(9211),ownerQuotaRevision=uuid(9212),ownerAdminLimit=4;
 let ownerScope=[uuid(9213)],ownerWrites=[],ownerRejectNext=false;
@@ -82,7 +83,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     res.end(fs.readFileSync(file));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, ...(process.env.FWH_BROWSER_EXECUTABLE?{executablePath:process.env.FWH_BROWSER_EXECUTABLE}:{}) });
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await context.addInitScript(()=>{
@@ -846,6 +847,37 @@ const wait = async (page, condition) => page.waitForFunction(condition);
           wo_number: payload.p_wo_number, assigned_user_id: payload.p_assigned_user_id, due_date: payload.p_due_date,
           work_type: payload.p_work_type, updated_at:'2026-10-11T12:00:00.000000Z', run: { requirement_snapshot: payload.p_requirements } });
         return reply([{ work_order_id: row.id, wo_number: row.wo_number, pending_assignee_user_id: null }]);
+      }
+      if(url.pathname==='/rest/v1/rpc/admin_work_order_page') {
+        if(recoveryMode)return reply({message:'Office work access disabled'},403);
+        if(queueFailOnce){queueFailOnce=false;return reply({message:'Controlled queue read failure'},503);}
+        const f=req.postDataJSON().p_filters;
+        assert.ok([25,50].includes(f.size));
+        assert.equal(Object.hasOwn(f,'organization_id'),false);
+        const keys=['ALL','ACTIVE','NEEDS_ASSIGNMENT','AWAITING_ACK','IN_PROGRESS','OVERDUE',
+          'PHOTOS_PENDING','AWAITING_REVIEW','FOLLOWUP_PENDING','READY_FOR_APPROVAL','READY_TO_SEND',
+          'SENDING','DELIVERY_PROBLEM','COMPLETED','PROBLEMS','CANCELLED'];
+        let data=structuredClone(queueMode?rows.slice(0,4):rows);
+        for(const [i,row] of data.entries()) {
+          const primary=queueMode?['COMPLETED','READY_TO_SEND','DELIVERY_PROBLEM','PHOTOS_PENDING'][i]:
+            row.field_status==='FIELD_COMPLETE'?'PHOTOS_PENDING':row.field_status==='IN_PROGRESS'?'IN_PROGRESS':
+            row.field_status==='CANCELLED'?'CANCELLED':row.assigned_user_id?'AWAITING_ACK':'NEEDS_ASSIGNMENT';
+          const flags=Object.fromEntries(keys.map(key=>[key,false]));
+          flags.ALL=true;flags.ACTIVE=!['COMPLETED','CANCELLED'].includes(primary);flags[primary]=true;
+          flags.PROBLEMS=primary==='DELIVERY_PROBLEM';
+          row.operational={primary,queues:flags,timezone_configured:true,completed:primary==='COMPLETED'};
+          if(queueMode){row.company_name='Synthetic Queue Company';row.client_company_id=uuid(9997);}
+        }
+        if(f.status)data=data.filter(row=>row.field_status===f.status);
+        if(f.search)data=data.filter(row=>row[f.searchField].toLowerCase().includes(f.search.toLowerCase()));
+        if(f.contractor)data=data.filter(row=>row.assigned_user_id===f.contractor);
+        if(f.companySearch)data=data.filter(row=>(row.company_name||'').toLowerCase().includes(f.companySearch.toLowerCase()));
+        if(f.dueDate)data=data.filter(row=>row.due_date===f.dueDate);
+        const counts=Object.fromEntries(keys.map(key=>[key,data.filter(row=>row.operational.queues[key]).length]));
+        data=data.filter(row=>row.operational.queues[f.queue]);
+        if(delayPage){const pending=delayPage;delayPage=null;await pending;}
+        return reply({organization_id:organization,as_of:new Date().toISOString(),scope_fingerprint:'e'.repeat(32),
+          rows:data.slice(f.offset,f.offset+f.size),size:f.size,offset:f.offset,total:data.length,queue:f.queue,counts});
       }
       if (url.pathname === '/rest/v1/work_orders') {
         if (recoveryMode) return reply({message:'Office work access disabled'},403);
@@ -1652,7 +1684,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#job-search').inputValue(), ''); assert.equal(await page.locator('#edit-work-order-id').inputValue(), '');
     const preferences = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('fwh.jobView.')));
     assert.ok(preferences.length > 0);
-    for (const [, value] of preferences) assert.deepEqual(Object.keys(JSON.parse(value)).sort(), ['size', 'sort', 'status']);
+    for (const [, value] of preferences) assert.deepEqual(Object.keys(JSON.parse(value)).sort(), ['queue', 'size', 'sort', 'status']);
     let releaseDetail; delayDetail = new Promise(resolve => { releaseDetail = resolve; });
     // A modal workspace intentionally blocks pointer access to the header.
     // Simulate an independent session termination while a detail read is
@@ -2241,6 +2273,37 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#results-card:visible').count(),0);
     assert.equal(recoveryPhotoRequests,4);
     recoveryMode=false;recoveryGranted=true;
+    // NEW 6A queue interaction: exact server counts, failed-read retention,
+    // company filtering, account clear and responsive controls. No live writes.
+    queueMode=true;
+    await page.locator('#email').fill('admin@example.invalid');
+    await page.locator('#password').fill('disposable');
+    await page.locator('#sign-in').click();
+    await page.locator('#results-card:visible').waitFor();
+    await page.getByRole('button',{name:'Open Work Orders',exact:true}).click();
+    await wait(page,()=>document.querySelectorAll('.job-table tbody tr').length===4);
+    assert.match(await page.locator('#job-queue option[value="COMPLETED"]').innerText(),/\(1\)/);
+    await page.locator('#job-queue').selectOption('COMPLETED');
+    await page.locator('#job-filters button[type="submit"]').click();
+    await wait(page,()=>document.querySelectorAll('.job-table tbody tr').length===1);
+    assert.match(await page.locator('.job-table tbody').innerText(),/Completed/);
+    assert.match(await page.locator('#job-page-info').innerText(),/of 1/);
+    queueFailOnce=true;
+    await page.locator('#job-queue').selectOption('DELIVERY_PROBLEM');
+    await page.locator('#job-filters button[type="submit"]').click();
+    await wait(page,()=>document.querySelector('#job-list-status').textContent.includes('Filters were not applied'));
+    assert.match(await page.locator('.job-table tbody').innerText(),/Completed/);
+    await page.locator('#job-filters button[type="submit"]').click();
+    await wait(page,()=>document.querySelector('.job-table tbody')?.textContent.includes('Delivery problem'));
+    await page.locator('#job-company').fill('Synthetic Queue Company');
+    await page.locator('#job-filters button[type="submit"]').click();
+    await wait(page,()=>document.querySelector('.job-table tbody')?.textContent.includes('Synthetic Queue Company'));
+    await page.screenshot({path:path.join(output,'phase6a-queues-desktop.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.locator('#job-filters').evaluate(el=>el.scrollWidth<=el.clientWidth+2),true);
+    await page.screenshot({path:path.join(output,'phase6a-queues-mobile.png'),fullPage:true});
+    await page.locator('#sign-out').click();
+    assert.equal(await page.locator('#job-queue-summary').innerText(),'');
     assert.equal(errors.length,0,errors.join('\\n'));
     console.log('PASS: bounded job workspace and exact on-demand signed-in recovery after denied work. No live backend traffic.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

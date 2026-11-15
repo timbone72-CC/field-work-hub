@@ -17,7 +17,7 @@ test('job reads are bounded and presentation filters cannot supply columns or op
 test('stored job-view preferences exclude searches, identities and payloads', () => {
   assert.deepEqual(rules.normalize({ size: 50, status: 'ASSIGNED', sort: 'due_date.asc',
     search: 'Private address', access_token: 'private', instructions: 'Private work', id: 'private' }),
-  { size: 50, status: 'ASSIGNED', sort: 'due_date.asc' });
+  { size: 50, queue:'ALL', status: 'ASSIGNED', sort: 'due_date.asc' });
 });
 test('unknown count stays unknown rather than inventing a total', () => {
   assert.equal(rules.total('0-24/1000'), 1000); assert.equal(rules.total('*/0'), 0);

@@ -11,8 +11,9 @@ assert.ok(a>0 && b>a);
 const code = source.slice(a,b);
 function rig() {
  const names=['job-page-info','job-page-previous','job-page-next','job-list-status',
- 'job-page-size','job-sort','job-status','job-search','job-search-field','job-contractor','job-due-date'];
+ 'job-queue','job-company','job-page-size','job-sort','job-status','job-search','job-search-field','job-contractor','job-due-date'];
  const fields=Object.fromEntries(names.map(n=>[n,{value:'',disabled:false,textContent:''}]));
+ fields['job-queue'].value='ALL';
  Object.assign(fields['job-page-size'],{value:'50'});
  fields['job-sort'].value='due_date.asc';
  fields['job-status'].value='FIELD_COMPLETE';
@@ -63,7 +64,7 @@ test('explicit successful retry persists the now-confirmed preferences only',asy
  assert.equal(f.ctx.info().state.status,'FIELD_COMPLETE');
  assert.equal(f.writes.length,1);
  const saved=JSON.parse(f.writes[0][1]);
- assert.deepEqual(Object.keys(saved).sort(),['size','sort','status']);
+ assert.deepEqual(Object.keys(saved).sort(),['queue','size','sort','status']);
  assert.equal(saved.size,50);
  assert.equal(saved.sort,'due_date.asc');
  assert.equal(saved.status,'FIELD_COMPLETE');

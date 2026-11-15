@@ -12,7 +12,7 @@ function rig() {
  const id='selected-job';
  const old={id,organization_id:'org-a',instructions:'original',field_status:'ASSIGNED'};
  const status=[],fields={'job-reload':{hidden:true}};
- const context={
+ const context={JobOperationalFacts:require('../../dashboard/job-workspace.js').JobOperationalFacts,
    editSection:{open:true},selectedRow:old,selection:10,needsReload:false,
    page(){},setEditStatus:(msg,error)=>status.push({msg,error}),
    el:key=>fields[key]??={hidden:true}
@@ -64,6 +64,15 @@ test('closed workspace cannot be reclassified by a background selected read',()=
  const f=rig(),original=f.context.snapshot();
  f.context.editSection.open=false;
  f.context.refresh([],{...original,unavailable:true});
+ assert.equal(f.context.readState().needsReload,false);
+ assert.equal(f.status.length,0);
+});
+
+test('queue badges, company labels and JSON key order do not falsely stale an unchanged editor',()=>{
+ const f=rig();
+ const projected={field_status:'ASSIGNED',instructions:'original',organization_id:'org-a',
+   id:'selected-job',company_name:'Company label',operational:{primary:'AWAITING_ACK'}};
+ f.context.refresh([projected]);
  assert.equal(f.context.readState().needsReload,false);
  assert.equal(f.status.length,0);
 });

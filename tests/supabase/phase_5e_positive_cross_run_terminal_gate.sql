@@ -58,13 +58,13 @@ begin
   frozen:=jsonb_build_array(
     jsonb_build_object('id',photo_selected,'captured_at',now()),
     jsonb_build_object('id',photo_excluded,'captured_at',now()));
-  insert into public.photos(id,work_order_id,run_id,captured_by,captured_at)
-  values(photo_selected,wo,old_run,owner_id,now()),
-        (photo_excluded,wo,old_run,owner_id,now());
   insert into public.photo_finish_sets(
     id,actor_user_id,organization_id,work_order_id,run_id,
     assignment_instance_id,photos,digest)
   values(old_finish,owner_id,org,wo,old_run,old_assignment,frozen,old_digest);
+  insert into public.photos(id,work_order_id,run_id,captured_by,captured_at,finish_set_id,assignment_instance_id)
+  values(photo_selected,wo,old_run,owner_id,now(),old_finish,old_assignment),
+        (photo_excluded,wo,old_run,owner_id,now(),old_finish,old_assignment);
   insert into public.field_actions(
     action_id,actor_user_id,organization_id,work_order_id,run_id,
     assignment_instance_id,action_kind,event_time_text,event_at,
@@ -185,6 +185,28 @@ begin
       where package_id=pkg and run_id=old_run;
   exception when sqlstate '42501' then denied:=true;end;
   if not denied then raise exception 'Immutable closure update unexpectedly allowed';end if;
+  -- An older unsent historical draft is retained history, not a new required
+  -- submission. It cannot permanently block the latest verified closure.
+  insert into private.client_packages(organization_id,work_order_id,run_id,company_id,created_at)
+  values(org,wo,old_run,company,now()-interval '1 hour');
+  -- 6A-T01: terminal status alone must not claim current Storage retention.
+  result:=public.admin_work_order_page(jsonb_build_object('searchField','wo_number',
+    'search',(select wo_number from public.work_orders where id=wo)));
+  if result->'rows'->0->'operational'->>'completed'<>'false' then
+    raise exception 'Queue treated a missing retained object as Complete';end if;
+  insert into storage.objects(id,bucket_id,name,owner_id,version)
+  select r.object_id,r.bucket,r.object_key,r.owner_user_id::text,r.object_version
+  from private.photo_transfer_receipts r where r.photo_id in(photo_selected,photo_excluded);
+  result:=public.admin_work_order_page(jsonb_build_object('searchField','wo_number',
+    'search',(select wo_number from public.work_orders where id=wo),'queue','COMPLETED'));
+  if (result->>'total')::int<>1 or (result->'counts'->>'COMPLETED')::int<>1
+    or result->'rows'->0->'operational'->>'primary'<>'COMPLETED'
+  then raise exception 'Exact retained two-run closure missing from Completed queue: %',result;end if;
+  update storage.objects set archived_at=now() where id=(
+    select object_id from private.photo_transfer_receipts where photo_id=photo_excluded);
+  result:=public.admin_work_order_page(jsonb_build_object('searchField','wo_number',
+    'search',(select wo_number from public.work_orders where id=wo),'queue','COMPLETED'));
+  if (result->>'total')::int<>0 then raise exception 'Excluded receipt lost bytes but queue claimed Complete';end if;
   raise notice 'PASS: genuine terminal update closes two accepted runs, excluded receipt retained, foreign/immutable denied';
 end;
 $cross_run$;

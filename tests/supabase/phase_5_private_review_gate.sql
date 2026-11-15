@@ -291,9 +291,17 @@ begin
   pkg_state:=public.admin_package_state(wo);
   if pkg_state->'package'->>'can_send'<>'true' then
     raise exception 'Verified synthetic dispatch and worker readiness not reflected';end if;
+  target:=public.admin_work_order_page(jsonb_build_object('searchField','wo_number',
+    'search',(select wo_number from public.work_orders where id=wo),'queue','READY_TO_SEND'));
+  if (target->>'total')::int<>1 or target->'rows'->0->'operational'->>'primary'<>'READY_TO_SEND'
+  then raise exception 'Queue differs from existing exact can_send owner: %',target;end if;
   pkg_send:=public.admin_queue_package(send_action,wo,pkg_id,
     (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256');
   if pkg_send->>'status'<>'QUEUED' then raise exception 'Explicit Send did not queue';end if;
+  target:=public.admin_work_order_page(jsonb_build_object('searchField','wo_number',
+    'search',(select wo_number from public.work_orders where id=wo),'queue','SENDING'));
+  if (target->>'total')::int<>1 or target->'rows'->0->'operational'->>'primary'<>'SENDING'
+  then raise exception 'Queued package not represented truthfully';end if;
   if pkg_send is distinct from public.admin_queue_package(send_action,wo,pkg_id,
       (pkg_approval->>'revision')::uuid,pkg_preview->>'manifest_sha256') then
     raise exception 'Duplicate Send was not idempotent';end if;

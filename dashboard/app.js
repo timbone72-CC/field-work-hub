@@ -489,41 +489,19 @@ async function fetchWorkOrders() {
   requireAccessToken();
   JobWorkspace.ensureAccount(currentUser);
   const page = JobWorkspace.request();
-  const select = [
-    'id',
-    'organization_id',
-    'client_company_id',
-    'assigned_user_id',
-    'pending_assignee_user_id',
-    'reassignment_requested_at',
-    'assignment_received_at',
-    'wo_number',
-    'property_address',
-    'work_type',
-    'instructions',
-    'due_date',
-    'field_status',
-    'updated_at',
-    'created_at',
-    'current_run_id',
-    'run:work_order_runs!work_orders_current_run_same_work_order_fk(requirement_snapshot,assignment:work_order_assignments!work_order_assignments_run_id_fkey(assigned_user_id,assignment_received_at,acknowledgment_received_at,assignment_ended_at))'
-  ].join(',');
-
-  // Intentionally broad request: no organization_id or assigned_user_id filter.
-  // Supabase RLS is the authorization boundary for rows returned here.
-  const response = await adminFetch(
-    `${SUPABASE_URL}/rest/v1/work_orders?select=${encodeURIComponent(select)}&${JobViewRules.parameters(page)}`,
-    { headers: { ...authHeaders(), Prefer: 'count=exact' } }
-  );
-
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_work_order_page`, {
+    method:'POST',headers:authHeaders(true),
+    body:JSON.stringify({p_filters:JobQueueRules.filters(page)})
+  });
   if (!response.ok) {
-    throw await adminHttpFailure(response, response.adminRequestStage, response.adminRequestStartedAt);
+    throw await adminHttpFailure(response,response.adminRequestStage,response.adminRequestStartedAt);
   }
-
-  const rows = await response.json();
+  const snapshot=await response.json();
   JobWorkspace.accept(page);
-  if (!Array.isArray(rows) || rows.length > page.size) throw new Error('Unexpected job page response.');
-  rows.page = { ...page, total: JobViewRules.total(response.headers.get('Content-Range')) };
+  JobQueueRules.validate(snapshot,page,currentUser?.app_metadata?.organization_id);
+  const rows=snapshot.rows;
+  rows.page={...page,total:snapshot.total,counts:snapshot.counts,
+    as_of:snapshot.as_of,scope_fingerprint:snapshot.scope_fingerprint};
   return rows;
 }
 
@@ -714,7 +692,7 @@ function renderWorkOrders(rows, organizationId) {
   table.className = 'job-table';
   const caption = document.createElement('caption'); caption.textContent = 'Current work orders'; caption.className = 'sr-only'; table.append(caption);
   const head = table.createTHead().insertRow();
-  for (const title of ['WO / Address', 'Work type', 'Assigned to', 'Due', 'Status / Receipt']) {
+  for (const title of ['WO / Address', 'Company', 'Work type', 'Assigned to', 'Due', 'Status / Receipt']) {
     const th = document.createElement('th'); th.scope = 'col'; th.textContent = title; head.append(th);
   }
   const body = table.createTBody();
@@ -728,6 +706,7 @@ function renderWorkOrders(rows, organizationId) {
     button.addEventListener('click', () => JobWorkspace.choose(row.id));
     const address = document.createElement('div'); address.textContent = row.property_address;
     title.append(button, address);
+    tr.insertCell().textContent = row.company_name||'Not configured';
     tr.insertCell().textContent = row.work_type;
     tr.insertCell().textContent = userLabel(userById.get(row.assigned_user_id));
     tr.insertCell().textContent = row.due_date;
@@ -737,6 +716,7 @@ function renderWorkOrders(rows, organizationId) {
     const receipt = document.createElement('small');
     receipt.textContent = accepted ? 'Accepted by contractor' : row.assignment_received_at ? 'Assignment received' : 'Not yet received';
     status.append(field, receipt);
+    if(row.operational?.overdue){const badge=document.createElement('div');badge.textContent='Overdue';status.append(badge);}
     if (row.pending_assignee_user_id) {
       const handoff = document.createElement('div'); handoff.className = 'handoff pending'; handoff.textContent = 'Handoff awaiting approval'; status.append(handoff);
     }

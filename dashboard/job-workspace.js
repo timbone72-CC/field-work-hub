@@ -1,8 +1,43 @@
+const JobQueueRules = {
+  labels: {
+    ALL:'All jobs', ACTIVE:'Active jobs', NEEDS_ASSIGNMENT:'Needs assignment',
+    AWAITING_ACK:'Awaiting acknowledgment', IN_PROGRESS:'In progress', OVERDUE:'Overdue',
+    PHOTOS_PENDING:'Finished — photos pending', AWAITING_REVIEW:'Awaiting review',
+    FOLLOWUP_PENDING:'Follow-up pending', READY_FOR_APPROVAL:'Ready for package approval',
+    READY_TO_SEND:'Ready to send', SENDING:'Sending', DELIVERY_PROBLEM:'Delivery problem',
+    COMPLETED:'Completed', PROBLEMS:'Problems', CANCELLED:'Cancelled'
+  },
+  normalize(value) { return Object.hasOwn(this.labels,value) ? value : 'ALL'; },
+  filters(state) {
+    const bounded=JobViewRules.parameters(state);
+    return {size:Number(bounded.get('limit')),offset:Number(bounded.get('offset')),
+      sort:JobViewRules.normalize(state).sort,status:JobViewRules.normalize(state).status,
+      queue:this.normalize(state.queue),search:String(state.search||'').trim().slice(0,160),
+      searchField:state.searchField==='wo_number'?'wo_number':'property_address',
+      contractor:bounded.get('assigned_user_id')?.slice(3)||'',
+      dueDate:bounded.get('due_date')?.slice(3)||'',
+      companySearch:String(state.company||'').trim().slice(0,100)};
+  },
+  validate(result, page, org) {
+    if(result?.organization_id!==org || !Array.isArray(result.rows) || result.rows.length>page.size
+      || !Number.isSafeInteger(result.total) || result.total<0 || result.offset!==page.offset
+      || result.size!==page.size || result.queue!==this.normalize(page.queue)
+      || typeof result.scope_fingerprint!=='string' || !/^[a-f0-9]{32}$/.test(result.scope_fingerprint)
+      || Number.isNaN(Date.parse(result.as_of)) || !result.counts
+      || Object.keys(this.labels).some(key=>!Number.isSafeInteger(result.counts[key])||result.counts[key]<0)
+      || result.counts[this.normalize(page.queue)]!==result.total
+      || result.rows.some(row=>row.organization_id!==org || !row.operational
+        || row.operational.queues?.[this.normalize(page.queue)]!==true))
+      throw Error('Unexpected authorized job queue response.');
+    return result;
+  }
+};
 /* Presentation state only. Server RLS and existing dispatch RPCs own authority. */
 const JobViewRules = {
   normalize(value = {}) {
     return { size: value.size === 50 ? 50 : 25,
       sort: ['created_at.desc', 'due_date.asc', 'due_date.desc'].includes(value.sort) ? value.sort : 'created_at.desc',
+      queue: JobQueueRules.normalize(value.queue),
       status: ['ASSIGNED', 'IN_PROGRESS', 'FIELD_COMPLETE', 'CANCELLED'].includes(value.status) ? value.status : '' };
   },
   parameters(state) {
@@ -36,6 +71,7 @@ const JobViewRules = {
   }
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = JobViewRules;
+if (typeof module !== 'undefined' && module.exports) module.exports.JobQueueRules=JobQueueRules;
 
 
 // Phase 6A: conservative operational state from fields actually returned by
@@ -44,12 +80,28 @@ if (typeof module !== 'undefined' && module.exports) module.exports = JobViewRul
 const JobOperationalFacts = {
   currentAssignment(row) {
     const assignments = row?.run?.assignment;
-    if (!Array.isArray(assignments)) return null;
+    if (!Array.isArray(assignments)) return row?.operational?.acknowledgment_received_at
+      ? {acknowledgment_received_at:row.operational.acknowledgment_received_at} : null;
     return assignments.find(assignment => !assignment?.assignment_ended_at
       && assignment.assigned_user_id === row.assigned_user_id) || null;
   },
   project(row) {
     if (!row || typeof row !== 'object') return {label:'Status unavailable',next:'Open details',panel:'details'};
+    if (row.operational) {
+      const state=row.operational.primary;
+      const actions={
+        NEEDS_ASSIGNMENT:['Assign','assignment'], AWAITING_ACK:['View assignment','assignment'],
+        IN_PROGRESS:['Open details','details'], FOLLOWUP_PENDING:['Open follow-up','assignment'],
+        PHOTOS_PENDING:['Check photos','photos'], AWAITING_REVIEW:['Review photos','photos'],
+        READY_FOR_APPROVAL:['Preview','delivery'],READY_TO_SEND:['Send','delivery'],
+        SENDING:['View exact attempt','delivery'],DELIVERY_PROBLEM:['View exact attempt','delivery'],
+        COMPLETED:['History','history'],PROBLEMS:['Open details','details'],CANCELLED:['Open details','details']
+      };
+      if(state==='AWAITING_REVIEW' && row.operational.review_required===false)
+        return {label:'Prepare package',next:'Prepare package',panel:'delivery'};
+      if(state==='ACCEPTED')return {label:'Accepted by contractor',next:'View assignment',panel:'assignment'};
+      if(actions[state])return {label:JobQueueRules.labels[state],next:actions[state][0],panel:actions[state][1]};
+    }
     if (row.pending_assignee_user_id) return {
       label:'Reassignment pending',next:'View assignment',panel:'assignment'};
     switch (row.field_status) {
@@ -109,7 +161,7 @@ const JobResultNavigation = {
 if (typeof module !== 'undefined' && module.exports) module.exports.JobResultNavigation=JobResultNavigation;
 
 const JobWorkspace = (() => {
-  let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'' };
+  let account = '', state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address',contractor:'',dueDate:'',company:'' };
   let revision = 0, selection = 0, baseline = null, pending = null, selectedRow = null, needsReload = false;
   let filterReadFailed = false;
   let filterDraftPending = false;
@@ -124,6 +176,8 @@ const JobWorkspace = (() => {
     controls();
   }
   function controls() {
+    el('job-queue').value=state.queue;
+    el('job-company').value=state.company||'';
     el('job-page-size').value = state.size; el('job-sort').value = state.sort;
     el('job-status').value = state.status; el('job-search').value = state.search;
     el('job-search-field').value = state.searchField;
@@ -155,9 +209,13 @@ const JobWorkspace = (() => {
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     filterReadFailed = false;
     filterDraftPending = false;
+    if(el('job-queue-summary'))el('job-queue-summary').textContent='';
+    if(el('job-queue'))for(const option of el('job-queue').options)option.textContent=JobQueueRules.labels[option.value];
+    if(el('job-company'))el('job-company').value='';
+    if(el('job-company-choices'))el('job-company-choices').replaceChildren();
     resetRepeatRunChoices();
     returnFocusId = null; addressLookupEpoch++; addressRows=[]; addressTotal=null; addressOffset=0;
-    state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'' };
+    state = { ...JobViewRules.normalize(), offset: 0, search: '', searchField: 'property_address', contractor:'',dueDate:'',company:'' };
   }
   function request() { return { ...state, revision }; }
   function accept(page) {
@@ -165,6 +223,23 @@ const JobWorkspace = (() => {
   }
   function pendingFiltersMessage() {
     return 'Filter changes have not been applied. Current jobs use the last confirmed filters. Select Apply to update them.';
+  }
+  function queueSummary(rows) {
+    if(!rows.page?.counts)return;
+    const current=el('job-queue').value;
+    for(const option of el('job-queue').options)
+      option.textContent=JobQueueRules.labels[option.value]+' ('+rows.page.counts[option.value]+')';
+    el('job-queue').value=current;
+    // Suggestions are page-bounded; typing any company name searches on the
+    // server, so companies on another page remain reachable without a dump.
+    const choices=el('job-company-choices');
+    choices.replaceChildren();
+    for(const name of new Set(rows.map(row=>row.company_name).filter(Boolean)))
+      choices.append(new Option(name,name));
+    el('job-queue-summary').textContent='Queue counts match the applied filters. Updated '+
+      new Date(rows.page.as_of).toLocaleTimeString()+'.'+
+      (rows.some(row=>row.operational?.timezone_configured===false)
+        ? ' Organization timezone is not configured; overdue status is unavailable.' : '');
   }
   function setPageControls(rows) {
     const info = rows.page || { offset: state.offset, total: null };
@@ -177,6 +252,7 @@ const JobWorkspace = (() => {
   function page(rows) {
     accept(rows.page);
     setPageControls(rows);
+    queueSummary(rows);
     if (!filterReadFailed) el('job-list-status').textContent = '';
     navigation();
   }
@@ -187,7 +263,7 @@ const JobWorkspace = (() => {
     if (!keepResultFilters) filterDraftPending = false;
     state = keepResultFilters ? {...state,offset} :
       { ...state, size: Number(el('job-page-size').value), sort: el('job-sort').value,
-        status: el('job-status').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
+        status: el('job-status').value, queue:el('job-queue').value,company:el('job-company').value, search: el('job-search').value.trim(), searchField: el('job-search-field').value,
         contractor:el('job-contractor').value,dueDate:el('job-due-date').value, offset };
     revision++;
     filterReadFailed = false;
@@ -421,6 +497,17 @@ const JobWorkspace = (() => {
   function selectionSnapshot() {
     return selectedRow && editSection.open ? { id: selectedRow.id, selection } : null;
   }
+  // Queue/receipt projections have a different JSON shape from the exact
+  // editor read. Compare stable editable identity, not transport key order or
+  // a changed derived badge, before declaring an unsaved edit stale.
+  function editVersion(row) {
+    if(!row)return '';
+    return JSON.stringify(['id','organization_id','client_company_id','current_run_id','updated_at',
+      'wo_number','property_address','work_type','instructions','due_date','field_status',
+      'assigned_user_id','pending_assignee_user_id','reassignment_requested_at','assignment_received_at']
+      .map(key=>row[key]??null).concat([row.run?.requirement_snapshot??null,
+        JobOperationalFacts.currentAssignment(row)?.acknowledgment_received_at??null]));
+  }
   function refreshed(rows, checkedSelection = null) {
     page(rows);
     const current = selectionSnapshot();
@@ -434,7 +521,7 @@ const JobWorkspace = (() => {
       el('job-reload').hidden = false;
       el('job-save-continue').disabled = true;
       setEditStatus('Unable to verify this selected work order. Your edits were kept. Reload to check access and current details before saving.', true);
-    } else if (row && JSON.stringify(row) !== JSON.stringify(selectedRow)) {
+    } else if (row && editVersion(row) !== editVersion(selectedRow)) {
       needsReload = true;
       el('job-reload').hidden = false;
       el('job-save-continue').disabled = true;
@@ -494,6 +581,8 @@ const JobWorkspace = (() => {
       el('job-search').value='';
       el('job-search-field').value='property_address';
       el('job-status').value='';
+      el('job-queue').value='ALL';
+      el('job-company').value='';
       el('job-contractor').value='';
       el('job-due-date').value='';
       el('job-sort').value='created_at.desc';
