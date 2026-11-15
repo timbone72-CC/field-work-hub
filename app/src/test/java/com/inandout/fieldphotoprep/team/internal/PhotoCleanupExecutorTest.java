@@ -599,4 +599,35 @@ public class PhotoCleanupExecutorTest {
         assertEquals("HELD",journal.find(p.id).state);
         assertTrue(new File(p.originalPath).exists());
     }
+
+    @Test public void periodicDispatchUsesFreshProofThenExactPhotoOwnerAndDoesNotRepeat()
+            throws Exception {
+        ProtectedPhoto ready=verified("wo-dispatch-clean","run-dispatch-clean");
+        journal(ready);
+        String snapshot=journal.find(ready.id).serverProofJson;
+        PhotoCleanupCoordinator fresh=new PhotoCleanupCoordinator(journal,sessions,
+                (token,id)->{
+                    assertEquals(actor.accessToken,token);
+                    assertEquals(ready.id,id);
+                    return snapshot;
+                });
+        PhotoCleanupDispatchRunner dispatcher=new PhotoCleanupDispatchRunner(
+                journal,sessions,(session,generation,id)->{
+                    if(!fresh.recordServerReadiness(session.userId,session.organizationId,id))
+                        return false;
+                    return owner.cleanupVerified(session,generation,id);
+                },true);
+        java.util.concurrent.atomic.AtomicReference<String> cursor=
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        assertEquals(1,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+        assertEquals("CLEANED",journal.find(ready.id).state);
+        assertEquals("CLEANED",fields.photo(ready.id).state);
+        assertFalse(new File(ready.originalPath).exists());
+        assertFalse(new File(ready.preparedPath).exists());
+        assertEquals("RECEIVED",transfers.find(ready.id).state);
+        // CLEANED never re-enters the dispatch scan after worker restart.
+        assertEquals(0,dispatcher.drain(actor.userId,actor.organizationId,
+                cursor.get(),()->false,cursor::set));
+    }
 }
