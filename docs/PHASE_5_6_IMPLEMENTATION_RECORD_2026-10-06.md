@@ -3,9 +3,9 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 15 — 5D receipts; 5E TEST deployment
+## November 15 — 5E-T02 source scope
 
-`TEST-P5D-SECOND-001` / `TEST-P4-REVISION-1005-D`: matching final receipts, three verified files and seven steps each. **5D-T01 COMPLETE**; no retest. PR #99: one-minute Supabase delivery wake ON; new Send/receipt PENDING, no approved unsent package. 5D-T02 zero-photo receipt and dependent T04 PENDING. Never replay October package or fabricate work. **5E-T01**: PR #101 merged, TEST migration `20261115143423` installed, frozen match/foreign denial PASS, two old run closures unchanged. Real multi-run closure PENDING; cleanup OFF. Return to 5D-T03 on genuine Send. Detailed evidence in PR #101.
+5D-T01 receipts COVERED; T02/T03 await genuine Send; event wake/cron ON. **5E-T01**: PR #101 TEST deployed, PR #103 positive cross-run/excluded photo CI PASS; hosted proof BLOCKED. **5E-T02 ACTIVE source only**: bounded owner WorkManager calls existing server-read/Room-journal/PhotoOwner path; deletion OFF. Level 3 merge approval and APK/cleanup activation PENDING. 5E-T03 PLANNED. No new phone/provider/retention writes. Return to 5E-T01 on real multi-run delivery, to 5D-T03 on real Send.
 
 ## November 15 — 5D-T03 controlled TEST scheduler cutover (in progress)
 
