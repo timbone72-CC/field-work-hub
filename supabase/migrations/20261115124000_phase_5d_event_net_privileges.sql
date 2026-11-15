@@ -18,6 +18,11 @@ begin
     raise exception 'FWH_WAKE_NET_TABLES_MISSING';
   end if;
 
+  -- Hosted net.http_post is SECURITY INVOKER, while the FWH wake producer
+  -- runs SECURITY DEFINER as postgres. Preserve this trusted execution role's
+  -- existing transport-table capabilities before removing PUBLIC grants.
+  grant all privileges on table net.http_request_queue, net._http_response
+    to postgres;
   revoke all privileges on table net.http_request_queue, net._http_response
     from public, anon, authenticated;
 
