@@ -338,7 +338,7 @@ createForm.addEventListener('submit', async (event) => {
     if(!stillCreator())return;
     if(typeof CreateJobDrafts!=='undefined')await CreateJobDrafts.created();
     if(!stillCreator())return;
-    setCreateStatus(`Created and assigned ${created.wo_number}. Waiting for contractor receipt.`, false);
+    setCreateStatus(`Created and assigned ${created.wo_number}. Check Work Orders for current receipt and status.`, false);
     createForm.reset();
     createPhotos.load(null);
     fillWorkTypes();

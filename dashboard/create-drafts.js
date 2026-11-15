@@ -27,7 +27,7 @@ const CreateJobDrafts=(()=>{
     await ensure();
     if(!editor.active())throw Error('Current creator session required.');
     if(creationAttempt&&creationAttempt.fingerprint!==editor.fingerprint())
-      throw Error('Earlier creation is unconfirmed. Check Work Orders before creating different work; your new input is retained.');
+      throw Error('Earlier creation is unconfirmed. Check Work Orders, keep new input with Save draft, then reload before creating different work. Your input is retained.');
     if(!creationAttempt){
       if(!editor.isSaved()&&!await editor.save())throw Error('Save draft was not confirmed. Nothing was created.');
       creationAttempt={revision:editor.revision(),fingerprint:editor.fingerprint()};
@@ -40,7 +40,7 @@ const CreateJobDrafts=(()=>{
     if(!response.ok)throw Error(await readableError(response,'Creation was not confirmed. Retry the same entry to check the exact result.'));
     return response.json();
   }
-  function created(){creationAttempt=null;editor.reset();resetProvenance();}
+  function created(){reset();}
   function refreshed(){return ensure();}
   function init(){editor.init();
     el('create-wo-details').addEventListener('toggle',()=>{if(el('create-wo-details').open)ensure();});
