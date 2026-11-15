@@ -161,7 +161,8 @@ final class TeamRuntime {
      */
     int pollReadiness(String owner, String org, java.util.function.BooleanSupplier stopped)
             throws Exception {
-        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) return 0;
+        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
+                && !BuildConfig.AUTOMATIC_CLEANUP_ENABLED) return 0;
         synchronized (readinessPollLock) {
             android.content.SharedPreferences cursors =
                     applicationContext.getSharedPreferences(
