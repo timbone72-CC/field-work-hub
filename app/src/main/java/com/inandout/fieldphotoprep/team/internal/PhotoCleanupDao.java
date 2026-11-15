@@ -29,6 +29,22 @@ abstract class PhotoCleanupDao {
            "ORDER BY p.id LIMIT :limit")
     abstract List<String> readinessCandidates(String owner, String org, String after, int limit);
 
+    /**
+     * An exact original-owner page for the separately activated cleanup
+     * WorkManager. This selects durable HELD, READY and interrupted CLEANING
+     * decisions only; no server success is inferred from their states.
+     * The dispatcher obtains fresh server authority before every deletion.
+     */
+    @Query("SELECT j.photoId FROM photo_cleanup_journal j " +
+           "JOIN protected_photos p ON p.id=j.photoId " +
+           "WHERE j.ownerId=:owner AND j.organizationId=:org " +
+           "AND p.ownerId=:owner AND p.organizationId=:org " +
+           "AND j.state IN ('HELD','READY','CLEANING') " +
+           "AND ((j.state='CLEANING' AND p.state='CLEANING') " +
+           "     OR (j.state IN ('HELD','READY') AND p.state='WAITING')) " +
+           "AND j.photoId>:after ORDER BY j.photoId LIMIT :limit")
+    abstract List<String> dispatchCandidates(String owner,String org,String after,int limit);
+
     /** TEST read-only status count: never exposes evidence from another owner. */
     @Query("SELECT count(*) FROM photo_cleanup_journal " +
             "WHERE ownerId=:owner AND organizationId=:org AND state='HELD'")
