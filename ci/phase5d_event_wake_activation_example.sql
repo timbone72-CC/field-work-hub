@@ -4,6 +4,13 @@
 -- New event SQL and Edge flags remain OFF on source deployment.
 -- Provision pg_net and pg_cron separately using supported Supabase setup.
 -- Confirm net.http_request_queue/_http_response are not client-readable.
+-- Apply migration 20261115124000_phase_5d_event_net_privileges.sql
+-- to the authorized TEST project before turning on the event wake.
+-- Verify anon/authenticated have NO SELECT/INSERT/UPDATE/DELETE privilege
+-- on either net.http_request_queue or net._http_response. If an extension
+-- upgrade restores PUBLIC grants, stop the cutover and recheck the ACLs.
+-- This is a real database gate: disposable-CI tests simulate net tables,
+-- not the hosted pg_net extension or HTTP delivery.
 -- Keep GitHub wake OFF during event cutover; retain it only as an explicitly
 -- controlled rollback mechanism, not as the production delivery clock.
 --
