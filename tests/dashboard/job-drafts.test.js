@@ -86,3 +86,17 @@ test('checking a confirmed lost response recognizes saved content',async()=>{
  const h=rig();await h.drafts.open(h.row);h.setFail('AFTER');assert.equal(await h.drafts.save(),false);
  await h.drafts.check();assert.equal(h.drafts.isSaved(),true);
 });
+
+test('resumed legacy requirements keep ordinary active edits from rewriting field requirements',async()=>{
+ const h=rig();h.ctx.editPhotos.legacy=true;h.ctx.editPhotos.expectedRevision=null;
+ await h.drafts.open(h.row);await h.drafts.save();h.ctx.editPhotos.legacy=false;
+ await h.drafts.open(h.row);assert.equal(h.ctx.editPhotos.legacy,true);
+ assert.equal(h.ctx.editPhotos.expectedRevision,null);assert.equal(h.drafts.isSaved(),true);
+});
+
+test('applying unrelated editor contents preserves the unapplied saved draft',async()=>{
+ const h=rig();await h.drafts.open(h.row);h.node('edit-instructions').value='Saved';await h.drafts.save();
+ h.node('edit-instructions').value='Different active edit';await h.drafts.applied();
+ assert.equal(h.data.payload.instructions,'Saved');
+ h.node('edit-instructions').value='Saved';await h.drafts.applied();assert.equal(h.data,null);
+});

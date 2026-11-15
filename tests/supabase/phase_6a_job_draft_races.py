@@ -28,7 +28,7 @@ with psycopg.connect(DSN) as setup:
         'INSPECTION', 'active original', datetime.date.today(), CONTRACTOR, Jsonb(cfg))).fetchone()[0]
     base = setup.execute('select updated_at from public.work_orders where id=%s', (wo,)).fetchone()[0]
     body = {'woNumber': '', 'propertyAddress': '', 'workType': '', 'instructions': 'first draft',
-            'dueDate': '', 'assignedUserId': str(CONTRACTOR), 'requirements': cfg, 'expectedRevision': cfg['revision']}
+            'dueDate': '', 'assignedUserId': str(CONTRACTOR), 'requirements': cfg, 'requirementsLegacy': False, 'expectedRevision': cfg['revision']}
 ready, release, started = threading.Event(), threading.Event(), threading.Event()
 results, errors, second_pid = {}, [], []
 

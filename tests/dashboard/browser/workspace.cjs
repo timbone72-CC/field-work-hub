@@ -1203,10 +1203,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.screenshot({path:path.join(output,'6a-saved-job-draft-desktop.png'),fullPage:false});
     page.once('dialog',dialog=>dialog.accept());await page.locator('#job-draft-discard').click();
     await wait(page,()=>document.querySelector('#job-draft-status').textContent.includes('discarded'));
-    await page.evaluate(()=>JobWorkspace.guard(()=>JobWorkspace.choose(document.getElementById('edit-work-order-id').value)));
-    await page.locator('#job-discard').click();
-    // The existing guard owns reload; no second business mutation is involved.
-    await page.evaluate(async()=>{const id=document.getElementById('edit-work-order-id').value;openEditor(id,await fetchWorkOrder(id));});
+    await page.locator('#cancel-edit').click();await page.locator('#job-discard').click();
+    await wait(page,()=>!document.querySelector('#edit-work-order-section').open);
+    await page.locator('[data-job-open-id]').first().click();
     await wait(page,()=>!document.querySelector('#job-draft-save').disabled);
     assert.ok(draftWrites>=2);
     const first = await page.locator('#edit-work-order-id').inputValue();

@@ -6,7 +6,7 @@ const JobDrafts=(()=>{
     instructions:'edit-instructions',dueDate:'edit-due-date',assignedUserId:'edit-assignee'};
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function payload(){return {...Object.fromEntries(Object.entries(fields).map(([key,id])=>[key,el(id).value])),
-    requirements:structuredClone(editPhotos.value),expectedRevision:editPhotos.expectedRevision||null};}
+    requirements:structuredClone(editPhotos.value),requirementsLegacy:!!editPhotos.legacy,expectedRevision:editPhotos.expectedRevision||null};}
   function value(p=payload()) {
     const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'
       ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
@@ -44,10 +44,10 @@ const JobDrafts=(()=>{
     // draft and are validated by the existing active-work owner on application.
     for(const [key,id] of Object.entries(fields))el(id).value=p[key];
     editPhotos.load(p.requirements,row.field_status!=='ASSIGNED');
-    editPhotos.expectedRevision=p.expectedRevision;
-    savedValue=value();
+    editPhotos.expectedRevision=p.expectedRevision;editPhotos.legacy=p.requirementsLegacy;
+    savedValue=value(p);
     if(draft.stale){JobWorkspace.saveUnverified();status('Saved draft restored. Job changed since this draft; reload the job before applying changes. Draft remains saved.',true);}
-    else status('Saved draft restored. Save Changes applies it to the work order.');
+    else status(isSaved()?'Saved draft restored. Save Changes applies it to the work order.':'Draft restored with unavailable values. Review and save the adjusted draft before leaving.',!isSaved());
     return true;
   }
   async function check(restore=false){if(!row||busy)return false;
@@ -88,7 +88,7 @@ const JobDrafts=(()=>{
     }catch(error){if(current(g))status(error.message,true);return false;}
     finally{if(current(g)){busy=false;buttons();}}
   }
-  async function applied(){if(draft)return discard(false);return true;}
+  async function applied(){if(draft&&isSaved())return discard(false);return true;}
   function init(){el('job-draft-save').addEventListener('click',()=>save());
     el('job-draft-check').addEventListener('click',()=>check());
     el('job-draft-resume').addEventListener('click',()=>resume());

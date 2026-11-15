@@ -23,7 +23,7 @@ begin
   'DRAFT-'||gen_random_uuid(),'Synthetic draft address','Inspection','active original',current_date,contractor,cfg) j;
  select updated_at,to_jsonb(w) into base,before_row from public.work_orders w where id=wo;
  body:=jsonb_build_object('woNumber','','propertyAddress','','workType','Inspection','instructions','Unapplied draft',
-  'dueDate','','assignedUserId',contractor,'requirements',cfg,'expectedRevision',cfg->>'revision');
+  'dueDate','','assignedUserId',contractor,'requirements',cfg,'requirementsLegacy',false,'expectedRevision',cfg->>'revision');
  checked:=public.admin_job_draft_state(wo);
  if checked->'draft'<>'null'::jsonb then raise exception 'Fresh job exposed a draft';end if;
  saved:=public.admin_save_job_draft(wo,body,null,base,write_id);rev:=(saved->'draft'->>'revision')::uuid;

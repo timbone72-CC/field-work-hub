@@ -46,9 +46,9 @@ begin
  if p_operation='SAVE' then
   if p_payload is null or jsonb_typeof(p_payload)<>'object'
     or octet_length(p_payload::text)>200000 or p_write_id is null or p_base_updated_at is null
-    or not (p_payload ?& array['woNumber','propertyAddress','workType','instructions','dueDate','assignedUserId','requirements','expectedRevision'])
+    or not (p_payload ?& array['woNumber','propertyAddress','workType','instructions','dueDate','assignedUserId','requirements','requirementsLegacy','expectedRevision'])
     or exists(select 1 from jsonb_object_keys(p_payload) k where k not in
-      ('woNumber','propertyAddress','workType','instructions','dueDate','assignedUserId','requirements','expectedRevision'))
+      ('woNumber','propertyAddress','workType','instructions','dueDate','assignedUserId','requirements','requirementsLegacy','expectedRevision'))
   then raise exception 'Invalid job draft' using errcode='22023';end if;
   foreach field_name in array array['woNumber','propertyAddress','workType','instructions','dueDate','assignedUserId'] loop
    max_length:=case field_name when 'woNumber' then 160 when 'propertyAddress' then 500
@@ -56,7 +56,8 @@ begin
    if jsonb_typeof(p_payload->field_name)<>'string' or char_length(p_payload->>field_name)>max_length
    then raise exception 'Invalid job draft field' using errcode='22023';end if;
   end loop;
-  if jsonb_typeof(p_payload->'requirements')<>'object'
+  if jsonb_typeof(p_payload->'requirementsLegacy')<>'boolean'
+    or jsonb_typeof(p_payload->'requirements')<>'object'
     or jsonb_typeof(p_payload->'expectedRevision') not in ('string','null')
     or coalesce(char_length(p_payload->>'expectedRevision'),0)>36
   then raise exception 'Invalid job draft requirements' using errcode='22023';end if;
