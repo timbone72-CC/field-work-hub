@@ -48,6 +48,8 @@
   create.addEventListener('toggle', () => {
     if (create.open && root.dataset.fwhView && root.dataset.fwhView !== 'create') select('create', false);
   });
+  // Preparation can reuse already-open details, which emits no native toggle.
+  create.addEventListener('fwh-create-prepared', () => select('create', false));
   document.getElementById('sign-out').addEventListener('click', () => select('home', false, true));
 
   // Contractor management and Product Owner controls are inserted/removed by
