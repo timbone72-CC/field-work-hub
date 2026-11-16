@@ -1517,8 +1517,11 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     // Phase 6B: the repeat action creates ONLY a fresh draft with a new
     // requirement revision, never the old WO number/assignment/due date.
     await page.evaluate(async()=>{
-      document.getElementById('create-wo-details').open=true;
-      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const create=document.getElementById('create-wo-details');
+      if(!create.open)await new Promise(resolve=>{
+        create.addEventListener('toggle',resolve,{once:true});
+        create.open=true;
+      });
       document.getElementById('results-card').dataset.fwhView='work';
     });
     rows[50].run={requirement_snapshot:{schema:1,revision:uuid(7700),
