@@ -1575,6 +1575,32 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#work-type').dispatchEvent('change');
     assert.equal(await page.locator('#create-photo-requirements').getByLabel('Photo template').locator('option').count(),2,
       'An unassigned Create draft has only organization-wide templates');
+    // Cancelling instruction replacement keeps both the draft and truthful
+    // choices after a work-type change or an explicit template selection.
+    const createTemplateChoice=page.locator('#create-photo-requirements').getByLabel('Photo template');
+    const savedInstructions=await page.locator('#instructions').inputValue();
+    const savedRequirements=await page.evaluate(()=>JSON.stringify(createPhotos.value));
+    await page.locator('#instructions').fill('Keep unfinished instructions');
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.dismiss()),
+      page.locator('#work-type-choice').selectOption('Property inspection')
+    ]);
+    assert.equal(await createTemplateChoice.locator('option').count(),2,
+      'Cancelling the default must keep its work-type template available');
+    assert.equal(await createTemplateChoice.inputValue(),'');
+    assert.equal(await page.locator('#instructions').inputValue(),'Keep unfinished instructions');
+    assert.equal(await page.evaluate(()=>JSON.stringify(createPhotos.value)),savedRequirements);
+    await Promise.all([
+      page.waitForEvent('dialog').then(dialog=>dialog.dismiss()),
+      createTemplateChoice.selectOption(uuid(9970))
+    ]);
+    assert.equal(await createTemplateChoice.inputValue(),'',
+      'Cancelled explicit template must not be displayed as applied');
+    assert.equal(await page.evaluate(()=>JSON.stringify(createPhotos.value)),savedRequirements);
+    await page.locator('#work-type-choice').selectOption('');
+    await page.locator('#work-type').fill('Property inspection');
+    await page.locator('#work-type').dispatchEvent('change');
+    await page.locator('#instructions').fill(savedInstructions);
     rows[50].client_company_id=uuid(9981);
     await page.evaluate(async()=>{await refreshWorkOrders();});
     await page.locator('.job-link').first().click();

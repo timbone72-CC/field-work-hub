@@ -102,7 +102,11 @@ class PhotoRequirementEditor {
     const t = this.applicable().find(t=>t.id===id);
     if (t) {
       PhotoRules.validate(t.requirements);
-      if (this.onTemplateApplied && this.onTemplateApplied(t)===false) return;
+      if (this.onTemplateApplied && this.onTemplateApplied(t)===false) {
+        // A work-type change or native select already changed the displayed
+        // choice. Refresh options while keeping the unapplied draft intact.
+        this.refreshSuggestions(); return;
+      }
     }
     this.selectedId=t?.id||'';
     this.value=t ? structuredClone(t.requirements) : PhotoRules.empty();
