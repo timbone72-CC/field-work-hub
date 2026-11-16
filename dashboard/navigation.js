@@ -19,8 +19,12 @@
     if (tile) tile.hidden = !available;
     if (!available && root.dataset.fwhView === 'team') select('home', false);
   }
-  function select(view, scroll = true) {
+  function select(view, scroll = true, guarded = false) {
     if (!views.has(view) || (view === 'team' && !teamAvailable())) return;
+    if (!guarded && root.dataset.fwhView==='create' && view!=='create'
+      && typeof CreateJobDrafts!=='undefined') {
+      CreateJobDrafts.guard(()=>select(view,scroll,true));return;
+    }
     root.dataset.fwhView = view;
     for (const button of links) {
       if (button.dataset.fwhGo === view) button.setAttribute('aria-current', 'page');
@@ -44,7 +48,7 @@
   create.addEventListener('toggle', () => {
     if (create.open && root.dataset.fwhView && root.dataset.fwhView !== 'create') select('create', false);
   });
-  document.getElementById('sign-out').addEventListener('click', () => select('home', false));
+  document.getElementById('sign-out').addEventListener('click', () => select('home', false, true));
 
   // Contractor management and Product Owner controls are inserted/removed by
   // their own authorized modules. Navigation only observes actual DOM presence.

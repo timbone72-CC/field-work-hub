@@ -304,16 +304,19 @@ loginForm.addEventListener('submit', async (event) => {
 createForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   // Ignore a second Enter/submit event while the first server create is pending.
-  if (createButton.disabled) return;
+  if (createButton.disabled || createForm.inert) return;
   setCreateStatus('Creating work order…', false);
-  createButton.disabled = true;
+  createButton.disabled = true;createForm.inert=true;
 
+  const createEpoch=adminSessionEpoch,createActor=currentUser?.id,createOrg=currentUser?.app_metadata?.organization_id;
+  const stillCreator=()=>!!accessToken&&adminSessionEpoch===createEpoch&&currentUser?.id===createActor
+    && currentUser?.app_metadata?.organization_id === createOrg;
   const mode = currentWoNumberMode();
   const rememberMode = rememberWoNumberMode.checked;
 
   let confirmedCreated = null;
   try {
-    const createdRows = await createWorkOrder({
+    const creationFields = {
       generateWoNumber: mode === 'auto',
       woNumber: mode === 'custom' ? woNumberInput.value.trim() : null,
       propertyAddress: propertyAddressInput.value.trim(),
@@ -322,7 +325,9 @@ createForm.addEventListener('submit', async (event) => {
       dueDate: dueDateInput.value,
       assignedUserId: assigneeSelect.value,
       requirements: createPhotos.snapshot()
-    });
+    };
+    if(typeof CreateJobDrafts==='undefined')throw Error('Reload the dashboard before creating work; draft controls are unavailable.');
+    const createdRows = await CreateJobDrafts.submit(creationFields);
 
     const created = Array.isArray(createdRows) ? createdRows[0] : null;
     if (created?.work_order_id) confirmedCreated = created;
@@ -330,7 +335,10 @@ createForm.addEventListener('submit', async (event) => {
       throw new Error('The server did not return the created work order.');
     }
 
-    setCreateStatus(`Created and assigned ${created.wo_number}. Waiting for contractor receipt.`, false);
+    if(!stillCreator())return;
+    if(typeof CreateJobDrafts!=='undefined')await CreateJobDrafts.created();
+    if(!stillCreator())return;
+    setCreateStatus(`Created and assigned ${created.wo_number}. Check Work Orders for current receipt and status.`, false);
     createForm.reset();
     createPhotos.load(null);
     fillWorkTypes();
@@ -338,8 +346,10 @@ createForm.addEventListener('submit', async (event) => {
     applyWoNumberMode(mode);
     persistWoNumberModePreference();
     fillAssigneeSelect(assigneeSelect, assignableUsers, 'Choose Team user');
+    if(typeof CreateJobDrafts!=='undefined')CreateJobDrafts.refreshed();
     await refreshWorkOrders();
   } catch (error) {
+    if(!stillCreator())return;
     const detail = error instanceof Error ? error.message : 'Unexpected response.';
     if (confirmedCreated) {
       // A confirmed create must not become a failed create when list refresh fails.
@@ -350,7 +360,7 @@ createForm.addEventListener('submit', async (event) => {
       setCreateStatus(`Creation not confirmed. ${detail} Check Work Orders before submitting again to avoid duplicates.`, true);
     }
   } finally {
-    createButton.disabled = false;
+    createButton.disabled = false;createForm.inert=false;
   }
 });
 

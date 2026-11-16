@@ -206,6 +206,7 @@ const JobWorkspace = (() => {
   function dirty() { return (detailsDirty() && !(typeof JobDrafts !== 'undefined' && JobDrafts.isSaved())) || !!ClientRelease.dirty() || !!CorrectionDraft.dirty(); }
   function reset() {
     if (typeof JobDrafts !== 'undefined') JobDrafts.reset();
+    if (typeof CreateJobDrafts !== 'undefined') CreateJobDrafts.reset();
     PrivateReview.reset(); ClientRelease.reset(); CorrectionDraft.reset(); FollowupManagement.reset(); ReleaseHistory.reset();
     revision++; selection++; account = ''; baseline = null; pending = null; selectedRow = null; needsReload = false;
     filterReadFailed = false;
@@ -575,6 +576,7 @@ const JobWorkspace = (() => {
   }
   function init() {
     if (typeof JobDrafts !== 'undefined') JobDrafts.init();
+    if (typeof CreateJobDrafts !== 'undefined') CreateJobDrafts.init();
     CorrectionDraft.init(); FollowupManagement.init(); PrivateReview.init(); ClientRelease.init(); ReleaseHistory.init();
     el('job-address-load').addEventListener('click',()=>loadAddressContext(0));
     el('job-address-next').addEventListener('click',()=>loadAddressContext(addressOffset+50));

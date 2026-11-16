@@ -153,6 +153,24 @@
 
           <div id="create-photo-requirements"></div>
 
+          <section aria-label="Your new-work draft">
+            <p class="muted">Save draft keeps an unfinished entry on the server. Create &amp; Assign creates the actual job.</p>
+            <div class="row gap">
+              <button id="create-draft-save" type="button" class="secondary" disabled>Save draft</button>
+              <button id="create-draft-check" type="button" class="secondary" disabled>Check saved draft</button>
+              <button id="create-draft-resume" type="button" class="secondary" hidden>Resume saved draft</button>
+              <button id="create-draft-discard" type="button" class="secondary" hidden>Discard saved draft</button>
+            </div>
+            <p id="create-draft-status" class="status" role="status" aria-live="polite"></p>
+            <div id="create-draft-unsaved" class="unsaved-choice" hidden>
+              <p>Your new-work entry has unsaved changes. Save a draft, stay, or discard unsaved changes before leaving.</p>
+              <div class="row gap">
+                <button id="create-draft-save-continue" type="button">Save draft and continue</button>
+                <button id="create-draft-stay" type="button" class="secondary">Stay here</button>
+                <button id="create-draft-discard-local" type="button" class="secondary">Discard unsaved changes</button>
+              </div>
+            </div>
+          </section>
           <button id="create-wo" type="submit">Create &amp; Assign</button>
           <p id="create-status" class="status" role="status" aria-live="polite"></p>
         </form>
@@ -459,7 +477,7 @@
       </section>
     </section>
   </main>
-  <script src="navigation.js?v=modern-premium-stage2b-20261017" defer></script>
+  <script src="navigation.js?v=6a-create-drafts-20261115" defer></script>
   <script src="photo-requirements.js?v=phase4-1" defer></script>
   <script src="repeat-run-copies.js?v=phase6b-20261029" defer></script>
   <script src="correction-draft.js?v=phase6c-20261013-eligibility" defer></script>
@@ -471,9 +489,10 @@
   <script src="push-device.js?v=phase6e-20261011" defer></script>
   <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
-  <script src="job-drafts.js?v=6a-drafts-20261115" defer></script>
-  <script src="job-workspace.js?v=6a-drafts-phase6c-20261115" defer></script>
-  <script src="app.js?v=6a-drafts-phase56-20261115" defer></script>
+  <script src="job-drafts.js?v=6a-create-drafts-20261115" defer></script>
+  <script src="create-drafts.js?v=6a-create-drafts-20261115" defer></script>
+  <script src="job-workspace.js?v=6a-create-drafts-phase6c-20261115" defer></script>
+  <script src="app.js?v=6a-create-drafts-phase56-20261115" defer></script>
   <script src="recovery.js?v=phase5e-recovery-20261012" defer></script>
   <script src="session.js?v=phase56-20261013-request-stage" defer></script>
   <script src="contractors.js?v=job-workspace-20261007-1" defer></script>

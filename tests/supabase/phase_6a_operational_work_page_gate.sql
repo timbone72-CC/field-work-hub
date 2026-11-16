@@ -15,10 +15,11 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'session_id',actor,
   'role','authenticated','app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
  insert into private.client_companies(id,organization_id,name) values(company,org,'QUEUE COMPANY');
+ -- Match the organization's calendar day, including hours when UTC is tomorrow.
  for n in 1..1000 loop
    select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,
     'QUEUE-'||lpad(n::text,4,'0'),'Queue literal 50%_* property '||n,'INSPECTION','Queue only',
-    current_date-1,worker,cfg) j;
+    (now() at time zone 'America/Chicago')::date-1,worker,cfg) j;
    ids:=array_append(ids,wo);
  end loop;
  update public.work_orders set client_company_id=company where id=any(ids);

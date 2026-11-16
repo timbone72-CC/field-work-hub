@@ -18,7 +18,7 @@ function createHarness(createResult, refreshFailure = null) {
   const notices = [];
   const button = { disabled: false };
   const sandbox = {
-    Error,
+    Error,adminSessionEpoch:1,accessToken:'token-a',currentUser:{id:'admin-a',app_metadata:{organization_id:'org-a'}},
     createForm: {
       addEventListener: (type, fn) => {
         assert.equal(type, 'submit');
@@ -26,6 +26,7 @@ function createHarness(createResult, refreshFailure = null) {
       },
       reset: () => { resets++; }
     },
+    CreateJobDrafts:{submit:()=>sandbox.createWorkOrder(),created:async()=>{},refreshed(){}},
     createButton: button,
     rememberWoNumberMode: { checked: true },
     currentWoNumberMode: () => 'custom',
@@ -58,7 +59,7 @@ function createHarness(createResult, refreshFailure = null) {
     async run() { await submit({ preventDefault() {} }); },
     get calls() { return { createCalls, refreshCalls, resets }; },
     get messages() { return notices; },
-    button
+    button,sandbox
   };
 }
 
@@ -108,4 +109,12 @@ test('confirmed create with successful refresh preserves the normal success flow
   assert.equal(h.button.disabled, false);
   assert.match(h.messages.at(-1).message, /Created and assigned WO-102/);
   assert.equal(h.messages.at(-1).error, false);
+});
+
+test('late previous-account create cannot clear a new account draft or form',async()=>{
+ let finish;const flight=new Promise(r=>{finish=r;});const h=createHarness(()=>flight);
+ let clears=0;h.sandbox.CreateJobDrafts={submit:()=>h.sandbox.createWorkOrder(),created:async()=>{clears++;},refreshed(){}};
+ const work=h.run();h.sandbox.currentUser={id:'admin-b',app_metadata:{organization_id:'org-b'}};
+ finish([{work_order_id:'confirmed-old',wo_number:'OLD'}]);await work;
+ assert.equal(clears,0);assert.equal(h.calls.createCalls,1);assert.equal(h.calls.resets,0);assert.equal(h.calls.refreshCalls,0);
 });
