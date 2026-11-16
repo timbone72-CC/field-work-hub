@@ -1516,6 +1516,14 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.setViewportSize({ width: 1280, height: 900 });
     // Phase 6B: the repeat action creates ONLY a fresh draft with a new
     // requirement revision, never the old WO number/assignment/due date.
+    await page.evaluate(async()=>{
+      const create=document.getElementById('create-wo-details');
+      if(!create.open)await new Promise(resolve=>{
+        create.addEventListener('toggle',resolve,{once:true});
+        create.open=true;
+      });
+      document.getElementById('results-card').dataset.fwhView='work';
+    });
     rows[50].run={requirement_snapshot:{schema:1,revision:uuid(7700),
       total:{enabled:false,minimum:0},items:[{
         id:uuid(7701),label:'Front',enabled:true,minimum:2,
@@ -1525,6 +1533,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('dialog').open);
     await page.locator('#prepare-repeat-work').click();
     await wait(page, () => document.querySelector('#create-wo-details').open);
+    await wait(page,()=>document.querySelector('#results-card').dataset.fwhView==='create');
+    assert.equal(await page.locator('#create-wo-details').isVisible(),true,
+      'Repeat work reveals the prepared form even when details was already open');
     assert.equal(await page.locator('#property-address').inputValue(),rows[50].property_address);
     assert.equal(await page.locator('#work-type').inputValue(),rows[50].work_type);
     assert.equal(await page.locator('#instructions').inputValue(),rows[50].instructions);
@@ -1534,6 +1545,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#wo-number').inputValue(),'');
     assert.equal(await page.locator('#create-photo-requirements input[type="number"]').count(),2);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    await page.evaluate(()=>document.getElementById('results-card').dataset.fwhView='work');
     // Phase 6B custom choice keeps the address but does not inherit the old
     // work type, instructions, or photo minimums. Replacing a draft is explicit.
     await page.locator('.job-link').first().click();
@@ -1544,11 +1556,15 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     ]);
     assert.equal(await page.locator('#work-type').inputValue(),rows[50].work_type,
       'Cancelled replacement must preserve the existing repeat draft');
+    assert.equal(await page.locator('#results-card').getAttribute('data-fwh-view'),'work',
+      'Declining preparation must not navigate away');
     await Promise.all([
       page.waitForEvent('dialog').then(dialog => dialog.accept()),
       page.locator('#prepare-custom-work').click()
     ]);
     await wait(page, () => document.querySelector('#create-status').textContent.includes('New custom work-order draft'));
+    assert.equal(await page.locator('#results-card').getAttribute('data-fwh-view'),'create');
+    assert.equal(await page.locator('#create-wo-details').isVisible(),true);
     assert.equal(await page.locator('#property-address').inputValue(),rows[50].property_address);
     assert.equal(await page.locator('#work-type').inputValue(),'');
     assert.equal(await page.locator('#instructions').inputValue(),'');
@@ -1558,6 +1574,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#wo-number-mode-auto').isChecked(),true);
     assert.equal(await page.locator('#create-photo-requirements .photo-item').count(),0);
     assert.equal(requests.some(x=>x.includes('/admin_create_work_order')),false);
+    // Resume the pre-existing all-sections-visible exhaustive fixture.
+    await page.evaluate(()=>document.getElementById('results-card').removeAttribute('data-fwh-view'));
     // Company-scoped templates appear only on a server-authorized company WO.
     templateRows.push(
       {id:uuid(9970),company_id:null,name:'Organization inspection',active:true,

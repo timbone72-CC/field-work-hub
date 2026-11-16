@@ -123,7 +123,9 @@ function prepareWorkFromSelectedJob(copyPriorDetails) {
       }
       createPhotos.load(snapshot);
       fillWorkTypes();
-      document.getElementById('create-wo-details').open=true;
+      const preparedForm=document.getElementById('create-wo-details');
+      preparedForm.open=true;
+      preparedForm.dispatchEvent(new Event('fwh-create-prepared'));
       setCreateStatus(copyPriorDetails
         ? 'New work-order draft prepared from prior job. Enter a new due date and assignee; review all fields before creating.'
         : 'New custom work-order draft at this address. Choose work type, instructions, photos, due date and assignee before creating.',false);
