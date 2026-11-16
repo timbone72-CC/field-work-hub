@@ -4,6 +4,12 @@ const CorrectionDraft=(()=>{
   let releaseRev='',preview=null,busy=false,uncertain=false,issues=[];
   const el=id=>document.getElementById(id);
   const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // JSONB can reorder object fields; issue values and array order stay exact.
+  function sameJson(a,b){
+    const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'
+      ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
+    return JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
+  }
   function valid(g,id,token){return g===generation&&wo===id&&!!token&&accessToken===token&&editWorkOrderIdInput.value===id;}
   async function rpc(name,payload,token){
     const response=await adminFetch(SUPABASE_URL+'/rest/v1/rpc/'+name,{
@@ -197,12 +203,12 @@ const CorrectionDraft=(()=>{
         ...body,p_issues:savedIssues},token);
       if(!valid(gen,id,token))return false;
       if(!UUID.test(result.revision)||result.status!=='DRAFT'
-         ||JSON.stringify(result.issues)!==JSON.stringify(savedIssues))
+         ||!sameJson(result.issues,savedIssues))
         throw Error('Atomic correction and issue save did not confirm an exact revision.');
       const updated=await rpc('admin_correction_state',{p_wo:id},token);
       if(!valid(gen,id,token))return false;
       if(updated.draft?.revision!==result.revision
-          ||JSON.stringify(updated.draft?.issues)!==JSON.stringify(savedIssues))
+          ||!sameJson(updated.draft?.issues,savedIssues))
         throw Error('Saved correction issues changed during verification. Reload.');
       fill(updated);status('Draft saved. Review exact summary before Dispatch.');
       return true;

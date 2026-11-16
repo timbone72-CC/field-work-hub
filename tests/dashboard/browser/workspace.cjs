@@ -510,7 +510,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         assert.equal(p.p_issues[0].photo_id,reviewPhoto);
         assert.equal(p.p_issues[0].reason,'Blurry exterior');
         assert.equal(p.p_issues[0].requested_count,1);
-        correctionIssues=structuredClone(p.p_issues);
+        // Match JSONB's field ordering instead of echoing browser insertion order.
+        correctionIssues=p.p_issues.map(i=>({reason:i.reason,item_id:i.item_id,
+          photo_id:i.photo_id,requested_count:i.requested_count}));
         correctionDraftRev=uuid(9966);
         correctionDraft={id:uuid(9964),revision:correctionDraftRev,status:'DRAFT',
           origin_run_id:p.p_expected_run,expected_wo_updated_at:p.p_expected_wo_updated_at,
@@ -529,7 +531,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         assert.equal(p.p_issues[0].photo_id,reviewPhoto);
         assert.equal(p.p_issues[0].reason,'Blurry exterior');
         assert.equal(p.p_issues[0].requested_count,1);
-        correctionIssues=p.p_issues;correctionDraftRev=uuid(9966);
+        correctionIssues=p.p_issues.map(i=>({reason:i.reason,item_id:i.item_id,photo_id:i.photo_id,requested_count:i.requested_count}));correctionDraftRev=uuid(9966);
         correctionDraft.revision=correctionDraftRev;
         correctionDraft.issues=structuredClone(correctionIssues);
         return reply({work_order_id:uuid(51),draft_id:correctionDraft.id,
