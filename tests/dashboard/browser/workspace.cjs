@@ -1495,6 +1495,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await wait(page, () => document.querySelector('#release-status').textContent.includes('Package DRAFT'));
     assert.equal(await page.locator('#release-approve').isDisabled(), true,
       'Approval cannot precede viewing the exact preview');
+    assert.equal(await page.locator('#release-approve-send').isDisabled(), true,
+      'Combined approval and Send also requires the one exact preview');
     await page.locator('[data-job-tab="history"]').click();
     await wait(page,()=>document.querySelector('#job-history-status').textContent.includes('read-only'));
     assert.match(await page.locator('#job-history-packages').innerText(),/DELIVERED/);
@@ -1502,7 +1504,19 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('[data-job-tab="delivery"]').click();
     await page.locator('#release-preview').click();
     await wait(page, () => !document.querySelector('#release-exact-preview').hidden);
-    assert.match(await page.locator('#release-exact-preview').innerText(), /DISPOSABLE VERIFIED TEST/);
+    assert.match(await page.locator('#release-exact-preview').innerText(), /Client: DISPOSABLE COMPANY/);
+    assert.match(await page.locator('#release-exact-preview').innerText(), /Photos included: 1/);
+    assert.equal((await page.locator('#release-exact-preview').innerText()).includes('manifest_sha256'),false);
+    assert.equal(await page.locator('#release-approve-send').isEnabled(),true);
+    assert.equal(await page.locator('#release-approve').innerText(),'Approve for later');
+    const beforeCombinedCancel=requests.filter(x=>x.includes('admin_approve_package')).length;
+    const declineCombined=page.waitForEvent('dialog').then(dialog=>{
+      assert.match(dialog.message(),/Approve this exact reviewed package and queue/);
+      return dialog.dismiss();
+    });
+    await page.locator('#release-approve-send').click();await declineCombined;
+    assert.equal(requests.filter(x=>x.includes('admin_approve_package')).length,beforeCombinedCancel);
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
     await page.locator('#release-approve').click();
     await wait(page, () => document.querySelector('#release-status').textContent.includes('Package APPROVED'));
     assert.equal(await page.locator('#release-send').isDisabled(), true,
