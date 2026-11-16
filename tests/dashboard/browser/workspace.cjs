@@ -1523,6 +1523,18 @@ const wait = async (page, condition) => page.waitForFunction(condition);
       'Unverified trusted provider worker still prevents Send after approval');
     assert.equal(requests.some(x => x.includes('admin_queue_package')), false,
       'No client delivery can happen without explicit enabled Send');
+    // The office stays in this exact open job as its existing delivery finishes.
+    simulatedPackage={...simulatedPackage,status:'QUEUED',revision:uuid(9994)};
+    await page.locator('[data-job-tab="delivery"]').click();
+    await wait(page,()=>document.querySelector('#release-status').textContent.includes('Package QUEUED'));
+    const retainedNotes=await page.locator('#release-notes').inputValue();
+    simulatedPackage={...simulatedPackage,status:'DELIVERED',revision:uuid(9995)};
+    await page.evaluate(()=>ClientRelease.refreshStatus());
+    await wait(page,()=>document.querySelector('#release-status').textContent.includes('Package DELIVERED'));
+    assert.equal(await page.locator('dialog').evaluate(el=>el.open),true);
+    assert.equal(await page.locator('#job-delivery').isVisible(),true);
+    assert.equal(await page.locator('#release-notes').inputValue(),retainedNotes);
+    assert.equal(requests.some(x=>x.includes('admin_queue_package')),false);
     await page.locator('[data-job-tab="requirements"]').click();
     assert.equal(await page.locator('dialog').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Mobile workspace must not require sideways scrolling');
     await page.screenshot({ path: path.join(output, 'workspace-mobile.png'), fullPage: true });

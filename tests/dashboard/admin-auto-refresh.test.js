@@ -402,3 +402,12 @@ test('disabled-work explanation survives denied recovery without revealing arbit
   assert.equal(f.storage.size,0);assert.match(f.calls.messages.at(-1),/Office work access disabled/);
   assert.doesNotMatch(f.calls.messages.at(-1),/PRIVATE/);
 });
+
+test('the existing visible online refresh tick also requests current package status, without another timer',async()=>{
+ const f=fixture();let packageReads=0;
+ f.context.ClientRelease={refreshStatus:async()=>{packageReads++;}};
+ await f.run('refreshAdminViewAutomatically()');assert.equal(packageReads,1);
+ assert.equal(f.timers.size,1);
+ f.context.document.hidden=true;
+ await f.run('refreshAdminViewAutomatically()');assert.equal(packageReads,1);
+});

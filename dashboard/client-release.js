@@ -3,7 +3,7 @@
 const ClientRelease = (() => {
   let wo = '', seq = 0, config = null, pkg = null, chosen = new Set(), photoFacts = [];
   let savedNotes = '', savedPhotoIds = [], busy = false, loaded = false, previewedHash = null, tooMany = false;
-  let paged=false, photoCursor=null, paging=false;
+  let paged=false, photoCursor=null, paging=false, statusRead=null;
   const el = id => document.getElementById(id);
   const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const status = (id, message) => { el(id).textContent = message; };
@@ -21,7 +21,7 @@ const ClientRelease = (() => {
     seq++; wo=''; config=null; pkg=null; chosen.clear(); photoFacts=[];
     ClientFolderLayout.reset();
     busy=false; loaded=false; savedNotes=''; savedPhotoIds=[]; previewedHash=null; tooMany=false;
-    paged=false;photoCursor=null;paging=false;
+    paged=false;photoCursor=null;paging=false;statusRead=null;
     el('release-photos-more').hidden=true;el('release-photo-count').textContent='No photos selected.';
     el('release-exact-preview').hidden=true; el('release-exact-preview').textContent='';
     for(const id of ['release-status','review-policy-status','release-coverage','release-target']) {
@@ -71,6 +71,15 @@ const ClientRelease = (() => {
       '', 'Client notes: '+(manifest.client_notes||'None'),
       '', 'Approve for later saves approval without sending. Approve & send now requests delivery.'
     ].join('\n');
+  }
+  function packageStatusText(pkg) {
+    return pkg?.status==='APPROVED' && pkg.send_blocked_reason
+        ? `Package APPROVED. ${pkg.send_blocked_reason}`
+        : pkg?.status==='DRAFT' ? 'Package DRAFT. Preview it, then approve for later or approve and send now.'
+        : pkg?.status==='APPROVED' ? 'Package APPROVED. Saved for later; delivery has not been requested.'
+        : pkg?.status==='DELIVERED' ? 'Package DELIVERED. Client delivery receipt confirmed.'
+        : pkg ? `Package ${pkg.status}. Delivery is not confirmed until a verified receipt is recorded.`
+        : 'No package saved. Choose your photos and save a draft.';
   }
   function canApprove() {
     return loaded&&!busy&&pkg?.status==='DRAFT'&&pkg.ready_to_approve===true&&!dirty()
@@ -138,13 +147,7 @@ const ClientRelease = (() => {
         : 'No verified active destination. Package approval and Send remain blocked.';
       el('release-coverage').textContent=(tooMany?'Photo selection is unavailable until paging is verified. ':'')
         +(response.coverage_message||'Select eligible verified photos from original and corrective visits; all selected photos must pass exact package coverage.');
-      status('release-status',pkg?.status==='APPROVED' && pkg.send_blocked_reason
-        ? `Package APPROVED. ${pkg.send_blocked_reason}`
-        : pkg?.status==='DRAFT' ? 'Package DRAFT. Preview it, then approve for later or approve and send now.'
-        : pkg?.status==='APPROVED' ? 'Package APPROVED. Saved for later; delivery has not been requested.'
-        : pkg?.status==='DELIVERED' ? 'Package DELIVERED. Client delivery receipt confirmed.'
-        : pkg ? `Package ${pkg.status}. Delivery is not confirmed until a verified receipt is recorded.`
-        : 'No package saved. Choose your photos and save a draft.');
+      status('release-status',packageStatusText(pkg));
       loaded=true;buttons();
     }catch(error){if(valid(n,id,token)){status('release-status',error.message);status('review-policy-status',error.message);loaded=false;buttons();}}
   }
@@ -240,6 +243,30 @@ const ClientRelease = (() => {
       }
     }finally{if(wo===id&&token===accessToken)setBusy(false);}
   }
+  // Read only the in-flight package's status on the existing Admin refresh tick.
+  async function refreshStatus(){
+    if(!loaded||busy||statusRead||dirty()||!pkg
+        ||!['QUEUED','DELIVERING'].includes(pkg.status)||!editSection.open
+        ||el('job-delivery').hidden||document.hidden||navigator.onLine===false)return;
+    const id=wo,n=seq,token=accessToken,packageId=pkg.id,check={};
+    if(!valid(n,id,token))return;
+    statusRead=check;
+    try {
+      const response=await rpc('admin_package_state',{p_wo:id},token);
+      if(!valid(n,id,token)||busy||dirty()||!editSection.open||el('job-delivery').hidden)return;
+      const latest=response.package;
+      if(response.work_order_id!==id||latest?.id!==packageId||!UUID.test(latest.revision)
+          ||!['QUEUED','DELIVERING','FAILED','UNCERTAIN','DELIVERED'].includes(latest.status))
+        throw Error('Package status identity could not be confirmed.');
+      // Keep selection, notes, preview and scroll intact; a status read grants no Send.
+      pkg={...pkg,status:latest.status,revision:latest.revision,can_send:false};
+      status('release-status',packageStatusText(pkg));buttons();
+    }catch(error){
+      if(valid(n,id,token)&&!busy&&editSection.open&&!el('job-delivery').hidden)
+        status('release-status','Unable to refresh delivery status. Last confirmed status: '
+          +pkg.status+'. Automatic updates will retry.');
+    }finally{if(statusRead===check)statusRead=null;}
+  }
   async function loadNextPhotos(){
     if(!paged||!photoCursor||paging||busy||!loaded||!wo||!accessToken)return;
     const n=seq,id=wo,token=accessToken,cursor=photoCursor;
@@ -315,5 +342,5 @@ const ClientRelease = (() => {
         p_expected_revision:pkg?.revision,p_manifest_sha256:pkg?.manifest_sha256});
     });
   }
-  return {init,open:load,reset,dirty,saveDraft};
+  return {init,open:load,reset,dirty,saveDraft,refreshStatus};
 })();
