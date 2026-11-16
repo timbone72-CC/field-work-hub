@@ -78,3 +78,5 @@ The prior 5,216-line record at blob `d7c380ab1a22858baf02c5d2860e1a24dbfc2898`, 
 | 56 | [Dated handoff part 56](2026-11-15/PHASE_5_6_HISTORY_PART_56.md) | Superseded November 15 6A source and selection handoffs, verbatim |
 
 | 57 | [Dated handoff part 57](2026-11-15/PHASE_5_6_HISTORY_PART_57.md) | Superseded November 15 draft source/deployment handoffs, verbatim |
+
+| 58 | [Dated handoff part 58](2026-11-15/PHASE_5_6_HISTORY_PART_58.md) | Superseded November 15 Create & Assign TEST deployment handoff, verbatim |
