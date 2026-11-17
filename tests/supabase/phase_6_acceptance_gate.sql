@@ -15,7 +15,7 @@ begin
    'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
  execute 'set local role authenticated';
  select (j->>'work_order_id')::uuid into wo
-   from public.admin_create_work_order_v4(false,'ACK-TEST-'||gen_random_uuid(),
+   from fwh_test_fixtures.legacy_create_work_order_v4(false,'ACK-TEST-'||gen_random_uuid(),
      'Synthetic address','CHECK','',current_date,contractor,cfg) j;
  execute 'reset role';
  select current_run_id into run from public.work_orders where id=wo;

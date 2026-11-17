@@ -28,7 +28,7 @@ begin
  or has_table_privilege('authenticated','public.photo_templates','UPDATE')
  or has_function_privilege('anon','public.register_photo_finish_set(uuid,uuid,uuid,uuid,uuid,jsonb,text,text)','EXECUTE') then raise exception 'Broad phase 4 grants'; end if;
  perform set_config('request.jwt.claims',claims_admin,true);execute 'set local role authenticated';
- select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,'FWH-P4-'||gen_random_uuid(),'FWH TEST','TEST','',current_date,a,cfg) j;
+ select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,'FWH-P4-'||gen_random_uuid(),'FWH TEST','TEST','',current_date,a,cfg) j;
  select current_run_id into run from public.work_orders where id=wo;
  select id into instance from public.work_order_assignments where run_id=run and assignment_ended_at is null;
  select (j->'requirement_snapshot'->>'revision')::uuid into old_revision from public.field_assignments() j where j->>'id'=wo::text;
@@ -89,7 +89,7 @@ begin
  if (select count(*) from public.photos where finish_set_id=set_id)<>5 or exists(select 1 from public.photos where finish_set_id=set_id and (sync_status<>'WAITING' or remote_file_id is not null or uploaded_at is not null)) then raise exception 'Capture metadata claimed delivery';end if;
  -- All-off remains configured, requiring revision and a stable empty Finish set.
  perform set_config('request.jwt.claims',claims_admin,true);
- select (j->>'work_order_id')::uuid into wo2 from public.admin_create_work_order_v4(false,'FWH-P4-OFF-'||gen_random_uuid(),'FWH TEST','TEST','',current_date,a,off_cfg) j;
+ select (j->>'work_order_id')::uuid into wo2 from fwh_test_fixtures.legacy_create_work_order_v4(false,'FWH-P4-OFF-'||gen_random_uuid(),'FWH TEST','TEST','',current_date,a,off_cfg) j;
  select current_run_id into run2 from public.work_orders where id=wo2;
  select id into instance2 from public.work_order_assignments where run_id=run2 and assignment_ended_at is null;
  select (j->'requirement_snapshot'->>'revision')::uuid into revision from public.field_assignments() j where j->>'id'=wo2::text;

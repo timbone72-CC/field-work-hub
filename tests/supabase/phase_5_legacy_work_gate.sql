@@ -19,7 +19,7 @@ begin
   cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
   perform set_config('request.jwt.claims',jsonb_build_object('sub',p_admin,'session_id',p_admin,
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',p_org))::text,true);
-  select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,'RECOVERY-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
+  select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,'RECOVERY-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
   update public.work_orders set responsible_team_id=p_team where id=wo;
   select current_run_id into run from public.work_orders where id=wo;
   select id into instance from public.work_order_assignments where run_id=run and assignment_ended_at is null;
@@ -58,10 +58,10 @@ begin
  insert into private.admin_team_memberships(organization_id,team_id,user_id,active) values(org,team_b,other_admin,true);
  insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values(org,team_b,c,true);
  perform pg_temp.claims(admin_id,'ADMIN',org);
- select work_order_id into wo from public.admin_create_work_order(false,'CUTOVER-'||gen_random_uuid(),'TEST','TEST','',current_date,a);
+ select work_order_id into wo from fwh_test_fixtures.legacy_create_work_order(false,'CUTOVER-'||gen_random_uuid(),'TEST','TEST','',current_date,a);
  if (select responsible_team_id from public.work_orders where id=wo)<>team then raise exception 'Dispatch omitted explicit team';end if;
  perform pg_temp.claims(other_admin,'ADMIN',org);
- select work_order_id into wo_b from public.admin_create_work_order(false,'CUTOVER-B-'||gen_random_uuid(),'TEST','TEST','',current_date,c);
+ select work_order_id into wo_b from fwh_test_fixtures.legacy_create_work_order(false,'CUTOVER-B-'||gen_random_uuid(),'TEST','TEST','',current_date,c);
  insert into public.work_orders(organization_id,assigned_user_id,wo_number,property_address,work_type,due_date)
  values(org,a,'UNMAPPED-'||gen_random_uuid(),'TEST','TEST',current_date) returning id into unmapped;
  -- Synthetic historical Admin assignment; disable only this test fixture INSERT guard.
@@ -87,7 +87,7 @@ begin
    or exists(select 1 from public.admin_list_assignable_users() u where u.user_id=c) then raise exception 'Office crossed team/unmapped boundary';end if;
  perform pg_temp.deny(format('select * from public.start_work(%L)',legacy));
  perform pg_temp.deny(format('select * from public.acknowledge_assignment_received(%L)',legacy));
- perform pg_temp.deny(format('select * from public.admin_create_work_order(false,%L,%L,%L,%L,current_date,%L)','DENIED','TEST','TEST','',c));
+ perform pg_temp.deny(format('select * from fwh_test_fixtures.legacy_create_work_order(false,%L,%L,%L,%L,current_date,%L)','DENIED','TEST','TEST','',c));
  perform pg_temp.deny(format('select * from public.admin_update_work_order(%L,%L,%L,%L,%L,current_date,%L)',wo,'DENIED','TEST','TEST','',c));
  perform pg_temp.deny(format('select * from public.admin_set_photo_requirements(%L,null,%L::jsonb)',unmapped,cfg));
  perform pg_temp.deny(format('select * from public.admin_update_work_order(%L,%L,%L,%L,%L,current_date,%L)',unmapped,'DENIED','TEST','TEST','',a));
@@ -128,7 +128,7 @@ begin
  perform pg_temp.deny('select * from public.admin_list_assignable_users()');
  perform pg_temp.deny('select * from public.photo_templates');
  perform pg_temp.deny(format('select * from public.admin_save_photo_template(%L,%L,%L,%L::jsonb,true,false,null)',gen_random_uuid(),'DENIED','TEST',cfg));
- perform pg_temp.deny(format('select * from public.admin_create_work_order(false,%L,%L,%L,%L,current_date,%L)','DENIED','TEST','TEST','',a));
+ perform pg_temp.deny(format('select * from fwh_test_fixtures.legacy_create_work_order(false,%L,%L,%L,%L,current_date,%L)','DENIED','TEST','TEST','',a));
  perform pg_temp.deny(format('select * from public.admin_update_work_order(%L,%L,%L,%L,%L,current_date,%L)',wo,'DENIED','TEST','TEST','',a));
  execute 'reset role';
  -- Freeze before Contractor disablement: recovery survives but operational access does not.

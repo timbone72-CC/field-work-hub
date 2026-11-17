@@ -22,7 +22,7 @@ begin
  cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
   'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
  select (j->>'work_order_id')::uuid into wo
-  from public.admin_create_work_order_v4(
+  from fwh_test_fixtures.legacy_create_work_order_v4(
    false,'CAS-'||gen_random_uuid(),'Synthetic Address','INSPECTION','original',
    current_date,contractor,cfg) j;
  select updated_at into original_updated from public.work_orders where id=wo;

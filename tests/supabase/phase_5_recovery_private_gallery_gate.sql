@@ -31,7 +31,7 @@ begin
   perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,
     'session_id',admin_id,'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
   select (j->>'work_order_id')::uuid into wo
-    from public.admin_create_work_order_v4(false,'RECOVERY-VIEW','TEST','TEST','',
+    from fwh_test_fixtures.legacy_create_work_order_v4(false,'RECOVERY-VIEW','TEST','TEST','',
       current_date,capturer,config) j;
   select current_run_id into v_run from public.work_orders where id=wo;
   select id into instance from public.work_order_assignments where run_id=v_run and assignment_ended_at is null;

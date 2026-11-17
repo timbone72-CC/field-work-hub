@@ -1,0 +1,21 @@
+# Phase 5/6 history — part 61
+
+Superseded November 16 correction-save and returned-visit checkpoints, preserved verbatim.
+
+## November 16 — same-WO returned visit and photo review accepted
+
+Current evidence supersedes dated pending steps below; **6B-T01 remains ACTIVE**. PR #115 merged at `4707cb45`; exact-head CI (236 dashboard tests, browser/Android/database/governance), Pages and live asset parity PASS. Operator reopened the retained correction, reviewed its exact summary and dispatched one successor. Hosted readback: same WO TEST-P4-REVISION-1005-D, run 2/new assignment, fresh receipt and distinct confirmed Accept. Operator then captured one Front photo (phone Front 1/1), Finished and refreshed: phone/server FIELD_COMPLETE, one RECEIVED photo with verified matching private Storage receipt. Admin previewed and approved **55bb8935 / Run 2 / Front**; server agrees APPROVED. Earlier run/four photos/decisions and prior delivered package remain retained. Credit these narrow observations once.
+
+Offline job viewing is observed; operator never saw pending-sync wording, so **offline ACK/restart remains UNVERIFIED**. Generic waiting-to-sync banner persisted beside confirmed ACK; presentation inconsistency retained. No fabricated repeat, Send, cleanup or APK change. Next checkpoint: Delivery selects the new approved Front into a separate Run 2 package draft, then exact preview. Corrected delivery and whole 6B completion remain unclaimed.
+
+## November 16 — 6B correction draft saved; confirmation bug isolated
+
+**6B-T01 ACTIVE / FWH-F06 / AC3.** Operator prepared a same-WO CLIENT_RETURN correction for TEST-P4-REVISION-1005-D, due November 16, one replacement Front photo, no property visit, no earlier photo references; one Front issue requests one new photo and new Front capture maps to the original Front release goal. Clicking Save correction draft returned **Draft not confirmed: Atomic correction and issue save did not confirm an exact revision.** Read-only hosted inspection proves the atomic backend write DID commit: exact draft is **DRAFT**, issue/reason/instructions/due date/Front-1 capture/mapping retained, no dispatched action; original WO stays FIELD_COMPLETE with one run and three global final receipts retained. Do not blindly retry the stale client revision or dispatch. Retain the saved correction; recover through existing admin_correction_state/reopen after repair, without another save.
+
+Root cause: two client JSON.stringify issue checks compare object property insertion order. JSONB returned the same issue fields in a different order, producing a false failure before normal readback; browser mocks had echoed client order. One line `fix/fwh-6b-correction-save-confirmation-20261116`, scope `fwh-6b-correction-save-confirmation-20261116`, **Level 2 / FINISH / 6B-T01**, baseline/rollback `2fa607c797549e45d1ce1e5332b463d31628d59c`. Approved whole Phase 6 revision 1/shared-access amendment; packs AGENTS/Governance/Profile/Rule Index, Change/Testing/Integration and affected Phase 6 plan. Existing CorrectionDraft owner canonicalizes object keys for both issue comparisons while retaining exact revision/status, key presence, values/types and array ordering. No schema, RPC, authorization, persisted state, retry identity, preview or dispatch change. Add focused negative guards and browser JSONB-shaped responses; bump only correction module cache key.
+
+Failure domain is one correction confirmation; unrelated work remains usable. Preserve client input and exact server draft; no replay/write required for reconciliation. Rollback reverts helper/cache only, retaining the server draft and work/photo/run/delivery evidence. Two focused cases reproduce old failure; complete exact-head CI and live asset parity remain gates. Agent diagnostics are read-only; no new run, assignment, Send/provider/deletion/APK/FPP change. Next checkpoint: publish the reviewed UI correction under existing Level 2 authority, verify retained draft fingerprint/state, then reopen the saved correction and Review exact dispatch summary. Dispatch/fresh successor/phone acceptance remains unperformed; whole 6B completion is not claimed.
+
+---
+
+End of verbatim archived checkpoints.

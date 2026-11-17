@@ -643,6 +643,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         return reply({destination_id:uuid(9890),company_id:p.p_company,
           verified:false,active:false,revision:uuid(9891),replayed:true});
       }
+      if (url.pathname.endsWith('/admin_creation_client_choices')) return reply({organization_id:organization,companies:[{id:uuid(73),name:'Synthetic Queue Company'}]});
       if (url.pathname.endsWith('/admin_client_choices')) {
         const p=req.postDataJSON();
         return reply({work_order_id:p.p_wo,client_company_id:selectedCompany,review_required:reviewRequired,
@@ -865,7 +866,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         if(!result){
           const draft=ordinaryDrafts.get(key);
           if(!draft||draft.revision!==p.p_revision)return reply({message:'Draft revision changed'},409);
-          result=[{work_order_id:uuid(9898),wo_number:'DRAFT-CREATED-ONCE'}];
+          result=[{work_order_id:uuid(9898),wo_number:'DRAFT-CREATED-ONCE',client_company_id:uuid(73)}];
           draftCreationReceipts.set(p.p_revision,result);ordinaryDrafts.delete(key);createdFromDraft++;
         }
         if(loseDraftCreationAck){loseDraftCreationAck=false;return reply({message:'Controlled lost creation response'},503);}
@@ -2457,6 +2458,8 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     await page.locator('#fwh-primary-nav [data-fwh-go="create"]').click();
     await wait(page,()=>!document.querySelector('#create-draft-save').disabled);
     await page.locator('#wo-number-mode-auto').check();
+    await wait(page,()=>!document.querySelector('#create-company').disabled);
+    await page.locator('#create-company').selectOption(uuid(73));
     await page.locator('#property-address').fill('900 Synthetic Draft Creation');
     await page.locator('#work-type').fill('INSPECTION');
     await page.locator('#instructions').fill('Synthetic explicit creation');

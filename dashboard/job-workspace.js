@@ -428,7 +428,7 @@ const JobWorkspace = (() => {
     el('job-save-continue').disabled = false;
     el('edit-heading').textContent = row.wo_number;
     el('job-address').textContent = row.property_address;
-    el('job-facts').textContent = `${row.work_type} · ${row.field_status.replaceAll('_', ' ')} · Due ${row.due_date}`;
+    el('job-facts').textContent = `${row.work_type} · ${row.field_status.replaceAll('_', ' ')} · Due ${row.due_date}${row.client_company_id?'':' · Client company missing — complete setup in Delivery.'}`;
     const operational = JobOperationalFacts.project(row);
     el('job-next-action').textContent = operational.label + ' · ' + operational.next;
     el('job-next-action-open').textContent = operational.next;

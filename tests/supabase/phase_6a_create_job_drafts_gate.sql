@@ -5,8 +5,9 @@ declare
  org uuid:='00000000-0000-0000-0000-000000000001'; actor uuid:='00000000-0000-0000-0000-000000000010';
  contractor uuid:='00000000-0000-0000-0000-000000000011'; other_actor uuid:=gen_random_uuid();
  cfg jsonb; payload jsonb; saved jsonb; replay jsonb; rev uuid; request_id uuid:=gen_random_uuid();
- before_work bigint; before_runs bigint; denied boolean; created jsonb; created_replay jsonb; creation_rev uuid;
+ company uuid:=gen_random_uuid(); before_work bigint; before_runs bigint; denied boolean; created jsonb; created_replay jsonb; creation_rev uuid;
 begin
+ insert into private.client_companies(id,organization_id,name) values(company,org,'SYNTHETIC CREATE CLIENT');
  select count(*) into before_work from public.work_orders;select count(*) into before_runs from public.work_order_runs;
  insert into auth.users(id,email,raw_app_meta_data,email_confirmed_at) values(other_actor,'create-draft@example.invalid',jsonb_build_object('role','ADMIN','organization_id',org),now());
  insert into auth.sessions(id,user_id) values(other_actor,other_actor);
@@ -56,7 +57,7 @@ begin
  denied:=false;begin perform public.admin_create_work_order_from_draft(creation_rev);exception when others then denied:=true;end;
  if not denied then raise exception 'Incomplete draft dispatched';end if;
  if public.admin_job_draft_state(null)->'draft'->>'revision'<>creation_rev::text then raise exception 'Failed creation lost draft';end if;
- payload:=payload||jsonb_build_object('propertyAddress','Synthetic ready address','workType','INSPECTION',
+ payload:=payload||jsonb_build_object('clientCompanyId',company::text,'propertyAddress','Synthetic ready address','workType','INSPECTION',
   'dueDate',current_date::text,'assignedUserId',contractor::text,'woNumber','CREATED-DRAFT-'||gen_random_uuid());
  saved:=public.admin_save_job_draft(null,payload,creation_rev,null,gen_random_uuid());creation_rev:=(saved->'draft'->>'revision')::uuid;
  select j into created from public.admin_create_work_order_from_draft(creation_rev) j;

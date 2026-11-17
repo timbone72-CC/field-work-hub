@@ -43,7 +43,7 @@ begin
     'session_id',admin,'app_metadata',
     jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
   select (j->>'work_order_id')::uuid into wo
-  from public.admin_create_work_order_v4(false,
+  from fwh_test_fixtures.legacy_create_work_order_v4(false,
     'CI-5E-CROSS-RUN-'||gen_random_uuid()::text,
     'Synthetic cross run property','INSPECTION','CI only',current_date,
     owner_id,cfg) j;

@@ -126,6 +126,12 @@
             <span>Remember my WO-number choice on this browser</span>
           </label>
 
+          <label>Client company
+            <select id="create-company" required disabled><option value="">Choose client company</option></select>
+          </label>
+          <p id="create-company-status" class="muted" role="status">Choose a client company before Create &amp; Assign. Unfinished drafts may be saved without one.</p>
+          <button id="create-company-refresh" type="button" class="secondary">Reload client companies</button>
+
           <label>Property address
             <input id="property-address" name="property-address" type="text" required maxlength="500" placeholder="123 Test Property Rd">
           </label>
@@ -490,8 +496,8 @@
   <script src="notifications.js?v=phase6e-20261011" defer></script>
   <script src="folder-layout.js?v=phase5d-layout-20261010" defer></script>
   <script src="job-drafts.js?v=6a-create-drafts-20261115" defer></script>
-  <script src="create-drafts.js?v=6a-create-drafts-20261115" defer></script>
-  <script src="job-workspace.js?v=6a-create-drafts-phase6c-20261115" defer></script>
+  <script src="create-drafts.js?v=required-company-20261117" defer></script>
+  <script src="job-workspace.js?v=6a-create-drafts-phase6c-20261115-required-company-20261117" defer></script>
   <script src="app.js?v=6b-prepared-work-phase56-20261115" defer></script>
   <script src="recovery.js?v=phase5e-recovery-20261012" defer></script>
   <script src="session.js?v=phase56-20261013-request-stage" defer></script>

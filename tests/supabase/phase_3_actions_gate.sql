@@ -26,9 +26,9 @@ begin
  end loop;
  if has_table_privilege('anon','public.field_actions','SELECT') or has_function_privilege('anon','public.accept_field_action(uuid,uuid,uuid,uuid,text,text)','EXECUTE')then raise exception 'Anonymous access';end if;
  perform set_config('request.jwt.claims',claims_admin,true);execute 'set local role authenticated';
- select work_order_id into wo from public.admin_create_work_order(false,prefix,'FWH TEST','TEST','',current_date,a);
- select work_order_id into wo2 from public.admin_create_work_order(false,prefix||'-2','FWH TEST','TEST','',current_date,a);
- select work_order_id into wo3 from public.admin_create_work_order(false,prefix||'-3','FWH TEST','TEST','',current_date,a);
+ select work_order_id into wo from fwh_test_fixtures.legacy_create_work_order(false,prefix,'FWH TEST','TEST','',current_date,a);
+ select work_order_id into wo2 from fwh_test_fixtures.legacy_create_work_order(false,prefix||'-2','FWH TEST','TEST','',current_date,a);
+ select work_order_id into wo3 from fwh_test_fixtures.legacy_create_work_order(false,prefix||'-3','FWH TEST','TEST','',current_date,a);
  select current_run_id into run from public.work_orders where id=wo;
  select current_run_id into run2 from public.work_orders where id=wo2;
  select current_run_id into run3 from public.work_orders where id=wo3;

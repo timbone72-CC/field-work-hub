@@ -19,7 +19,7 @@ begin
   'role','authenticated','app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
  execute 'set local role authenticated';
  cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
- select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,
+ select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,
   'DRAFT-'||gen_random_uuid(),'Synthetic draft address','Inspection','active original',current_date,contractor,cfg) j;
  select updated_at,to_jsonb(w) into base,before_row from public.work_orders w where id=wo;
  body:=jsonb_build_object('woNumber','','propertyAddress','','workType','Inspection','instructions','Unapplied draft',

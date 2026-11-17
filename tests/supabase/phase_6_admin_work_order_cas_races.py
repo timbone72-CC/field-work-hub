@@ -52,7 +52,7 @@ with psycopg.connect(DSN) as setup:
     }
     claims(setup, ADMIN_A)
     wo = setup.execute(
-        "select (j->>'work_order_id')::uuid from public.admin_create_work_order_v4("
+        "select (j->>'work_order_id')::uuid from fwh_test_fixtures.legacy_create_work_order_v4("
         "false,%s,%s,%s,%s,%s,%s,%s) j",
         ("RACE-" + str(uuid.uuid4()), "CI synthetic address", "INSPECTION",
          "original", datetime.date.today(), CONTRACTOR, Jsonb(cfg)),
