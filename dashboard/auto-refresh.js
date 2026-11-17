@@ -102,6 +102,7 @@ async function refreshAdminViewAutomatically() {
       JobWorkspace.populateContractors(users);
       JobWorkspace.refreshed(rows, selectedCheck);
     }
+    if (typeof ClientRelease !== 'undefined') void ClientRelease.refreshStatus();
     if (changed) {
       if (usersChanged) preserveAdminAssigneeSelection(assigneeSelect, users);
       assigneeSelect.disabled = users.length === 0;

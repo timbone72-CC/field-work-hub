@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Field Work Hub Admin</title>
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
-  <link rel="stylesheet" href="styles.css?v=modern-premium-stage9-recovery-20261017">
+  <link rel="stylesheet" href="styles.css?v=modern-premium-stage9-recovery-20261017-package-summary-20261116">
 </head>
 <body>
   <main class="shell">
@@ -368,7 +368,7 @@
 
           <section id="job-delivery" data-job-panel="delivery" hidden>
             <h3>Client package and delivery</h3>
-            <p class="muted">No photo is sent when you preview or approve. Only an explicit Send can queue a verified package.</p>
+            <p class="muted">Preview once, then choose Approve for later or Approve &amp; send now. Saving a draft keeps unfinished selections; approval for later does not send.</p>
             <details id="client-folder-settings">
               <summary>Client folder organization (Admin)</summary>
               <p class="muted">Choose an authorized, verified client destination. Applies only to newly approved packages; existing deliveries are unchanged.</p>
@@ -404,12 +404,13 @@
             <div id="release-photo-list" aria-label="Package photo selection"></div>
             <button id="release-photos-more" type="button" class="secondary" hidden>Load next 25 verified photos</button>
             <p id="release-coverage" class="muted"></p>
-            <pre id="release-exact-preview" class="release-preview" hidden aria-label="Exact client package preview"></pre>
+            <div id="release-exact-preview" class="release-preview" hidden role="region" aria-label="Client package summary"></div>
             <p id="release-target" class="muted"></p>
             <div class="workspace-navigation">
               <button id="release-save" type="button" class="secondary" disabled>Save package draft</button>
               <button id="release-preview" type="button" class="secondary" disabled>Preview exact package</button>
-              <button id="release-approve" type="button" disabled>Approve package</button>
+              <button id="release-approve" type="button" disabled>Approve for later</button>
+              <button id="release-approve-send" type="button" disabled>Approve &amp; send now</button>
               <button id="release-send" type="button" disabled>Send approved package</button>
             </div>
             <p id="release-status" class="status" role="status" aria-live="polite"></p>
@@ -484,7 +485,7 @@
   <script src="followup-management.js?v=phase6c-20261011" defer></script>
   <script src="manual-test-export.js?v=phase5d-manual-test-20261029" defer></script>
   <script src="private-review.js?v=phase5d-manual-test-20261029" defer></script>
-  <script src="client-release.js?v=phase5d-20261010" defer></script>
+  <script src="client-release.js?v=send-now-20261116-phase5d-20261010" defer></script>
   <script src="release-history.js?v=phase6d-20261011" defer></script>
   <script src="push-device.js?v=phase6e-20261011" defer></script>
   <script src="notifications.js?v=phase6e-20261011" defer></script>
@@ -496,7 +497,7 @@
   <script src="recovery.js?v=phase5e-recovery-20261012" defer></script>
   <script src="session.js?v=phase56-20261013-request-stage" defer></script>
   <script src="contractors.js?v=job-workspace-20261007-1" defer></script>
-  <script src="auto-refresh.js?v=job-workspace-20261007-1" defer></script>
+  <script src="auto-refresh.js?v=delivery-status-20261116-job-workspace-20261007-1" defer></script>
   <script src="owner-management.js?v=phase6f-20261011-1" defer></script>
   <script src="test-other-org-first-admin.js?v=phase56-test-first-admin-20261018" defer></script>
   <script src="staffing-candidates.js?v=phase6f-assignee-20261012" defer></script>

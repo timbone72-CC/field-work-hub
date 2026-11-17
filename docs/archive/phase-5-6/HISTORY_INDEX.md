@@ -84,3 +84,5 @@ The prior 5,216-line record at blob `d7c380ab1a22858baf02c5d2860e1a24dbfc2898`, 
 | 59 | [Dated handoff part 59](2026-11-15/PHASE_5_6_HISTORY_PART_59.md) | Superseded November 15 template-choice source and accepted-draft handoffs, verbatim |
 
 | 60 | [Dated handoff part 60](2026-11-16/PHASE_5_6_HISTORY_PART_60.md) | Superseded November 15 navigation source and template acceptance handoffs, verbatim |
+
+| 61 | [Dated handoff part 61](2026-11-16/PHASE_5_6_HISTORY_PART_61.md) | Superseded November 16 correction-save and returned-visit checkpoints, verbatim |
