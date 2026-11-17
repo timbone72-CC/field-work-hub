@@ -49,11 +49,16 @@ public class ActionSchedulerTest {
         assertFalse(BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
         if (BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) {
             assertTrue(BuildConfig.FIELD_SYNC_ENABLED);
-            assertEquals(42, BuildConfig.VERSION_CODE);
+            // Exact candidate version is verified at the frozen APK identity gate.
+            // Normal internal TEST versions are even and can advance beyond v42.
+            assertTrue(BuildConfig.VERSION_CODE >= 42);
+            assertEquals(0, BuildConfig.VERSION_CODE % 2);
             assertEquals("https://vyocaujuwrivoqynvitm.supabase.co",
                     SupabaseConfig.PROJECT_URL);
         } else if (!BuildConfig.FIELD_SYNC_ENABLED) {
-            assertTrue(BuildConfig.VERSION_CODE == 41 || BuildConfig.VERSION_CODE == 43);
+            // Recovery-only versions are odd and must never enable field sync.
+            assertTrue(BuildConfig.VERSION_CODE >= 41);
+            assertEquals(1, BuildConfig.VERSION_CODE % 2);
         }
     }
 
