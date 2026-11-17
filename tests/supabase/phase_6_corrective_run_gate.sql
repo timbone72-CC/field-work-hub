@@ -24,7 +24,7 @@ begin
  values(company,org,'SYNTHETIC-CORRECTIVE-CLIENT');
  perform set_config('request.jwt.claims',claims_admin,true);
  execute 'set local role authenticated';
- select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(
+ select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(
    false,'CORRECT-'||gen_random_uuid(),'Synthetic correction address',
    'INSPECTION','Initial task',current_date,photographer,cfg) j;
  select current_run_id,review_policy_revision into oldrun,revision

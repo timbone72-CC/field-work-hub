@@ -22,7 +22,7 @@ begin
         or x.value->>'computer'<>'false')
  then raise exception '9 default per-user dashboard On and push Off options missing';end if;
  select (v->>'work_order_id')::uuid into w from
-    public.admin_create_work_order_v4(false,'ALERT-'||gen_random_uuid(),
+    fwh_test_fixtures.legacy_create_work_order_v4(false,'ALERT-'||gen_random_uuid(),
       'Synthetic Alert Work Address','CHECK','',current_date,worker,cfg) v;
  select current_run_id into current_run from public.work_orders where id=w;
  feed:=public.admin_alert_list(25,null,null);
@@ -157,7 +157,7 @@ begin
  perform set_config('request.jwt.claims',adminjwt,true);
  execute 'set local role authenticated';
  select (x->>'work_order_id')::uuid into wo
-  from public.admin_create_work_order_v4(false,'PUSH-DISPOSABLE-'||gen_random_uuid(),
+  from fwh_test_fixtures.legacy_create_work_order_v4(false,'PUSH-DISPOSABLE-'||gen_random_uuid(),
    'Synthetic push job','CHECK','',current_date,contractor,
    jsonb_build_object('schema',1,'revision',gen_random_uuid(),
     'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb)) x;

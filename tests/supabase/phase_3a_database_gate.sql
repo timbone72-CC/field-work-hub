@@ -83,9 +83,9 @@ begin
 
     perform set_config('request.jwt.claims',v_admin_claims,true);
     execute 'set local role authenticated';
-    select work_order_id into v_wo from public.admin_create_work_order(
+    select work_order_id into v_wo from fwh_test_fixtures.legacy_create_work_order(
       false,v_number,'FWH TEMPORARY TEST','TEST ONLY','gate',current_date,v_a);
-    select work_order_id into v_wo_b from public.admin_create_work_order(
+    select work_order_id into v_wo_b from fwh_test_fixtures.legacy_create_work_order(
       false,v_number || '-B','FWH TEMPORARY TEST B','TEST ONLY','gate',current_date,v_b);
     select current_run_id into v_run from public.work_orders where id=v_wo;
     select current_run_id into v_other_run from public.work_orders where id=v_wo_b;
@@ -100,7 +100,7 @@ begin
     -- Invalid target and wrong-role Admin operation must be denied.
     v_denied:=false;
     begin
-      perform public.admin_create_work_order(false,v_number || '-INVALID',
+      perform fwh_test_fixtures.legacy_create_work_order(false,v_number || '-INVALID',
         'FWH TEMPORARY TEST','TEST ONLY','gate',current_date,gen_random_uuid());
     exception when insufficient_privilege then v_denied:=true;
     end;
@@ -108,7 +108,7 @@ begin
     perform set_config('request.jwt.claims',v_a_claims,true);
     v_denied:=false;
     begin
-      perform public.admin_create_work_order(false,v_number || '-WRONGROLE',
+      perform fwh_test_fixtures.legacy_create_work_order(false,v_number || '-WRONGROLE',
         'FWH TEMPORARY TEST','TEST ONLY','gate',current_date,v_a);
     exception when insufficient_privilege then v_denied:=true;
     end;

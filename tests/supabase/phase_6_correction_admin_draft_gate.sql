@@ -23,7 +23,7 @@ begin
  insert into private.client_companies(id,organization_id,name)
  values(company,org,'SYNTHETIC CORRECTION ADMIN');
  perform set_config('request.jwt.claims',adminjwt,true);execute 'set local role authenticated';
- select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,
+ select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,
   'DRAFT-'||gen_random_uuid(),'Synthetic correction review','INSPECT',
   'Original work',current_date,contractor,config) j;
  select current_run_id,review_policy_revision into oldrun,policyrev

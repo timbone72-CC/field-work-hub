@@ -23,7 +23,7 @@ with psycopg.connect(DSN) as setup:
     assert setup.info.dbname == 'fwh_test' and setup.info.host in ('localhost', '127.0.0.1', '::1')
     claims(setup)
     cfg = {'schema': 1, 'revision': str(uuid.uuid4()), 'total': {'enabled': False, 'minimum': 0}, 'items': []}
-    wo = setup.execute('select (j->>\'work_order_id\')::uuid from public.admin_create_work_order_v4('
+    wo = setup.execute('select (j->>\'work_order_id\')::uuid from fwh_test_fixtures.legacy_create_work_order_v4('
         'false,%s,%s,%s,%s,%s,%s,%s) j', ('DRAFT-RACE-'+str(uuid.uuid4()), 'Synthetic address',
         'INSPECTION', 'active original', datetime.date.today(), CONTRACTOR, Jsonb(cfg))).fetchone()[0]
     base = setup.execute('select updated_at from public.work_orders where id=%s', (wo,)).fetchone()[0]

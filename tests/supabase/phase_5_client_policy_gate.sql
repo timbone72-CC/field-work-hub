@@ -21,7 +21,7 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'session_id',admin_id,
  'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
  select (j->>'work_order_id')::uuid into wo from
- public.admin_create_work_order_v4(false,'DISPOSABLE COMPANY TEST','TEST','TEST','',current_date,contractor,cfg) j;
+ fwh_test_fixtures.legacy_create_work_order_v4(false,'DISPOSABLE COMPANY TEST','TEST','TEST','',current_date,contractor,cfg) j;
  update public.work_orders set responsible_team_id=team where id=wo;
  select review_policy_revision into rev from public.work_orders where id=wo;
  if (select client_company_id from public.work_orders where id=wo) is not null

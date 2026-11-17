@@ -17,7 +17,7 @@ begin
  insert into private.client_companies(id,organization_id,name) values(company,org,'QUEUE COMPANY');
  -- Match the organization's calendar day, including hours when UTC is tomorrow.
  for n in 1..1000 loop
-   select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,
+   select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,
     'QUEUE-'||lpad(n::text,4,'0'),'Queue literal 50%_* property '||n,'INSPECTION','Queue only',
     (now() at time zone 'America/Chicago')::date-1,worker,cfg) j;
    ids:=array_append(ids,wo);

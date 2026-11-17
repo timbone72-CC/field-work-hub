@@ -9,7 +9,7 @@ begin
   cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
   perform set_config('request.jwt.claims',jsonb_build_object('sub',p_admin,'session_id',p_admin,
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',p_org))::text,true);
-  select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,'RECOVERY-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
+  select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,'RECOVERY-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
   update public.work_orders set responsible_team_id=p_team where id=wo;
   select current_run_id into run from public.work_orders where id=wo;
   select id into instance from public.work_order_assignments where run_id=run and assignment_ended_at is null;

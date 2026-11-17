@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 DSN = os.environ['FWH_TEST_DATABASE_URL']
 ORG = uuid.UUID('00000000-0000-0000-0000-000000000001')
 ACTOR = uuid.UUID('00000000-0000-0000-0000-000000000010')
+COMPANY = uuid.uuid4()
 CONTRACTOR = uuid.UUID('00000000-0000-0000-0000-000000000011')
 
 def claims(conn):
@@ -20,11 +21,12 @@ def claims(conn):
 
 with psycopg.connect(DSN) as setup:
     assert setup.info.dbname == 'fwh_test' and setup.info.host in ('localhost', '127.0.0.1', '::1')
+    setup.execute('insert into private.client_companies(id,organization_id,name) values(%s,%s,%s)', (COMPANY,ORG,'Synthetic create race client'))
     before_work = setup.execute('select count(*) from public.work_orders').fetchone()[0]
     cfg = {'schema': 1, 'revision': str(uuid.uuid4()), 'total': {'enabled': False, 'minimum': 0}, 'items': []}
     body = {'woNumber': '', 'propertyAddress': '', 'workType': '', 'instructions': 'first new draft',
             'dueDate': '', 'assignedUserId': '', 'requirements': cfg, 'requirementsLegacy': False, 'expectedRevision': None,
-            'numberMode': 'auto', 'rememberNumberMode': False, 'sourceTemplateId': None}
+            'numberMode': 'auto', 'rememberNumberMode': False, 'sourceTemplateId': None, 'clientCompanyId': str(COMPANY)}
 
 def race(first_call, second_call):
     ready, release, started = threading.Event(), threading.Event(), threading.Event()

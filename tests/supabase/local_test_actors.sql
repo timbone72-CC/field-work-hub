@@ -16,3 +16,23 @@ insert into private.admin_team_memberships(organization_id,team_id,user_id,activ
 insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values
  ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000020','00000000-0000-0000-0000-000000000011',true),
  ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000020','00000000-0000-0000-0000-000000000012',true);
+
+-- CI-only historical fixture builders. These keep pre-company job scenarios
+-- meaningful after old company-less creation RPCs are retired. Never migrate
+-- this schema to hosted FWH. Current creation/ACL is tested through drafts.
+create schema fwh_test_fixtures;
+grant usage on schema fwh_test_fixtures to authenticated;
+do $fixtures$
+declare name text; definition text; signature text;
+begin
+ foreach name in array array['admin_create_work_order','admin_create_work_order_v4'] loop
+  select pg_get_functiondef(p.oid),pg_get_function_identity_arguments(p.oid)
+   into definition,signature from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='public' and p.proname=name;
+  definition:=replace(definition,'public.'||name||'(', 'fwh_test_fixtures.legacy_create_work_order'||case when name like '%v4' then '_v4' else '' end||'(');
+  execute definition;
+  execute 'alter function fwh_test_fixtures.legacy_create_work_order'||case when name like '%v4' then '_v4' else '' end||'('||signature||') security definer';
+  execute 'revoke all on function fwh_test_fixtures.legacy_create_work_order'||case when name like '%v4' then '_v4' else '' end||'('||signature||') from public,anon';
+  execute 'grant execute on function fwh_test_fixtures.legacy_create_work_order'||case when name like '%v4' then '_v4' else '' end||'('||signature||') to authenticated';
+ end loop;
+end;$fixtures$;

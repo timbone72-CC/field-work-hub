@@ -67,7 +67,7 @@ begin
      'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
   execute 'set local role authenticated';
   select (j->>'work_order_id')::uuid into work
-   from public.admin_create_work_order_v4(false,'UPLOAD-START-TEST',
+   from fwh_test_fixtures.legacy_create_work_order_v4(false,'UPLOAD-START-TEST',
      'DISPOSABLE ADDRESS','TEST','',current_date,contractor,
      jsonb_build_object('schema',1,'revision',gen_random_uuid(),
        'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb)) j;

@@ -8,7 +8,7 @@ begin
   cfg:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
   perform set_config('request.jwt.claims',jsonb_build_object('sub',p_admin,'session_id',p_admin,
     'app_metadata',jsonb_build_object('role','ADMIN','organization_id',p_org))::text,true);
-  select (j->>'work_order_id')::uuid into wo from public.admin_create_work_order_v4(false,'REVIEW-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
+  select (j->>'work_order_id')::uuid into wo from fwh_test_fixtures.legacy_create_work_order_v4(false,'REVIEW-'||photo,'TEST','TEST','',current_date,p_actor,cfg) j;
   update public.work_orders set responsible_team_id=p_team where id=wo;
   insert into private.client_companies(id,organization_id,name)
     values(company,p_org,'FIXTURE REVIEW CLIENT '||company::text);

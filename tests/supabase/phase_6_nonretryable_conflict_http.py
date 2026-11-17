@@ -40,7 +40,7 @@ with connect() as connection:
                        (json.dumps(claims),))
     connection.execute('set local role authenticated')
     result = connection.execute('''
-        select public.admin_create_work_order_v4(false,%s,%s,%s,%s,current_date,%s,%s)
+        select fwh_test_fixtures.legacy_create_work_order_v4(false,%s,%s,%s,%s,current_date,%s,%s)
     ''', ('HTTP-' + str(uuid.uuid4()), 'Synthetic conflict fixture', 'INSPECT',
           'Disposable HTTP test', CONTRACTOR, json.dumps(requirements))).fetchone()[0]
     wo = result['work_order_id']
