@@ -14,6 +14,9 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',actor,'session_id',actor,'role','authenticated',
   'app_metadata',jsonb_build_object('role','ADMIN','organization_id',org))::text,true);
  execute 'set local role authenticated';
+ result:=public.admin_create_client_company(null,'FIRST SYNTHETIC CLIENT');
+ replay:=public.admin_create_client_company(null,'first synthetic client');
+ if result->>'id' is distinct from replay->>'id' then raise exception 'First client setup duplicated normalized identity';end if;
  choices:=public.admin_creation_client_choices();
  if choices->>'organization_id'<>org::text or not exists(select 1 from jsonb_array_elements(choices->'companies') c where c->>'id'=company::text)
   or exists(select 1 from jsonb_array_elements(choices->'companies') c where c->>'id' in (inactive::text,foreign_company::text))
@@ -61,6 +64,8 @@ begin
  execute 'set local role authenticated';
  denied:=false;begin perform public.admin_creation_client_choices();exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Contractor listed office clients';end if;
+ denied:=false;begin perform public.admin_create_client_company(null,'DENIED');exception when insufficient_privilege then denied:=true;end;
+ if not denied then raise exception 'Contractor created office client without work order';end if;
  denied:=false;begin perform public.admin_create_work_order_from_draft(rev);exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'Contractor replayed office creation';end if;
  execute 'reset role';

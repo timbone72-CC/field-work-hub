@@ -2,7 +2,7 @@
 const CreateJobDrafts=(()=>{
   const el=id=>document.getElementById(id);
   let provenance=null,provenanceRequirements='',pending=null,creationAttempt=null;
-  let companyGeneration=0,companyLoad=null,companies=new Map(),companySelection='';
+  let companyGeneration=0,companyLoad=null,companies=new Map(),companySelection='',companyBusy=false;
   const resetProvenance=()=>{provenance=null;provenanceRequirements='';};
   const editor=JobDraftEditor({prefix:'create-draft-',isNew:true,editor:()=>createPhotos,form:()=>createForm,
     fields:{woNumber:'wo-number',propertyAddress:'property-address',workType:'work-type',
@@ -42,10 +42,30 @@ const CreateJobDrafts=(()=>{
     finally{if(current())companyLoad=null;}})();
     companyLoad=task;return task;
   }
+  async function addCompany(){
+    if(companyBusy||!accessToken||currentUser?.app_metadata?.role!=='ADMIN')return;
+    const name=window.prompt('Client company name:');if(!name?.trim())return;
+    const gen=companyGeneration,epoch=adminSessionEpoch,actor=currentUser.id,org=currentUser.app_metadata.organization_id;
+    const current=()=>gen===companyGeneration&&!!accessToken&&epoch===adminSessionEpoch&&actor===currentUser?.id&&org===currentUser?.app_metadata?.organization_id;
+    companyBusy=true;el('create-add-company').disabled=true;
+    try{
+      const response=await adminFetch(SUPABASE_URL+'/rest/v1/rpc/admin_create_client_company',{
+        method:'POST',headers:authHeaders(true),body:JSON.stringify({p_wo:null,p_name:name.trim()})});
+      if(!current())return;
+      if(!response.ok)throw Error(await readableError(response,'Client company was not confirmed.'));
+      const result=await response.json();if(!current())return;
+      if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(result?.id||'')||typeof result.name!=='string')throw Error('Client company was not confirmed.');
+      await companyLoad;if(!current())return;await loadCompanies();if(!current())return;
+      if(!companies.has(result.id)||el('create-company').disabled)throw Error('Reload client companies to verify the saved company.');
+      companySelection=result.id;el('create-company').value=result.id;createPhotos.setCompany(result.id);
+      el('create-company-status').textContent='Client company saved and selected. No work order has been created.';
+    }catch(error){if(current())el('create-company-status').textContent=error.message+' Your draft is retained. Reload client companies before trying again.';}
+    finally{if(current()){companyBusy=false;el('create-add-company').disabled=false;}}
+  }
   function ensure(){if(!accessToken||currentUser?.app_metadata?.role!=='ADMIN')return;
     if(!companies.size&&!companyLoad)void loadCompanies();
     if(!editor.active()){resetProvenance();return editor.open({id:null,updated_at:null});}}
-  function reset(){companyGeneration++;companyLoad=null;companies.clear();companySelection='';
+  function reset(){companyGeneration++;companyLoad=null;companies.clear();companySelection='';companyBusy=false;el('create-add-company').disabled=false;
     const select=el('create-company');select.replaceChildren(new Option('Choose client company',''));select.value='';select.disabled=true;
     el('create-company-status').textContent='Choose a client company before Create & Assign.';creationAttempt=null;editor.reset();resetProvenance();pending=null;const node=el('create-draft-unsaved');if(node)node.hidden=true;}
   function clearForm(){companySelection='';createForm.reset();createPhotos.load(null);fillWorkTypes();restoreWoNumberModePreference();
@@ -58,6 +78,7 @@ const CreateJobDrafts=(()=>{
   async function submit(){
     await ensure();
     if(!editor.active())throw Error('Current creator session required.');
+    if(companyBusy)throw Error('Finish client company setup before Create & Assign. Your draft is retained.');
     const company=el('create-company').value;
     if(el('create-company').disabled||!companies.has(company))throw Error('Choose a client company before Create & Assign. You can Save draft without one.');
     if(creationAttempt&&creationAttempt.fingerprint!==editor.fingerprint())
@@ -80,6 +101,7 @@ const CreateJobDrafts=(()=>{
   function created(){reset();}
   function refreshed(){return ensure();}
   function init(){editor.init();
+    el('create-add-company').addEventListener('click',addCompany);
     el('create-company-refresh').addEventListener('click',()=>loadCompanies());
     el('create-company').addEventListener('change',()=>{companySelection=el('create-company').value;createPhotos.setCompany(companySelection||null);});
     el('create-wo-details').addEventListener('toggle',()=>{if(el('create-wo-details').open)ensure();});

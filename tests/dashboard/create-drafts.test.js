@@ -137,3 +137,15 @@ test('late previous-account company response cannot populate current client choi
  const read=h.click('create-company-refresh');h.drafts.reset();h.ctx.currentUser={id:id(8),app_metadata:{role:'ADMIN',organization_id:id(2)}};
  release();await read;assert.equal(h.node('create-company').disabled,true);assert.equal(h.node('create-company').value,'');
 });
+
+test('first-client creation uses existing owner with no prerequisite job and selects verified result',async()=>{
+ const h=rig();await h.drafts.ensure();h.ctx.window.prompt=()=> 'First client';
+ const fetch=h.ctx.adminFetch;let created=0;
+ h.ctx.adminFetch=async(url,options)=>{
+  if(url.endsWith('admin_create_client_company')){assert.equal(JSON.parse(options.body).p_wo,null);created++;return {ok:true,json:async()=>({id:id(61),name:'First client'})};}
+  if(url.endsWith('admin_creation_client_choices'))return {ok:true,json:async()=>({organization_id:id(2),companies:[{id:id(61),name:'First client'}]})};
+  return fetch(url,options);
+ };
+ await h.click('create-add-company');assert.equal(created,1);assert.equal(h.node('create-company').value,id(61));
+ assert.equal(h.createdCount(),0);assert.match(h.node('create-company-status').textContent,/No work order/);
+});

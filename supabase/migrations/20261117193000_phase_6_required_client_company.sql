@@ -14,6 +14,33 @@ language sql security invoker set search_path='' as $$select private.admin_creat
 revoke all on function private.admin_creation_client_choices(),public.admin_creation_client_choices() from public,anon,authenticated,service_role;
 grant execute on function private.admin_creation_client_choices(),public.admin_creation_client_choices() to authenticated;
 
+-- First client setup reuses the existing normalized-name/audit owner without a prerequisite WO.
+create or replace function private.admin_create_client_company(p_wo uuid,p_name text)
+returns jsonb language plpgsql security definer set search_path='' set lock_timeout='5s' as $newcompany$
+declare w public.work_orders%rowtype; c private.client_companies%rowtype; label text:=btrim(coalesce(p_name,'')); org uuid;
+begin
+  if char_length(label) not between 1 and 160 or label ~ '[[:cntrl:]]' then
+    raise exception 'Valid explicit client name required' using errcode='22023';end if;
+  perform private.lock_account_lifecycle();
+  if p_wo is null then
+    org:=private.phase4_admin_org();
+  else
+    if not private.current_identity_valid() or not private.can_work_order(p_wo) then
+      raise exception 'Scoped office authority required' using errcode='42501';end if;
+    select * into w from public.work_orders where id=p_wo;
+    org:=w.organization_id;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('fwh.client.'||org||lower(label),0));
+  select * into c from private.client_companies
+    where organization_id=org and lower(name)=lower(label);
+  if not found then
+    insert into private.client_companies(organization_id,name)
+      values(org,label) returning * into c;
+  end if;
+  if not c.active then raise exception 'Inactive client cannot be reactivated here' using errcode='42501';end if;
+  return jsonb_build_object('id',c.id,'name',c.name);
+end;
+$newcompany$;
 create or replace function private.admin_job_draft(
  p_wo uuid,p_operation text,p_payload jsonb default null,
  p_expected_revision uuid default null,p_base_updated_at timestamptz default null,
