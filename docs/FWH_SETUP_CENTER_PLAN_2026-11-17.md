@@ -1,8 +1,8 @@
 # FWH Setup & Configuration Center — proposed Phase 6 amendment
 
-Plan ID: `FWH_SETUP_CENTER_PLAN_2026-11-17`  
-Revision: **1 — DRAFT FOR OPERATOR REVIEW; planning authorized, runtime not authorized.**  
-Product source: [Issue #51](https://github.com/timbone72-CC/field-work-hub/issues/51).  
+Plan ID: `FWH_SETUP_CENTER_PLAN_2026-11-17`
+Revision: **1 — DRAFT FOR OPERATOR REVIEW; planning authorized, runtime not authorized.**
+Product source: [Issue #51](https://github.com/timbone72-CC/field-work-hub/issues/51).
 Evidence baseline: main `976d10357c4abbcf8c29479a498a061693c50ec0`, November 17, 2026 (America/Chicago).
 
 ## 1. Outcome and placement
