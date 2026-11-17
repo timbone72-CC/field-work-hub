@@ -74,7 +74,9 @@ final class SessionCoordinator {
             if (!matches(generation, expected.userId, expected.organizationId))
                 throw new SessionChanged();
             // Sign Out cannot interleave the local authorization check and durable commit.
-            return dao.createAction(store.load(), wo, run, kind, time);
+            return "START".equals(kind)
+                    ? dao.startAndAccept(store.load(), wo, run, time)
+                    : dao.createAction(store.load(), wo, run, kind, time);
         }
     }
 

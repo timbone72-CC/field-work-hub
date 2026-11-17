@@ -161,6 +161,30 @@ public class MainActivityWorkOrderScreenTest {
     }
 
     @Test
+    public void startAcceptancePendingAndConfirmedHideAcceptWithoutFakingOfficeReceipt() throws Exception {
+        MainActivity a = ui();
+        SupabaseApi.WorkOrder job = work("wo-a", "run-a", "assign-a", "15 Oak St", "100", "ASSIGNED");
+        call(a, "renderWorkOrders", List.class, List.of(job));
+        firstButton((LinearLayout) field(a, "workOrdersContainer")).performClick();
+        LinearLayout detail = (LinearLayout) field(a, "detailContainer");
+        assertTrue(containsText(detail, "Starting work also accepts this assignment."));
+        assertNotNull(findButton(detail, "Accept"));
+        job.acceptPending = true;
+        job.pendingKind = "START";
+        call(a, "renderWorkOrders", List.class, List.of(job));
+        assertNull(findButton(detail, "Accept"));
+        assertNull(findButton(detail, "Start Work"));
+        assertTrue(containsText(detail, "Accepted — pending sync"));
+        assertFalse(containsText(detail, "Accepted — confirmed by office"));
+        job = work("wo-a", "run-a", "assign-a", "15 Oak St", "100", "IN_PROGRESS");
+        job.acknowledgmentReceivedAt = "2026-11-17T21:30:00Z";
+        call(a, "renderWorkOrders", List.class, List.of(job));
+        assertNull(findButton(detail, "Accept"));
+        assertTrue(containsText(detail, "Accepted — confirmed by office"));
+        assertNotNull(findButton(detail, "Finish Field Work"));
+    }
+
+    @Test
     public void signOutClearsCachedSelectionAndSearchWithoutDeletingAnyWork() throws Exception {
         MainActivity a = ui();
         SupabaseApi.WorkOrder one = work("wo-a", "run-a", "assign-a", "15 Oak St", "100", "ASSIGNED");

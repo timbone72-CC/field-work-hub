@@ -93,7 +93,7 @@ All relevant list/count/workspace/history/template/draft/photo/review/correction
 - Assignment is server-authoritative.
 - Download receipt means the assigned authenticated contractor app durably received/downloaded that exact assignment/run before recording receipt to the server. It does not prove human acknowledgment.
 - Accept is one deliberate contractor tap, durably persisted before the phone says Accepted, then idempotently confirmed for the exact user/run/assignment instance. Pending sync and server confirmation remain distinct.
-- Receipt, Accept, Start and Finish are separate facts; none invents another. Accept is not a mandatory Start prerequisite.
+- Receipt, Accept, Start and Finish remain separate recorded facts. Per operator direction November 17, 2026, a deliberate new Start Work tap also accepts that exact assignment: atomically commit an ACK (unless already queued/confirmed) before START in the existing local queue. Sync ACK before START without requiring connectivity for the tap. Earlier explicit Accept retains its original time/UUID; Start replay and pre-update history never backfill ACK. Download, sign-in, refresh and Finish alone never acknowledge. Accept remains optional before starting.
 - Reassignment/follow-up requires fresh download receipt and human acknowledgment. Historical facts stay with their original instance; stale ACK is not rebound.
 - Receipt is tied to the current assignee; reassignment clears/invalidates prior-assignee receipt.
 - Repeated receipt acknowledgement must be idempotent.
