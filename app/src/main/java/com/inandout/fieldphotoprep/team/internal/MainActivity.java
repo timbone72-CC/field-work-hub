@@ -951,6 +951,9 @@ public final class MainActivity extends Activity {
                 // separate, reachable secondary action during photo collection.
                 styleWorkAction(action, start && action.isEnabled());
                 card.addView(action);
+                if (start && workOrder.acknowledgmentReceivedAt.isEmpty()
+                        && !workOrder.acceptPending)
+                    card.addView(text("Starting work also accepts this assignment.", 14, false));
                 if (workOrder.assignmentInstanceId.isEmpty())
                     card.addView(
                             text("Refresh Assignments online to enable field actions.", 14, false));

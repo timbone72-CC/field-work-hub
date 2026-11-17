@@ -63,7 +63,7 @@ Cover:
 - Admin vs Contractor and tier-authorized Supervisor permissions, scoped team/organization isolation and Product Owner-only entitlement authority;
 - server-authoritative assignment;
 - assign/reassign validation;
-- durable contractor download receipt versus one-tap human Accept, with fresh exact-instance facts and no automatic acknowledgment from Start/Finish;
+- durable contractor download receipt versus human acceptance: explicit Accept or the operator-approved deliberate Start Work tap queues exact-instance ACK before START atomically; duplicate/restart/replay preserves both UUIDs/times, existing acknowledgment is reused, and download/sign-in/refresh/Finish or historical Start never backfills acceptance;
 - consent-required handoff of in-progress work;
 - stale/unauthorized client requests denied by server;
 - narrow RPC behavior and direct-table privilege boundaries.

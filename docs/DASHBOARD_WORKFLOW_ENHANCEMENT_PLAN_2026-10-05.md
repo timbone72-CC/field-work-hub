@@ -98,7 +98,7 @@ Templates remain editable, but dispatched offline/started run requirements canno
 
 ## Contractor Accept acknowledgment
 
-The contractor sees **Accept** on a new assignment; one tap durably records acknowledgment for that exact authenticated contractor and assignment/run instance. **Start Work** remains a separate existing action. Do not add a new durable field state merely to display Accepted; retain the acknowledged timestamp alongside download receipt and the existing run state.
+The contractor sees **Accept** on a new assignment; one tap durably records acknowledgment for that exact authenticated contractor and assignment/run instance. **Start Work** remains a separate recorded action; operator refinement November 17, 2026 makes its deliberate new tap also queue acceptance, atomically ACK before START under the same owner/instance. Reuse earlier explicit ACK, never backfill prior Starts or infer acceptance from download/Finish. Keep the existing queue and offline/retry guards. Do not add a new durable field state merely to display Accepted; retain the acknowledged timestamp alongside download receipt and the existing run state.
 
 Show Admin facts distinctly: Assigned, Downloaded/received, Acknowledged (contractor-facing Accepted), and Started. Durable download alone never produces an Accepted label. Reassignment, redispatch or a follow-up requires a fresh acknowledgment; a previous contractor/run acknowledgment is history only.
 
@@ -203,7 +203,7 @@ Completion: Phase 5 establishes secure recoverable private holding, a usable min
 | Review toggle | New WO default On; Off permits selected non-rejected pending photos without false individual approval. Both require package approval and explicit Send. | Phase 5 sections 6–7 |
 | Retention and cleanup | Prepared evidence remains private with no automatic pilot purge. Originals stay until final delivery, durable bookkeeping and applicable retention/closure; never-sent/cancelled evidence is held. | Phase 5 section 8 |
 | Follow-ups and coverage | Same client WO/WO UUID, new run/assignment, zero new capture counts; internal correction before first delivery, client return after it; explicit release-item mappings. | Phase 6 sections 3–5 |
-| Accept | One durable tap, separate from download/Start; existing action owner handles offline idempotent exact-instance acknowledgment. No mandatory Start gate. | Phase 6 section 3 |
+| Accept | Explicit Accept or new deliberate Start tap; distinct ACK-before-START intents commit atomically through the existing owner. Offline idempotency, no historical backfill and no network prerequisite. | Phase 6 section 3 |
 | Phone/computer alerts | Optional Web Push to enrolled supported Android Chrome and desktop Chrome/Edge, generic private payload, per-type/channel settings, timing/quiet hours and truthful delivery limits. | Phase 6 section 6 |
 | Phase attachment | Keep 4 complete; one complete plan for each of 5 and 6, updated 7 pilot and 8 production configuration/retention gates. | Both phase plans and roadmap register |
 

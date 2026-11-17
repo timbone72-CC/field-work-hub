@@ -179,6 +179,26 @@ abstract class CachedWorkOrderDao {
             }
     }
 
+    /** One deliberate Start tap commits both intents, or neither, before any sync. */
+    @Transaction
+    FieldAction startAndAccept(
+            SupabaseApi.AuthSession session, String wo, String run, String eventTime) {
+        CachedWorkOrder row = find(session.userId, session.organizationId, wo, run);
+        if (row != null) {
+            for (FieldAction action : actions(session.userId, session.organizationId))
+                if (action.workOrderId.equals(wo) && action.runId.equals(run)
+                        && action.assignmentInstanceId.equals(row.assignmentInstanceId)
+                        && "START".equals(action.kind)) {
+                    // Replays, including pre-update Starts, never invent a new ACK or timestamp.
+                    return createAction(session, wo, run, "START", eventTime);
+                }
+        }
+        if (row == null || row.acknowledgmentReceivedAt.isEmpty())
+            createAction(session, wo, run, "ACK", eventTime);
+        // A validation/insert failure here rolls back a newly queued ACK as well.
+        return createAction(session, wo, run, "START", eventTime);
+    }
+
     @Transaction
     FieldAction createAction(
             SupabaseApi.AuthSession session, String wo, String run, String kind, String eventTime) {
