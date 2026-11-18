@@ -185,6 +185,72 @@ public class MainActivityWorkOrderScreenTest {
     }
 
     @Test
+    public void newlyConfirmedOfficeAckReplacesStaleOfflineBannerWithoutAnotherRefresh()
+            throws Exception {
+        MainActivity a = ui();
+        SupabaseApi.WorkOrder pending = work(
+                "wo-a", "run-a", "instance-a", "44 Test Rd", "V44", "ASSIGNED");
+        pending.acceptPending = true;
+        pending.pendingKind = "START";
+        call(a, "renderWorkOrders", List.class, List.of(pending));
+        TextView status = (TextView) field(a, "statusText");
+        // Existing v44 offline text could outlive a successful WorkManager drain.
+        status.setText("Offline — showing last downloaded assignments.");
+
+        SupabaseApi.WorkOrder confirmed = work(
+                "wo-a", "run-a", "instance-a", "44 Test Rd", "V44", "IN_PROGRESS");
+        confirmed.acknowledgmentReceivedAt = "2026-11-18T16:12:22Z";
+        call(a, "showCachedWorkOrders", List.class, List.of(confirmed));
+        assertEquals("Office confirmed a work update. Refresh for latest assignments.",
+                status.getText().toString());
+        assertTrue(MainActivity.hasNewOfficeReceipt(List.of(pending), List.of(confirmed)));
+
+        // A second cache invalidation cannot replay stale evidence as a new receipt.
+        status.setText("Last refresh failed — saved assignments available. Tap Refresh to retry.");
+        call(a, "showCachedWorkOrders", List.class, List.of(confirmed));
+        assertEquals("Last refresh failed — saved assignments available. Tap Refresh to retry.",
+                status.getText().toString());
+    }
+
+    @Test
+    public void onlySameExactInstanceServerReceiptCanClearRefreshWarning() throws Exception {
+        MainActivity a = ui();
+        SupabaseApi.WorkOrder pending = work(
+                "wo-a", "run-a", "instance-a", "44 Test Rd", "V44", "ASSIGNED");
+        pending.acceptPending = true;
+        pending.pendingKind = "START";
+        call(a, "renderWorkOrders", List.class, List.of(pending));
+        TextView status = (TextView) field(a, "statusText");
+        status.setText("Last refresh failed — saved assignments available. Tap Refresh to retry.");
+
+        // Local queue changes cannot assert network health or replace a failed refresh.
+        SupabaseApi.WorkOrder local = work(
+                "wo-a", "run-a", "instance-a", "44 Test Rd", "V44", "ASSIGNED");
+        local.acceptPending = true;
+        local.pendingKind = "START";
+        call(a, "showCachedWorkOrders", List.class, List.of(local));
+        assertTrue(status.getText().toString().startsWith("Last refresh failed"));
+
+        // A receipt for a different run/assignment must not clear this account's warning.
+        SupabaseApi.WorkOrder otherRun = work(
+                "wo-a", "run-b", "instance-b", "44 Test Rd", "V44", "IN_PROGRESS");
+        otherRun.acknowledgmentReceivedAt = "2026-11-18T16:12:22Z";
+        assertFalse(MainActivity.hasNewOfficeReceipt(List.of(local), List.of(otherRun)));
+        SupabaseApi.WorkOrder otherAssignment = work(
+                "wo-a", "run-a", "instance-other", "44 Test Rd", "V44", "IN_PROGRESS");
+        otherAssignment.acknowledgmentReceivedAt = "2026-11-18T16:12:22Z";
+        assertFalse(MainActivity.hasNewOfficeReceipt(List.of(local), List.of(otherAssignment)));
+
+        // A server receipt must not overwrite a new foreground refresh already underway.
+        SupabaseApi.WorkOrder confirmed = work(
+                "wo-a", "run-a", "instance-a", "44 Test Rd", "V44", "IN_PROGRESS");
+        confirmed.acknowledgmentReceivedAt = "2026-11-18T16:12:22Z";
+        status.setText(a.getString(R.string.refreshing_assignments));
+        call(a, "showCachedWorkOrders", List.class, List.of(confirmed));
+        assertEquals(a.getString(R.string.refreshing_assignments), status.getText().toString());
+    }
+
+    @Test
     public void signOutClearsCachedSelectionAndSearchWithoutDeletingAnyWork() throws Exception {
         MainActivity a = ui();
         SupabaseApi.WorkOrder one = work("wo-a", "run-a", "assign-a", "15 Oak St", "100", "ASSIGNED");
