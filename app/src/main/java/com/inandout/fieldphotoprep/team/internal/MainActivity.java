@@ -121,7 +121,7 @@ public final class MainActivity extends Activity {
                                                         && currentSession.userId.equals(s.userId)
                                                         && currentSession.organizationId.equals(
                                                                 s.organizationId))
-                                                    renderWorkOrders(cached);
+                                                    showCachedWorkOrders(cached);
                                             });
                                 });
                     } catch (java.util.concurrent.RejectedExecutionException ignored) {
@@ -414,7 +414,8 @@ public final class MainActivity extends Activity {
                                                 true,
                                                 getString(R.string.assignments_refreshed)));
                     } catch (IOException error) {
-                        postStatus(operation, sessionGeneration, "Offline — showing last downloaded assignments.");
+                        postStatus(operation, sessionGeneration,
+                                "Last refresh failed — saved assignments available. Tap Refresh to retry.");
                     } catch (SupabaseApi.ApiException error) {
                         if (error.statusCode == 403 && runtime.sessions.matches(sessionGeneration,
                                 saved.userId, saved.organizationId)) {
@@ -602,7 +603,7 @@ public final class MainActivity extends Activity {
                                     progress.setVisibility(View.GONE);
                                     refreshAssignmentsButton.setEnabled(true);
                                     statusText.setText(
-                                            "Offline — downloaded assignments remain available.");
+                                            "Last refresh failed — saved assignments available. Tap Refresh to retry.");
                                 });
                     } catch (SupabaseApi.ApiException error) {
                         if (error.statusCode == 403 && runtime.sessions.matches(sessionGeneration,
@@ -691,6 +692,41 @@ public final class MainActivity extends Activity {
             workOrdersScroll.post(() -> workOrdersScroll.scrollTo(0, previousScroll));
         }
         if (PAGE_DETAIL.equals(selectedPage)) renderSelectedWorkOrder();
+    }
+
+    /** A background worker may confirm a specific assignment even if the last
+     *  foreground list refresh failed. Clear only that outdated status; never
+     *  infer global connectivity from a cached row or a network signal. */
+    private void showCachedWorkOrders(List<SupabaseApi.WorkOrder> cached) {
+        boolean officeConfirmed = hasNewOfficeReceipt(downloadedWorkOrders, cached);
+        renderWorkOrders(cached);
+        String status = statusText.getText().toString();
+        if (officeConfirmed && (status.startsWith("Offline — ")
+                || status.startsWith("Last refresh failed — ")
+                || status.equals("Saved on this phone — waiting to sync."))) {
+            statusText.setText("Office confirmed a work update. Refresh for latest assignments.");
+        }
+    }
+
+    /** Only a newly observed server receipt on the same exact assignment/run
+     *  can supersede the last failed refresh or locally pending status. */
+    static boolean hasNewOfficeReceipt(
+            List<SupabaseApi.WorkOrder> previous, List<SupabaseApi.WorkOrder> cached) {
+        for (SupabaseApi.WorkOrder current : cached) {
+            if (current.assignmentInstanceId.isEmpty()) continue;
+            for (SupabaseApi.WorkOrder old : previous) {
+                if (!current.id.equals(old.id)
+                        || !current.currentRunId.equals(old.currentRunId)
+                        || !current.assignmentInstanceId.equals(old.assignmentInstanceId))
+                    continue;
+                if ((!current.acknowledgmentReceivedAt.isEmpty()
+                            && old.acknowledgmentReceivedAt.isEmpty())
+                        || (!current.assignmentReceivedAt.isEmpty()
+                            && old.assignmentReceivedAt.isEmpty()))
+                    return true;
+            }
+        }
+        return false;
     }
 
     private static boolean matchesWorkOrderSearch(
