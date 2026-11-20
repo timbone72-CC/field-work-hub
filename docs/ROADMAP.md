@@ -79,6 +79,12 @@ The adopted [FWH v1 feature completion, activation, acceptance and release plan]
 
 **This is not a new approved phase, a deployment authorization or an override of mandatory protection tests.** The approved Phase 5/6 plans, amendment, their completion criteria, existing Level 3 runtime pre-merge consent and explicit production/Google/destructive-operation authorizations remain mandatory. PR #40 **merged on November 2, 2026**; older roadmap notes below referring to it as a draft owner, or to outdated migration/worker versions, are superseded by live evidence and the authoritative current Phase 5/6 implementation record. The finish-line plan was adopted via merged PR #82; this adoption does not authorize a remote write, activation, cleanup or production release.
 
+## Proposed setup-center amendment — November 17, 2026 (NOT YET APPROVED)
+
+[Setup & Configuration Center plan, revision 1](FWH_SETUP_CENTER_PLAN_2026-11-17.md) develops [Issue #51](https://github.com/timbone72-CC/field-work-hub/issues/51) into a concrete proposed **Phase 6G / FWH-F06 / AC3** addition: one settings index, optional guided setup, scoped required progress, attention links and resume using existing settings owners. Proposed tasks are 6G-T01 index/status/shared controls, 6G-T02 guide/resume and 6G-T03 TEST rollout/acceptance. Target completion is before Phase 7; construction depends on its own settings/authority APIs, not completion of every delivery/cleanup/role feature. Finish or truthfully hand off current 6C before selecting any approved successor.
+
+**Planning only:** the operator requested a plan, not runtime implementation. These tasks are not added to the adopted construction register, do not alter existing AC3 or phase completion criteria, and do not select a new primary task. Approval/adoption of this complete amendment must reconcile the whole Phase 6 plan and register together. Existing 6C work, accepted evidence, remaining 5D/5E/6F/6E gates and deferred PR #116 remain as recorded. No provider activation, automatic setup writes, new WO or production rollout is authorized.
+
 ## Historical execution snapshot — November 2, 2026 (SUPERSEDED by the current register)
 
 **Historical November 2 snapshot only:** [the Phase 5/6 implementation record](PHASE_5_6_IMPLEMENTATION_RECORD_2026-10-06.md) has since been updated on merged `main`; PR #40 is merged. The current construction register above and newly verified external evidence supersede this dated snapshot. The approved Phase 5/6 plan remains in effect; this pointer authorizes no deployment.
