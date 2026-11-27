@@ -22,11 +22,10 @@ android {
         applicationId 'com.inandout.fieldphotoprep.team.internal'
         minSdk 26
         targetSdk 36
-        // Published v46 remains immutable. A separate authorized version-only
-        // release advances the updater to v50 after this source is merged.
-        versionCode (recoveryBuild ? 47 : 46)
-        versionName (recoveryBuild ? '0.5-phase6-status-v47-recovery-internal'
-                                   : '0.5-phase6-status-v46-test-internal')
+        // Normal guarded cleanup update; paired evidence-preserving recovery.
+        versionCode (recoveryBuild ? 51 : 50)
+        versionName (recoveryBuild ? '0.5-phase5-cleanup-v51-recovery-internal'
+                                   : '0.5-phase5-cleanup-v50-test-internal')
         buildConfigField 'boolean', 'FIELD_SYNC_ENABLED', recoveryBuild ? 'false' : 'true'
         buildConfigField 'boolean', 'CLEANUP_READINESS_POLLING_ENABLED', recoveryBuild ? 'false' : 'true'
         buildConfigField 'boolean', 'AUTOMATIC_CLEANUP_ENABLED', recoveryBuild ? 'false' : 'true'
