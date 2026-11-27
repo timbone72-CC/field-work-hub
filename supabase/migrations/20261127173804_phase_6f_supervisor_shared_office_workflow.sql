@@ -29,7 +29,7 @@ begin
   return o;
 end; $$;
 revoke all on function private.shared_office_work_org() from public,anon,authenticated,service_role;
-grant execute on function private.shared_office_work_org() to service_role;
+grant execute on function private.shared_office_work_org() to authenticated,service_role;
 
 -- Rewrite only the canonical draft/create/template/correction owners. Each
 -- source marker is checked before replacement so a deployed/source mismatch
