@@ -3,6 +3,38 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
+## November 27 — 6F-T01 Product Owner-only Supervisor invitations (current handoff)
+
+**Level 3 / implementation complete, merge pending.** Scope key remains
+`dashboard-workflow-enhancement-plan`; authoritative branch is
+`feat/fwh-6f-t01-shared-office-workflow`; baseline/rollback is
+`7e60a83c11a5ed794c087143fe1a476d0ff808da`; exact candidate head is
+`29eac7df25173e821a963736bf48460eba03e4d8`. This continues the existing 6F
+line and preserves the accepted shared-office evidence. The change adds
+permanent Product Owner-only Supervisor invitations to the existing secure
+staff invitation owner: owner-selected name/email/tier/active team scope,
+recent owner authentication, server allowance and duplicate checks, one
+immutable seat/action reservation, exact Auth UUID binding, existing setup
+link page, and one-time activation into the stored Supervisor grant/scope.
+Existing Admin and Contractor onboarding remain on their original paths.
+
+The new migration is additive and reuses `scoped_admin_invitation_reservations`,
+`office_seat_reservations`, the existing trusted `generateLink` function and
+the existing setup-link callback. No temporary account, second invitation
+ledger, client authority, new activation switch, hosted migration, deployment,
+Auth write, TEST fixture, device test, provider test, merge or activation was
+performed. An uncertain Auth result retains the exact action/seat and cannot
+issue a second link; a consumed invitation replay cannot restore disabled work.
+The disposable Supervisor SQL gate was added to the existing Database CI
+sequence; focused Supervisor/Admin invitation tests and the complete local
+dashboard suite pass. Local Database CI is **PENDING** because this checkout
+has neither `psql` nor Docker. The broad local Node function glob has 13
+pre-existing loader/provider failures unrelated to this scope; the new and
+legacy invitation tests pass. Explicit Level 3 operator merge approval,
+hosted migration/deployment/activation and real Supervisor setup/workflow
+evidence remain outstanding. Previously accepted device/provider/photo
+evidence is not repeated.
+
 ## November 27 — 6F-T01 shared office workflow (current construction)
 
 **Source complete, not operationally accepted:** PR #137 merged at `8d1fa9d065ff164372b00bf11092c124e19d6500` after exact head `34c99ddc732343530ca004aa0d8a3240a75a2deb` Governance 46051664902, Database 46051657112, Dashboard 46051656962, Android 46051657119 PASS. Existing contractor eligibility, scoped JWT/authority and exact row locks verified. Earlier construction and correction evidence retained in [part 69](archive/phase-5-6/2026-11-27/PHASE_5_6_HISTORY_PART_69.md) and [PR #137](https://github.com/timbone72-CC/field-work-hub/pull/137), including documentation-size correction. Operator-authorized TEST ledger repair verified: 141 applied application migrations, 142 repository migrations, no unmatched TEST versions, only 20261127173804 pending; corrected SQL matches repository, pg_net and pg_cron preserved. No old DDL rerun, Supervisor readiness 0/2 organizations, grants 0. Next: determine mandatory activation dependencies against the existing organization switch. Finish any concrete missing protection in existing 6F tasks before activation; optional recovery email/notifications do not block safe scoped work. Obtain scoped development rollout authority for exact pending migration/dashboard and eligible activation. No new runtime switch, hosted deployment, grant, or acceptance claimed.
