@@ -77,7 +77,7 @@ begin
   begin
     perform public.office_supervisor_update_work_order_v4(
       gen_random_uuid(),wo,'T01-CAS','Stale edit','TEST','Supervisor CAS edit',
-      current_date,contractor_a,null,null,before_edit);
+      current_date,contractor_a,null,null,before_edit+interval '1 second');
   exception when serialization_failure then denied:=true; end;
   if not denied then raise exception 'Stale Supervisor CAS edit was accepted'; end if;
   current_revision:=null;
