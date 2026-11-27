@@ -402,3 +402,49 @@ test('disabled-work explanation survives denied recovery without revealing arbit
   assert.equal(f.storage.size,0);assert.match(f.calls.messages.at(-1),/Office work access disabled/);
   assert.doesNotMatch(f.calls.messages.at(-1),/PRIVATE/);
 });
+
+test('Supervisor staffing-only view does not start the shared office poll', async () => {
+  const f = fixture();
+  f.context.currentUser.app_metadata.role = 'SUPERVISOR';
+  f.get('results-card').classes.add('hidden');
+  f.context.window.events.focus();
+  assert.equal(f.timers.size, 0);
+  await f.run('refreshAdminViewAutomatically()');
+  assert.equal(f.calls.list, 0);
+});
+
+test('shared Supervisor work refresh never calls Admin-only staffing RPCs', async () => {
+  const f = fixture();
+  f.context.currentUser.app_metadata.role = 'SUPERVISOR';
+  let adminCalls = 0;
+  f.context.fetchContractorSeatSummary = async () => { adminCalls++; throw Error('Admin only'); };
+  f.context.fetchPendingContractorInvitations = async () => { adminCalls++; throw Error('Admin only'); };
+  f.context.fetchWorkOrders = async () => rows('supervisor-receipt');
+  await f.run('refreshAdminViewAutomatically()');
+  assert.equal(adminCalls, 0);
+  assert.equal(f.calls.summary, 0);
+  assert.equal(f.context.workOrderRows[2].assignment_received_at, 'supervisor-receipt');
+});
+
+test('revoked Supervisor work access clears the shared view and stops polling', async () => {
+  const f = fixture();
+  f.context.currentUser.app_metadata.role = 'SUPERVISOR';
+  f.context.fetchWorkOrders = async () => { throw Object.assign(Error('Forbidden'), { status: 403 }); };
+  await f.run('refreshAdminViewAutomatically()');
+  assert.equal(f.context.accessToken, null);
+  assert.equal(f.context.workOrderRows.length, 0);
+  assert.equal(f.timers.size, 0);
+  assert.ok(f.calls.messages.some(x => x.includes('Supervisor work access')));
+});
+
+test('a stale Supervisor snapshot cannot replace a changed office role', async () => {
+  const f = fixture(), pending = deferred();
+  f.context.currentUser.app_metadata.role = 'SUPERVISOR';
+  f.context.fetchWorkOrders = () => pending.promise;
+  const poll = f.run('refreshAdminViewAutomatically()');
+  f.context.currentUser.app_metadata.role = 'ADMIN';
+  pending.resolve(rows('stale-supervisor-receipt'));
+  await poll;
+  assert.equal(f.calls.render, 0);
+  assert.equal(f.calls.summary, 0);
+});
