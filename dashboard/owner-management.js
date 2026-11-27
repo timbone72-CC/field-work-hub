@@ -10,6 +10,9 @@ let ownerRosterPending = null;
 let ownerInvitePending = null;
 let ownerInviteBusy = false;
 let ownerInviteNeedsRefresh = false;
+let ownerSupervisorInvitePending = null;
+let ownerSupervisorInviteBusy = false;
+let ownerSupervisorInviteNeedsRefresh = false;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -27,6 +30,9 @@ signOutButton.addEventListener('click', () => {
   ownerInvitePending = null;
   ownerInviteBusy = false;
   ownerInviteNeedsRefresh = false;
+  ownerSupervisorInvitePending = null;
+  ownerSupervisorInviteBusy = false;
+  ownerSupervisorInviteNeedsRefresh = false;
   document.getElementById('owner-office-console')?.remove();
 });
 
@@ -132,6 +138,30 @@ function ownerCreateConsole() {
        cannot invite a new user or activate a suspended account.</p>
     <div id="owner-supervisor-list"></div>
     <div id="owner-supervisor-team-panel" class="hidden"></div>
+    <h3>Invite a Supervisor</h3>
+    <p class="muted">The Product Owner selects the immutable tier and team scope. The existing
+      secure staff setup link lets the invitee choose their password; no temporary account is created.</p>
+    <form id="owner-supervisor-invite-form" class="admin-form" autocomplete="off">
+      <label>Supervisor tier
+        <select id="owner-supervisor-invite-tier">
+          <option value="1">Tier 1 — Work Supervisor</option>
+          <option value="2">Tier 2 — Team Manager</option>
+          <option value="3">Tier 3 — Organization Manager</option>
+        </select>
+      </label>
+      <fieldset id="owner-supervisor-invite-team-field"><legend>Exact supervised teams (Tier 1 or 2)</legend>
+        <div id="owner-supervisor-invite-teams"></div></fieldset>
+      <label>Supervisor name <input id="owner-supervisor-invite-name" type="text" maxlength="200" required></label>
+      <label>Supervisor email <input id="owner-supervisor-invite-email" type="email" maxlength="320" required autocomplete="off"></label>
+      <label>Audit reason <input id="owner-supervisor-invite-reason" type="text" maxlength="1000" required></label>
+      <button id="owner-supervisor-invite-submit" type="submit">Create Supervisor setup link</button>
+      <p id="owner-supervisor-invite-status" class="status" role="status" aria-live="polite"></p>
+    </form>
+    <div id="owner-supervisor-invite-link-result" class="hidden">
+      <p class="muted">Give this one-time bearer setup link only to the intended Supervisor; it is not saved to browser storage.</p>
+      <label>Supervisor setup link <textarea id="owner-supervisor-invite-link" rows="4" readonly></textarea></label>
+      <button id="owner-supervisor-invite-copy" class="secondary" type="button">Copy Supervisor setup link</button>
+    </div>
     <h3>Invite an Admin to an existing team</h3>
     <p class="muted">Choose a current authorized team. Seats and team scope are checked by
       the server; the new Admin cannot work until the invitee completes verified setup.
@@ -178,6 +208,16 @@ function ownerCreateConsole() {
   section.querySelector('#owner-admin-invite-form').addEventListener('submit', event => {
     event.preventDefault();
     void ownerCreateAdminInvitation();
+  });
+  section.querySelector('#owner-supervisor-invite-form').addEventListener('submit', event => {
+    event.preventDefault(); void ownerCreateSupervisorInvitation();
+  });
+  section.querySelector('#owner-supervisor-invite-tier').addEventListener('change', ownerSupervisorInviteUI);
+  section.querySelector('#owner-supervisor-invite-copy').addEventListener('click', () => {
+    const url = document.getElementById('owner-supervisor-invite-link')?.value;
+    if (url) void navigator.clipboard.writeText(url).then(
+      () => ownerSupervisorInviteStatus('Supervisor setup link copied.'),
+      () => ownerSupervisorInviteStatus('Copy was blocked. Select and copy the link manually.', true));
   });
   section.querySelector('#owner-admin-invite-copy').addEventListener('click', () => {
     const url = document.getElementById('owner-admin-invite-link')?.value;
@@ -705,6 +745,79 @@ function ownerInviteUI(capacity, teams) {
   }
 }
 
+function ownerSupervisorInviteStatus(message, error = false) {
+  const el = document.getElementById('owner-supervisor-invite-status');
+  if (el) { el.textContent = message; el.classList.toggle('error', error); }
+}
+function ownerSupervisorInviteUI() {
+  const data = ownerConsoleData, field = document.getElementById('owner-supervisor-invite-team-field');
+  const box = document.getElementById('owner-supervisor-invite-teams');
+  const tier = Number(document.getElementById('owner-supervisor-invite-tier')?.value);
+  const button = document.getElementById('owner-supervisor-invite-submit');
+  if (!data || !field || !box || !button) return;
+  field.hidden = tier === 3;
+  const selected = new Set(Array.from(box.querySelectorAll('input:checked')).map(input => input.value));
+  box.replaceChildren();
+  for (const team of data.teams.filter(item => item.active)) {
+    const label = document.createElement('label');
+    const input = document.createElement('input'); input.type = 'checkbox'; input.value = team.team_id;
+    input.checked = selected.has(team.team_id); label.append(input, document.createTextNode(' ' + team.team_name));
+    box.append(label);
+  }
+  button.disabled = ownerSupervisorInviteBusy || ownerSupervisorInviteNeedsRefresh
+    || Number(data.capacity.supervisor_available) < 1;
+  if (Number(data.capacity.supervisor_available) < 1 && !ownerSupervisorInvitePending)
+    ownerSupervisorInviteStatus('No Supervisor seat is available; only the Product Owner can raise the allowance.');
+}
+async function ownerCreateSupervisorInvitation() {
+  const check = ownerIdentity(), data = ownerConsoleData;
+  const tier = Number(document.getElementById('owner-supervisor-invite-tier')?.value);
+  const teamIds = tier === 3 ? [] : Array.from(document.querySelectorAll('#owner-supervisor-invite-teams input:checked')).map(input => input.value).sort();
+  const displayName = document.getElementById('owner-supervisor-invite-name')?.value.trim() || '';
+  const email = document.getElementById('owner-supervisor-invite-email')?.value.trim().toLowerCase() || '';
+  const reason = document.getElementById('owner-supervisor-invite-reason')?.value.trim() || '';
+  const quota = data?.capacity;
+  const activeTeams = new Set(data?.teams.filter(team => team.active).map(team => team.team_id));
+  if (ownerSupervisorInviteBusy || !ownerStillCurrent(check) || !data || data.organization !== check.organization
+    || Number(quota?.supervisor_available) < 1 || ![1,2,3].includes(tier)
+    || (tier < 3 && (!teamIds.length || teamIds.some(id => !activeTeams.has(id))))
+    || (tier === 3 && teamIds.length) || !displayName || !email || !reason) {
+    ownerSupervisorInviteStatus('Refresh office seats and choose a valid tier and active team scope.', true); return;
+  }
+  const request = { tier, team_ids: teamIds, display_name: displayName, email, reason,
+    expected_allowance_revision: quota.revision };
+  if (ownerSupervisorInvitePending && JSON.stringify(ownerSupervisorInvitePending.request) !== JSON.stringify(request)) {
+    ownerSupervisorInviteStatus('An earlier Supervisor invitation needs reconciliation first.', true); return;
+  }
+  ownerSupervisorInvitePending ||= { action: crypto.randomUUID(), request };
+  const action = ownerSupervisorInvitePending.action;
+  ownerSupervisorInviteBusy = true;
+  document.getElementById('owner-supervisor-invite-submit').disabled = true;
+  document.getElementById('owner-supervisor-invite-link-result')?.classList.add('hidden');
+  ownerSupervisorInviteStatus('Verifying the exact Supervisor seat and invitation…');
+  try {
+    const response = await adminFetch(`${SUPABASE_URL}/functions/v1/admin-invite-contractor`, {
+      method: 'POST', headers: authHeaders(true),
+      body: JSON.stringify({ operation: 'invite_supervisor', action_id: action, ...request })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!ownerStillCurrent(check)) return;
+    if (!response.ok || result.status !== 'BOUND' || !result.setup_url || result.action_id !== action
+      || result.role !== 'SUPERVISOR') throw new Error(result.error || 'The original Supervisor invitation requires reconciliation.');
+    document.getElementById('owner-supervisor-invite-link').value = result.setup_url;
+    document.getElementById('owner-supervisor-invite-link-result').classList.remove('hidden');
+    ownerSupervisorInvitePending = null; ownerSupervisorInviteNeedsRefresh = true;
+    ownerSupervisorInviteStatus('Supervisor setup link ready. Refresh office access before another invitation.');
+    for (const id of ['owner-supervisor-invite-name','owner-supervisor-invite-email','owner-supervisor-invite-reason']) document.getElementById(id).value = '';
+  } catch (error) {
+    if (ownerStillCurrent(check)) ownerSupervisorInviteStatus(
+      `${error instanceof Error ? error.message : 'Invitation status is uncertain.'} The exact action remains protected; retry only this request.`, true);
+  } finally {
+    ownerSupervisorInviteBusy = false;
+    if (ownerStillCurrent(check)) ownerSupervisorInviteUI();
+  }
+}
+
 async function ownerCreateAdminInvitation() {
   const check = ownerIdentity();
   const teamId = document.getElementById('owner-admin-invite-team')?.value || '';
@@ -801,6 +914,8 @@ async function loadOwnerConsole(force = false) {
     ownerSupervisorUI(grants);
     ownerEnrollmentUI(people, grants, teams);
     ownerInviteUI(capacity, teams);
+    ownerSupervisorInviteNeedsRefresh = false;
+    ownerSupervisorInviteUI();
     ownerRosterUI(people, teams);
     ownerPeopleUI(people);
     if (force) {
