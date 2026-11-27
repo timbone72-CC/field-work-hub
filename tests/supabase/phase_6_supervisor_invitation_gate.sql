@@ -18,7 +18,7 @@ begin
     values(org,1,1) returning private.org_office_allowances.revision into revision;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',owner,'session_id',owner)::text,true);
 
-  response:=public.reserve_scoped_supervisor_invitation(action,org,2,array[team],
+  response:=public.reserve_scoped_supervisor_invitation(action,org,2::smallint,array[team],
     'supervisor@example.invalid','Invited Supervisor',revision,'Owner approved','TEST');
   if response->>'status'<>'RESERVED' or response->>'tier'<>'2'
     or (select requested_role from private.office_seat_reservations where action_id=action)<>'SUPERVISOR'
@@ -29,7 +29,7 @@ begin
   response:=public.begin_scoped_supervisor_invitation_issue(action,org,'TEST');
   if response->>'instruction'<>'RECONCILE' then raise exception 'Supervisor retry could create another Auth identity'; end if;
   denied:=false;
-  begin perform public.reserve_scoped_supervisor_invitation(gen_random_uuid(),org,2,array[team],
+  begin perform public.reserve_scoped_supervisor_invitation(gen_random_uuid(),org,2::smallint,array[team],
     'second@example.invalid','Second',revision,'Over capacity','TEST');
   exception when check_violation then denied:=true; end;
   if not denied then raise exception 'Supervisor pending seat allowance was bypassed'; end if;
