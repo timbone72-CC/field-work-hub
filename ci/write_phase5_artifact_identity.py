@@ -19,12 +19,12 @@ signer=re.search(r'certificate SHA-256 digest:\s*([0-9a-fA-F]+)',cert).group(1).
 expected='1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe'
 assert signer==expected
 assert "name='com.inandout.fieldphotoprep.team.internal'" in badging
-assert ("versionCode='47'" if recovery else "versionCode='46'") in badging
+assert ("versionCode='51'" if recovery else "versionCode='50'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
 assert ('AUTOMATIC_CLEANUP_ENABLED = false' if recovery else 'AUTOMATIC_CLEANUP_ENABLED = true') in build_config
 assert 'https://vyocaujuwrivoqynvitm.supabase.co' in Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/SupabaseConfig.java').read_text()
-assert ('CLEANUP_READINESS_POLLING_ENABLED = false' if recovery else 'CLEANUP_READINESS_POLLING_ENABLED = true') in build_config, 'v46 TEST polling must be enabled and v47 recovery disabled'
+assert ('CLEANUP_READINESS_POLLING_ENABLED = false' if recovery else 'CLEANUP_READINESS_POLLING_ENABLED = true') in build_config, 'Normal TEST polling must be enabled and recovery disabled'
 room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
 room_version=6
 assert 'version = 6,' in room_source, 'Unexpected TeamDatabase schema; review the release gate'
@@ -41,7 +41,7 @@ out=Path('phase5-artifacts')/variant;out.mkdir(parents=True,exist_ok=True)
 filename=f'Field-Work-Hub-0.5-Phase5-{variant}-{head[:7]}.apk'
 shutil.copyfile(apk,out/filename)
 identity={'runtime_head':head,'variant':variant,'file':filename,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
-          'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':47 if recovery else 46,
+          'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':51 if recovery else 50,
           'room_version':room_version,'room_schema_blobs':room_schema_blobs,'field_sync_enabled':not recovery,'private_photo_network_enabled':not recovery,'cleanup_readiness_polling_enabled':not recovery,'automatic_cleanup_enabled':not recovery}
 (out/'identity.json').write_text(json.dumps(identity,indent=2)+'\n')
 if not recovery:
