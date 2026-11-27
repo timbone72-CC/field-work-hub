@@ -6,17 +6,7 @@ Control how Team changes are planned, implemented, tested, reviewed, merged, and
 
 ## Mandatory reread before runtime work
 
-Before using this contract to authorize or classify a runtime change:
-
-1. read `AGENTS.md` completely;
-2. read the relevant phase in `docs/ROADMAP.md` completely;
-3. read `TESTING_CONTRACT.md`;
-4. read `INTEGRATION_CONTRACT.md` when the work touches Supabase/Auth/RLS, local persistence, offline behavior, reassignment, camera/photos, background sync, remote storage, upload, retry, or cleanup;
-5. read `docs/PHASE_STAGING_DOCTRINE.md` for phase transitions, device-gate staging, or decisions about how far implementation may proceed before phone evidence.
-
-Do not substitute memory, a chat summary, earlier-session notes, or an earlier read for these rereads.
-
-If the relevant roadmap phase does not contain an approved implementation plan, **STOP. Planning is the work.**
+Follow `AGENTS.md` and `RULE_INDEX.md` for the mandatory reads and approved parent-phase plan gate; do not substitute prior-session notes for the current governing sources.
 
 ## Core rule
 
@@ -83,7 +73,7 @@ Required process:
 - focused tests and final complete automated verification;
 - affected data-preservation/security/device/provider checks;
 - Supabase advisors after DDL;
-- explicit operator approval before merge.
+- explicit operator approval before merge; compatible development rollout actions may be authorized together under GOVERNANCE.md.
 
 When uncertain between levels, use the higher level.
 
@@ -119,7 +109,7 @@ Before merge:
 
 For database changes:
 - DDL goes through migrations;
-- every applied migration is mirrored under `supabase/migrations/`;
+- every applied application migration is mirrored under `supabase/migrations/`; separately record verified environment provisioning that is not an application migration, without rerunning applied DDL merely to align timestamps;
 - migration order/live history and repository history must agree;
 - RLS/grants/RPC execution permissions are explicitly tested;
 - advisors are run after DDL;
@@ -172,8 +162,8 @@ Level 3:
 - focused + complete regression coverage;
 - safe fixtures/provider validation where applicable;
 - authorization/data-preservation checks;
-- affected real-device gate where software cannot prove reality;
-- explicit pre-merge operator approval.
+- affected real-device gate where software cannot prove reality, at its actual dependency boundary;
+- explicit pre-merge operator approval, with combined development rollout authority as defined in GOVERNANCE.md.
 
 A required failure stops merge/publication/deployment.
 
