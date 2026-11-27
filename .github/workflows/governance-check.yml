@@ -24,6 +24,7 @@ jobs:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
         run: |
           python3 - <<'PY'
+          import base64
           import json
           import os
           import re
@@ -150,6 +151,7 @@ jobs:
                   )
 
           changed_files = []
+          file_changes = []
           page = 1
           while True:
               url = (
@@ -160,6 +162,7 @@ jobs:
               if not files:
                   break
               changed_files.extend(item["filename"] for item in files)
+              file_changes.extend(files)
               if len(files) < 100:
                   break
               page += 1
@@ -241,14 +244,19 @@ jobs:
                       "Declare New physical/provider evidence: NONE, or "
                       "FWH-AC#: specific unproven reality boundary."
                   )
-              elif physical != "NONE" and (
-                  not gate or not physical.startswith(gate + ": ")
-                  or not physical[len(gate) + 2:].strip()
-              ):
-                  errors.append(
-                      "New physical/provider evidence must be NONE or the exact "
-                      "milestone followed by a specific previously unproven boundary."
-                  )
+              elif physical != "NONE":
+                  prefix = (gate or "") + ": "
+                  detail = physical[len(prefix):] if physical.startswith(prefix) else ""
+                  if detail.startswith("NEW: ") and detail[5:].strip():
+                      pass
+                  elif detail.startswith("INVALIDATED: ") and re.fullmatch(
+                      r"INVALIDATED: \S.*; Prior evidence: \S.*; Changed boundary: \S.*", detail
+                  ):
+                      pass
+                  else:
+                      errors.append("Use NONE, milestone: NEW: specific unproven behavior, "
+                                    "or milestone: INVALIDATED: scenario; Prior evidence: reference; "
+                                    "Changed boundary: concrete change or contradiction.")
           # Exactly one business construction task is selected on trusted main.
           # Read the PR base SHA rather than executing or trusting fork code.
           # Safety incident and governance-only work retain their existing paths.
@@ -258,8 +266,6 @@ jobs:
                   errors.append("Business runtime PR must name Construction task from docs/ROADMAP.md.")
               else:
                   try:
-                      import base64
-
                       base_sha = pr["base"]["sha"]
                       if not re.fullmatch(r"[0-9a-fA-F]{40}", base_sha):
                           raise ValueError("Invalid trusted PR base revision")
@@ -312,6 +318,115 @@ jobs:
                           )
                   except (KeyError, TypeError, ValueError, UnicodeError) as exc:
                       errors.append(f"Cannot validate trusted construction register: {exc}")
+
+          # Permanent business functionality: inspect only added operational lines.
+          # Fixtures/tests/docs and removal of old temporary code are not exceptions.
+          def operational(path):
+              return path in {"app/build.gradle", "build.gradle", "gradle.properties"} or (
+                  path.startswith(("app/src/main/", "dashboard/", "supabase/functions/",
+                                   "supabase/migrations/", "ci/"))
+                  and not re.search(r"(?:^|/)(?:tests?|__tests__|fixtures|testdata)(?:/|$)", path, re.I)
+                  and not re.search(r"(?:^|/)(?:test_[^/]+|[^/]+\.(?:test|spec)\.[^/]+)$", path, re.I)
+                  and path.endswith((".java", ".kt", ".js", ".ts", ".tsx", ".jsx",
+                                     ".py", ".sql", ".gradle", ".json", ".html", ".sh"))
+              )
+
+          def inspect_additions(item):
+              path = item["filename"]
+              if not operational(path) or item.get("status") == "removed" or not item.get("additions"):
+                  return []
+              added = [line[1:] for line in (item.get("patch") or "").splitlines() if line.startswith("+")]
+              if len(added) != item["additions"]:
+                  return ["incomplete operational diff"]
+              found = set()
+              for line in added:
+                  if re.match(r"\s*(?://|#|--|/\*|\*)", line):
+                      continue
+                  ids = re.findall(r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", line)
+                  if any(x != "00000000-0000-0000-0000-000000000000" for x in ids):
+                      found.add("literal UUID: potential hardcoded business identity")
+                  if re.search(r"""(?i)['"](?:TEST-P[0-9]|TEST-WO-|TEST-FWH-|FWH-TEST-WO-|TEST-[0-9]{4})[^'"]*['"]""", line):
+                      found.add("literal TEST work-order identity")
+                  if re.search(r"(?i)\b(?:fwh[_-]?(?:cleanup|delivery|readiness)[_-]?test|(?:cleanup|delivery|package|photo|work[_-]?order|job)[_-]?(?:test|pin)[_-]?(?:photo|package|work[_-]?order|job|id|slot|enabled|mode|worker|dispatcher|path)\w*|(?:temporary|alternate|parallel|test[_-]?only)[_-]?(?:updater|worker|dispatcher)\w*)\b", line):
+                      found.add("temporary/pinned or parallel operational path")
+                  if path.endswith((".gradle", ".properties", ".sql", ".json")) and re.search(
+                      r"(?i)(?:automatic[_-]?cleanup[_-]?enabled|(?:client[_-]?)?delivery[_-]?dispatch[_-]?enabled|cleanupEnabled)\b.{0,100}(?:\bfalse\b|\boff\b)", line
+                  ) and not re.search(r"(?i)\b(?:recoveryBuild|recovery[_-]?mode|kill[_-]?switch|rollback)\b", line):
+                      found.add("new default-OFF cleanup/delivery gate")
+              return sorted(found)
+
+          def sample(path, line):
+              return {"filename": path, "status": "modified", "additions": 1, "patch": "+" + line}
+
+          # Focused regression cases run on the trusted workflow, not proposed code.
+          assert inspect_additions(sample("app/build.gradle", "def pin = 'd23443e0-2abb-4df4-912f-859b9367aaef'"))
+          assert inspect_additions(sample("app/src/main/X.java", 'String id = "TEST-P4-FINISH-1005";'))
+          assert inspect_additions(sample("app/src/main/X.java", "String CLEANUP_TEST_PHOTO_ID;"))
+          assert inspect_additions(sample("app/build.gradle", "AUTOMATIC_CLEANUP_ENABLED = false"))
+          assert not inspect_additions(sample("app/src/test/X.java", 'String id = "TEST-P4-FINISH-1005";'))
+          assert not inspect_additions(sample("app/src/main/X.java", "return ownerId.equals(receipt.photoId);"))
+          assert not inspect_additions(sample("app/build.gradle", "AUTOMATIC_CLEANUP_ENABLED = recoveryBuild ? false : true"))
+          assert inspect_additions({"filename": "app/build.gradle", "additions": 2, "patch": "+one"}) == ["incomplete operational diff"]
+          assert not inspect_additions({"filename": "app/build.gradle", "additions": 0, "patch": "-old pin"})
+
+          findings = [(item["filename"], result) for item in file_changes for result in inspect_additions(item)]
+          errors.extend(path + ": " + result for path, result in findings if result == "incomplete operational diff")
+          exception = field_value("Completion exception")
+          if findings or exception not in (None, "NONE"):
+              approved = False
+              if not exception or not re.fullmatch(r"NECESSARY: \S.*; Remove when: \S.*", exception):
+                  errors.append("Use Completion exception: NECESSARY: reason; Remove when: condition.")
+              else:
+                  owner = pr["base"]["repo"]["owner"]["login"]
+                  marker = f"APPROVE COMPLETION EXCEPTION #{number} {pr['head']['sha']}"
+                  page = 1
+                  while True:
+                      comments = github_json(f"https://api.github.com/repos/{repository}/issues/{number}/comments?per_page=100&page={page}")
+                      if any(c.get("user", {}).get("login") == owner and c.get("author_association") == "OWNER"
+                             and marker in (c.get("body") or "").splitlines() for c in comments):
+                          approved = True
+                          break
+                      if len(comments) < 100:
+                          break
+                      page += 1
+                  if not approved:
+                      errors.append("Independent repository-owner approval required on exact head: " + marker)
+              if not approved:
+                  errors.extend(path + ": " + result for path, result in findings if result != "incomplete operational diff")
+
+          # Documentation closeout cannot bypass the existing construction register.
+          if "docs/ROADMAP.md" in changed_files:
+              def read_register(repo_name, sha):
+                  doc = github_json(f"https://api.github.com/repos/{repo_name}/contents/docs/ROADMAP.md?ref={sha}")
+                  road = base64.b64decode(doc["content"]).decode("utf-8")
+                  marker = "## Completion-first V1 construction register —"
+                  if road.count(marker) != 1:
+                      raise ValueError("Construction register missing or duplicated")
+                  block = road.split(marker, 1)[1].split("\n## ", 1)[0]
+                  selected = re.findall(r"(?m)^- Next construction task: \*\*([A-Za-z0-9-]+)\*\*$", block)
+                  rows = re.findall(r"(?m)^\|\s*\*\*((?:[568][A-F]?|7)-T\d{2})\*\*\s*\|\s*[^|]+\|\s*([^|]+)\|", block)
+                  states = {name: state.strip() for name, state in rows}
+                  if len(selected) != 1 or len(states) != len(rows) or selected[0] not in states:
+                      raise ValueError("Invalid construction register")
+                  return selected[0], states
+
+              try:
+                  prior, before = read_register(repository, pr["base"]["sha"])
+                  selected, after = read_register(pr["head"]["repo"]["full_name"], pr["head"]["sha"])
+                  if not before.keys() <= after.keys():
+                      errors.append("Do not remove existing construction tasks to bypass acceptance.")
+                  closed = [name for name, state in after.items() if state in {"COMPLETE", "ACCEPTED"}
+                            and before.get(name) not in {"COMPLETE", "ACCEPTED"}]
+                  if closed:
+                      for field in ("Activation evidence", "Acceptance evidence"):
+                          value = field_value(field) or ""
+                          if not all(re.search(r"\b" + re.escape(name) + r"\b", value) for name in closed) or not re.search(r"(?:docs/|https://github\.com/|#\d+)", value):
+                              errors.append(f"{field} must name each closing task ({', '.join(closed)}) and cite existing evidence.")
+                  if selected != prior and after.get(prior) not in {"COMPLETE", "ACCEPTED"}:
+                      if after.get(prior) != "BLOCKED" or not field_value("Construction blocker") or not field_value("Resume condition"):
+                          errors.append("Unfinished selected task requires BLOCKED state, Construction blocker and Resume condition before advancing.")
+              except (KeyError, TypeError, ValueError, UnicodeError) as exc:
+                  errors.append(f"Cannot validate completion closeout: {exc}")
 
           # Documentation-only governance work has no new metadata requirement.
           # ACTIVATE uses the existing External systems changed / Rollback point.
