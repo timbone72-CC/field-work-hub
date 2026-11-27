@@ -199,9 +199,8 @@ final class TeamRuntime {
     }
 
     /**
-     * Future explicit cleanup dispatch owner. The existing action/transfer
-     * locks serialize the exact local evidence check with future offline work.
-     * Returns false in every currently distributed/test APK (switch OFF).
+     * Normal cleanup dispatch owner. Existing action/transfer locks serialize
+     * the exact local evidence check with offline work. Recovery remains disabled.
      */
     boolean cleanupVerified(SupabaseApi.AuthSession expected,long generation,String photoId)
             throws Exception {
