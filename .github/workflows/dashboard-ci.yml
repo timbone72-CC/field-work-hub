@@ -20,6 +20,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/ci -p 'test_phase56_record_size.py' -v
           python3 ci/check_phase56_record_size.py
+      - name: Verify permanent-functionality governance (offline)
+        run: python3 -m unittest discover -s tests/ci -p 'test_governance_completion.py' -v
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
