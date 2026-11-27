@@ -1,0 +1,62 @@
+-- Disposable Phase 6F-T01 Supervisor authority gate; no hosted data or photos.
+begin;
+do $gate$
+declare
+  org uuid:=gen_random_uuid(); team_a uuid:=gen_random_uuid(); team_b uuid:=gen_random_uuid();
+  supervisor uuid:=gen_random_uuid(); contractor_a uuid:=gen_random_uuid(); contractor_b uuid:=gen_random_uuid();
+  owner_id uuid:=gen_random_uuid(); actor uuid; company uuid:=gen_random_uuid(); draft jsonb; result jsonb;
+  payload jsonb; revision uuid; denied boolean; assignable_count integer;
+  cfg jsonb:=jsonb_build_object('schema',1,'revision',gen_random_uuid(),
+    'total',jsonb_build_object('enabled',false,'minimum',0),'items','[]'::jsonb);
+begin
+  insert into public.organizations(id,name) values(org,'6F-T01 shared office gate');
+  insert into public.admin_teams(id,organization_id,name) values(team_a,org,'Scoped'),(team_b,org,'Outside scope');
+  foreach actor in array array[owner_id,supervisor,contractor_a,contractor_b] loop
+    insert into auth.users(id,email,email_confirmed_at,raw_app_meta_data)
+      values(actor,actor::text||'@example.invalid',now(),
+        jsonb_build_object('role',case when actor=supervisor then 'SUPERVISOR' when actor=owner_id then 'ADMIN' else 'CONTRACTOR' end,
+          'organization_id',org));
+    insert into auth.sessions(id,user_id) values(actor,actor);
+  end loop;
+  insert into private.account_work_access(organization_id,user_id,work_role,active) values
+    (org,supervisor,'SUPERVISOR',true),(org,contractor_a,'CONTRACTOR',true),(org,contractor_b,'CONTRACTOR',true);
+  insert into private.platform_owner_capabilities(user_id,active,environment,verified_at)
+    values(owner_id,true,'TEST',now());
+  insert into private.org_work_settings(organization_id,supervisor_work_ready) values(org,true);
+  insert into private.supervisor_grants(organization_id,user_id,tier,active,granted_by,reason)
+    values(org,supervisor,1,true,owner_id,'TEST');
+  insert into private.supervisor_team_scopes(organization_id,user_id,team_id) values(org,supervisor,team_a);
+  insert into private.contractor_team_memberships(organization_id,team_id,user_id,active) values
+    (org,team_a,contractor_a,true),(org,team_b,contractor_b,true);
+  insert into private.client_companies(id,organization_id,name,active) values(company,org,'T01 TEST CLIENT',true);
+
+  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisor,'session_id',supervisor,
+    'role','authenticated','app_metadata',jsonb_build_object('role','SUPERVISOR','organization_id',org))::text,true);
+  execute 'set local role authenticated';
+  select count(*) into assignable_count from public.office_supervisor_assignable_users();
+  if assignable_count<>1 or not exists(select 1 from public.office_supervisor_assignable_users() where user_id=contractor_a)
+  then raise exception 'Assignable users escaped the Supervisor team scope'; end if;
+  if exists(select 1 from public.office_supervisor_assignable_users() where user_id=contractor_b)
+  then raise exception 'Other-team Contractor was exposed to Supervisor'; end if;
+
+  payload:=jsonb_build_object('woNumber','T01-'||gen_random_uuid(),'propertyAddress','Scoped test address',
+    'workType','TEST','instructions','Supervisor draft','dueDate',current_date::text,
+    'assignedUserId',contractor_a::text,'requirements',cfg,'requirementsLegacy',false,
+    'expectedRevision',null,'numberMode','custom','rememberNumberMode',false,'sourceTemplateId',null,
+    'clientCompanyId',company::text);
+  draft:=public.admin_save_job_draft(null,payload,null,null,gen_random_uuid());
+  revision:=(draft->'draft'->>'revision')::uuid;
+  select j into result from public.admin_create_work_order_from_draft(revision) j;
+  if result->>'work_order_id' is null or (select responsible_team_id from public.work_orders where id=(result->>'work_order_id')::uuid)<>team_a
+  then raise exception 'Scoped Supervisor creation did not use the existing owner'; end if;
+
+  payload:=jsonb_set(payload,'{assignedUserId}',to_jsonb(contractor_b::text));
+  draft:=public.admin_save_job_draft(null,payload,null,null,gen_random_uuid());
+  revision:=(draft->'draft'->>'revision')::uuid; denied:=false;
+  begin perform public.admin_create_work_order_from_draft(revision);
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Supervisor created work for an out-of-scope team'; end if;
+  execute 'reset role';
+end;
+$gate$;
+rollback;

@@ -614,7 +614,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         alertOrgTimezone=p.p_timezone;
         return reply({organization_id:organization,timezone:p.p_timezone,revision:uuid(9753)});
       }
-      if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
+      if (url.pathname.endsWith('/admin_list_assignable_users')
+          || url.pathname.endsWith('/office_supervisor_assignable_users'))
+        return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
       if (url.pathname.endsWith('/admin_list_client_folder_destinations')) {
         if(layoutListDelayed){
           layoutListRequested=true;
