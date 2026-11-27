@@ -15,7 +15,7 @@ begin
   insert into private.platform_owner_capabilities(user_id,active,environment,verified_at)
     values(owner,true,'TEST',now());
   insert into private.org_office_allowances(organization_id,admin_limit,supervisor_limit)
-    values(org,1,1) returning revision into revision;
+    values(org,1,1) returning private.org_office_allowances.revision into revision;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',owner,'session_id',owner)::text,true);
 
   response:=public.reserve_scoped_supervisor_invitation(action,org,2,array[team],
