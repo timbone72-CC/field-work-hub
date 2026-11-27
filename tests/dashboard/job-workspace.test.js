@@ -232,6 +232,14 @@ test('connection timeout guidance never implies a rejected Admin password', () =
   assert.match(app,/setLoginStatus\(error\?\.requestStage \? adminLoginFailureMessage\(error\) : timedOut/);
 });
 
+test('Supervisor workspace uses the shared office authority endpoints', () => {
+  assert.match(app,/office_supervisor_assignable_users/);
+  assert.match(app,/office_supervisor_update_work_order_v4/);
+  assert.match(app,/p_action: action/);
+  assert.match(fs.readFileSync(require.resolve('../../dashboard/session.js'),'utf8'),
+    /office_supervisor_assignable_users.*loading contractors/s);
+});
+
 function adminRestoreRig({errorStage='identity',errorType='TimeoutError'}={}) {
   const code=fs.readFileSync(require.resolve('../../dashboard/session.js'),'utf8');
   const future=Math.floor(Date.now()/1000)+3600;

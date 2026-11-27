@@ -9,6 +9,15 @@ let contractorInvitationsRendered = false;
 const renderSignedInBeforeContractors = renderSignedIn;
 renderSignedIn = function renderSignedInWithContractors(rows, users, organizationId) {
   const result = renderSignedInBeforeContractors(rows, users, organizationId);
+  if (currentUser?.app_metadata?.role !== 'ADMIN') {
+    document.getElementById('contractor-management-section')?.remove();
+    contractorManagementReady = false;
+    contractorSeatAvailable = false;
+    contractorSeatSummary = null;
+    pendingContractorInvitations = [];
+    contractorInvitationsRendered = false;
+    return result;
+  }
   ensureContractorManagementUi();
   refreshContractorManagement().catch((error) => {
     setContractorInviteStatus(
@@ -19,6 +28,15 @@ renderSignedIn = function renderSignedInWithContractors(rows, users, organizatio
   return result;
 };
 
+signOutButton.addEventListener('click', () => {
+  clearContractorSetupLink();
+  document.getElementById('contractor-management-section')?.remove();
+  contractorManagementReady = false;
+  contractorSeatAvailable = false;
+  contractorSeatSummary = null;
+  pendingContractorInvitations = [];
+  contractorInvitationsRendered = false;
+});
 function ensureContractorManagementUi() {
   if (contractorManagementReady) return;
 
@@ -61,7 +79,7 @@ function ensureContractorManagementUi() {
 
   document.getElementById('contractor-invite-form').addEventListener('submit', handleContractorInvite);
   document.getElementById('contractor-copy-setup-link').addEventListener('click', copyContractorSetupLink);
-  signOutButton.addEventListener('click', clearContractorSetupLink);
+  // Sign-out cleanup is registered once below, not on each account render.
   document.getElementById('contractor-refresh-button').addEventListener('click', async () => {
     const refreshButton = document.getElementById('contractor-refresh-button');
     refreshButton.disabled = true;
@@ -92,15 +110,19 @@ async function refreshContractorManagement(refreshAssignees = false) {
     throw new Error('Admin permission required.');
   }
 
+  const epoch=adminSessionEpoch,actor=currentUser.id,org=metadata.organization_id;
+  const current=()=>accessToken&&adminSessionEpoch===epoch&&currentUser?.id===actor
+    &&currentUser?.app_metadata?.role==='ADMIN'&&currentUser.app_metadata.organization_id===org;
   const [summary, pendingInvitations] = await Promise.all([
     fetchContractorSeatSummary(),
     fetchPendingContractorInvitations()
   ]);
-
+  if (!current()) return;
   renderContractorManagement(summary, pendingInvitations);
 
   if (refreshAssignees) {
     const users = await fetchAssignableUsers();
+    if (!current()) return;
     assignableUsers = users;
     renderAssignableUsers(users);
   }

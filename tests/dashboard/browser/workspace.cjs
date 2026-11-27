@@ -614,7 +614,9 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         alertOrgTimezone=p.p_timezone;
         return reply({organization_id:organization,timezone:p.p_timezone,revision:uuid(9753)});
       }
-      if (url.pathname.endsWith('/admin_list_assignable_users')) return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
+      if (url.pathname.endsWith('/admin_list_assignable_users')
+          || url.pathname.endsWith('/office_supervisor_assignable_users'))
+        return reply([{ user_id: contractor, email: 'contractor@example.invalid', role: 'CONTRACTOR' }]);
       if (url.pathname.endsWith('/admin_list_client_folder_destinations')) {
         if(layoutListDelayed){
           layoutListRequested=true;
@@ -2069,6 +2071,16 @@ const wait = async (page, condition) => page.waitForFunction(condition);
     assert.equal(await page.locator('#staffing-roster-person option').count(),2);
      assert.match(await page.locator('#staffing-work-status').innerText(),/Tier 2 · 1 authorized jobs/);
      assert.equal(await page.locator('#staffing-work-rows tr').count(),1);
+    // The current scoped Supervisor can open the same operational job workspace.
+    // Returning preserves the already-tested tier-specific staffing actions.
+    await page.locator('#staffing-open-workspace').click();
+    await page.locator('#results-card:visible').waitFor();
+    assert.equal(await page.locator('#staffing-card:visible').count(),0);
+    assert.equal(await page.locator('#contractor-management-section').count(),0);
+    assert.equal(await page.locator('#supervisor-return-to-team').isVisible(),true);
+    await page.locator('#supervisor-return-to-team').click();
+    await page.locator('#staffing-card:visible').waitFor();
+    assert.equal(await page.locator('#results-card:visible').count(),0);
     // Stage 7: existing Supervisor view before any staffing mutations.
     for(const id of ['staffing-capacity','staffing-refresh','staffing-invite-form',
       'staffing-operation','staffing-team-name','staffing-name','staffing-email',

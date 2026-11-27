@@ -12,6 +12,7 @@ let staffingRosterBusy = false;
 let staffingRosterNeedsRefresh = false;
 let staffingWork = null;
 let staffingWorkBusy = false;
+let staffingWorkspaceOpening = false;
 let staffingDetailGeneration = 0;
 let staffingWorkDetail = null;
 let staffingWorkEditPending = null;
@@ -47,7 +48,9 @@ function staffingCard() {
       <h2>Supervisor work and staffing</h2><p id="staffing-account" class="muted"></p>
     </div><button type="button" id="staffing-sign-out" class="secondary">Sign Out</button></div>
     <p class="muted">Work orders below are limited to current server-authorized teams.
-      Only due-date corrections and appended instructions are editable here. Assignments, photos and Send remain unavailable.</p>
+      Use Work Orders for the shared job workspace, including creation, templates, review and delivery.
+      The controls below retain the existing scoped staffing, assignment and audited handoff actions.</p>
+    <button type="button" id="staffing-open-workspace">Open Work Orders</button>
     <p id="staffing-capacity" class="muted"></p>
     <button type="button" class="secondary" id="staffing-refresh">Refresh staffing</button>
     <p id="staffing-status" class="status" role="status" aria-live="polite"></p>
@@ -122,6 +125,7 @@ function staffingCard() {
     </div>`;
   document.querySelector('main.shell').append(card);
   card.querySelector('#staffing-sign-out').addEventListener('click', () => signOutButton.click());
+  card.querySelector('#staffing-open-workspace').addEventListener('click', () => void openSupervisorWorkWorkspace());
   card.querySelector('#staffing-refresh').addEventListener('click', () => {
     staffingNeedsRefresh = false;
     void staffingRefresh().catch(error => staffingMessage(error.message, true));
@@ -520,6 +524,72 @@ async function showScopedStaffingPortal(organizationId) {
   if (snapshot) { staffingRender(); staffingRenderRoster(); }
   staffingRenderWork();
 }
+// Switch to the existing office job workspace only after a fresh server scope
+// read, bounded work list and eligible contractor list succeed for this actor.
+async function openSupervisorWorkWorkspace() {
+  if (staffingWorkspaceOpening || staffingWorkBusy || staffingWorkEditPending || staffingWorkEditBusy
+      || SupervisorPhotoReview.blocked || SupervisorAssignmentCandidates.blocked
+      || staffingPending || staffingBusy || staffingRosterPending || staffingRosterBusy
+      || staffingHandoffPending || staffingHandoffBusy) {
+    staffingMessage('Resolve the pending Supervisor action before changing workspaces.', true);
+    return;
+  }
+  const check = staffingIdentity();
+  if (!staffingStillCurrent(check)) return;
+  const card = staffingCard(), button = card.querySelector('#staffing-open-workspace');
+  staffingWorkspaceOpening = true; button.disabled = true;
+  try {
+    const work = await staffingReadWorkPage(check.org);
+    if (!staffingStillCurrent(check)) return;
+    const [rows, users] = await Promise.all([fetchWorkOrders(), fetchAssignableUsers()]);
+    if (!staffingStillCurrent(check)) return;
+    verifyAdminRls(rows, check.org);
+    if (!Array.isArray(users)) throw new Error('Unexpected Contractor response.');
+    // A scope change must clear old Supervisor DOM and selected details.
+    if (staffingWork && (staffingWork.tier !== work.tier ||
+        staffingWork.scopeFingerprint !== work.scopeFingerprint)) {
+      signOutButton.click();
+      setLoginStatus('Supervisor work scope changed. Sign in again.', true);
+      return;
+    }
+    staffingClearWorkDetail();
+    renderSignedIn(rows, users, check.org);
+    card.classList.add('hidden');
+  } catch (error) {
+    if (!staffingStillCurrent(check)) return;
+    if ([401,403].includes(error?.status)) {
+      signOutButton.click();
+      setLoginStatus('Current Supervisor work access could not be verified. Sign in again.', true);
+    } else {
+      staffingMessage(error.message || 'Unable to open Work Orders. Try again.', true);
+    }
+  } finally {
+    if (staffingStillCurrent(check)) { staffingWorkspaceOpening = false; button.disabled = false; }
+  }
+}
+async function returnToSupervisorControls() {
+  const check = staffingIdentity();
+  if (!staffingStillCurrent(check) || staffingWorkspaceOpening || adminWritesPending) return;
+  const button = document.getElementById('supervisor-return-to-team');
+  staffingWorkspaceOpening = true; button.disabled = true;
+  try {
+    await showScopedStaffingPortal(check.org);
+    if (!staffingStillCurrent(check)) return;
+    stopAdminAutoRefresh();
+    closeEditor(true);
+  } catch (error) {
+    if (staffingStillCurrent(check)) {
+      if ([401,403].includes(error?.status)) {
+        signOutButton.click(); setLoginStatus('Current Supervisor access could not be verified.', true);
+      } else setAdminAutoRefreshStatus(error.message || 'Unable to open Supervisor controls.');
+    }
+  } finally {
+    if (staffingStillCurrent(check)) { staffingWorkspaceOpening = false; button.disabled = false; }
+  }
+}
+document.getElementById('supervisor-return-to-team').addEventListener('click', () => {
+  CreateJobDrafts.guard(() => JobWorkspace.guard(() => void returnToSupervisorControls()));
+});
 async function staffingRefresh() {
   const check = staffingIdentity();
   if (staffingWorkEditPending || staffingWorkEditBusy || SupervisorPhotoReview.blocked) {
@@ -921,6 +991,11 @@ function staffingSignedOut() {
   staffingRosterNeedsRefresh = false;
   staffingWork = null;
   staffingWorkBusy = false;
+  staffingWorkspaceOpening = false;
+  const openWorkspace = document.getElementById('staffing-open-workspace');
+  if (openWorkspace) openWorkspace.disabled = false;
+  const returnToTeam = document.getElementById('supervisor-return-to-team');
+  returnToTeam.hidden = true; returnToTeam.disabled = false;
   SupervisorPhotoReview.reset();
   staffingWorkEditPending = null;
   staffingWorkEditBusy = false;

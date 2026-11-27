@@ -27,7 +27,12 @@ window.addEventListener('offline', () => {
 window.addEventListener('focus', resumeAdminAutoRefresh);
 
 function adminAutoRefreshAllowed() {
-  return Boolean(accessToken && currentUser && !document.hidden && navigator.onLine !== false);
+  const role = currentUser?.app_metadata?.role;
+  // The shared job coordinator must never poll an Admin-only staffing API
+  // while the separate scoped staffing panel is the active Supervisor view.
+  return Boolean(accessToken && ['ADMIN', 'SUPERVISOR'].includes(role)
+    && (role !== 'SUPERVISOR' || !document.getElementById('results-card')?.classList.contains('hidden'))
+    && !document.hidden && navigator.onLine !== false);
 }
 
 function stopAdminAutoRefresh() {
@@ -60,20 +65,30 @@ async function refreshAdminViewAutomatically() {
   const writeRevision = adminWriteRevision;
   const organizationId = currentUser.app_metadata.organization_id;
   const actorId = currentUser.id, sessionToken = accessToken;
+  const officeRole = currentUser.app_metadata.role;
+  const adminStaffing = officeRole === 'ADMIN';
   const selected = typeof JobWorkspace !== 'undefined' ? JobWorkspace.selectionSnapshot() : null;
 
   try {
     const [rows, users, summary, invitations] = await Promise.all([
       fetchWorkOrders(), fetchAssignableUsers(),
-      fetchContractorSeatSummary(), fetchPendingContractorInvitations()
+      adminStaffing ? fetchContractorSeatSummary() : Promise.resolve(null),
+      adminStaffing ? fetchPendingContractorInvitations() : Promise.resolve(null)
     ]);
     if (epoch !== adminSessionEpoch || writeRevision !== adminWriteRevision
         || adminWritesPending || accessToken !== sessionToken
         || currentUser?.id !== actorId
+        || currentUser?.app_metadata?.role !== officeRole
         || currentUser?.app_metadata?.organization_id !== organizationId
         || !adminAutoRefreshAllowed()) return;
     verifyAdminRls(rows, organizationId);
     if (!Array.isArray(users)) throw new Error('Unexpected Contractor response.');
+    if (officeRole === 'SUPERVISOR' && workOrderRows.page?.scope_fingerprint
+        && rows.page?.scope_fingerprint !== workOrderRows.page.scope_fingerprint) {
+      signOutButton.click();
+      setLoginStatus('Supervisor team scope changed. Sign in again.', true);
+      return;
+    }
 
     // The current bounded page may omit the open job after a filter/status
     // change. Verify that specific UUID through the existing RLS-protected
@@ -86,6 +101,7 @@ async function refreshAdminViewAutomatically() {
       if (epoch !== adminSessionEpoch || writeRevision !== adminWriteRevision
           || adminWritesPending || accessToken !== sessionToken
           || currentUser?.id !== actorId
+          || currentUser?.app_metadata?.role !== officeRole
           || currentUser?.app_metadata?.organization_id !== organizationId
           || !adminAutoRefreshAllowed()) return;
     }
@@ -116,15 +132,21 @@ async function refreshAdminViewAutomatically() {
       renderWorkOrders(rows, organizationId);
       window.scrollTo(scrollX, scrollY);
     }
-    renderContractorManagement(summary, invitations);
+    if (adminStaffing) renderContractorManagement(summary, invitations);
     const inviteStatus = document.getElementById('contractor-invite-status');
     if (inviteStatus && /JWT expired|dashboard session expired/i.test(inviteStatus.textContent)) {
       setContractorInviteStatus('', false);
     }
     setAdminAutoRefreshStatus('Automatic updates on.');
   } catch (error) {
-    if (epoch === adminSessionEpoch && accessToken) {
-      setAdminAutoRefreshStatus('Unable to update right now. Showing the last received data; retrying.');
+    if (epoch === adminSessionEpoch && currentUser?.id === actorId
+        && currentUser?.app_metadata?.role === officeRole && accessToken) {
+      if (officeRole === 'SUPERVISOR' && [401, 403].includes(error?.status)) {
+        signOutButton.click();
+        setLoginStatus('Current Supervisor work access could not be verified. Sign in again.', true);
+      } else {
+        setAdminAutoRefreshStatus('Unable to update right now. Showing the last received data; retrying.');
+      }
     }
   } finally {
     adminAutoRefreshPending = false;

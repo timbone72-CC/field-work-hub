@@ -136,7 +136,8 @@ function adminRequestStage(url) {
   if (path === `${SUPABASE_URL}/auth/v1/user`) return 'verifying your account';
   if (path === `${SUPABASE_URL}/rest/v1/rpc/admin_work_order_page`) return 'loading work orders';
   if (path === `${SUPABASE_URL}/rest/v1/work_orders`) return 'loading work orders';
-  if (path === `${SUPABASE_URL}/rest/v1/rpc/admin_list_assignable_users`) return 'loading contractors';
+  if (path === `${SUPABASE_URL}/rest/v1/rpc/admin_list_assignable_users`
+      || path === `${SUPABASE_URL}/rest/v1/rpc/office_supervisor_assignable_users`) return 'loading contractors';
   return 'contacting the dashboard service';
 }
 

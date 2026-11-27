@@ -385,6 +385,7 @@ editForm.addEventListener('submit', async (event) => {
 
   try {
     const updatedRows = await updateWorkOrder({
+      action: globalThis.crypto?.randomUUID?.() || null,
       workOrderId: editWorkOrderIdInput.value,
       woNumber: editWoNumberInput.value.trim(),
       propertyAddress: editPropertyAddressInput.value.trim(),
@@ -566,7 +567,9 @@ async function fetchWorkOrder(id) {
 
 async function fetchAssignableUsers() {
   requireAccessToken();
-  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_list_assignable_users`, {
+  const rpc = currentUser?.app_metadata?.role === 'SUPERVISOR'
+    ? 'office_supervisor_assignable_users' : 'admin_list_assignable_users';
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/${rpc}`, {
     method: 'POST',
     headers: authHeaders(true),
     body: '{}'
@@ -603,12 +606,16 @@ async function createWorkOrder({ generateWoNumber, woNumber, propertyAddress, wo
   return response.json();
 }
 
-async function updateWorkOrder({ workOrderId, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId, requirements, expectedRevision, expectedWorkOrderUpdatedAt }) {
+async function updateWorkOrder({ action, workOrderId, woNumber, propertyAddress, workType, instructions, dueDate, assignedUserId, requirements, expectedRevision, expectedWorkOrderUpdatedAt }) {
   requireAccessToken();
-  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_update_work_order_v4`, {
+  const supervisor = typeof currentUser !== 'undefined'
+    && currentUser?.app_metadata?.role === 'SUPERVISOR';
+  const response = await adminFetch(`${SUPABASE_URL}/rest/v1/rpc/${supervisor
+    ? 'office_supervisor_update_work_order_v4' : 'admin_update_work_order_v4'}`, {
     method: 'POST',
     headers: authHeaders(true),
     body: JSON.stringify({
+      ...(supervisor ? {p_action: action} : {}),
       p_work_order_id: workOrderId,
       p_wo_number: woNumber,
       p_property_address: propertyAddress,
@@ -662,6 +669,9 @@ function renderSignedIn(rows, users, organizationId) {
   loginCard.classList.add('hidden');
   resultsCard.classList.remove('hidden');
   accountHeading.textContent = `Signed in as ${currentUser.email}`;
+  document.getElementById('supervisor-return-to-team').hidden = currentUser.app_metadata.role !== 'SUPERVISOR';
+  resultsCard.querySelector('.eyebrow').textContent = currentUser.app_metadata.role === 'SUPERVISOR'
+    ? 'Authenticated Supervisor' : 'Authenticated Admin';
   assignableUsers = users;
   workOrderRows = rows;
   renderRlsSummary(rows);
@@ -678,11 +688,11 @@ function renderRlsSummary(rows) {
 }
 
 function renderAssignableUsers(users) {
-  if (!Array.isArray(users) || users.length === 0) {
+  if (!Array.isArray(users) || (users.length === 0 && currentUser?.app_metadata?.role !== 'SUPERVISOR')) {
     throw new Error('No assignable Team users were returned.');
   }
   fillAssigneeSelect(assigneeSelect, users, 'Choose Team user');
-  assigneeSelect.disabled = false;
+  assigneeSelect.disabled = users.length === 0;
 }
 
 function fillAssigneeSelect(select, users, placeholder, selectedUserId = '') {

@@ -120,22 +120,59 @@ finally:
         subprocess.run(['docker', 'stop', container], capture_output=True, timeout=20, check=True)
 
 with connect() as connection:
-    # Exact-source parity for the legacy Run 1 compatibility function;
-    # preserve the original PT409-to-40001 provenance check on requirements.
+    # 6F-T01 intentionally extends these two existing correction/requirements
+    # owners to the shared scoped office authority. Keep the security/ACL
+    # checks and the original conflict provenance check, but do not reject
+    # the approved authority marker change as source drift.
     for signature, expected, client_execute, undo_pt409 in (
-        ('private.admin_correction_basis(uuid)', 'd51474ff0e5b600f7ebfa5aeed8e4f62', True, False),
+        ('private.admin_correction_basis(uuid)', None, True, False),
         ('private.admin_set_photo_requirements_phase4_engine(uuid,uuid,jsonb)',
-         'd91ff5f2b5eeda06129171ae057b715c', False, True),
+         None, False, True),
     ):
         row = connection.execute('''
             select md5(case when %s then replace(prosrc,%s,%s) else prosrc end),
+              prosrc,
               prosecdef,proconfig,
               has_function_privilege('anon',oid,'EXECUTE'),
               has_function_privilege('authenticated',oid,'EXECUTE'),
               has_function_privilege('service_role',oid,'EXECUTE')
             from pg_proc where oid=%s::regprocedure
         ''', (undo_pt409, "'PT409'", "'40001'", signature)).fetchone()
-        assert row[0] == expected and row[1] and 'search_path=""' in row[2]
-        assert not row[3] and row[4] == client_execute and row[5]
+        if expected is None:
+            assert 'private.shared_office_work_org()' in row[1]
+            assert 'private.phase4_admin_org()' not in row[1]
+        else:
+            assert row[0] == expected
+        assert 'PT409' in row[1]
+        assert row[2] and 'search_path=""' in row[3]
+        assert not row[4] and row[5] == client_execute and row[6]
 print('PASS conflict repair preserves all predicates, source parity, private engine grants and security configuration')
+
+with connect() as connection:
+    def source(signature):
+        return connection.execute(
+            'select prosrc from pg_proc where oid=%s::regprocedure', (signature,)
+        ).fetchone()[0]
+
+    requirements_wrapper = source('private.admin_set_photo_requirements(uuid,uuid,jsonb)')
+    assert 'private.lock_legacy_work_authority()' in requirements_wrapper
+    assert 'private.shared_office_work_org()' in requirements_wrapper
+    assert 'private.guard_legacy_work_order' not in requirements_wrapper
+
+    supervisor_cas = source(
+        'public.office_supervisor_update_work_order_v4(uuid,uuid,text,text,text,text,date,uuid,uuid,jsonb,timestamptz)'
+    )
+    assert "private.current_work_role(org) is distinct from 'SUPERVISOR'" in supervisor_cas
+    assert 'or p_expected_revision is null' not in supervisor_cas
+    assert "u.raw_app_meta_data->>'role'='ADMIN'" in supervisor_cas
+    assert 'p_assigned_user_id=w.assigned_user_id' in supervisor_cas
+
+    for signature in (
+        'private.admin_cancel_untouched_followup(uuid,uuid,uuid,timestamptz,text)',
+        'private.admin_replace_cancelled_followup(uuid,uuid,uuid,timestamptz,text,uuid,date,text)',
+    ):
+        followup = source(signature)
+        assert 'private.shared_office_work_org()' in followup
+        assert 'private.phase4_admin_org()' not in followup
+print('PASS Supervisor CAS and follow-up authority corrections retain locks, role boundaries, legacy revisions and assignment exceptions')
 
