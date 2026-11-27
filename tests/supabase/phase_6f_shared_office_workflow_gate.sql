@@ -103,6 +103,26 @@ begin
   exception when insufficient_privilege then denied:=true; end;
   if not denied then raise exception 'Other-team Contractor remained eligible'; end if;
 
+  -- A banned Auth account must be excluded from the shared list and CAS,
+  -- even if its roster membership and account_work_access remain active.
+  execute 'reset role';
+  update private.account_work_access set active=true
+    where organization_id=org and user_id=contractor_a;
+  update auth.users set banned_until=now()+interval '1 day' where id=contractor_a;
+  execute 'set local role authenticated';
+  if exists(select 1 from public.office_supervisor_assignable_users() where user_id=contractor_a)
+  then raise exception 'Banned Contractor leaked into shared assignment choices'; end if;
+  denied:=false;
+  begin
+    perform public.office_supervisor_update_work_order_v4(
+      gen_random_uuid(),wo,'T01-CAS','Banned contractor','TEST','Supervisor CAS edit',
+      current_date,contractor_a,current_revision,null,after_edit);
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Banned Contractor remained eligible'; end if;
+  execute 'reset role';
+  update auth.users set banned_until=null where id=contractor_a;
+  execute 'set local role authenticated';
+
   -- A valid Admin identity may remain on a historical assignment, but Admin
   -- must not use the Supervisor CAS endpoint itself.
   perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'session_id',owner_id,

@@ -5,6 +5,8 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 ## November 27 — 6F-T01 shared office workflow (current construction)
 
+**Final scope/eligibility correction:** exact head `78e74c66763d39bdaa76168ec2dad90b59d2975c` verified Governance 46049306298, Database 46049018522, Dashboard 46049018467, Android 46049018512 PASS. Review identified a remaining partial eligibility predicate; the shared list and CAS now use the existing complete `private.is_assignable_contractor` owner (including banned, unconfirmed, suspended and unaccepted accounts), unchanged-assignment historical Contractor handoff exceptions, and current operational identity for list reads. Shared office org is tied to the JWT organization. Requirements mutation retains both the authority lock and exact WO row lock before authorization. A focused banned-account denial regression extends the existing gate. Exact new-head CI PENDING; no merge, activation or new hosted test. Migration history remains unreconciled.
+
 **Post-Codex correction pass — construction continued on PR #137.** The selective
 rewrite now includes untouched-follow-up cancellation and replacement, so their
 existing correction business functions use the shared scoped office authority.

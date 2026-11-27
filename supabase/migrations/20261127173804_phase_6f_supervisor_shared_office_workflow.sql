@@ -18,7 +18,8 @@ language plpgsql stable security definer set search_path='' as $$
 declare o uuid; role_name text;
 begin
   select a.organization_id into o from private.account_work_access a
-   where a.user_id=auth.uid() and a.active and a.disabled_at is null;
+   where a.user_id=auth.uid() and a.active and a.disabled_at is null
+     and a.organization_id::text=auth.jwt()->'app_metadata'->>'organization_id';
   role_name:=private.current_work_role(o);
   if o is null or role_name not in ('ADMIN','SUPERVISOR')
      or auth.jwt()->'app_metadata'->>'role' is distinct from role_name
@@ -83,7 +84,7 @@ begin
   then raise exception 'Unexpected requirements wrapper source; stop upgrade'; end if;
   src:=replace(src,
     'perform private.guard_legacy_work_order(p_work_order_id,''ADMIN'');',
-    'perform private.lock_legacy_work_authority(); perform private.shared_office_work_org(); if not private.can_work_order(p_work_order_id) then raise exception ''Current Supervisor work required'' using errcode=''42501''; end if;');
+    'perform private.lock_legacy_work_authority(); perform private.shared_office_work_org(); perform 1 from public.work_orders w where w.id=p_work_order_id for update; if not private.can_work_order(p_work_order_id) then raise exception ''Current scoped office work required'' using errcode=''42501''; end if;');
   execute src;
 end;
 $requirements_wrapper$;
@@ -163,10 +164,14 @@ begin
     or not private.has_team_capability(org,w.responsible_team_id,'WORK')
     or w.updated_at is distinct from p_expected_updated_at then
    raise exception 'Work order changed or is outside current Supervisor scope' using errcode='40001'; end if;
- if not exists(select 1 from auth.users u join private.account_work_access a on a.user_id=u.id
-   where u.id=p_assigned_user_id and a.organization_id=org and a.work_role='CONTRACTOR'
-     and a.active and a.disabled_at is null and u.deleted_at is null
-     and private.contractor_current_team(u.id,org)=w.responsible_team_id)
+ -- New assignments must satisfy the same complete eligibility predicate
+ -- as existing dispatch and exact Supervisor assignment actions. Historical
+ -- exceptions apply only to retaining the unchanged existing assignee.
+ if not (private.is_assignable_contractor(p_assigned_user_id,org)
+           and (private.contractor_current_team(p_assigned_user_id,org)=w.responsible_team_id
+             or (p_assigned_user_id=w.assigned_user_id
+               and (private.completed_handoff_assignment_for_user(p_assigned_user_id,p_work_order_id)
+                 or private.active_team_handoff_original_assignment(p_assigned_user_id,p_work_order_id)))))
    and not exists(select 1 from auth.users u
      where u.id=p_assigned_user_id and u.deleted_at is null
        and u.raw_app_meta_data->>'organization_id'=org::text
@@ -199,9 +204,10 @@ language sql stable security definer set search_path='' as $$
       and a.active and a.disabled_at is null
     join private.contractor_team_memberships m on m.user_id=u.id
       and m.organization_id=a.organization_id and m.active
-    where private.current_work_role(a.organization_id)='SUPERVISOR'
+    where private.current_operational_identity(a.organization_id)
+      and private.current_work_role(a.organization_id)='SUPERVISOR'
       and private.has_team_capability(a.organization_id,m.team_id,'WORK')
-      and u.deleted_at is null and u.email_confirmed_at is not null
+      and private.is_assignable_contractor(u.id,a.organization_id)
     order by u.email,u.id limit 500;
 $$;
 revoke all on function public.office_supervisor_assignable_users() from public,anon,authenticated,service_role;
