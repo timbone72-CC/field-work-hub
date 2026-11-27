@@ -69,6 +69,23 @@ begin
 end;
 $rewrite$;
 
+-- The post-cutover requirements wrapper retains a legacy Admin guard while
+-- delegating to the rewritten Phase 4 engine. Replace only that exact guard;
+-- all other legacy guards remain untouched.
+do $requirements_wrapper$
+declare src text;
+begin
+  select pg_get_functiondef('private.admin_set_photo_requirements(uuid,uuid,jsonb)'::regprocedure)
+    into src;
+  if position('private.guard_legacy_work_order(p_work_order_id,''ADMIN'')' in src)=0
+  then raise exception 'Unexpected requirements wrapper source; stop upgrade'; end if;
+  src:=replace(src,
+    'perform private.guard_legacy_work_order(p_work_order_id,''ADMIN'');',
+    'perform private.shared_office_work_org(); if not private.can_work_order(p_work_order_id) then raise exception ''Current Supervisor work required'' using errcode=''42501''; end if;');
+  execute src;
+end;
+$requirements_wrapper$;
+
 -- Company-scoped template reads follow the same shared business boundary;
 -- staffing and Product Owner controls still use their own private authority.
 drop policy if exists photo_templates_admin_read on public.photo_templates;
