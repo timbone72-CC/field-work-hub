@@ -372,7 +372,7 @@ jobs:
           findings = [(item["filename"], result) for item in file_changes for result in inspect_additions(item)]
           errors.extend(path + ": " + result for path, result in findings if result == "incomplete operational diff")
           exception = field_value("Completion exception")
-          if findings or exception not in (None, "NONE"):
+          if any(result != "incomplete operational diff" for _, result in findings) or exception not in (None, "NONE"):
               approved = False
               if not exception or not re.fullmatch(r"NECESSARY: \S.*; Remove when: \S.*", exception):
                   errors.append("Use Completion exception: NECESSARY: reason; Remove when: condition.")
@@ -406,8 +406,9 @@ jobs:
                   selected = re.findall(r"(?m)^- Next construction task: \*\*([A-Za-z0-9-]+)\*\*$", block)
                   rows = re.findall(r"(?m)^\|\s*\*\*((?:[568][A-F]?|7)-T\d{2})\*\*\s*\|\s*[^|]+\|\s*([^|]+)\|", block)
                   states = {name: state.strip() for name, state in rows}
-                  if len(selected) != 1 or len(states) != len(rows) or selected[0] not in states:
-                      raise ValueError("Invalid construction register")
+                  if (len(selected) != 1 or len(states) != len(rows)
+                          or [name for name, state in states.items() if state == "ACTIVE"] != selected):
+                      raise ValueError("Exactly one selected ACTIVE construction task is required")
                   return selected[0], states
 
               try:
@@ -420,8 +421,12 @@ jobs:
                   if closed:
                       for field in ("Activation evidence", "Acceptance evidence"):
                           value = field_value(field) or ""
-                          if not all(re.search(r"\b" + re.escape(name) + r"\b", value) for name in closed) or not re.search(r"(?:docs/|https://github\.com/|#\d+)", value):
-                              errors.append(f"{field} must name each closing task ({', '.join(closed)}) and cite existing evidence.")
+                          allowed = ("PASS: ", "N/A: ") if field == "Activation evidence" else ("PASS: ",)
+                          if (not value.startswith(allowed)
+                                  or not all(re.search(r"\b" + re.escape(name) + r"\b", value) for name in closed)
+                                  or not re.search(r"(?:docs/|https://github\.com/|#\d+)", value)):
+                              errors.append(f"{field} needs PASS (activation-only N/A with reason), closing task IDs "
+                                            f"({', '.join(closed)}) and existing evidence reference.")
                   if selected != prior and after.get(prior) not in {"COMPLETE", "ACCEPTED"}:
                       if after.get(prior) != "BLOCKED" or not field_value("Construction blocker") or not field_value("Resume condition"):
                           errors.append("Unfinished selected task requires BLOCKED state, Construction blocker and Resume condition before advancing.")
