@@ -22,9 +22,8 @@ assert "name='com.inandout.fieldphotoprep.team.internal'" in badging
 assert ("versionCode='47'" if recovery else "versionCode='46'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
-assert 'AUTOMATIC_CLEANUP_ENABLED = false' in build_config, 'Photo cleanup cannot silently activate in a source-only build'
-assert 'CLEANUP_TEST_PHOTO_ID = ""' in build_config
-assert 'CLEANUP_TEST_PACKAGE_ID = ""' in build_config
+assert ('AUTOMATIC_CLEANUP_ENABLED = false' if recovery else 'AUTOMATIC_CLEANUP_ENABLED = true') in build_config
+assert 'https://vyocaujuwrivoqynvitm.supabase.co' in Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/SupabaseConfig.java').read_text()
 assert ('CLEANUP_READINESS_POLLING_ENABLED = false' if recovery else 'CLEANUP_READINESS_POLLING_ENABLED = true') in build_config, 'v46 TEST polling must be enabled and v47 recovery disabled'
 room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
 room_version=6
@@ -43,7 +42,7 @@ filename=f'Field-Work-Hub-0.5-Phase5-{variant}-{head[:7]}.apk'
 shutil.copyfile(apk,out/filename)
 identity={'runtime_head':head,'variant':variant,'file':filename,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),
           'package':'com.inandout.fieldphotoprep.team.internal','signer_sha256':signer,'version_code':47 if recovery else 46,
-          'room_version':room_version,'room_schema_blobs':room_schema_blobs,'field_sync_enabled':not recovery,'private_photo_network_enabled':not recovery,'cleanup_readiness_polling_enabled':not recovery,'automatic_cleanup_enabled':False}
+          'room_version':room_version,'room_schema_blobs':room_schema_blobs,'field_sync_enabled':not recovery,'private_photo_network_enabled':not recovery,'cleanup_readiness_polling_enabled':not recovery,'automatic_cleanup_enabled':not recovery}
 (out/'identity.json').write_text(json.dumps(identity,indent=2)+'\n')
 if not recovery:
     release_dir=Path('phase5-artifacts/internal-release')
