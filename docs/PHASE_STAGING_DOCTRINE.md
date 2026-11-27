@@ -4,18 +4,7 @@ Status: **GOVERNED PROJECT OPERATING RULE**
 
 ## Mandatory reread before using this doctrine
 
-Before making a phase-transition decision, deciding how far to implement before the next phone test, staging a physical-device gate, or resuming work after device evidence:
-
-1. read `AGENTS.md` completely;
-2. read the relevant current and next phase in `docs/ROADMAP.md` completely;
-3. read `CHANGE_CONTROL_CONTRACT.md`;
-4. read `TESTING_CONTRACT.md`;
-5. read `INTEGRATION_CONTRACT.md` when the phase touches Supabase/Auth/RLS, Room/offline state, reassignment, camera/photos, background sync, remote storage, upload, retry, or cleanup;
-6. read the exact device-gate plan for that phase if one exists.
-
-Do not replace these rereads with memory, a chat summary, previous-session notes, or an earlier read.
-
-If the next phase is not fully planned in `docs/ROADMAP.md`, **STOP. Planning is the next task.**
+Follow `AGENTS.md` and `RULE_INDEX.md` for current mandatory reads, approved whole-phase planning and the exact applicable device-gate plan. Read the current and next phase for transitions; do not substitute previous-session notes.
 
 ## Purpose
 
@@ -23,7 +12,7 @@ Team is developed in large, evidence-based stages through working operation. Saf
 
 Default pattern:
 
-`plan the full operational outcome → build and verify → stage safely → obtain any still-missing required authorization → deploy and activate in the authorized environment → verify only the affected unproven behavior → leave the accepted feature enabled`
+`plan the full operational outcome → build and verify in dependency order → obtain any still-missing required authorization (combine compatible development actions) → merge, deploy and activate in the authorized environment → verify only the affected unproven behavior → leave the accepted feature enabled`
 
 Place necessary device/provider gates at their actual dependency boundary within that sequence. Reuse accepted evidence; a phone gate, deployment step or temporary OFF setting does not create another approval or retest stage. If the approved target is working operation, continue through activation and acceptance unless a specific blocker or operator decision prevents it.
 
@@ -33,7 +22,7 @@ A **phase** is the numbered parent in the roadmap, such as Phase 3. Its lettered
 
 Before starting any section, complete the entire parent-phase plan with behavior, protected boundaries, failure/recovery, verification and completion criteria for every included section. Identify dependencies and each genuine phone/laptop/provider gate upfront, explaining what automation cannot prove and what subsequent work depends on it. Do not approve only the next letter and defer planning the remaining letters until later.
 
-Record one parent-phase plan approval and proceed through its included sections within unchanged scope. An impact record or technical implementation note may refine approved behavior without requiring another design approval. A lettered-section, branch/PR, session boundary or passed phone gate is not a reason to request permission again. Separate explicit Level 3 pre-merge approval remains mandatory.
+Record one parent-phase plan approval and proceed through its included sections within unchanged scope. An impact record or technical implementation note may refine approved behavior without requiring another design approval. A lettered-section, branch/PR, session boundary or passed phone gate is not a reason to request permission again. Explicit Level 3 pre-merge approval remains mandatory; GOVERNANCE.md permits one scoped development authorization covering compatible rollout actions.
 
 Multiple real-device/provider gates are permitted where actual evidence dependencies require them. Build all independent work that can safely be proven first, combine compatible checks, and pause only dependent work at the documented boundary. A newly discovered real boundary must have a recorded reason; it does not by itself create another design-approval gate.
 

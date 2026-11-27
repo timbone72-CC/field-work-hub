@@ -6,17 +6,7 @@ Define which tests run, when they run, and when testing must stop work. The goal
 
 ## Mandatory reread before test planning
 
-Before selecting tests, interpreting a failure, declaring a runtime head ready, or staging a device gate:
-
-1. read `AGENTS.md` completely;
-2. read the relevant phase in `docs/ROADMAP.md` completely;
-3. read `CHANGE_CONTROL_CONTRACT.md`;
-4. read `INTEGRATION_CONTRACT.md` when the work touches Supabase/Auth/RLS, local persistence, offline behavior, reassignment, camera/photos, background sync, remote storage, upload, retry, or cleanup;
-5. read `docs/PHASE_STAGING_DOCTRINE.md` before deciding that phone/device evidence is required or before declaring a device gate complete.
-
-Do not replace these rereads with memory, a chat summary, prior CI results from another runtime head, or earlier-session notes.
-
-If the roadmap does not define the behavior being tested, **STOP. Testing cannot invent the product rule.**
+Follow `AGENTS.md` and `RULE_INDEX.md` for the mandatory reads and approved behavior; testing cannot invent a product rule. Read the staging doctrine for genuine device boundaries. Prior CI from another runtime head cannot establish final-head verification.
 
 ## Development loop
 
@@ -31,7 +21,7 @@ Before merging a runtime change:
 
 1. focused tests for the changed behavior pass;
 2. the complete automated suite passes once on the exact final runtime head;
-3. affected smoke/device/provider checks required by the change class pass;
+3. affected checks that genuinely gate merge pass; checks requiring deployed operation occur at the authorized activation/acceptance boundary, not before deployment;
 4. the tested head is the head proposed for merge.
 
 A successful CI run on the exact final runtime head satisfies the complete-suite requirement. Do not duplicate it locally without a concrete reason.
@@ -47,7 +37,7 @@ Use one decision per proposed reality check:
 - **INVALIDATED:** A specific code/configuration/identity change or actual contradiction undermines a previously accepted assertion. Record **what changed and why that exact proof no longer applies**; repeat *only* the affected observation, not the whole old test or unrelated phases.
 - **BLOCKED:** Required credentials, permission, provider access or a safety fact are unavailable. Stop the dependent action without faking PASS or provoking retries. Continue other independent approved work; do not create substitute test work orders or a new review gate.
 
-This classification is a **decision rule inside existing Phase 5–8 acceptance**, not a new approval, document, PR, checklist or physical test. The operator may report a result once; preserve it without requesting a second screenshot. If a newly affected security/data-preservation/remote-identity boundary genuinely needs verification, fail closed until that narrow evidence exists. Existing Level 3 operator approval, exact-head final CI and documented deployment/rollback authority are unchanged.
+This classification is a **decision rule inside existing Phase 5–8 acceptance**, not a new approval, document, PR, checklist or physical test. The operator may report a result once; preserve it without requesting a second screenshot. If a newly affected security/data-preservation/remote-identity boundary genuinely needs verification, fail closed until that narrow evidence exists. Existing Level 3 operator approval, exact-head final CI and documented deployment/rollback authority are governed by GOVERNANCE.md; compatible development rollout actions may be authorized together.
 
 **Phase 7 pilot interpretation:** The roadmap's scenario catalog describes coverage for realistic repeated *operation*, not a command to rerun every historical camera, offline, receipt or Google Drive test. Review credited evidence first, observe normal integrated field use for *unproven interactions or newly activated behavior*, and record only missing/invalidated boundaries. This does not waive the actual integrated pilot or Phase 8 production-specific reality gates.
 
