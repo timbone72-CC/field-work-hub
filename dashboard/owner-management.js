@@ -765,7 +765,7 @@ function ownerSupervisorInviteUI() {
     box.append(label);
   }
   button.disabled = ownerSupervisorInviteBusy || ownerSupervisorInviteNeedsRefresh
-    || Number(data.capacity.supervisor_available) < 1;
+    || (Number(data.capacity.supervisor_available) < 1 && !ownerSupervisorInvitePending);
   if (Number(data.capacity.supervisor_available) < 1 && !ownerSupervisorInvitePending)
     ownerSupervisorInviteStatus('No Supervisor seat is available; only the Product Owner can raise the allowance.');
 }
@@ -779,13 +779,13 @@ async function ownerCreateSupervisorInvitation() {
   const quota = data?.capacity;
   const activeTeams = new Set(data?.teams.filter(team => team.active).map(team => team.team_id));
   if (ownerSupervisorInviteBusy || !ownerStillCurrent(check) || !data || data.organization !== check.organization
-    || Number(quota?.supervisor_available) < 1 || ![1,2,3].includes(tier)
+    || (Number(quota?.supervisor_available) < 1 && !ownerSupervisorInvitePending) || ![1,2,3].includes(tier)
     || (tier < 3 && (!teamIds.length || teamIds.some(id => !activeTeams.has(id))))
     || (tier === 3 && teamIds.length) || !displayName || !email || !reason) {
     ownerSupervisorInviteStatus('Refresh office seats and choose a valid tier and active team scope.', true); return;
   }
   const request = { tier, team_ids: teamIds, display_name: displayName, email, reason,
-    expected_allowance_revision: quota.revision };
+    expected_allowance_revision: ownerSupervisorInvitePending?.request.expected_allowance_revision ?? quota.revision };
   if (ownerSupervisorInvitePending && JSON.stringify(ownerSupervisorInvitePending.request) !== JSON.stringify(request)) {
     ownerSupervisorInviteStatus('An earlier Supervisor invitation needs reconciliation first.', true); return;
   }

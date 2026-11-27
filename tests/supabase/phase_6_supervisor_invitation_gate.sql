@@ -5,7 +5,7 @@ do $supervisor_invite_gate$
 declare
   org uuid:=gen_random_uuid(); team uuid:=gen_random_uuid(); owner uuid:=gen_random_uuid();
   invited uuid:=gen_random_uuid(); action uuid:=gen_random_uuid(); revision uuid;
-  response jsonb; denied boolean;
+  response jsonb; denied boolean; cancelled uuid:=gen_random_uuid();
 begin
   insert into public.organizations(id,name) values(org,'SUPERVISOR INVITE GATE');
   insert into public.admin_teams(id,organization_id,name) values(team,org,'SUPERVISED TEAM');
@@ -18,6 +18,18 @@ begin
     values(org,1,1) returning private.org_office_allowances.revision into revision;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',owner,'session_id',owner)::text,true);
 
+  denied:=false;
+  begin perform public.reserve_scoped_supervisor_invitation(gen_random_uuid(),org,null::smallint,array[team],
+    'invalid@example.invalid','Invalid',revision,'Missing tier','TEST');
+  exception when invalid_parameter_value then denied:=true; end;
+  if not denied then raise exception 'Null Supervisor tier allocated a seat'; end if;
+  perform public.reserve_scoped_supervisor_invitation(cancelled,org,1::smallint,array[team],
+    'supervisor@example.invalid','Cancelled',revision,'Cancel before Auth','TEST');
+  perform public.owner_release_office_seat(cancelled,org,'Cancel before Auth','TEST');
+  if (select state from private.scoped_admin_invitation_reservations where action_id=cancelled)<>'RELEASED'
+    or (select state from private.office_seat_reservations where action_id=cancelled)<>'RELEASED' then
+    raise exception 'Pre-Auth cancellation failed to release both records'; end if;
+
   response:=public.reserve_scoped_supervisor_invitation(action,org,2::smallint,array[team],
     'supervisor@example.invalid','Invited Supervisor',revision,'Owner approved','TEST');
   if response->>'status'<>'RESERVED' or response->>'tier'<>'2'
@@ -26,6 +38,10 @@ begin
     raise exception 'Supervisor reservation did not retain exact owner scope'; end if;
   response:=public.begin_scoped_supervisor_invitation_issue(action,org,'TEST');
   if response->>'instruction'<>'CREATE_ONCE' then raise exception 'Supervisor Auth create was not fenced'; end if;
+  denied:=false;
+  begin perform public.owner_release_office_seat(action,org,'Cannot cancel after Auth starts','TEST');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Issuing Supervisor reservation was released'; end if;
   response:=public.begin_scoped_supervisor_invitation_issue(action,org,'TEST');
   if response->>'instruction'<>'RECONCILE' then raise exception 'Supervisor retry could create another Auth identity'; end if;
   denied:=false;
