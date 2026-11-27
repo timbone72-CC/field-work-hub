@@ -448,3 +448,16 @@ test('a stale Supervisor snapshot cannot replace a changed office role', async (
   assert.equal(f.calls.render, 0);
   assert.equal(f.calls.summary, 0);
 });
+
+test('a changed Supervisor team scope clears all previously displayed job rows', async () => {
+  const f = fixture();
+  f.context.currentUser.app_metadata.role = 'SUPERVISOR';
+  f.context.workOrderRows.page = {scope_fingerprint:'a'.repeat(32)};
+  const next = rows('new-team');
+  next.page = {scope_fingerprint:'b'.repeat(32)};
+  f.context.fetchWorkOrders = async () => next;
+  await f.run('refreshAdminViewAutomatically()');
+  assert.equal(f.context.accessToken, null);
+  assert.equal(f.context.workOrderRows.length, 0);
+  assert.ok(f.calls.messages.some(x => x.includes('team scope changed')));
+});

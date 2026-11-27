@@ -169,5 +169,5 @@ const SupervisorAssignmentCandidates = (() => {
       if(current(gen,wo,identity))status(error.message+' Exact action retained for safe retry.',true);
     }finally{assignBusy=false;render()}
   }
-  return {mount,reset};
+  return {mount,reset,get blocked(){return busy||assignBusy||Boolean(pending)}};
 })();

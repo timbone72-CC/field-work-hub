@@ -662,6 +662,9 @@ function renderSignedIn(rows, users, organizationId) {
   loginCard.classList.add('hidden');
   resultsCard.classList.remove('hidden');
   accountHeading.textContent = `Signed in as ${currentUser.email}`;
+  document.getElementById('supervisor-return-to-team').hidden = currentUser.app_metadata.role !== 'SUPERVISOR';
+  resultsCard.querySelector('.eyebrow').textContent = currentUser.app_metadata.role === 'SUPERVISOR'
+    ? 'Authenticated Supervisor' : 'Authenticated Admin';
   assignableUsers = users;
   workOrderRows = rows;
   renderRlsSummary(rows);
@@ -678,11 +681,11 @@ function renderRlsSummary(rows) {
 }
 
 function renderAssignableUsers(users) {
-  if (!Array.isArray(users) || users.length === 0) {
+  if (!Array.isArray(users) || (users.length === 0 && currentUser?.app_metadata?.role !== 'SUPERVISOR')) {
     throw new Error('No assignable Team users were returned.');
   }
   fillAssigneeSelect(assigneeSelect, users, 'Choose Team user');
-  assigneeSelect.disabled = false;
+  assigneeSelect.disabled = users.length === 0;
 }
 
 function fillAssigneeSelect(select, users, placeholder, selectedUserId = '') {

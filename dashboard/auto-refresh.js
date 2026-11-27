@@ -83,6 +83,12 @@ async function refreshAdminViewAutomatically() {
         || !adminAutoRefreshAllowed()) return;
     verifyAdminRls(rows, organizationId);
     if (!Array.isArray(users)) throw new Error('Unexpected Contractor response.');
+    if (officeRole === 'SUPERVISOR' && workOrderRows.page?.scope_fingerprint
+        && rows.page?.scope_fingerprint !== workOrderRows.page.scope_fingerprint) {
+      signOutButton.click();
+      setLoginStatus('Supervisor team scope changed. Sign in again.', true);
+      return;
+    }
 
     // The current bounded page may omit the open job after a filter/status
     // change. Verify that specific UUID through the existing RLS-protected

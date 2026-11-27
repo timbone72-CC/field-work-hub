@@ -20,7 +20,7 @@ const CreateJobDrafts=(()=>{
   async function loadCompanies(){
     if(companyLoad)return companyLoad;
     const gen=companyGeneration,epoch=adminSessionEpoch,actor=currentUser?.id,org=currentUser?.app_metadata?.organization_id;
-    if(!accessToken||!actor||currentUser?.app_metadata?.role!=='ADMIN')return;
+    if(!accessToken||!actor||!['ADMIN','SUPERVISOR'].includes(currentUser?.app_metadata?.role))return;
     const current=()=>gen===companyGeneration&&!!accessToken&&epoch===adminSessionEpoch&&actor===currentUser?.id&&org===currentUser?.app_metadata?.organization_id;
     const select=el('create-company'),message=el('create-company-status'),chosen=select.value||companySelection;
     select.disabled=true;message.textContent='Loading client companies…';
@@ -43,7 +43,7 @@ const CreateJobDrafts=(()=>{
     companyLoad=task;return task;
   }
   async function addCompany(){
-    if(companyBusy||!accessToken||currentUser?.app_metadata?.role!=='ADMIN')return;
+    if(companyBusy||!accessToken||!['ADMIN','SUPERVISOR'].includes(currentUser?.app_metadata?.role))return;
     const name=window.prompt('Client company name:');if(!name?.trim())return;
     const gen=companyGeneration,epoch=adminSessionEpoch,actor=currentUser.id,org=currentUser.app_metadata.organization_id;
     const current=()=>gen===companyGeneration&&!!accessToken&&epoch===adminSessionEpoch&&actor===currentUser?.id&&org===currentUser?.app_metadata?.organization_id;
@@ -62,7 +62,7 @@ const CreateJobDrafts=(()=>{
     }catch(error){if(current())el('create-company-status').textContent=error.message+' Your draft is retained. Reload client companies before trying again.';}
     finally{if(current()){companyBusy=false;el('create-add-company').disabled=false;}}
   }
-  function ensure(){if(!accessToken||currentUser?.app_metadata?.role!=='ADMIN')return;
+  function ensure(){if(!accessToken||!['ADMIN','SUPERVISOR'].includes(currentUser?.app_metadata?.role))return;
     if(!companies.size&&!companyLoad)void loadCompanies();
     if(!editor.active()){resetProvenance();return editor.open({id:null,updated_at:null});}}
   function reset(){companyGeneration++;companyLoad=null;companies.clear();companySelection='';companyBusy=false;el('create-add-company').disabled=false;
