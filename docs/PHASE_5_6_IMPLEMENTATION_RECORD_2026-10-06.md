@@ -7,9 +7,9 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 **Level 3 / implementation complete, merge pending.** Scope key remains
 `dashboard-workflow-enhancement-plan`; authoritative branch is
-`feat/fwh-6f-t01-shared-office-workflow`; baseline/rollback is
-`7e60a83c11a5ed794c087143fe1a476d0ff808da`; exact candidate head is
-`29eac7df25173e821a963736bf48460eba03e4d8`. This continues the existing 6F
+`feat/fwh-6f-t01-supervisor-invitations`; baseline/rollback is the reconciled
+`52bcc2ae6aaa60de01a9e5fec2dd63610902767c`; exact implementation candidate
+is `17d7fdb` (carried from preserved `29eac7d`). This continues the existing 6F
 line and preserves the accepted shared-office evidence. The change adds
 permanent Product Owner-only Supervisor invitations to the existing secure
 staff invitation owner: owner-selected name/email/tier/active team scope,
