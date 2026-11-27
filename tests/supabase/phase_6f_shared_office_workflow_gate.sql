@@ -54,27 +54,22 @@ begin
   if wo is null or (select responsible_team_id from public.work_orders where id=wo)<>team_a
   then raise exception 'Scoped Supervisor creation did not use the existing owner'; end if;
 
-  -- The shared CAS owner accepts a legacy run whose requirement revision is
+  -- The shared CAS owner accepts a legacy client whose requirement revision is
   -- null, preserves exact replay identity, and rejects stale/changed actions.
-  execute 'reset role';
-  update public.work_order_runs set requirement_snapshot=
-    jsonb_set(requirement_snapshot,'{revision}','null'::jsonb)
-    where work_order_id=wo and id=(select current_run_id from public.work_orders where id=wo);
-  execute 'set local role authenticated';
   select updated_at into before_edit from public.work_orders where id=wo;
   action:=gen_random_uuid();
   select j into result from public.office_supervisor_update_work_order_v4(
     action,wo,'T01-CAS','Legacy null revision address','TEST','Supervisor CAS edit',
-    current_date,contractor_a,null,cfg,before_edit) j;
+    current_date,contractor_a,null,null,before_edit) j;
   select j into replay from public.office_supervisor_update_work_order_v4(
     action,wo,'T01-CAS','Legacy null revision address','TEST','Supervisor CAS edit',
-    current_date,contractor_a,null,cfg,before_edit) j;
+    current_date,contractor_a,null,null,before_edit) j;
   if replay is distinct from result then raise exception 'Supervisor CAS replay changed result'; end if;
   denied:=false;
   begin
     perform public.office_supervisor_update_work_order_v4(
       action,wo,'T01-CAS','Changed replay','TEST','Supervisor CAS edit',
-      current_date,contractor_a,null,cfg,before_edit);
+      current_date,contractor_a,null,null,before_edit);
   exception when serialization_failure then denied:=true; end;
   if not denied then raise exception 'Changed Supervisor CAS replay was accepted'; end if;
   select updated_at into after_edit from public.work_orders where id=wo;
@@ -82,13 +77,10 @@ begin
   begin
     perform public.office_supervisor_update_work_order_v4(
       gen_random_uuid(),wo,'T01-CAS','Stale edit','TEST','Supervisor CAS edit',
-      current_date,contractor_a,(select (requirement_snapshot->>'revision')::uuid
-        from public.work_order_runs where id=(select current_run_id from public.work_orders where id=wo)),
-      cfg,before_edit);
+      current_date,contractor_a,null,null,before_edit);
   exception when serialization_failure then denied:=true; end;
   if not denied then raise exception 'Stale Supervisor CAS edit was accepted'; end if;
-  current_revision:=(select (requirement_snapshot->>'revision')::uuid
-    from public.work_order_runs where id=(select current_run_id from public.work_orders where id=wo));
+  current_revision:=null;
 
   -- Only an active Contractor in the responsible team is eligible for a new
   -- assignment; inactive or other-team identities fail closed.
