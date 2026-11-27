@@ -15,7 +15,8 @@
 - Feature / milestone: <!-- Runtime only: FWH-F04 / FWH-AC1; shared: FWH-PLATFORM / FWH-AC#; incident: FWH-SAFETY; docs-only: N/A -->
 - Work lane: <!-- Runtime only: FINISH | ACTIVATE | ACCEPT | RELEASE | SAFETY; docs-only: GOVERNANCE -->
 - Business outcome: <!-- Runtime: concrete feature progress; ACTIVATE names switch in existing External systems changed/rollback; ACCEPT/RELEASE cite evidence in existing Evidence section; SAFETY includes linked issue. Docs: N/A -->
-- New physical/provider evidence: <!-- Runtime: NONE or FWH-AC#: specific previously unproven boundary; accepted evidence is not re-tested. Docs: NONE -->
+- New physical/provider evidence: <!-- NONE | FWH-AC#: NEW: specific unproven behavior | FWH-AC#: INVALIDATED: scenario; Prior evidence: reference; Changed boundary: concrete change -->
+<!-- Only when applicable: Completion exception: NECESSARY: reason; Remove when: condition; independent exact-head owner comment. Task closure: Activation evidence and Acceptance evidence name closing IDs and cite the existing record. Advancing past BLOCKED task: Construction blocker and Resume condition. -->
 
 ## Summary
 
