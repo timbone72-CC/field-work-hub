@@ -98,3 +98,5 @@ The prior 5,216-line record at blob `d7c380ab1a22858baf02c5d2860e1a24dbfc2898`, 
 | 66 | [Dated handoff part 66](2026-11-26/PHASE_5_6_HISTORY_PART_66.md) | Full post-#130 cleanup/dependency checkpoint preserved verbatim before actual manifest-only acceptance |
 
 | 67 | [Dated handoff part 67](2026-11-27/PHASE_5_6_HISTORY_PART_67.md) | Full post-#131 manifest-only acceptance and prior two-package preparation checkpoint, preserved verbatim before independent delivery acceptance |
+
+| 68 | [Dated handoff part 68](2026-11-27/PHASE_5_6_HISTORY_PART_68.md) | Full pre-v50 device-acceptance handoff, including superseded v48/v49 construction, preserved verbatim |
