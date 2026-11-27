@@ -35,7 +35,8 @@ public class ActionSchedulerTest {
         PeriodicWorkRequest request = ActionScheduler.readinessRequest("owner", "org");
         assertEquals(NetworkType.CONNECTED,
                 request.getWorkSpec().constraints.getRequiredNetworkType());
-        assertEquals(TimeUnit.HOURS.toMillis(24), request.getWorkSpec().intervalDuration);
+        assertEquals(BuildConfig.AUTOMATIC_CLEANUP_ENABLED ? TimeUnit.MINUTES.toMillis(15)
+                : TimeUnit.HOURS.toMillis(24), request.getWorkSpec().intervalDuration);
         assertEquals(3, request.getWorkSpec().input.getKeyValueMap().size());
         assertEquals("owner", request.getWorkSpec().input.getString("owner"));
         assertEquals("org", request.getWorkSpec().input.getString("org"));
@@ -45,8 +46,22 @@ public class ActionSchedulerTest {
     }
 
     @Test
-    public void testReadinessBuildNeverEnablesDestructiveCleanupOrWrongBackend() {
-        assertFalse(BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
+    public void testBuildAllowsCleanupOnlyForExactControlledTestCandidate() {
+        if (BuildConfig.AUTOMATIC_CLEANUP_ENABLED) {
+            assertEquals(48, BuildConfig.VERSION_CODE);
+            assertEquals("d23443e0-2abb-4df4-912f-859b9367aaef",BuildConfig.CLEANUP_TEST_PHOTO_ID);
+            assertEquals("aae49a70-a6e3-441d-badf-8b4b4be74e80",BuildConfig.CLEANUP_TEST_PACKAGE_ID);
+            assertTrue(BuildConfig.CLEANUP_READINESS_POLLING_ENABLED);
+            PeriodicWorkRequest cleanup=ActionScheduler.cleanupRequest("owner","org");
+            assertEquals(TimeUnit.MINUTES.toMillis(15),cleanup.getWorkSpec().intervalDuration);
+            assertTrue(cleanup.getWorkSpec().input.getBoolean("cleanup_only",false));
+            assertFalse(cleanup.getWorkSpec().input.getBoolean("readiness_only",false));
+            assertNotEquals(ActionScheduler.cleanupWorkName("owner","org"),
+                    ActionScheduler.readinessWorkName("owner","org"));
+        } else {
+            assertEquals("",BuildConfig.CLEANUP_TEST_PHOTO_ID);
+            assertEquals("",BuildConfig.CLEANUP_TEST_PACKAGE_ID);
+        }
         if (BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) {
             assertTrue(BuildConfig.FIELD_SYNC_ENABLED);
             // Exact candidate version is verified at the frozen APK identity gate.

@@ -8,7 +8,7 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** One application-scoped original/file owner; cleanup is independently release-gated OFF. */
+/** One application-scoped original/file owner; cleanup is independently release-gated. */
 final class PhotoOwner {
     final ExecutorService io=Executors.newSingleThreadExecutor();
     private final File directory;
@@ -16,6 +16,7 @@ final class PhotoOwner {
     private final SessionCoordinator sessions;
     private final PhotoCleanupDao cleanupDao;
     private final boolean cleanupEnabled;
+    private final String cleanupTestPhotoId, cleanupTestPackageId;
     private boolean recovered;
 
     PhotoOwner(Context context,CachedWorkOrderDao dao,SessionCoordinator sessions) {
@@ -24,15 +25,27 @@ final class PhotoOwner {
 
     PhotoOwner(Context context,CachedWorkOrderDao dao,PhotoCleanupDao cleanupDao,
                SessionCoordinator sessions) {
-        this(context,dao,cleanupDao,sessions,BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
+        this(context,dao,cleanupDao,sessions,BuildConfig.AUTOMATIC_CLEANUP_ENABLED
+                && !BuildConfig.CLEANUP_TEST_PHOTO_ID.isEmpty()
+                && !BuildConfig.CLEANUP_TEST_PACKAGE_ID.isEmpty(),
+                BuildConfig.CLEANUP_TEST_PHOTO_ID,BuildConfig.CLEANUP_TEST_PACKAGE_ID);
     }
 
     // Test seam. Production always uses the BuildConfig switch above.
     PhotoOwner(Context context,CachedWorkOrderDao dao,PhotoCleanupDao cleanupDao,
                SessionCoordinator sessions,boolean cleanupEnabled) {
+        this(context,dao,cleanupDao,sessions,cleanupEnabled,"","");
+    }
+
+    // Exact scoped TEST seam; the runtime constructor uses immutable BuildConfig.
+    PhotoOwner(Context context,CachedWorkOrderDao dao,PhotoCleanupDao cleanupDao,
+               SessionCoordinator sessions,boolean cleanupEnabled,String testPhotoId,String testPackageId) {
         directory=new File(context.getFilesDir(),"protected-photos");
         this.dao=dao; this.cleanupDao=cleanupDao; this.sessions=sessions;
         this.cleanupEnabled=cleanupEnabled;
+        this.cleanupTestPhotoId=testPhotoId;this.cleanupTestPackageId=testPackageId;
+        if(testPhotoId.isEmpty()!=testPackageId.isEmpty())
+            throw new IllegalArgumentException("Complete TEST cleanup identity required");
     }
     ProtectedPhoto reserve(SupabaseApi.AuthSession session,long generation,String wo,String run,String item) throws Exception {
         if(!BuildConfig.FIELD_SYNC_ENABLED) throw new IllegalStateException("Recovery mode preserves photos; capture is paused.");
@@ -89,6 +102,8 @@ final class PhotoOwner {
     boolean cleanupVerified(SupabaseApi.AuthSession session,long generation,String id)
             throws Exception {
         if(!cleanupEnabled || !BuildConfig.FIELD_SYNC_ENABLED) return false;
+        // Limit the activation candidate at the sole file owner, including restart.
+        if(!cleanupTestPhotoId.isEmpty()&&!cleanupTestPhotoId.equals(id)) return false;
         if(cleanupDao==null) throw new IllegalStateException("Cleanup journal unavailable");
         return sessions.local(generation,session,()->{
             PhotoCleanupJournal j=cleanupDao.find(id);
@@ -97,6 +112,8 @@ final class PhotoOwner {
                 ||!session.organizationId.equals(j.organizationId)
                 ||!p.id.equals(j.photoId))
                 throw new IOException("Exact original-owner cleanup proof unavailable");
+            if(!cleanupTestPackageId.isEmpty()&&!cleanupTestPackageId.equals(j.packageId))
+                return false;
             if("CLEANED".equals(j.state)) {
                 if(!"CLEANED".equals(p.state))
                     throw new IOException("Local cleanup history needs reconciliation");

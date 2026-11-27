@@ -68,6 +68,41 @@ public class PhotoCleanupExecutorTest {
             Files.deleteIfExists(root.toPath());
     }
 
+    @Test public void controlledCleanupScopeBlocksWrongPhotoAndPackageAtFileOwner() throws Exception {
+        ProtectedPhoto a=verified("wo-target","run-target");
+        journal(a);
+        ProtectedPhoto b=verified("wo-other","run-other");
+        journal(b);
+        String packageId=journal.find(a.id).packageId;
+        PhotoOwner scoped=new PhotoOwner(context,fields,journal,sessions,true,a.id,packageId);
+        PhotoOwner wrongPackage=new PhotoOwner(context,fields,journal,sessions,true,a.id,
+                UUID.randomUUID().toString());
+        try {
+            assertFalse(scoped.cleanupVerified(actor,sessions.generation(),b.id));
+            assertFalse(wrongPackage.cleanupVerified(actor,sessions.generation(),a.id));
+            assertEquals("HELD",journal.find(a.id).state);
+            assertEquals("HELD",journal.find(b.id).state);
+            assertTrue(new File(a.originalPath).isFile());
+            assertTrue(new File(b.originalPath).isFile());
+            assertTrue(scoped.cleanupVerified(actor,sessions.generation(),a.id));
+            assertEquals("CLEANED",journal.find(a.id).state);
+            assertTrue(new File(b.originalPath).isFile());
+        } finally {
+            scoped.io.shutdownNow();wrongPackage.io.shutdownNow();
+        }
+    }
+
+    @Test public void runtimeBuildCannotDeleteOutsideItsExactTestPin() throws Exception {
+        ProtectedPhoto unrelated=verified("wo-unrelated","run-unrelated");
+        journal(unrelated);
+        PhotoOwner actual=new PhotoOwner(context,fields,journal,sessions);
+        try {
+            assertFalse(actual.cleanupVerified(actor,sessions.generation(),unrelated.id));
+            assertEquals("HELD",journal.find(unrelated.id).state);
+            assertTrue(new File(unrelated.originalPath).isFile());
+        } finally {actual.io.shutdownNow();}
+    }
+
     static String digest(byte[] bytes) throws Exception {
         byte[] hash=MessageDigest.getInstance("SHA-256").digest(bytes);
         StringBuilder result=new StringBuilder();
