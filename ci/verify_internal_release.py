@@ -16,7 +16,8 @@ assert identity["version_code"] >= 22 and identity["version_code"] % 2 == 0
 assert identity["room_version"] == 6
 assert set(identity["room_schema_blobs"]) == {str(v) for v in range(1, 7)}
 assert identity["field_sync_enabled"] is True
-assert identity["automatic_cleanup_enabled"] is False
+assert identity["automatic_cleanup_enabled"] is True
+assert identity["cleanup_readiness_polling_enabled"] is True
 assert identity["signer_sha256"] == "1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe"
 assert identity["sha256"] == digest
 for field, expected in (
@@ -28,7 +29,8 @@ for field, expected in (
     ("room_version", identity["room_version"]),
     ("room_schema_blobs", identity["room_schema_blobs"]),
     ("field_sync_enabled", True),
-    ("automatic_cleanup_enabled", False),
+    ("automatic_cleanup_enabled", True),
+    ("cleanup_readiness_polling_enabled", True),
 ):
     assert release[field] == expected, field
 print("Verified byte-identical standalone internal APK:", digest)

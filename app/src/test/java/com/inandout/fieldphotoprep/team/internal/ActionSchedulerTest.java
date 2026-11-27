@@ -46,11 +46,9 @@ public class ActionSchedulerTest {
     }
 
     @Test
-    public void testBuildAllowsCleanupOnlyForExactControlledTestCandidate() {
+    public void normalBuildSchedulesGuardedCleanup() {
         if (BuildConfig.AUTOMATIC_CLEANUP_ENABLED) {
-            assertEquals(48, BuildConfig.VERSION_CODE);
-            assertEquals("d23443e0-2abb-4df4-912f-859b9367aaef",BuildConfig.CLEANUP_TEST_PHOTO_ID);
-            assertEquals("aae49a70-a6e3-441d-badf-8b4b4be74e80",BuildConfig.CLEANUP_TEST_PACKAGE_ID);
+            assertTrue(BuildConfig.FIELD_SYNC_ENABLED);
             assertTrue(BuildConfig.CLEANUP_READINESS_POLLING_ENABLED);
             PeriodicWorkRequest cleanup=ActionScheduler.cleanupRequest("owner","org");
             assertEquals(TimeUnit.MINUTES.toMillis(15),cleanup.getWorkSpec().intervalDuration);
@@ -59,8 +57,7 @@ public class ActionSchedulerTest {
             assertNotEquals(ActionScheduler.cleanupWorkName("owner","org"),
                     ActionScheduler.readinessWorkName("owner","org"));
         } else {
-            assertEquals("",BuildConfig.CLEANUP_TEST_PHOTO_ID);
-            assertEquals("",BuildConfig.CLEANUP_TEST_PACKAGE_ID);
+            assertFalse(BuildConfig.FIELD_SYNC_ENABLED);
         }
         if (BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) {
             assertTrue(BuildConfig.FIELD_SYNC_ENABLED);

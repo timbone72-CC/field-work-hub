@@ -170,27 +170,27 @@ class MergedInternalReleaseTests(unittest.TestCase):
             meta = {"source_commit": MERGE, "package": pub.PACKAGE,
                     "version_code": 40, "room_version": 6, "signer_sha256": pub.SIGNER,
                     "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
-                    "automatic_cleanup_enabled": False, "field_sync_enabled": True,
+                    "automatic_cleanup_enabled": True, "cleanup_readiness_polling_enabled": True, "field_sync_enabled": True,
                     "room_schema_blobs": {str(v): f"{v:040x}" for v in range(1, 7)}}
             self.assertEqual(meta["sha256"], pub.verify_artifact(meta, apk, MERGE, 40))
             for k, value in [("source_commit", OLD), ("package", "fake.pkg"),
                              ("version_code", 38), ("room_version", 5),
                              ("signer_sha256", "fake"), ("sha256", "fake"),
-                             ("automatic_cleanup_enabled", True), ("field_sync_enabled", False),
+                             ("automatic_cleanup_enabled", False), ("cleanup_readiness_polling_enabled", False), ("field_sync_enabled", False),
                              ("room_version", 7), ("room_schema_blobs", {"6": "6" * 40})]:
                 with self.subTest(k=k), self.assertRaises(pub.NotEligible):
                     pub.verify_artifact({**meta, k: value}, apk, MERGE, 40)
 
-    def test_room_lineage_requires_exact_source_and_explicit_cleanup_off(self):
+    def test_room_lineage_requires_exact_source_and_guarded_cleanup(self):
         with tempfile.TemporaryDirectory() as d:
             apk = Path(d) / pub.APK_NAME
             apk.write_bytes(b"APK" * 40_000)
             meta = {"source_commit": MERGE, "package": pub.PACKAGE,
                     "version_code": 40, "room_version": 6, "signer_sha256": pub.SIGNER,
                     "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
-                    "automatic_cleanup_enabled": False, "field_sync_enabled": True,
+                    "automatic_cleanup_enabled": True, "cleanup_readiness_polling_enabled": True, "field_sync_enabled": True,
                     "room_schema_blobs": {str(v): f"{v:040x}" for v in range(1, 7)}}
-            for field in ("automatic_cleanup_enabled", "field_sync_enabled", "room_schema_blobs"):
+            for field in ("automatic_cleanup_enabled", "cleanup_readiness_polling_enabled", "field_sync_enabled", "room_schema_blobs"):
                 missing = {k: v for k, v in meta.items() if k != field}
                 with self.subTest(missing=field), patch.object(pub, "api", fake_api):
                     with self.assertRaises(pub.NotEligible):

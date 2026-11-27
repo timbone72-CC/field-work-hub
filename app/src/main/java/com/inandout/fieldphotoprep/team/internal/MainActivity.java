@@ -62,8 +62,8 @@ public final class MainActivity extends Activity {
     private Button updateCheckButton;
     private Button updateAppButton;
     private TextView updateStatus;
-    private Button readinessTestButton;
-    private TextView readinessTestStatus;
+    private Button cleanupStatusButton;
+    private TextView cleanupStatusText;
     private UpdateReleasePolicy.Candidate availableUpdate;
     private File pendingInstallerApk;
     private Button refreshAssignmentsButton;
@@ -287,22 +287,15 @@ public final class MainActivity extends Activity {
         accountPane.addView(updateStatus);
 
         if (BuildConfig.CLEANUP_READINESS_POLLING_ENABLED) {
-            readinessTestButton = new Button(this);
-            readinessTestButton.setText(BuildConfig.AUTOMATIC_CLEANUP_ENABLED
-                    ? "Check cleanup status (TEST — read-only)"
-                    : "Check photo readiness (TEST — read-only)");
-            readinessTestButton.setContentDescription(BuildConfig.AUTOMATIC_CLEANUP_ENABLED
-                    ? "Read the one-photo TEST cleanup journal; does not start cleanup"
-                    : "Check up to eight privately received photos; never delete originals");
-            readinessTestButton.setOnClickListener(v -> checkReadinessNow());
-            FwhVisualStyle.button(readinessTestButton, false);
-            accountPane.addView(readinessTestButton, matchWrap());
-            readinessTestStatus = text(
-                    BuildConfig.AUTOMATIC_CLEANUP_ENABLED
-                            ? "TEST only: automatic cleanup limited to one delivered photo. This button only reads status."
-                            : "TEST only: checks delivery readiness and keeps originals. Cleanup is disabled.", 13, false);
-            FwhVisualStyle.body(readinessTestStatus);
-            accountPane.addView(readinessTestStatus);
+            cleanupStatusButton = new Button(this);
+            cleanupStatusButton.setText("Check photo cleanup status");
+            cleanupStatusButton.setContentDescription("Read your local cleanup history; does not start cleanup");
+            cleanupStatusButton.setOnClickListener(v -> checkCleanupStatus());
+            FwhVisualStyle.button(cleanupStatusButton, false);
+            accountPane.addView(cleanupStatusButton, matchWrap());
+            cleanupStatusText = text("Eligible delivered photos are cleaned automatically. This button only reads status.", 13, false);
+            FwhVisualStyle.body(cleanupStatusText);
+            accountPane.addView(cleanupStatusText);
         }
 
         // Work Orders has one scroll owner: search/refresh/navigation stay above the list.
@@ -547,18 +540,15 @@ public final class MainActivity extends Activity {
         }
 
         identityText.setText("Account: " + session.email + "\nRole: " + session.role);
-        if (readinessTestButton != null) {
-            readinessTestButton.setVisibility("CONTRACTOR".equals(session.role)
+        if (cleanupStatusButton != null) {
+            cleanupStatusButton.setVisibility("CONTRACTOR".equals(session.role)
                     ? View.VISIBLE : View.GONE);
-            readinessTestButton.setEnabled(true);
+            cleanupStatusButton.setEnabled(true);
         }
-        if (readinessTestStatus != null) {
+        if (cleanupStatusText != null) {
             // Never carry a former owner's HELD count into a new account.
-            readinessTestStatus.setText(
-                    BuildConfig.AUTOMATIC_CLEANUP_ENABLED
-                            ? "TEST only: automatic cleanup limited to one delivered photo. This button only reads status."
-                            : "TEST only: checks delivery readiness and keeps originals. Cleanup is disabled.");
-            readinessTestStatus.setVisibility("CONTRACTOR".equals(session.role)
+            cleanupStatusText.setText("Eligible delivered photos are cleaned automatically. This button only reads status.");
+            cleanupStatusText.setVisibility("CONTRACTOR".equals(session.role)
                     ? View.VISIBLE : View.GONE);
         }
         if (serverVerified) {
@@ -1264,61 +1254,45 @@ public final class MainActivity extends Activity {
     }
 
 
-    /** Explicit TEST-only observation of the same owner-scoped bounded read path. */
-    private void checkReadinessNow() {
+    /** Read-only account-scoped cleanup status. Never triggers polling or deletion. */
+    private void checkCleanupStatus() {
         SupabaseApi.AuthSession expected = currentSession;
-        if (!BuildConfig.CLEANUP_READINESS_POLLING_ENABLED
-                || expected == null || !"CONTRACTOR".equals(expected.role)
-                || readinessTestButton == null) return;
+        if (expected == null || !"CONTRACTOR".equals(expected.role)
+                || cleanupStatusButton == null) return;
         long generation = runtime.sessions.generation();
         long operation = sessionOperations.capture();
-        readinessTestButton.setEnabled(false);
-        readinessTestStatus.setText("TEST: checking up to eight photos for readiness only…");
+        cleanupStatusButton.setEnabled(false);
+        cleanupStatusText.setText("Checking saved cleanup history…");
         executor.execute(() -> {
             try {
-                if (BuildConfig.AUTOMATIC_CLEANUP_ENABLED) {
-                    String status=runtime.sessions.local(generation,expected,()->{
-                        String id=BuildConfig.CLEANUP_TEST_PHOTO_ID;
-                        ProtectedPhoto photo=runtime.cleanupDao.photo(id);
-                        if(photo==null||!expected.userId.equals(photo.ownerId)
-                                ||!expected.organizationId.equals(photo.organizationId))
-                            return "No scoped TEST photo on this account/device.";
-                        PhotoCleanupJournal journal=runtime.cleanupDao.find(id);
-                        String state=journal==null?"NOT JOURNALED":
-                            (!expected.userId.equals(journal.ownerId)
-                              ||!expected.organizationId.equals(journal.organizationId)
-                              ||!BuildConfig.CLEANUP_TEST_PACKAGE_ID.equals(journal.packageId))
-                                ?"HELD — identity mismatch":journal.state;
-                        return "TEST target: photo "+photo.state+"; journal "+state
-                                +"; original "+(new java.io.File(photo.originalPath).exists()?"present":"absent")
-                                +"; prepared "+(new java.io.File(photo.preparedPath).exists()?"present":"absent")
-                                +". Read-only observation; no cleanup started by this button.";
-                    });
-                    postIfCurrent(operation,generation,()->{
-                        readinessTestButton.setEnabled(true);
-                        readinessTestStatus.setText(status);
-                    });
-                    return;
-                }
-                int attempted = runtime.pollReadiness(expected.userId,
-                        expected.organizationId, Thread.currentThread()::isInterrupted);
-                int held = runtime.sessions.local(generation, expected,
-                        () -> runtime.cleanupDao.heldReadinessCount(
-                                expected.userId, expected.organizationId));
-                postIfCurrent(operation, generation, () -> {
-                    readinessTestButton.setEnabled(true);
-                    readinessTestStatus.setText("TEST read-only: checked " + attempted
-                            + " photo candidate(s); " + held + " previously saved HELD"
-                            + " readiness snapshot(s) for this account."
-                            + " Ineligible/offline results do not count as delivery."
-                            + " No originals were deleted.");
+                String status=runtime.sessions.local(generation,expected,()->{
+                    PhotoCleanupDao dao=runtime.cleanupDao;
+                    String owner=expected.userId,org=expected.organizationId;
+                    String result="Cleaned: "+dao.cleanupStateCount(owner,org,"CLEANED")
+                        +"; held: "+dao.cleanupStateCount(owner,org,"HELD")
+                        +"; ready: "+dao.cleanupStateCount(owner,org,"READY")
+                        +"; cleaning: "+dao.cleanupStateCount(owner,org,"CLEANING")+".";
+                    PhotoCleanupJournal sample=dao.cleanedExample(owner,org);
+                    if(sample!=null) {
+                        ProtectedPhoto photo=dao.photo(sample.photoId);
+                        if(photo!=null&&owner.equals(photo.ownerId)&&org.equals(photo.organizationId)) {
+                            result+=" Example "+photo.id.substring(0,Math.min(8,photo.id.length()))
+                                +": journal "+sample.state+"; original "
+                                +(new java.io.File(photo.originalPath).exists()?"present":"absent")
+                                +"; prepared "
+                                +(new java.io.File(photo.preparedPath).exists()?"present":"absent")+".";
+                        }
+                    }
+                    return result;
                 });
-            } catch (Exception blocked) {
-                postIfCurrent(operation, generation, () -> {
-                    readinessTestButton.setEnabled(true);
-                    readinessTestStatus.setText(BuildConfig.AUTOMATIC_CLEANUP_ENABLED
-                            ? "TEST cleanup status unavailable. No cleanup was started by this button."
-                            : "TEST readiness check unavailable. Saved photo evidence remains protected. No deletion.");
+                postIfCurrent(operation,generation,()->{
+                    cleanupStatusButton.setEnabled(true);
+                    cleanupStatusText.setText(status);
+                });
+            } catch(Exception unavailable) {
+                postIfCurrent(operation,generation,()->{
+                    cleanupStatusButton.setEnabled(true);
+                    cleanupStatusText.setText("Cleanup status unavailable. No cleanup was started by this button.");
                 });
             }
         });
