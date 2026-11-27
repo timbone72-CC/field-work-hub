@@ -13,8 +13,10 @@ import subprocess
 import sys
 
 EXPECTED = {
-    "candidate": (42, True, True, "v42-test"),
-    "recovery": (43, False, False, "v43-recovery"),
+    "candidate": (42, True, True, False, "v42-test"),
+    "recovery": (43, False, False, False, "v43-recovery"),
+    "cleanup-candidate": (48, True, True, True, "v48-test"),
+    "cleanup-recovery": (49, False, False, False, "v49-recovery"),
 }
 SIGNER = "1bbff192f97a8a24c6f812d77df6847eb9759b3afb3c4b210d9e6c251f4eecfe"
 PROJECT = 'static final String PROJECT_URL = "https://vyocaujuwrivoqynvitm.supabase.co";'
@@ -23,12 +25,10 @@ PACKAGE = "com.inandout.fieldphotoprep.team.internal"
 
 def verify(variant):
     if variant not in EXPECTED:
-        raise SystemExit("Expected candidate or recovery")
-    version, field_sync, readiness, name_fragment = EXPECTED[variant]
+        raise SystemExit("Expected readiness or cleanup TEST candidate/recovery")
+    version, field_sync, readiness, cleanup, name_fragment = EXPECTED[variant]
     source = Path("app/src/main/java/com/inandout/fieldphotoprep/team/internal/SupabaseConfig.java")
     assert PROJECT in source.read_text(encoding="utf-8"), "Wrong FWH TEST Supabase project"
-    gradle = Path("app/build.gradle").read_text(encoding="utf-8")
-    assert "buildConfigField 'boolean', 'AUTOMATIC_CLEANUP_ENABLED', 'false'" in gradle
     apk = Path("app/build/outputs/apk/debug/app-debug.apk")
     assert apk.is_file(), "Built APK missing"
     android_home = Path(os.environ["ANDROID_HOME"])
@@ -50,19 +50,25 @@ def verify(variant):
     for field, value in (
         ("FIELD_SYNC_ENABLED", field_sync),
         ("CLEANUP_READINESS_POLLING_ENABLED", readiness),
-        ("AUTOMATIC_CLEANUP_ENABLED", False),
+        ("AUTOMATIC_CLEANUP_ENABLED", cleanup),
     ):
         expected = f"{field} = {str(value).lower()}"
         assert expected in config, f"BuildConfig mismatch: {expected}"
+    target_photo = "d23443e0-2abb-4df4-912f-859b9367aaef" if cleanup else ""
+    target_package = "aae49a70-a6e3-441d-badf-8b4b4be74e80" if cleanup else ""
+    assert f'CLEANUP_TEST_PHOTO_ID = "{target_photo}"' in config
+    assert f'CLEANUP_TEST_PACKAGE_ID = "{target_package}"' in config
     room = Path("app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java")
     assert "version = 6," in room.read_text(encoding="utf-8"), "Room6 lineage changed"
     for version_number in range(1, 7):
         schema = Path("app/schemas/com.inandout.fieldphotoprep.team.internal.TeamDatabase") / (
             str(version_number) + ".json")
         assert json.loads(schema.read_text(encoding="utf-8"))["database"]["version"] == version_number
-    out = Path("phase5-artifacts") / ("readiness-test-" + variant)
+    is_cleanup_variant = variant.startswith("cleanup-")
+    out = Path("phase5-artifacts") / (variant if is_cleanup_variant else "readiness-test-" + variant)
     out.mkdir(parents=True, exist_ok=True)
-    filename = f"Field-Work-Hub-Readiness-v{version}-{variant}-TEST.apk"
+    label = "Cleanup" if is_cleanup_variant else "Readiness"
+    filename = f"Field-Work-Hub-{label}-v{version}-{variant}-TEST.apk"
     shutil.copyfile(apk, out / filename)
     report = {
         "variant": variant,
@@ -76,7 +82,9 @@ def verify(variant):
         "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
         "field_sync_enabled": field_sync,
         "cleanup_readiness_polling_enabled": readiness,
-        "automatic_cleanup_enabled": False,
+        "automatic_cleanup_enabled": cleanup,
+        "cleanup_test_photo_id": target_photo,
+        "cleanup_test_package_id": target_package,
         "test_project_url": "https://vyocaujuwrivoqynvitm.supabase.co",
         "published": False,
         "installed": False,

@@ -23,6 +23,8 @@ assert ("versionCode='47'" if recovery else "versionCode='46'") in badging
 build_config=next(Path('app/build/generated').rglob('BuildConfig.java')).read_text()
 assert ('FIELD_SYNC_ENABLED = false' if recovery else 'FIELD_SYNC_ENABLED = true') in build_config
 assert 'AUTOMATIC_CLEANUP_ENABLED = false' in build_config, 'Photo cleanup cannot silently activate in a source-only build'
+assert 'CLEANUP_TEST_PHOTO_ID = ""' in build_config
+assert 'CLEANUP_TEST_PACKAGE_ID = ""' in build_config
 assert ('CLEANUP_READINESS_POLLING_ENABLED = false' if recovery else 'CLEANUP_READINESS_POLLING_ENABLED = true') in build_config, 'v46 TEST polling must be enabled and v47 recovery disabled'
 room_source=Path('app/src/main/java/com/inandout/fieldphotoprep/team/internal/TeamDatabase.java').read_text()
 room_version=6

@@ -54,7 +54,8 @@ final class ActionScheduler {
         try {
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                     readinessWorkName(session.userId, session.organizationId),
-                    ExistingPeriodicWorkPolicy.KEEP,
+                    BuildConfig.AUTOMATIC_CLEANUP_ENABLED
+                            ? ExistingPeriodicWorkPolicy.UPDATE : ExistingPeriodicWorkPolicy.KEEP,
                     readinessRequest(session.userId, session.organizationId))
                     .getResult().get(10, TimeUnit.SECONDS);
         } catch (Exception error) {

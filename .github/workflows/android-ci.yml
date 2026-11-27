@@ -178,6 +178,26 @@ jobs:
             phase5-artifacts/readiness-test-recovery/
           retention-days: 7
           if-no-files-found: error
+      # Separate opt-in artifacts only: never enter the direct-release directory.
+      - name: Verify scoped cleanup activation in isolated Android JVM fixtures
+        run: gradle :app:testDebugUnitTest -PfwhCleanupTest=true --tests '*ActionSchedulerTest' --tests '*PhotoCleanupExecutorTest'
+      - name: Freeze unpublished scoped TEST v48 cleanup candidate
+        run: |
+          gradle :app:assembleDebug -PfwhCleanupTest=true
+          python3 ci/verify_phase5e_readiness_test_candidate.py cleanup-candidate
+      - name: Freeze unpublished higher-version v49 cleanup recovery
+        run: |
+          gradle :app:assembleDebug -PfwhCleanupTest=true -PfwhRecovery
+          python3 ci/verify_phase5e_readiness_test_candidate.py cleanup-recovery
+      - name: Upload unpublished scoped cleanup candidate and recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: field-work-hub-phase5e-cleanup-test-staged-not-released
+          path: |
+            phase5-artifacts/cleanup-candidate/
+            phase5-artifacts/cleanup-recovery/
+          retention-days: 7
+          if-no-files-found: error
       - name: Upload versioned Room schemas
         uses: actions/upload-artifact@v4
         with:
