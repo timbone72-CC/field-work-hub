@@ -54,7 +54,7 @@ public class PhotoCleanupExecutorTest {
         });
         sessions=new SessionCoordinator(secure,token->actor);
         assertTrue(sessions.install(sessions.beginLogin(),actor));
-        owner=new PhotoOwner(context,fields,journal,sessions,true); // test seam; shipping flag OFF
+        owner=new PhotoOwner(context,fields,journal,sessions,true); // isolated disposable-file seam
         finishSet=UUID.randomUUID().toString();
     }
 
@@ -68,38 +68,21 @@ public class PhotoCleanupExecutorTest {
             Files.deleteIfExists(root.toPath());
     }
 
-    @Test public void controlledCleanupScopeBlocksWrongPhotoAndPackageAtFileOwner() throws Exception {
+    @Test public void normalRuntimeCleansEligibleOriginalsWithoutFixedIdentity() throws Exception {
         ProtectedPhoto a=verified("wo-target","run-target");
         journal(a);
         ProtectedPhoto b=verified("wo-other","run-other");
         journal(b);
-        String packageId=journal.find(a.id).packageId;
-        PhotoOwner scoped=new PhotoOwner(context,fields,journal,sessions,true,a.id,packageId);
-        PhotoOwner wrongPackage=new PhotoOwner(context,fields,journal,sessions,true,a.id,
-                UUID.randomUUID().toString());
-        try {
-            assertFalse(scoped.cleanupVerified(actor,sessions.generation(),b.id));
-            assertFalse(wrongPackage.cleanupVerified(actor,sessions.generation(),a.id));
-            assertEquals("HELD",journal.find(a.id).state);
-            assertEquals("HELD",journal.find(b.id).state);
-            assertTrue(new File(a.originalPath).isFile());
-            assertTrue(new File(b.originalPath).isFile());
-            assertTrue(scoped.cleanupVerified(actor,sessions.generation(),a.id));
-            assertEquals("CLEANED",journal.find(a.id).state);
-            assertTrue(new File(b.originalPath).isFile());
-        } finally {
-            scoped.io.shutdownNow();wrongPackage.io.shutdownNow();
-        }
-    }
-
-    @Test public void runtimeBuildCannotDeleteOutsideItsExactTestPin() throws Exception {
-        ProtectedPhoto unrelated=verified("wo-unrelated","run-unrelated");
-        journal(unrelated);
         PhotoOwner actual=new PhotoOwner(context,fields,journal,sessions);
         try {
-            assertFalse(actual.cleanupVerified(actor,sessions.generation(),unrelated.id));
-            assertEquals("HELD",journal.find(unrelated.id).state);
-            assertTrue(new File(unrelated.originalPath).isFile());
+            assertTrue(BuildConfig.AUTOMATIC_CLEANUP_ENABLED);
+            assertTrue(actual.cleanupVerified(actor,sessions.generation(),a.id));
+            assertEquals("CLEANED",journal.find(a.id).state);
+            assertFalse(new File(a.originalPath).exists());
+            assertTrue(new File(b.originalPath).isFile());
+            assertTrue(actual.cleanupVerified(actor,sessions.generation(),b.id));
+            assertEquals("CLEANED",journal.find(b.id).state);
+            assertFalse(new File(b.originalPath).exists());
         } finally {actual.io.shutdownNow();}
     }
 
