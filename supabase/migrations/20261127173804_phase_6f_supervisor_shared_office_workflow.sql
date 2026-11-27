@@ -50,7 +50,9 @@ begin
     'private.admin_save_company_photo_template(uuid,text,text,jsonb,boolean,boolean,uuid,uuid,text,text)'::regprocedure,
     'private.admin_correction_basis(uuid)'::regprocedure,
     'private.admin_save_correction_draft(uuid,uuid,timestamptz,uuid,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb)'::regprocedure,
-    'private.admin_create_followup(uuid,uuid,uuid,timestamptz,text,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb)'::regprocedure
+    'private.admin_create_followup(uuid,uuid,uuid,timestamptz,text,text,uuid[],uuid,date,text,jsonb,jsonb,jsonb)'::regprocedure,
+    'private.admin_cancel_untouched_followup(uuid,uuid,uuid,timestamptz,text)'::regprocedure,
+    'private.admin_replace_cancelled_followup(uuid,uuid,uuid,timestamptz,text,uuid,date,text)'::regprocedure
   ] loop
     select pg_get_functiondef(fn) into src;
     if position('private.phase4_admin_org()' in src)=0
@@ -81,7 +83,7 @@ begin
   then raise exception 'Unexpected requirements wrapper source; stop upgrade'; end if;
   src:=replace(src,
     'perform private.guard_legacy_work_order(p_work_order_id,''ADMIN'');',
-    'perform private.shared_office_work_org(); if not private.can_work_order(p_work_order_id) then raise exception ''Current Supervisor work required'' using errcode=''42501''; end if;');
+    'perform private.lock_legacy_work_authority(); perform private.shared_office_work_org(); if not private.can_work_order(p_work_order_id) then raise exception ''Current Supervisor work required'' using errcode=''42501''; end if;');
   execute src;
 end;
 $requirements_wrapper$;
@@ -131,10 +133,13 @@ create function public.office_supervisor_update_work_order_v4(
 declare org uuid; w public.work_orders%rowtype; result jsonb; fingerprint text; prior jsonb;
 begin
  if p_action is null or p_work_order_id is null or p_expected_updated_at is null
-    or p_expected_revision is null then
+    then
    raise exception 'Exact Supervisor work edit identity required' using errcode='22023'; end if;
  perform private.lock_legacy_work_authority();
  org:=private.shared_office_work_org();
+ if private.current_work_role(org) is distinct from 'SUPERVISOR'
+    or auth.jwt()->'app_metadata'->>'role' is distinct from 'SUPERVISOR' then
+   raise exception 'Supervisor role required' using errcode='42501'; end if;
  if not private.can_work_order(p_work_order_id) then
    raise exception 'Work order unavailable in current Supervisor scope' using errcode='42501'; end if;
  perform pg_advisory_xact_lock(hashtextextended('fwh.supervisor.edit.'||p_action::text,0));
@@ -161,7 +166,12 @@ begin
  if not exists(select 1 from auth.users u join private.account_work_access a on a.user_id=u.id
    where u.id=p_assigned_user_id and a.organization_id=org and a.work_role='CONTRACTOR'
      and a.active and a.disabled_at is null and u.deleted_at is null
-     and private.contractor_current_team(u.id,org)=w.responsible_team_id) then
+     and private.contractor_current_team(u.id,org)=w.responsible_team_id)
+   and not exists(select 1 from auth.users u
+     where u.id=p_assigned_user_id and u.deleted_at is null
+       and u.raw_app_meta_data->>'organization_id'=org::text
+       and u.raw_app_meta_data->>'role'='ADMIN'
+       and p_assigned_user_id=w.assigned_user_id) then
    raise exception 'Assignee is not an active Contractor in the responsible team' using errcode='42501'; end if;
  if p_requirements is not null then
    perform private.admin_set_photo_requirements(p_work_order_id,p_expected_revision,p_requirements);

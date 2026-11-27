@@ -148,3 +148,31 @@ with connect() as connection:
         assert not row[4] and row[5] == client_execute and row[6]
 print('PASS conflict repair preserves all predicates, source parity, private engine grants and security configuration')
 
+with connect() as connection:
+    def source(signature):
+        return connection.execute(
+            'select prosrc from pg_proc where oid=%s::regprocedure', (signature,)
+        ).fetchone()[0]
+
+    requirements_wrapper = source('private.admin_set_photo_requirements(uuid,uuid,jsonb)')
+    assert 'private.lock_legacy_work_authority()' in requirements_wrapper
+    assert 'private.shared_office_work_org()' in requirements_wrapper
+    assert 'private.guard_legacy_work_order' not in requirements_wrapper
+
+    supervisor_cas = source(
+        'public.office_supervisor_update_work_order_v4(uuid,uuid,text,text,text,text,date,uuid,uuid,jsonb,timestamptz)'
+    )
+    assert "private.current_work_role(org) is distinct from 'SUPERVISOR'" in supervisor_cas
+    assert 'or p_expected_revision is null' not in supervisor_cas
+    assert "u.raw_app_meta_data->>'role'='ADMIN'" in supervisor_cas
+    assert 'p_assigned_user_id=w.assigned_user_id' in supervisor_cas
+
+    for signature in (
+        'private.admin_cancel_untouched_followup(uuid,uuid,uuid,timestamptz,text)',
+        'private.admin_replace_cancelled_followup(uuid,uuid,uuid,timestamptz,text,uuid,date,text)',
+    ):
+        followup = source(signature)
+        assert 'private.shared_office_work_org()' in followup
+        assert 'private.phase4_admin_org()' not in followup
+print('PASS Supervisor CAS and follow-up authority corrections retain locks, role boundaries, legacy revisions and assignment exceptions')
+
