@@ -7,22 +7,7 @@ Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification:
 
 **Final scope/eligibility correction:** exact head `78e74c66763d39bdaa76168ec2dad90b59d2975c` verified Governance 46049306298, Database 46049018522, Dashboard 46049018467, Android 46049018512 PASS. Review identified a remaining partial eligibility predicate; the shared list and CAS now use the existing complete `private.is_assignable_contractor` owner (including banned, unconfirmed, suspended and unaccepted accounts), unchanged-assignment historical Contractor handoff exceptions, and current operational identity for list reads. Shared office org is tied to the JWT organization. Requirements mutation retains both the authority lock and exact WO row lock before authorization. A focused banned-account denial regression extends the existing gate. Exact new-head CI PENDING; no merge, activation or new hosted test. Migration history remains unreconciled.
 
-**Post-Codex correction pass — construction continued on PR #137.** The selective
-rewrite now includes untouched-follow-up cancellation and replacement, so their
-existing correction business functions use the shared scoped office authority.
-The Supervisor CAS endpoint has an explicit Supervisor role check, accepts
-legacy null requirement revisions, retains the historical same-assignment Admin
-exception while requiring active same-team Contractors for new assignments, and
-the requirements wrapper retains its legacy authority lock before the shared
-scope check. The disposable database gate now covers CAS replay/stale behavior,
-legacy null revisions, inactive/foreign-team assignees and the Supervisor-only
-boundary; source parity covers the retained wrapper lock and follow-up rewrites.
-No hosted migration-history repair, deployment, activation, merge, device test
-or provider test was performed. Exact-head CI at `5395652afab47a374195b4bbc5616d2877cc1f92`
-is PASS: Governance 2808, Database 4979, Dashboard 5254 and Android 5269.
-Explicit Level 3 merge authorization remains outstanding.
-
-**Level 3 / FINISH; branch `feat/fwh-6f-t01-shared-office-workflow`; baseline/rollback `7e60a83c11a5ed794c087143fe1a476d0ff808da`.** Approved shared-access amendment and current 6F-T01 definition govern. Read-only TEST: two organizations with Supervisor work readiness false, zero Supervisor grants, 142 migrations. Existing scoped work page/detail/schedule/assignment, team predicate, exact review signer and package authority remain owners. The permanent source construction now adds one selective `private.shared_office_work_org()` boundary, an action-bound `public.office_supervisor_update_work_order_v4`, and scoped `public.office_supervisor_assignable_users`; it rewrites only the canonical draft/create/template/correction owners and their required Phase 4 engines. Staffing, invitation, owner-grant, escalation and legacy nonrevision Admin paths remain separate and revoked/restricted. The dashboard selects these Supervisor endpoints while retaining the existing Admin endpoints for Admins; creation continues through the existing draft/create owner. A disposable database gate covers scoped client choices/assignable users, same-team draft creation and rejection of an out-of-scope Contractor; the browser fixture and source assertions cover endpoint routing. All 31 dashboard tests, JavaScript syntax checks and diff checks pass locally. Exact-head CI at `d5142b18fe5ad5bf971d2682b641ae6492d05ae9` is PASS: Database 4971, Dashboard 5246, Android 5261. The migration-history discrepancy remains explicitly unresolved pending a real migration-capable checkout: repository and TEST-only versions are not mapped or repaired by assumption, and no hosted migration/activation has occurred. Hosted TEST deployment/activation, explicit Level 3 merge authorization and actual authorized Supervisor workflow remain outstanding. No device, provider, photo, production, activation or release change; previously accepted device/provider evidence is not repeated.
+**Current checkpoint:** exact head `89c04c99d7bc84d66bb823b963f3c2d52716e8a0` Database 46051109256, Android 46051109276 and Governance 46051117694 PASS. Dashboard 46051109265 stopped at the active-record size gate (24,719 bytes; limit 24,576), before runtime tests. Earlier correction/construction details are preserved verbatim in [part 69](archive/phase-5-6/2026-11-27/PHASE_5_6_HISTORY_PART_69.md). This documentation-only correction archives superseded details; no runtime, test, CI or hosted changes. Next: verify all required gates on the new exact head, then seek Level 3 merge authorization. Migration history reconciliation and separate TEST activation remain required.
 
 ## November 27 — permanent automatic cleanup accepted (prior checkpoint)
 
@@ -106,6 +91,6 @@ Earlier source/provider/legacy-worker snapshots and record-discipline notes are 
 
 ## Frozen, losslessly preserved implementation history
 
-[Numbered immutable history index (parts 01–68)](archive/phase-5-6/HISTORY_INDEX.md). Historical notes there are evidence archives, not the current status or a second implementation record.
+[Numbered immutable history index (parts 01–69)](archive/phase-5-6/HISTORY_INDEX.md). Historical notes there are evidence archives, not the current status or a second implementation record.
 
 **Precedence:** Latest independently supported evidence for the same precise boundary controls current status; do not upgrade SOURCE-ONLY or simulated checks to hosted, real Google, signed-in or device PASS. Archive creation changes no runtime, SQL, Auth, tests, CI, hosting, Google Drive, held permit/session/photos, FPP or governing documents.
