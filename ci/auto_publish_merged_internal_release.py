@@ -172,8 +172,10 @@ def verify_artifact(meta, apk, sha, version):
     require(meta.get("package") == PACKAGE, "Wrong Android package")
     require(meta.get("version_code") == version, "Wrong APK version")
     require(meta.get("room_version") == 6, "Room schema unexpectedly changed")
-    require(meta.get("automatic_cleanup_enabled") is False,
-            "Automatic cleanup must remain disabled")
+    require(meta.get("automatic_cleanup_enabled") is True,
+            "Normal internal APK must use the guarded cleanup path")
+    require(meta.get("cleanup_readiness_polling_enabled") is True,
+            "Normal internal APK requires fresh readiness polling")
     require(meta.get("field_sync_enabled") is True,
             "Recovery or sync-disabled APK cannot be published")
     schemas = meta.get("room_schema_blobs")
