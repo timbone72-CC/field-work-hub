@@ -18,6 +18,32 @@ begin
     values(org,1,1) returning private.org_office_allowances.revision into revision;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',owner,'session_id',owner)::text,true);
 
+  -- An older valid Owner session must retain its read-only console but
+  -- never acquire new permission or capacity without recent Auth.
+  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner;
+  response:=public.owner_office_capacity_status(org,'TEST');
+  if response->>'recent_authentication' is distinct from 'false'
+    or response->>'supervisor_available' is distinct from '1'
+    or (select count(*) from public.owner_office_team_list(org,'TEST'))<>1 then
+    raise exception 'Valid older Owner session lost its read-only console'; end if;
+  perform public.owner_supervisor_grant_list(org,'TEST');
+  perform public.owner_office_people_list(org,'TEST');
+  denied:=false;
+  begin perform public.owner_set_office_allowances(org,revision,1,2,'Stale owner','TEST');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Older session changed office allowance'; end if;
+  denied:=false;
+  begin perform public.reserve_scoped_supervisor_invitation(gen_random_uuid(),org,1::smallint,array[team],
+    'stale@example.invalid','Stale owner',revision,'Must step up','TEST');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Older session reserved a Supervisor seat'; end if;
+  if exists(select 1 from private.office_seat_reservations where organization_id=org) then
+    raise exception 'Denied older-session request allocated a seat'; end if;
+  update auth.sessions set created_at=now() where id=owner;
+  response:=public.owner_office_capacity_status(org,'TEST');
+  if response->>'recent_authentication' is distinct from 'true' then
+    raise exception 'Fresh Owner session not recognized'; end if;
+
   denied:=false;
   begin perform public.reserve_scoped_supervisor_invitation(gen_random_uuid(),org,null::smallint,array[team],
     'invalid@example.invalid','Invalid',revision,'Missing tier','TEST');
@@ -72,7 +98,20 @@ begin
     where user_id=invited;
   response:=public.complete_scoped_supervisor_invitation_activation();
   if response->>'status'<>'WORK_DISABLED' then raise exception 'Replay restored disabled Supervisor work'; end if;
+  denied:=false;
+  begin perform public.owner_office_capacity_status(org,'TEST');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Non-owner read Office console'; end if;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',owner,'session_id',owner)::text,true);
+  update auth.sessions set created_at=now()-interval '16 minutes' where id=owner;
+  if (select count(*) from public.owner_supervisor_grant_list(org,'TEST'))<>1
+    or (select count(*) from public.owner_supervisor_team_scope_list(org,invited,'TEST'))<>1 then
+    raise exception 'Older verified Owner cannot read exact existing grant/scope'; end if;
+  update private.platform_owner_capabilities set active=false where user_id=owner;
+  denied:=false;
+  begin perform public.owner_office_capacity_status(org,'TEST');
+  exception when insufficient_privilege then denied:=true; end;
+  if not denied then raise exception 'Revoked Owner could read console'; end if;
   if has_function_privilege('authenticated','public.team_finalize_scoped_supervisor_issue(uuid,uuid,uuid,text)','execute')
     or has_table_privilege('authenticated','private.scoped_admin_invitation_reservations','select') then
     raise exception 'Supervisor invitation internals exposed to client'; end if;

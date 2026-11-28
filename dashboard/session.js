@@ -323,6 +323,34 @@ async function ensureFreshAdminSession() {
   }
 }
 
+// Confirm the same identity through the existing Auth endpoint without
+// resetting the workspace epoch or invoking a different-user sign-in.
+async function reauthenticateCurrentAdmin(password) {
+  const epoch = adminSessionEpoch;
+  const expected = currentUser;
+  const sameIdentity = user => Boolean(user && expected && user.id === expected.id &&
+    user.app_metadata?.organization_id === expected.app_metadata?.organization_id &&
+    user.app_metadata?.role === expected.app_metadata?.role);
+  const stillCurrent = () => epoch === adminSessionEpoch && accessToken && sameIdentity(currentUser);
+  if (!expected?.email || !stillCurrent()) throw Error('Your session is no longer current.');
+  if (adminRefreshPromise) await adminRefreshPromise;
+  if (!stillCurrent() || adminWritesPending || adminRefreshPromise)
+    throw Error('Finish the current operation before verifying your identity.');
+  const flight = (async () => {
+    const next = await originalSignInWithPassword(expected.email, password);
+    if (!stillCurrent() || !sameIdentity(next?.user) ||
+        !next.access_token || !next.refresh_token || adminWritesPending)
+      throw Error('Identity or session changed. No new session was adopted.');
+    accessToken = next.access_token;
+    currentUser = next.user;
+    pendingAdminSession = null;
+    storeAdminSession(next);
+  })();
+  adminRefreshPromise = flight;
+  try { await flight; }
+  finally { if (adminRefreshPromise === flight) adminRefreshPromise = null; }
+}
+
 function expireAdminSession(message = 'Your dashboard session expired. Sign in again.') {
   signOutButton.click();
   setLoginStatus(message, true);
