@@ -16,6 +16,7 @@ function rig() {
     ownerConsoleData:{organization:'test-office'},
     ownerIdentity:()=>identity,
     ownerStillCurrent:check=>check === identity && ctx.current,
+    ownerRequireRecentAuthentication:async()=>{},
     current:true,
     ownerStatus:(msg,error=false)=>statuses.push({
       msg,error,busyAtDisplay:ctx.ownerConsoleBusy
@@ -71,4 +72,13 @@ test('a stale owner session does not report Saved and always releases the busy g
   await action;
   assert.equal(x.ctx.ownerConsoleBusy,false);
   assert.equal(x.statuses.some(entry=>entry.msg.startsWith('Saved.')),false);
+});
+
+test('cancelled step-up never sends the owner mutation and releases the guard',async()=>{
+  const x=rig();let writes=0;
+  x.ctx.ownerRequireRecentAuthentication=async()=>{throw Error('Identity confirmation cancelled.');};
+  await x.change(async()=>{writes++;});
+  assert.equal(writes,0);
+  assert.equal(x.ctx.ownerConsoleBusy,false);
+  assert.match(x.statuses.at(-1).msg,/cancelled/);
 });

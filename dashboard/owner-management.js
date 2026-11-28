@@ -13,6 +13,7 @@ let ownerInviteNeedsRefresh = false;
 let ownerSupervisorInvitePending = null;
 let ownerSupervisorInviteBusy = false;
 let ownerSupervisorInviteNeedsRefresh = false;
+let ownerFreshPrompt = null;
 
 const renderSignedInBeforeOwnerConsole = renderSignedIn;
 renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizationId) {
@@ -21,6 +22,7 @@ renderSignedIn = function renderSignedInWithOwnerConsole(rows, users, organizati
   return result;
 };
 signOutButton.addEventListener('click', () => {
+  ownerFinishFreshPrompt(false);
   ownerConsoleGeneration++;
   ownerReviewGeneration++;
   ownerConsoleData = null;
@@ -65,6 +67,94 @@ async function ownerRpc(name, params) {
   }
   return response.json();
 }
+// Reads verify current Owner identity; writes still require recent Auth.
+async function ownerRequireRecentAuthentication(check) {
+  if (!ownerStillCurrent(check)) throw Error('Your Owner session changed.');
+  const readStatus = async () => {
+    let status;
+    try {
+      status = await ownerRpc('owner_office_capacity_status', {
+        p_org: check.organization, p_environment: OWNER_CONSOLE_ENVIRONMENT
+      });
+    } catch (error) {
+      if (error?.status === 403 && ownerStillCurrent(check)) {
+        ownerFinishFreshPrompt(false);
+        ownerConsoleData = null;
+        document.getElementById('owner-office-console')?.remove();
+      }
+      throw error;
+    }
+    if (!ownerStillCurrent(check) || status?.organization_id !== check.organization ||
+        typeof status.recent_authentication !== 'boolean')
+      throw Error('Current Product Owner authorization could not be verified.');
+    return status.recent_authentication;
+  };
+  if (await readStatus()) return;
+  if (!await ownerPromptFreshAuthentication(check))
+    throw Error('Identity confirmation cancelled. No new change was submitted.');
+  if (!await readStatus())
+    throw Error('The server did not confirm recent Product Owner authentication.');
+}
+function ownerFinishFreshPrompt(accepted) {
+  const pending = ownerFreshPrompt;
+  if (!pending) return;
+  ownerFreshPrompt = null;
+  const password = document.getElementById('owner-reauth-password');
+  if (password) password.value = '';
+  const dialog = document.getElementById('owner-reauth-dialog');
+  if (dialog?.open) dialog.close();
+  pending.resolve(accepted);
+}
+function ownerPromptFreshAuthentication(check) {
+  if (!ownerStillCurrent(check) || ownerFreshPrompt)
+    throw Error('Finish the current identity confirmation first.');
+  const dialog = document.getElementById('owner-reauth-dialog');
+  const password = document.getElementById('owner-reauth-password');
+  const status = document.getElementById('owner-reauth-status');
+  if (!dialog || !password || !status) throw Error('Identity confirmation is unavailable. Refresh office access.');
+  password.value = '';
+  status.textContent = '';
+  document.getElementById('owner-reauth-submit').disabled = false;
+  document.getElementById('owner-reauth-cancel').disabled = false;
+  return new Promise((resolve, reject) => {
+    ownerFreshPrompt = {check, resolve, busy:false};
+    try { dialog.showModal(); password.focus(); }
+    catch (error) { ownerFreshPrompt = null; reject(error); }
+  });
+}
+async function ownerSubmitFreshAuthentication(event) {
+  event.preventDefault();
+  const pending = ownerFreshPrompt;
+  if (!pending || pending.busy || !ownerStillCurrent(pending.check)) return;
+  const field = document.getElementById('owner-reauth-password');
+  const status = document.getElementById('owner-reauth-status');
+  const submit = document.getElementById('owner-reauth-submit');
+  const cancel = document.getElementById('owner-reauth-cancel');
+  const password = field.value;
+  if (!password) return;
+  field.value = '';
+  pending.busy = true;
+  submit.disabled = true;
+  cancel.disabled = true;
+  status.textContent = 'Verifying your identity…';
+  try {
+    await reauthenticateCurrentAdmin(password);
+    if (ownerFreshPrompt === pending && ownerStillCurrent(pending.check))
+      ownerFinishFreshPrompt(true);
+    else if (ownerFreshPrompt === pending) ownerFinishFreshPrompt(false);
+  } catch {
+    if (ownerFreshPrompt === pending && ownerStillCurrent(pending.check))
+      status.textContent = 'Identity could not be confirmed. Try your current password again; your work has not been changed.';
+    else if (ownerFreshPrompt === pending) ownerFinishFreshPrompt(false);
+  } finally {
+    if (ownerFreshPrompt === pending) {
+      pending.busy = false;
+      submit.disabled = false;
+      cancel.disabled = false;
+      field.focus();
+    }
+  }
+}
 async function ownerPaged(name, organizationId) {
   const records = [];
   let cursor = null;
@@ -93,11 +183,22 @@ function ownerCreateConsole() {
   // The template contains only static text; all server values use textContent.
   section.innerHTML = `
     <summary>Product Owner · Office access and seats</summary>
-    <p class="muted">Owner-only controls. This does not grant customer job or photo access.
-       Supervisor work remains disabled until the complete access rollout is approved.</p>
+    <p class="muted">Owner-only controls. This does not grant customer job or photo access. Sensitive changes require recent identity confirmation.</p>
     <p id="owner-office-status" class="status" role="status" aria-live="polite"></p>
     <button id="owner-office-refresh" class="secondary" type="button">Refresh office access</button>
     <div id="owner-office-capacity" class="muted"></div>
+    <dialog id="owner-reauth-dialog" aria-labelledby="owner-reauth-title">
+      <form id="owner-reauth-form" class="admin-form" autocomplete="off">
+        <h3 id="owner-reauth-title">Confirm your identity</h3>
+        <p class="muted">You are still signed in. Confirm your password to make this protected office access change.</p>
+        <label>Password <input id="owner-reauth-password" type="password" autocomplete="current-password" required></label>
+        <p id="owner-reauth-status" class="status" role="status" aria-live="polite"></p>
+        <div class="row gap">
+          <button id="owner-reauth-cancel" type="button" class="secondary">Cancel</button>
+          <button id="owner-reauth-submit" type="submit">Verify identity</button>
+        </div>
+      </form>
+    </dialog>
     <form id="owner-office-limit-form" class="admin-form">
       <div class="form-grid">
         <label>Admin seats <input id="owner-admin-limit" type="number" min="0" step="1" required></label>
@@ -192,6 +293,14 @@ function ownerCreateConsole() {
   const notifications = document.getElementById('notification-center');
   if (notifications) notifications.after(section);
   else document.getElementById('results-card').append(section);
+  section.querySelector('#owner-reauth-form').addEventListener('submit', event => void ownerSubmitFreshAuthentication(event));
+  section.querySelector('#owner-reauth-cancel').addEventListener('click', () => {
+    if (!ownerFreshPrompt?.busy) ownerFinishFreshPrompt(false);
+  });
+  section.querySelector('#owner-reauth-dialog').addEventListener('cancel', event => {
+    event.preventDefault();
+    if (!ownerFreshPrompt?.busy) ownerFinishFreshPrompt(false);
+  });
   section.querySelector('#owner-office-refresh').addEventListener('click', () => void loadOwnerConsole(true));
   section.querySelector('#owner-office-limit-form').addEventListener('submit', event => {
     event.preventDefault();
@@ -294,10 +403,12 @@ function ownerInteger(id) {
 async function ownerChange(action, onSuccess) {
   if (ownerConsoleBusy || !ownerConsoleData) return;
   ownerConsoleBusy = true;
-  const check = ownerIdentity();
+  const check = ownerIdentity(), data = ownerConsoleData;
   ownerStatus('Checking owner access and saving…');
   try {
-    await action(ownerConsoleData);
+    await ownerRequireRecentAuthentication(check);
+    if (!ownerStillCurrent(check)) return;
+    await action(data);
     if (!ownerStillCurrent(check)) return;
     await onSuccess?.();
     if (!ownerStillCurrent(check)) return;
@@ -430,7 +541,7 @@ function ownerEnrollmentUI(people, grants, teams) {
   form.querySelector('button[type="submit"]').disabled =
     !candidates.length || available < 1;
   if (status) status.textContent = !candidates.length
-    ? 'No eligible verified, inactive Supervisor account is available. New-user invitations are not enabled.'
+    ? 'No eligible verified, inactive Supervisor account is available. Use Invite a Supervisor for a new account.'
     : available < 1 ? 'No Supervisor seat is available. Review office seat limits.'
     : 'Enrollment does not start work access or send a setup email.';
 }
@@ -469,8 +580,8 @@ async function ownerEnrollExisting() {
       throw Error('An earlier enrollment outcome may be uncertain. Refresh and reconcile it before changing the request.');
     }
     const actionId = ownerEnrollmentPending?.actionId || crypto.randomUUID();
-    ownerEnrollmentPending = { actionId, fingerprint, user };
     await ownerChange(async current => {
+      ownerEnrollmentPending = { actionId, fingerprint, user };
       try {
         return await ownerRpc('owner_enroll_supervisor_with_seat', {
           p_action: actionId, p_org: current.organization, p_user: user,
@@ -550,8 +661,8 @@ async function ownerMoveRoster(person, destination) {
       ? 'Move this idle Contractor roster entry? Existing job and photo ownership will NOT move; an active assignment blocks this operation.'
       : 'Place this unassigned Contractor with the selected team? A verified Contractor seat is required.')) return;
     const actionId = ownerRosterPending?.actionId || crypto.randomUUID();
-    ownerRosterPending = {actionId,fingerprint,user:person.user_id,destination};
     await ownerChange(async current => {
+      ownerRosterPending = {actionId,fingerprint,user:person.user_id,destination};
       try {
         return await ownerRpc('manage_idle_contractor_roster',{
           p_action:actionId,p_org:current.organization,p_user:person.user_id,p_team:destination,
@@ -651,6 +762,8 @@ async function ownerReviewAccess(person, requestedActive) {
   ownerStatus('Reviewing current account, teams, and affected work…');
   try {
     const data = ownerConsoleData;
+    await ownerRequireRecentAuthentication(check);
+    if (!ownerStillCurrent(check) || reviewGeneration !== ownerReviewGeneration) return;
     const review = await ownerReadAccessReview(person, requestedActive, data.organization);
     if (!ownerStillCurrent(check) || reviewGeneration !== ownerReviewGeneration) return;
     const heading = document.createElement('p');
@@ -789,13 +902,15 @@ async function ownerCreateSupervisorInvitation() {
   if (ownerSupervisorInvitePending && JSON.stringify(ownerSupervisorInvitePending.request) !== JSON.stringify(request)) {
     ownerSupervisorInviteStatus('An earlier Supervisor invitation needs reconciliation first.', true); return;
   }
-  ownerSupervisorInvitePending ||= { action: crypto.randomUUID(), request };
-  const action = ownerSupervisorInvitePending.action;
   ownerSupervisorInviteBusy = true;
   document.getElementById('owner-supervisor-invite-submit').disabled = true;
   document.getElementById('owner-supervisor-invite-link-result')?.classList.add('hidden');
   ownerSupervisorInviteStatus('Verifying the exact Supervisor seat and invitation…');
   try {
+    await ownerRequireRecentAuthentication(check);
+    if (!ownerStillCurrent(check)) return;
+    ownerSupervisorInvitePending ||= { action: crypto.randomUUID(), request };
+    const action = ownerSupervisorInvitePending.action;
     const response = await adminFetch(`${SUPABASE_URL}/functions/v1/admin-invite-contractor`, {
       method: 'POST', headers: authHeaders(true),
       body: JSON.stringify({ operation: 'invite_supervisor', action_id: action, ...request })
@@ -811,7 +926,7 @@ async function ownerCreateSupervisorInvitation() {
     for (const id of ['owner-supervisor-invite-name','owner-supervisor-invite-email','owner-supervisor-invite-reason']) document.getElementById(id).value = '';
   } catch (error) {
     if (ownerStillCurrent(check)) ownerSupervisorInviteStatus(
-      `${error instanceof Error ? error.message : 'Invitation status is uncertain.'} The exact action remains protected; retry only this request.`, true);
+      `${error instanceof Error ? error.message : 'Invitation status is uncertain.'}${ownerSupervisorInvitePending ? ' The exact action remains protected; retry only this request.' : ''}`, true);
   } finally {
     ownerSupervisorInviteBusy = false;
     if (ownerStillCurrent(check)) ownerSupervisorInviteUI();
@@ -843,15 +958,15 @@ async function ownerCreateAdminInvitation() {
     ownerInviteStatus('An earlier invitation needs review first. Do not start another request.', true);
     return;
   }
-  if (!ownerInvitePending) {
-    ownerInvitePending = { action: crypto.randomUUID(), request };
-  }
-  const action = ownerInvitePending.action;
   ownerInviteBusy = true;
   document.getElementById('owner-admin-invite-submit').disabled = true;
   document.getElementById('owner-admin-invite-link-result')?.classList.add('hidden');
   ownerInviteStatus('Verifying the exact Admin seat and invitation…');
   try {
+    await ownerRequireRecentAuthentication(check);
+    if (!ownerStillCurrent(check)) return;
+    ownerInvitePending ||= { action: crypto.randomUUID(), request };
+    const action = ownerInvitePending.action;
     const response = await adminFetch(`${SUPABASE_URL}/functions/v1/admin-invite-contractor`, {
       method: 'POST', headers: authHeaders(true),
       body: JSON.stringify({ operation: 'invite_admin', action_id: action, ...request })
@@ -878,7 +993,7 @@ async function ownerCreateAdminInvitation() {
     if (ownerStillCurrent(check)) {
       ownerInviteStatus(
         (error instanceof Error ? error.message : 'Invitation status is uncertain.') +
-        ' The original action is protected; retry only this exact request.', true);
+        (ownerInvitePending ? ' The original action is protected; retry only this exact request.' : ''), true);
     }
   } finally {
     ownerInviteBusy = false;
@@ -922,11 +1037,18 @@ async function loadOwnerConsole(force = false) {
       section.open = true;
       document.getElementById('owner-access-review-panel')?.classList.add('hidden');
     }
-    ownerStatus('Current owner entitlement verified by the server.');
+    ownerStatus(capacity.recent_authentication === true
+      ? 'Current owner entitlement verified by the server.'
+      : 'Owner access verified. Confirm your identity when you make a protected change.');
   } catch (error) {
     if (!ownerStillCurrent(check)) return;
+    if (ownerConsoleData?.organization === check.organization && error?.status !== 401 && error?.status !== 403) {
+      ownerStatus('Office access could not be refreshed. The last verified view remains; retry Refresh office access.', true);
+      return;
+    }
+    ownerFinishFreshPrompt(false);
     ownerConsoleData = null;
     document.getElementById('owner-office-console')?.remove();
-    // A non-owner must never see owner controls; missing draft RPCs fail closed.
+    // Explicit authorization denial or a different identity never retains owner controls.
   }
 }
