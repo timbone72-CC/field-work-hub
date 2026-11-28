@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Set Up Field Work Hub Admin</title>
+  <title>Set Up Field Work Hub Staff</title>
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
   <link rel="stylesheet" href="styles.css?v=modern-premium-stage8-setup-20261017">
 </head>
@@ -11,8 +11,8 @@
   <main class="shell">
     <section class="card">
       <p class="eyebrow">Field Work Hub</p>
-      <h1>Set Up Your Admin Account</h1>
-      <p class="muted">Open your approved setup link, then choose your password. The person who invited you will not see it.</p>
+      <h1 id="staff-setup-title">Set Up Your Staff Account</h1>
+      <p class="muted">Open your approved setup or account recovery link, then choose your password. The person who invited you will not see it.</p>
 
       <div id="invite-check" class="check" role="status" aria-live="polite">Checking invitation…</div>
       <form id="password-form" class="admin-form hidden" autocomplete="off">
@@ -23,7 +23,7 @@
         <label>Confirm password
           <input id="confirm-password" type="password" required minlength="10" autocomplete="new-password">
         </label>
-        <button id="set-password" type="submit">Finish Admin Setup</button>
+        <button id="set-password" type="submit">Finish Staff Setup</button>
         <p id="setup-status" class="status" role="status" aria-live="polite"></p>
       </form>
     </section>

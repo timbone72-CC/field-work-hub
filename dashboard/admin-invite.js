@@ -37,8 +37,8 @@ async function startSetup() {
   const type = hash.get('type');
   // Never leave bearer credentials in URL, browser history, copied links, or logs.
   history.replaceState(null, '', window.location.pathname + window.location.search);
-  if (!token || (type && type !== 'invite')) {
-    fail('This page requires an approved Field Work Hub staff setup link.');
+  if (!token || !['invite', 'recovery'].includes(type)) {
+    fail('This page requires a valid Field Work Hub staff invitation or account recovery link.');
     return;
   }
   staffSetupToken = token;
@@ -60,7 +60,10 @@ async function startSetup() {
     }
     staffSetupUser = user;
     check.className = 'check pass';
-    check.textContent = 'INVITATION VERIFIED';
+    const roleLabel = user.app_metadata.role === 'SUPERVISOR' ? 'Supervisor' : 'Admin';
+    check.textContent = type === 'recovery' ? 'ACCOUNT RECOVERY VERIFIED' : 'INVITATION VERIFIED';
+    document.getElementById('staff-setup-title').textContent = 'Set Up Your ' + roleLabel + ' Account';
+    submit.textContent = 'Finish ' + roleLabel + ' Setup';
     identity.textContent = (user.user_metadata?.display_name || user.app_metadata.role) + ' • ' + user.email;
     form.classList.remove('hidden');
     password.focus();
