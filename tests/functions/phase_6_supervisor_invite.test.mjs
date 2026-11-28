@@ -85,3 +85,25 @@ test('Supervisor uncertain Auth result retains the exact action and never issues
   assert.equal(retried.body.status, 'BOUND');
   assert.equal(retry.events.filter(event => event[0] === 'generateLink').length, 0);
 });
+
+test('obsolete Supervisor callback is rejected before any reservation or Auth call', async () => {
+  const { events, args } = harness();
+  const result = await handleScopedAdminInvite({ ...args, redirectUrl:
+    'https://timbone72-cc.github.io/field-work-hub/phase56-review/admin-invite.html' });
+  assert.equal(result.status, 503);
+  assert.equal(events.length, 0);
+});
+test('confirmed duplicate identity has an actionable error, distinct from uncertain reservation failure', async () => {
+  const { events, args } = harness({ reserveError:
+    { code: '23505', message: 'Identity or invitation already pending' } });
+  const result = await handleScopedAdminInvite(args);
+  assert.equal(result.status, 409);
+  assert.equal(result.body.code, 'SUPERVISOR_IDENTITY_EXISTS');
+  assert.match(result.body.error, /email already belongs/);
+  assert.equal(events.length, 1);
+  const uncertain = harness({ reserveError: { code: '23505', message: 'Other unique violation' } });
+  const denied = await handleScopedAdminInvite(uncertain.args);
+  assert.equal(denied.status, 409);
+  assert.equal(denied.body.code, undefined);
+  assert.equal(uncertain.events.length, 1);
+});

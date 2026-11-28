@@ -217,17 +217,20 @@ test('invalid team, unconfigured environment or cross-account details fail befor
   assert.equal(events.length, 0);
 });
 
-test('exact isolated Admin preview callback is TEST-only and cannot redirect elsewhere', async () => {
+test('only the exact permanent staff callback is accepted in either environment', async () => {
   const preview = 'https://timbone72-cc.github.io/field-work-hub/phase56-review/admin-invite.html';
-  const good = harness();
-  const accepted = await handleScopedAdminInvite({
-    ...good.args, redirectUrl: preview, environment: 'TEST'
-  });
-  assert.equal(accepted.status, 200);
-  const generated = good.events.find(e => e[0] === 'generateLink');
-  assert.equal(generated[1].options.redirectTo, preview);
+  for (const environment of ['TEST', 'PRODUCTION']) {
+    const good = harness();
+    const accepted = await handleScopedAdminInvite({
+      ...good.args, redirectUrl, environment
+    });
+    assert.equal(accepted.status, 200);
+    const generated = good.events.find(e => e[0] === 'generateLink');
+    assert.equal(generated[1].options.redirectTo, redirectUrl);
+  }
 
   for (const [environment, redirectUrl] of [
+    ['TEST', preview],
     ['PRODUCTION', preview],
     ['TEST', 'https://example.invalid/field-work-hub/phase56-review/admin-invite.html'],
     ['TEST', preview + '?next=https://other.invalid'],

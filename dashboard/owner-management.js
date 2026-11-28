@@ -917,6 +917,11 @@ async function ownerCreateSupervisorInvitation() {
     });
     const result = await response.json().catch(() => ({}));
     if (!ownerStillCurrent(check)) return;
+    if (response.status === 409 && result.code === 'SUPERVISOR_IDENTITY_EXISTS' &&
+        ownerSupervisorInvitePending?.action === action) {
+      ownerSupervisorInvitePending = null;
+      throw new Error(result.error || 'This email already belongs to an account or pending invitation.');
+    }
     if (!response.ok || result.status !== 'BOUND' || !result.setup_url || result.action_id !== action
       || result.role !== 'SUPERVISOR') throw new Error(result.error || 'The original Supervisor invitation requires reconciliation.');
     document.getElementById('owner-supervisor-invite-link').value = result.setup_url;

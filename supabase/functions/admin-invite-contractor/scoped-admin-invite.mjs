@@ -5,15 +5,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const response = (status, body) => ({ status, body });
 const valid = value => typeof value === 'string' && UUID.test(value);
 const fail = (status, message) => response(status, { error: message });
-// The deployed main Admin root and the isolated PR #40 TEST preview are
-// distinct exact callbacks. Never accept the preview in PRODUCTION.
+// Staff setup uses the published permanent dashboard in both environments.
+// Reject obsolete or altered configuration before reserving a seat or invoking Auth.
 const MAIN_ADMIN_CALLBACK =
   'https://timbone72-cc.github.io/field-work-hub/admin-invite.html';
-const TEST_ADMIN_CALLBACK =
-  'https://timbone72-cc.github.io/field-work-hub/phase56-review/admin-invite.html';
-const allowedAdminCallback = (environment, url) =>
-  url === MAIN_ADMIN_CALLBACK ||
-  (environment === 'TEST' && url === TEST_ADMIN_CALLBACK);
+const allowedAdminCallback = url => url === MAIN_ADMIN_CALLBACK;
 
 export async function handleScopedAdminInvite({
   body, callerClient, adminClient, organizationId, environment, redirectUrl,
@@ -23,8 +19,8 @@ export async function handleScopedAdminInvite({
   if (!supervisor && targetRole !== 'ADMIN') return fail(400, 'Unsupported staff invitation role.');
   if (!valid(organizationId) || !['TEST', 'PRODUCTION'].includes(environment) ||
     typeof redirectUrl !== 'string' ||
-    !allowedAdminCallback(environment, redirectUrl)) {
-    return fail(503, 'Scoped staff invitations are not configured.');
+    !allowedAdminCallback(redirectUrl)) {
+    return fail(503, 'Staff setup links require the permanent dashboard address. Ask the Product Owner to correct the invitation configuration.');
   }
   const action = body.action_id;
   const team = body.team_id;
@@ -59,6 +55,13 @@ export async function handleScopedAdminInvite({
       ...(newTeam ? { p_team_name: teamName } : {}), p_email: email, p_name: displayName,
       p_expected_allowance_revision: expectedRevision, p_reason: reason, p_environment: environment
     });
+  // This exact transaction rejection occurs before a new reservation exists.
+  // Never classify a transport failure or an already-issued action as safe to edit.
+  if (supervisor && seatError?.code === '23505' &&
+      seatError.message === 'Identity or invitation already pending') {
+    return response(409, { code: 'SUPERVISOR_IDENTITY_EXISTS',
+      error: 'This email already belongs to an account or pending invitation. Use an unused address for a new Supervisor, or recover the existing account.' });
+  }
   if (seatError ||
       (!supervisor && seat?.team_id !== team) ||
       (supervisor && (seat?.tier !== tier || JSON.stringify(seat?.team_ids || []) !== JSON.stringify(normalizedTeamIds))) ||
