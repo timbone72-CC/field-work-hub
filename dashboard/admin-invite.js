@@ -1,4 +1,4 @@
-// Exact scoped Admin setup. This screen never selects a team or grants work;
+// Exact scoped staff setup. This screen never selects a team or grants work;
 // the authenticated server RPC verifies the bound invitation and consumes its seat.
 const STAFF_SUPABASE_URL = 'https://vyocaujuwrivoqynvitm.supabase.co';
 const STAFF_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_UPmj_Y10-mLwJo7soekCpg_BYZ08LNZ';
@@ -38,7 +38,7 @@ async function startSetup() {
   // Never leave bearer credentials in URL, browser history, copied links, or logs.
   history.replaceState(null, '', window.location.pathname + window.location.search);
   if (!token || (type && type !== 'invite')) {
-    fail('This page requires an approved Admin setup link.');
+    fail('This page requires an approved Field Work Hub staff setup link.');
     return;
   }
   staffSetupToken = token;
@@ -53,15 +53,15 @@ async function startSetup() {
       throw Error(await apiError(response, 'This setup link is invalid or expired.'));
     }
     const user = await response.json();
-    if (user.app_metadata?.role !== 'ADMIN' ||
+    if (!['ADMIN', 'SUPERVISOR'].includes(user.app_metadata?.role) ||
         !user.app_metadata.organization_id ||
         !user.user_metadata?.scoped_admin_invitation_id) {
-      throw Error('This is not a Field Work Hub Admin invitation.');
+      throw Error('This is not a Field Work Hub staff invitation.');
     }
     staffSetupUser = user;
     check.className = 'check pass';
     check.textContent = 'INVITATION VERIFIED';
-    identity.textContent = (user.user_metadata?.display_name || 'Admin') + ' • ' + user.email;
+    identity.textContent = (user.user_metadata?.display_name || user.app_metadata.role) + ' • ' + user.email;
     form.classList.remove('hidden');
     password.focus();
   } catch (error) {
@@ -71,7 +71,8 @@ async function startSetup() {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   submit.disabled = true;
-  setStatus('Finishing Admin setup…');
+  const role = staffSetupUser?.app_metadata?.role;
+  setStatus(`Finishing ${role === 'SUPERVISOR' ? 'Supervisor' : 'Admin'} setup…`);
   try {
     if (!staffSetupToken || !staffSetupUser) {
       throw Error('The setup session is unavailable. Contact the person who invited you.');
@@ -91,8 +92,11 @@ form.addEventListener('submit', async event => {
     if (!passwordResponse.ok) {
       throw Error(await apiError(passwordResponse, 'Unable to save the password.'));
     }
+    const activationRpc = role === 'SUPERVISOR'
+      ? 'complete_scoped_supervisor_invitation_activation'
+      : 'complete_scoped_admin_invitation_activation';
     const activationResponse = await fetch(
-      STAFF_SUPABASE_URL + '/rest/v1/rpc/complete_scoped_admin_invitation_activation', {
+      STAFF_SUPABASE_URL + '/rest/v1/rpc/' + activationRpc, {
         method: 'POST',
         headers: {
           apikey: STAFF_SUPABASE_PUBLISHABLE_KEY,
@@ -104,11 +108,11 @@ form.addEventListener('submit', async event => {
     );
     if (!activationResponse.ok) {
       throw Error(await apiError(activationResponse,
-        'Password saved, but the Team did not authorize this Admin account.'));
+        'Password saved, but the Team did not authorize this staff account.'));
     }
     const outcome = await activationResponse.json();
     if (!['ACCEPTED', 'ALREADY_ACTIVATED'].includes(outcome?.status)) {
-      throw Error('Admin setup could not be confirmed. Work access remains unavailable.');
+      throw Error('Staff setup could not be confirmed. Work access remains unavailable.');
     }
     staffSetupToken = null;
     staffSetupUser = null;
@@ -116,8 +120,8 @@ form.addEventListener('submit', async event => {
     confirm.value = '';
     form.classList.add('hidden');
     check.className = 'check pass';
-    check.textContent = 'ADMIN ACCOUNT READY';
-    setStatus('Your Admin account is ready. Sign in to Field Work Hub Admin.');
+    check.textContent = `${role === 'SUPERVISOR' ? 'SUPERVISOR' : 'ADMIN'} ACCOUNT READY`;
+    setStatus(`Your ${role === 'SUPERVISOR' ? 'Supervisor' : 'Admin'} account is ready. Sign in to Field Work Hub.`);
   } catch (error) {
     // A confirmed password write is not proof of team/work activation.
     setStatus(error instanceof Error ? error.message : 'Admin setup failed.', true);

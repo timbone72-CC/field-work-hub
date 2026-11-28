@@ -131,6 +131,25 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(result.status, result.body);
   }
 
+  if (operation === 'invite_supervisor') {
+    // Product Owner authority, recent authentication, allowance, tier and
+    // team scope are rechecked by the existing server-side staff owner. The
+    // dashboard cannot widen this path by asserting owner metadata.
+    if (Deno.env.get('TEAM_ADMIN_INVITE_ENABLED') !== 'true') {
+      return jsonResponse(503, { error: 'Staff setup links are not enabled.' });
+    }
+    const result = await handleScopedAdminInvite({
+      body,
+      callerClient,
+      adminClient,
+      organizationId: String(callerOrganizationId),
+      environment: Deno.env.get('TEAM_ADMIN_INVITE_ENVIRONMENT') ?? '',
+      redirectUrl: Deno.env.get('TEAM_ADMIN_INVITE_REDIRECT_URL') ?? '',
+      targetRole: 'SUPERVISOR',
+    });
+    return jsonResponse(result.status, result.body);
+  }
+
   // The original Contractor invite/cancel owner remains ADMIN-only; extending
   // staff recruitment cannot silently widen existing Contractor authority.
   if (callerRole !== 'ADMIN') {

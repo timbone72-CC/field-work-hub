@@ -17,8 +17,10 @@ const allowedAdminCallback = (environment, url) =>
 
 export async function handleScopedAdminInvite({
   body, callerClient, adminClient, organizationId, environment, redirectUrl,
-  newTeam = false
+  newTeam = false, targetRole = 'ADMIN'
 }) {
+  const supervisor = targetRole === 'SUPERVISOR';
+  if (!supervisor && targetRole !== 'ADMIN') return fail(400, 'Unsupported staff invitation role.');
   if (!valid(organizationId) || !['TEST', 'PRODUCTION'].includes(environment) ||
     typeof redirectUrl !== 'string' ||
     !allowedAdminCallback(environment, redirectUrl)) {
@@ -31,35 +33,46 @@ export async function handleScopedAdminInvite({
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const displayName = typeof body.display_name === 'string' ? body.display_name.trim() : '';
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
-  if (![action, team, expectedRevision].every(valid) ||
+  const tier = Number(body.tier);
+  const teamIds = Array.isArray(body.team_ids) ? body.team_ids : [];
+  const normalizedTeamIds = teamIds.slice().sort();
+  if (![action, expectedRevision].every(valid) ||
       !email || email.length > 320 || !displayName || displayName.length > 200 ||
       reason.length < 1 || reason.length > 1000 ||
+      (supervisor && (!Number.isInteger(tier) || tier < 1 || tier > 3 ||
+        normalizedTeamIds.some(id => !valid(id)) || (tier === 3 ? normalizedTeamIds.length !== 0 : normalizedTeamIds.length === 0))) ||
+      (!supervisor && !valid(team)) ||
       (newTeam && (teamName.length < 1 || teamName.length > 100))) {
     return fail(400, 'An action ID, team, capacity revision, email, name, and reason are required.');
   }
   // An untrusted actor cannot claim an Auth outcome by calling the service-role
   // finalizer: the two ordinary RPCs re-evaluate current team and seat grants.
   const { data: seat, error: seatError } = await callerClient.rpc(
-    newTeam ? 'create_admin_team_and_reserve_invitation' :
-      'reserve_scoped_admin_invitation', {
-      p_action: action, p_org: organizationId, p_team: team,
-      ...(newTeam ? { p_team_name: teamName } : {}),
-      p_email: email, p_name: displayName,
-      p_expected_allowance_revision: expectedRevision,
+    supervisor ? 'reserve_scoped_supervisor_invitation' :
+      (newTeam ? 'create_admin_team_and_reserve_invitation' : 'reserve_scoped_admin_invitation'),
+    supervisor ? {
+      p_action: action, p_org: organizationId, p_tier: tier, p_team_ids: normalizedTeamIds,
+      p_email: email, p_name: displayName, p_expected_allowance_revision: expectedRevision,
       p_reason: reason, p_environment: environment
+    } : {
+      p_action: action, p_org: organizationId, p_team: team,
+      ...(newTeam ? { p_team_name: teamName } : {}), p_email: email, p_name: displayName,
+      p_expected_allowance_revision: expectedRevision, p_reason: reason, p_environment: environment
     });
-  if (seatError || seat?.team_id !== team ||
+  if (seatError ||
+      (!supervisor && seat?.team_id !== team) ||
+      (supervisor && (seat?.tier !== tier || JSON.stringify(seat?.team_ids || []) !== JSON.stringify(normalizedTeamIds))) ||
       !['RESERVED', 'ISSUING', 'BOUND', 'PROBLEM'].includes(seat?.status) ||
       (newTeam && (seat.new_team !== true || seat.team_name !== teamName))) {
-    return fail(409, 'The Admin seat or team is no longer available. Refresh and review the request.');
+    return fail(409, `The ${supervisor ? 'Supervisor' : 'Admin'} seat or scope is no longer available. Refresh and review the request.`);
   }
   const { data: claim, error: claimError } = await callerClient.rpc(
-    'begin_scoped_admin_invitation_issue', {
+    supervisor ? 'begin_scoped_supervisor_invitation_issue' : 'begin_scoped_admin_invitation_issue', {
       p_action: action, p_org: organizationId, p_environment: environment
     });
-  if (claimError || !claim || claim.action_id !== action ||
-      claim.organization_id !== organizationId || claim.team_id !== team ||
-      claim.invite_email !== email) {
+  if (claimError || !claim || claim.action_id !== action || claim.organization_id !== organizationId ||
+      (!supervisor && claim.team_id !== team) || claim.invite_email !== email ||
+      (supervisor && (claim.tier !== tier || JSON.stringify(claim.team_ids || []) !== JSON.stringify(normalizedTeamIds)))) {
     return fail(409, 'Invitation authority changed. The reserved seat remains protected.');
   }
 
@@ -72,31 +85,32 @@ export async function handleScopedAdminInvite({
       (user.app_metadata?.organization_id &&
         user.app_metadata.organization_id !== organizationId) ||
       (user.app_metadata?.role &&
-        !['ADMIN', 'authenticated'].includes(user.app_metadata.role))) {
+        ![targetRole, 'authenticated'].includes(user.app_metadata.role))) {
       return false;
     }
     // Recheck the original actor's live scope after the network/Auth roundtrip.
     // If revoked, do not write elevated Auth metadata at all.
     const { data: scoped, error: scopeError } = await callerClient.rpc(
-      'begin_scoped_admin_invitation_issue', {
+      supervisor ? 'begin_scoped_supervisor_invitation_issue' : 'begin_scoped_admin_invitation_issue', {
         p_action: action, p_org: organizationId, p_environment: environment
       });
     if (scopeError || scoped?.status !== 'ISSUING' ||
       scoped.instruction !== 'RECONCILE' || scoped.action_id !== action ||
-      scoped.team_id !== team) return false;
+      (!supervisor && scoped.team_id !== team) ||
+      (supervisor && (scoped.tier !== tier || JSON.stringify(scoped.team_ids || []) !== JSON.stringify(normalizedTeamIds)))) return false;
     // Metadata is server-managed. The reserved scope is verified again in SQL
     // and activation cannot grant work from a user-controlled marker.
     const { data: updated, error: updateError } =
       await adminClient.auth.admin.updateUserById(user.id, {
         app_metadata: {
           ...(user.app_metadata ?? {}),
-          role: 'ADMIN',
+          role: targetRole,
           organization_id: organizationId
         }
       });
     if (updateError || updated?.user?.id !== user.id) return false;
     const { data: bound, error: boundError } =
-      await adminClient.rpc('team_finalize_scoped_admin_issue', {
+      await adminClient.rpc(supervisor ? 'team_finalize_scoped_supervisor_issue' : 'team_finalize_scoped_admin_issue', {
         p_action: action, p_org: organizationId, p_auth_user: user.id, p_outcome: 'BOUND'
       });
     return !boundError && bound?.status === 'BOUND' && bound.auth_user_id === user.id;
@@ -155,8 +169,10 @@ export async function handleScopedAdminInvite({
       throw Error('Auth or DB outcome unconfirmed');
     }
     return response(200, {
-      action_id: action, organization_id: organizationId, team_id: team,
-      status: 'BOUND', setup_url: url
+      action_id: action, organization_id: organizationId,
+      ...(!supervisor ? { team_id: team } : {}),
+      status: 'BOUND', setup_url: url, role: targetRole,
+      ...(supervisor ? { tier, team_ids: normalizedTeamIds } : {})
     });
   } catch {
     if (await reconcile()) {
