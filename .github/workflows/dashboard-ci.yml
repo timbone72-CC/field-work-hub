@@ -70,6 +70,7 @@ jobs:
           node --check dashboard/private-review.js
           node --check dashboard/app.js
           node --check dashboard/auto-refresh.js
+          node --check dashboard/dashboard-release.js
           node --check dashboard/owner-management.js
           node --check dashboard/test-other-org-first-admin.js
           node --check supabase/functions/admin-invite-contractor/test-other-org-first-admin.mjs
@@ -80,6 +81,10 @@ jobs:
           node --check dashboard/contractor-invite.js
           node --check dashboard/admin-invite.js
           node --check supabase/functions/admin-invite-contractor/scoped-admin-invite.mjs
+      - name: Verify exact dashboard release packaging
+        run: |
+          python3 -m unittest discover -s tests/ci -p 'test_dashboard_release_packaging.py' -v
+          python3 ci/package_dashboard_release.py --source dashboard --output "$RUNNER_TEMP/fwh-dashboard-release" --revision "$(git rev-parse HEAD)"
       - name: Test automatic Admin updates and session races
         run: node --test tests/dashboard/*.test.js
       - name: Verify trusted private photo bytes and failure handling
