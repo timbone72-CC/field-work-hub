@@ -149,7 +149,7 @@ const wait = async (page, condition) => page.waitForFunction(condition);
         assert.equal(p.p_environment,'TEST');
         assert.equal(p.p_org,organization);
         if (url.pathname.endsWith('owner_office_capacity_status')) return reply({
-          organization_id:organization,revision:ownerQuotaRevision,
+          organization_id:organization,revision:ownerQuotaRevision,recent_authentication:true,
           admin_limit:ownerAdminLimit,admin_active:2,admin_reserved:1,admin_available:ownerAdminLimit-3,
           supervisor_limit:4,supervisor_active:1,supervisor_reserved:0,supervisor_available:3
         });
