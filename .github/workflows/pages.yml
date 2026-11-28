@@ -7,6 +7,7 @@ on:
     paths:
       - 'dashboard/**'
       - '.github/workflows/pages.yml'
+      - 'ci/package_dashboard_release.py'
   workflow_dispatch:
     inputs:
       phase56_preview:
@@ -80,6 +81,10 @@ jobs:
           assert 'private-review.js?v=' in (preview / "index.html").read_text()
           print("Main dashboard retained unchanged; Phase 5C preview path: /field-work-hub/phase56-review/")
           PY
+      - name: Package normal dashboard release with exact revision
+        if: ${{ !inputs.phase56_preview }}
+        shell: bash
+        run: python3 ci/package_dashboard_release.py --source dashboard --output dashboard-release --revision "$GITHUB_SHA"
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
@@ -87,7 +92,7 @@ jobs:
       - name: Upload dashboard artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ${{ inputs.phase56_preview && 'phase56-preview-site' || 'dashboard' }}
+          path: ${{ inputs.phase56_preview && 'phase56-preview-site' || 'dashboard-release' }}
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -4,11 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Field Work Hub Admin</title>
+  <meta name="fwh-dashboard-build" content="unpackaged">
   <link rel="icon" type="image/png" href="fwh-icon.png?v=fwh-branding-20261002-1">
   <link rel="stylesheet" href="styles.css?v=modern-premium-stage9-recovery-20261017">
 </head>
 <body>
   <main class="shell">
+    <section id="dashboard-release-panel" class="card" aria-label="Dashboard software version">
+      <p id="dashboard-release-status" class="muted" role="status" aria-live="polite">Dashboard build</p>
+      <button id="dashboard-release-reload" type="button" class="secondary" hidden>Reload now</button>
+      <p id="dashboard-release-help" class="muted" hidden>Save unfinished work and finish or copy any setup links before reloading.</p>
+    </section>
     <section class="card" id="login-card">
       <p class="eyebrow">Field Work Hub</p>
       <h1>Admin Login</h1>
@@ -515,5 +521,6 @@
   <script src="phase5-private-photo-check.js?v=phase5-test-browser-20261018" defer></script>
   <script src="phase5-contractor-denial-test.js?v=phase5-contractor-test-20261018" defer></script>
   <script src="phase5-foreign-admin-denial-test.js?v=phase5-foreign-admin-test-20261019" defer></script>
+  <script src="dashboard-release.js?v=source" defer></script>
 </body>
 </html>

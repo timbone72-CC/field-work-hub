@@ -3,37 +3,11 @@
 Scope key: `dashboard-workflow-enhancement-plan`. Overall change classification: **Level 3**.
 **This is the single authoritative CURRENT Phase 5/6 implementation/handoff record.** Its entire previous text has been frozen without modification in the historical archives indexed below. Read current facts here before acting on older dated “next”, “pending” or “PASS” statements in archived entries. Reconcile this summary with current GitHub, required deployed TEST facts and approved phase plans rather than assuming that a recorded snapshot is live truth. Applicable governance/contracts remain authoritative.
 
-## November 27 — 6F-T01 Product Owner-only Supervisor invitations (current handoff)
+## November 27 — 6F-T01 Supervisor invitation / dashboard release dependency (current)
 
-**Level 3 / implementation complete, merge pending.** Scope key remains
-`dashboard-workflow-enhancement-plan`; authoritative branch is
-`feat/fwh-6f-t01-supervisor-invitations`; baseline/rollback is the reconciled
-`52bcc2ae6aaa60de01a9e5fec2dd63610902767c`; exact implementation candidate
-is `17d7fdb` (carried from preserved `29eac7d`). This continues the existing 6F
-line and preserves the accepted shared-office evidence. The change adds
-permanent Product Owner-only Supervisor invitations to the existing secure
-staff invitation owner: owner-selected name/email/tier/active team scope,
-recent owner authentication, server allowance and duplicate checks, one
-immutable seat/action reservation, exact Auth UUID binding, existing setup
-link page, and one-time activation into the stored Supervisor grant/scope.
-Existing Admin and Contractor onboarding remain on their original paths.
+PR #139 merged a5c94c4315c028197d428f71fe824d3551038872; corrected head a6028ea exact required CI PASS. Operator authorized combined rollout; migration 20261127200000 deployed, ledger 143/143, invitation function v56 exact source with JWT verification retained, Pages deployment 46098425219 PASS. Organization readiness ON for intended organization only; one Supervisor seat available, zero reservations/grants. Details, safety review and previous evidence in [PR #139](https://github.com/timbone72-CC/field-work-hub/pull/139). Actual chosen identity setup and scoped workflow acceptance pending. Do not repeat previous evidence.
 
-The new migration is additive and reuses `scoped_admin_invitation_reservations`,
-`office_seat_reservations`, the existing trusted `generateLink` function and
-the existing setup-link callback. No temporary account, second invitation
-ledger, client authority, new activation switch, hosted migration, deployment,
-Auth write, TEST fixture, device test, provider test, merge or activation was
-performed. An uncertain Auth result retains the exact action/seat and cannot
-issue a second link; a consumed invitation replay cannot restore disabled work.
-The disposable Supervisor SQL gate was added to the existing Database CI
-sequence; focused Supervisor/Admin invitation tests and the complete local
-dashboard suite pass. Local Database CI is **PENDING** because this checkout
-has neither `psql` nor Docker. The broad local Node function glob has 13
-pre-existing loader/provider failures unrelated to this scope; the new and
-legacy invitation tests pass. Explicit Level 3 operator merge approval,
-hosted migration/deployment/activation and real Supervisor setup/workflow
-evidence remain outstanding. Previously accepted device/provider/photo
-evidence is not repeated.
+**Current dependency:** operator saw old dashboard after deployment/hard reload and had to close/reopen it. PR #27 covered data polling, not software delivery; index and invite HTML still used stale manual version URLs. Operator directed correction before returning to 6F-T01. Branch `fix/fwh-6f-t01-dashboard-release-refresh`, rollback a5c94c4. Normal Pages packaging stamps full Git revision into local asset URLs, release metadata and dashboard build display. Open dashboard checks public release metadata with cache bypass, never auto-reloads, blocks known unsaved/pending edits and requests explicit reload confirmation; same-tab session and saved drafts unchanged. Existing preview root rule, Auth/roles, Android, provider and photo paths unchanged. No new backend or release switch. Exact candidate CI/deployment and one real update observation pending. Initial pre-fix page cannot discover new code until loaded once; thereafter normal in-app reload. Record final proof on PR; resume actual Supervisor enrollment immediately after release delivery verified.
 
 ## November 27 — 6F-T01 shared office workflow (current construction)
 
